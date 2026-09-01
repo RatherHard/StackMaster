@@ -23,3 +23,6 @@ coverage/
 *.log
 .tmp/
 tmp/
+
+# Local Claude Code worktrees
+.claude/
