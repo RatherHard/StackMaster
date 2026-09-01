@@ -1,0 +1,25 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node.js and frontend artifacts
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+
+# Local environment and temporary files
+.env
+.env.*
+!.env.example
+*.log
+.tmp/
+tmp/
