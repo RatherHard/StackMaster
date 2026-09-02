@@ -1,0 +1,16 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0000",
+  "revision": 43,
+  "status": "running",
+  "projectionDelta": {
+    "revision": 43
+  },
+  "publicEvents": [
+    {
+      "seq": 0,
+      "kind": "write",
+      "addressHex": "0x7FF3A0",
+      "rawState": "00"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/session-action/v1/verdict-result.schema.json",
+  "title": "VerdictResult",
+  "x-sm-class": "public",
+  "type": "string",
+  "enum": [
+    "success",
+    "wrong_answer",
+    "invalid_action",
+    "program_crash",
+    "memory_fault",
+    "resource_limit",
+    "timeout",
+    "engine_error",
+    "challenge_invalid",
+    "replay_mismatch",
+    "cancelled"
+  ]
+}

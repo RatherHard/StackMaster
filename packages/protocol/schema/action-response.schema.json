@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/session-action/v1/action-response.schema.json",
+  "title": "ActionResponse",
+  "x-sm-class": "public",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "paused",
+        "won",
+        "failed",
+        "rejected"
+      ]
+    },
+    "projectionDelta": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "x-sm-provisional": true
+    },
+    "publicEvents": {
+      "maxItems": 256,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "call",
+              "ret",
+              "syscall",
+              "exception"
+            ]
+          },
+          "addressHex": {
+            "type": "string",
+            "maxLength": 18
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "payloadHex": {
+            "type": "string",
+            "maxLength": 8192,
+            "pattern": "^(?:[0-9a-fA-F]{2})+$"
+          }
+        },
+        "required": [
+          "seq",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "x-sm-provisional": true
+      }
+    },
+    "userVisibleError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "addressHex": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 18
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "x-sm-provisional": true
+    }
+  },
+  "required": [
+    "requestId",
+    "revision",
+    "status",
+    "projectionDelta",
+    "publicEvents"
+  ],
+  "additionalProperties": false
+}

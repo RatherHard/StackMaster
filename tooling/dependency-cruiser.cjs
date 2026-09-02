@@ -57,6 +57,14 @@ module.exports = {
       from: { path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/" },
       to: { path: "^packages/", pathNot: "^packages/protocol/" },
     },
+    {
+      name: "protocol-schema-generator-not-importable",
+      severity: "error",
+      comment:
+        "protocol 的 JSON Schema 生成器(schema/)依赖 node:fs,只供生成脚本与漂移测试使用;协议包之外的任何包不得深引其模块路径——“生成器不进浏览器构建图”由 exports map 之外再加这道依赖边界兜底(WP-2 安全评审 L-8)。",
+      from: { path: "^(packages|apps)/", pathNot: "^packages/protocol/" },
+      to: { path: "^packages/protocol/(dist|src)/schema/" },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

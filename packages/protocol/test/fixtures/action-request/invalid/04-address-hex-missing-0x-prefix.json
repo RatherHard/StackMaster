@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "clientSeq": 7,
+  "baseRevision": 42,
+  "idempotencyKey": "0d9f4c7e-2b1a-4f3e-8a5d-6c9e0b1f2a3b",
+  "action": {
+    "type": "write_bytes",
+    "args": {
+      "addressHex": "7FF3A0",
+      "bytesHex": "00"
+    }
+  }
+}

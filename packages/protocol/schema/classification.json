@@ -1,0 +1,44 @@
+{
+  "packageVersion": "0.1.0",
+  "sessionActionProtocolVersion": 1,
+  "note": "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第六章;机检消费见 ZR-P1 / I-1。Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
+  "schemas": {
+    "action-request": {
+      "file": "action-request.schema.json",
+      "title": "ActionRequest",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "protocolVersion": "boundary",
+        "sessionId": "boundary",
+        "clientSeq": "boundary",
+        "baseRevision": "boundary",
+        "idempotencyKey": "boundary",
+        "action": "boundary"
+      }
+    },
+    "action-response": {
+      "file": "action-response.schema.json",
+      "title": "ActionResponse",
+      "rootClass": "public",
+      "fieldClasses": {
+        "requestId": "public",
+        "revision": "public",
+        "status": "public",
+        "projectionDelta": "public",
+        "publicEvents": "public",
+        "userVisibleError": "public"
+      },
+      "provisionalFields": [
+        "projectionDelta",
+        "publicEvents",
+        "userVisibleError"
+      ]
+    },
+    "verdict-result": {
+      "file": "verdict-result.schema.json",
+      "title": "VerdictResult",
+      "rootClass": "public",
+      "fieldClasses": {}
+    }
+  }
+}

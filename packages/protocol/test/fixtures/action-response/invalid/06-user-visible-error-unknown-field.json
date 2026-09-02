@@ -1,0 +1,12 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0000",
+  "revision": 43,
+  "status": "rejected",
+  "projectionDelta": null,
+  "publicEvents": [],
+  "userVisibleError": {
+    "code": "stale_base_revision",
+    "message": "baseRevision 已过期",
+    "internalStack": "at orchestrate (session-api/src/…)"
+  }
+}

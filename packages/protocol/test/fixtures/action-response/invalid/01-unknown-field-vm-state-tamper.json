@@ -1,0 +1,16 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0003",
+  "revision": 43,
+  "status": "running",
+  "projectionDelta": {
+    "revision": 43
+  },
+  "publicEvents": [],
+  "vmStateSnapshot": {
+    "registers": {
+      "RSP": 1
+    },
+    "memory": {},
+    "status": "running"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0000",
+  "revision": 43,
+  "status": "rejected",
+  "projectionDelta": null,
+  "publicEvents": [],
+  "userVisibleError": {
+    "code": "",
+    "message": "动作被拒绝"
+  }
+}

@@ -136,7 +136,7 @@ stackmaster/
 
 ## 常用命令
 
-> WP-0 已落地 TS 工程基线:pnpm workspaces + Turborepo,含 `packages/protocol`、`packages/challenge-schema`、`tooling/`(ESLint flat config 与 dependency-cruiser 配置)。`apps/` 与 `vm-engine/` 自阶段二起搭建,下列命令中 vm-engine 与 docker compose 部分在对应阶段落地前执行会失败,属预期现象。
+> WP-0 已落地 TS 工程基线:pnpm workspaces + Turborepo,含 `packages/protocol`、`packages/challenge-schema`、`tooling/`(ESLint flat config 与 dependency-cruiser 配置)。WP-1 已冻结数据分类与秘密零驻留清单(`docs/数据分类与秘密零驻留清单.md`);WP-2 已冻结会话动作协议 v1(`packages/protocol`:Zod 契约 + JSON Schema 2020-12 落盘 + `docs/会话动作协议语义.md`;`projectionDelta`/`publicEvents`/`userVisibleError` 完整 Schema 待 WP-3)。`apps/` 与 `vm-engine/` 自阶段二起搭建,下列命令中 vm-engine 与 docker compose 部分在对应阶段落地前执行会失败,属预期现象。
 
 ```bash
 pnpm install                              # 安装 TS 依赖(workspaces)
