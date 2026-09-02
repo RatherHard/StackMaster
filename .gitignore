@@ -15,6 +15,11 @@ dist/
 build/
 coverage/
 .vite/
+*.tsbuildinfo
+
+# Tooling caches
+.turbo/
+.eslintcache
 
 # Local environment and temporary files
 .env
@@ -26,3 +31,6 @@ tmp/
 
 # Local Claude Code worktrees
 .claude/
+
+# 私有题目包(CLAUDE.md:private-bundles 类内容永不进入 git)
+private-bundles/

@@ -136,14 +136,14 @@ stackmaster/
 
 ## 常用命令
 
-> 仓库当前仅有计划书,脚手架尚未初始化。按 5.5 初始化(pnpm workspaces + Turborepo + Cargo workspace)后,以下为既定命令;在脚手架落地前执行它们会失败,属预期现象。
+> WP-0 已落地 TS 工程基线:pnpm workspaces + Turborepo,含 `packages/protocol`、`packages/challenge-schema`、`tooling/`(ESLint flat config 与 dependency-cruiser 配置)。`apps/` 与 `vm-engine/` 自阶段二起搭建,下列命令中 vm-engine 与 docker compose 部分在对应阶段落地前执行会失败,属预期现象。
 
 ```bash
 pnpm install                              # 安装 TS 依赖(workspaces)
-pnpm build                                # Turborepo 全量构建
-pnpm dev                                  # plugin-dev 开发壳(Vite)
+pnpm build                                # Turborepo 全量构建(tsc -b 逐包)
+pnpm dev                                  # plugin-dev 开发壳(Vite;阶段二落地)
 pnpm test / pnpm lint / pnpm typecheck    # 测试 / ESLint / tsc project references
-pnpm exec depcruise .                     # 依赖边界检查
+pnpm lint:deps                            # 依赖边界检查(dependency-cruiser)
 
 cd vm-engine
 cargo test                                # 引擎测试 + proptest
