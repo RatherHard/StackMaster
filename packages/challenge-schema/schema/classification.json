@@ -1,0 +1,52 @@
+{
+  "packageVersion": "0.1.0",
+  "challengePackageSchemaVersion": 1,
+  "note": "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。",
+  "schemas": {
+    "public-descriptor": {
+      "file": "public-descriptor.schema.json",
+      "title": "PublicChallengeDescriptor",
+      "rootClass": "public",
+      "fieldClasses": {
+        "schemaVersion": "public",
+        "challengeId": "public",
+        "challengeContentVersion": "public",
+        "vmProfileVersion": "public",
+        "locale": "public",
+        "briefing": "public",
+        "vmProfile": "public",
+        "memoryLayout": "public",
+        "allowedActions": "public",
+        "resourceLimits": "public",
+        "hintLadder": "public",
+        "publicErrorMapping": "public",
+        "randomizationNotice": "public",
+        "initialProjection": "public"
+      }
+    },
+    "private-bundle": {
+      "file": "private-bundle.schema.json",
+      "title": "PrivateChallengeBundle",
+      "rootClass": "server-only",
+      "fieldClasses": {
+        "schemaVersion": "server-only",
+        "challengeId": "server-only",
+        "challengeContentVersion": "server-only",
+        "vmProfileVersion": "server-only",
+        "dslSchemaVersion": "server-only",
+        "vmEngineVersion": "server-only",
+        "engineBuildId": "server-only",
+        "declaredSeedPublicPaths": "server-only",
+        "seedPolicy": "server-only",
+        "initialState": "server-only",
+        "secretSinkRegisters": "server-only",
+        "secrets": "server-only",
+        "privateObjects": "server-only",
+        "judging": "server-only",
+        "stages": "server-only",
+        "compiledIr": "server-only",
+        "judgingConfig": "server-only"
+      }
+    }
+  }
+}

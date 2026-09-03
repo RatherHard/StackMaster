@@ -42,10 +42,13 @@ module.exports = {
       name: "challenge-schema-dependents-restricted",
       severity: "error",
       comment:
-        "challenge-schema 只能被后端 TS 包(challenge-compiler、session-api、verifier)依赖;浏览器侧与编排之外的应用不得依赖。",
+        "challenge-schema 只能被后端 TS 包(challenge-compiler、session-api、verifier)依赖;浏览器侧与编排之外的应用不得依赖。排除包自身(其内部模块边不属于“依赖方”约束)。",
       from: {
         path: "^(packages|apps)/",
-        pathNot: "^packages/(challenge-compiler|session-api|verifier)/",
+        pathNot: [
+          "^packages/(challenge-compiler|session-api|verifier)/",
+          "^packages/challenge-schema/",
+        ],
       },
       to: { path: "^packages/challenge-schema/" },
     },

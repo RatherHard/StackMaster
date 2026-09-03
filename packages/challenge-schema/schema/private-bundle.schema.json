@@ -1,0 +1,817 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/challenge/v1/private-bundle.schema.json",
+  "title": "PrivateChallengeBundle",
+  "x-sm-class": "server-only",
+  "description": "私有判题包(计划书 7.1):整体 SERVER_ONLY,只存在于 vm-worker 进程内;Schema 存在不等于可下发,仅经 @stackmaster/challenge-schema/server-only 子路径供后端包消费。字段级分类见 docs/数据分类与秘密零驻留清单.md 第十二章 §12.3;语义见 packages/challenge-schema/docs/双包Schema语义.md §三、§四。$defs 引用图无环(非递归),条件嵌套深度仍为静态属性(L1→L2→L3→谓词)。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "challengeId",
+    "challengeContentVersion",
+    "vmProfileVersion",
+    "dslSchemaVersion",
+    "vmEngineVersion",
+    "declaredSeedPublicPaths",
+    "seedPolicy",
+    "initialState",
+    "secrets",
+    "privateObjects",
+    "judging",
+    "compiledIr",
+    "judgingConfig"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "双包格式信封版本,与公开包一致。"
+    },
+    "challengeId": {
+      "$ref": "#/$defs/challengeId",
+      "description": "与公开包相等(XS-ID-CORR)。"
+    },
+    "challengeContentVersion": {
+      "$ref": "#/$defs/semver",
+      "description": "与公开包相等(XS-ID-CORR)。"
+    },
+    "vmProfileVersion": {
+      "$ref": "#/$defs/semver",
+      "description": "VM Profile Version(7.4 第 3 类);与公开包相等(XS-ID-CORR)。"
+    },
+    "dslSchemaVersion": {
+      "const": 1,
+      "description": "DSL Schema Version(7.4 第 1 类);扩展 21 opcode / 7 谓词时递增。"
+    },
+    "vmEngineVersion": {
+      "$ref": "#/$defs/semver",
+      "description": "VM Engine Version(7.4 第 2 类):锁定执行环境,生产不得自动使用最新引擎(7.4)。"
+    },
+    "engineBuildId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "引擎构建 ID(7.4 正式判题记录项)。"
+    },
+    "declaredSeedPublicPaths": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "description": "作者声明的 seed 影响公开投影路径;T-SC4 / ZR-P2 判定基准。空数组 = 显式声明无公开随机化面。路径语法在此约束,可解析性由 XS-SEED-DECL 检查(§4.3)。",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}(\\.[A-Za-z][A-Za-z0-9_]{0,31}){0,7}$"
+      }
+    },
+    "seedPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "enum": ["fixed", "server_random_per_session"]
+        },
+        "seedHex": {
+          "type": "string",
+          "pattern": "^([0-9a-fA-F]{2}){8,32}$",
+          "description": "16 – 64 hex 字符(8–32 字节熵);仅 fixed 策略允许。"
+        }
+      },
+      "if": {
+        "required": ["strategy"],
+        "properties": {
+          "strategy": {
+            "const": "fixed"
+          }
+        }
+      },
+      "then": {
+        "required": ["seedHex"],
+        "properties": {
+          "seedHex": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{2}){8,32}$"
+          }
+        }
+      },
+      "description": "随机化只用可复现服务端 seed;无 algorithmId——确定性由 vmEngineVersion 锁定(6.3)。seed 是秘密:禁入公开面。"
+    },
+    "initialState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registers", "memoryRegions"],
+      "properties": {
+        "registers": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "propertyNames": {
+            "$ref": "#/$defs/vmRegisterName"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/hexValue64"
+          },
+          "description": "VmState 初始寄存器;可含 FLAG 寄存器值——FLAG 值永不进入公开面(I-3)。键 ⊆ 冻结基集 ∪ FLAG 模式(XS-REG-FROZEN,基集清单见跨包一致性测试)。"
+        },
+        "memoryRegions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "description": "全部内存区域(含隐藏);非隐藏区域与公开布局按 regionId 双射(I2-PUB-MIRROR)。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "regionId",
+              "kind",
+              "startAddressHex",
+              "byteLength",
+              "permissions",
+              "contentHex",
+              "isHidden"
+            ],
+            "properties": {
+              "regionId": {
+                "$ref": "#/$defs/objectId"
+              },
+              "kind": {
+                "$ref": "#/$defs/regionKind"
+              },
+              "startAddressHex": {
+                "$ref": "#/$defs/hexValue64"
+              },
+              "byteLength": {
+                "$ref": "#/$defs/byteLength"
+              },
+              "permissions": {
+                "$ref": "#/$defs/permissions"
+              },
+              "contentHex": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{2})+$",
+                "maxLength": 33554432,
+                "description": "非空偶长 hex;长度必须等于 2 × byteLength(XS-MEM-CONTENT)。"
+              },
+              "isHidden": {
+                "type": "boolean",
+                "description": "隐藏区域禁止与公开区域相交(I2-HIDDEN-NOT-PUBLIC)。"
+              }
+            }
+          }
+        }
+      }
+    },
+    "secretSinkRegisters": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "description": "I-3 作者显式声明的补充秘密汇;纪律是仅收紧不得放宽——检查器始终叠加 FLAG 模式寄存器(I3-VISIBLE-REG)。",
+      "items": {
+        "$ref": "#/$defs/vmRegisterName"
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["flag", "virtualFiles"],
+      "properties": {
+        "flag": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128,
+          "description": "隐藏 flag;禁止发送到浏览器(CLAUDE.md 安全红线)。仓库不提交真实 flag,fixture 只用占位符。"
+        },
+        "virtualFiles": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 8,
+          "description": "虚拟文件 capability 内容;fileId 仅供服务端 grant_virtual_file / virtual_file_read 引用,私有 capability 返回值禁止下发。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fileId", "content"],
+            "properties": {
+              "fileId": {
+                "$ref": "#/$defs/objectId"
+              },
+              "content": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 4096
+              }
+            }
+          }
+        }
+      }
+    },
+    "privateObjects": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 64,
+      "description": "I-2 / I-3 检查器输入:私有对象登记。hidden 且 containsSecret 的对象地址区间不得与公开区域相交(I2-OBJ-NOT-PUBLIC)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objectId",
+          "kind",
+          "addressHex",
+          "byteLength",
+          "visibility",
+          "containsSecret"
+        ],
+        "properties": {
+          "objectId": {
+            "$ref": "#/$defs/objectId"
+          },
+          "kind": {
+            "enum": ["buffer", "canary", "saved_rbp", "return_address", "file", "other"]
+          },
+          "addressHex": {
+            "$ref": "#/$defs/hexValue64"
+          },
+          "byteLength": {
+            "$ref": "#/$defs/byteLength"
+          },
+          "visibility": {
+            "enum": ["public", "hidden"]
+          },
+          "containsSecret": {
+            "type": "boolean",
+            "description": "true ⇒ visibility 必须 hidden(I3-SINK-HIDDEN)。"
+          }
+        }
+      }
+    },
+    "judging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["successCondition"],
+      "properties": {
+        "successCondition": {
+          "$ref": "#/$defs/conditionL1",
+          "description": "成功条件:L1 布尔组合(表达式白名单第 6 项;深度静态封顶,XS-NESTING);恒真写作 {\"all\": []}。"
+        },
+        "failureConditions": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/conditionL1"
+          },
+          "description": "失败条件;触发即进入终态判定(D1 约束 5)。"
+        },
+        "hiddenTests": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 16,
+          "description": "隐藏测试是(输入, 预期判定)对;expectedResult ∈ 7 值可达判定枚举(challenge_invalid / replay_mismatch / cancelled / engine_error 非可授权期望,D6)。隐藏测试禁止发送到浏览器。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["testId", "kind", "expectedResult"],
+            "properties": {
+              "testId": {
+                "$ref": "#/$defs/objectId"
+              },
+              "kind": {
+                "enum": ["reference_payload", "predicate_probe"]
+              },
+              "payloadHex": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{2})+$",
+                "maxLength": 8192,
+                "description": "reference_payload 的输入字节序列,≤ 4096 字节。"
+              },
+              "expectedResult": {
+                "enum": [
+                  "success",
+                  "wrong_answer",
+                  "invalid_action",
+                  "program_crash",
+                  "memory_fault",
+                  "resource_limit",
+                  "timeout"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "description": "多阶段状态机(7.2 六要素,docs/最小DSL范围.md §七);单阶段题目省略。阶段图可达性与预算由 XS-STAGE-REACH / XS-STAGE-BUDGET 检查;阶段不可声明子状态机(无递归表达位)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stageId",
+          "allowedActions",
+          "preconditions",
+          "transitions",
+          "sideEffects",
+          "failureConditions",
+          "resourceBudget"
+        ],
+        "properties": {
+          "stageId": {
+            "$ref": "#/$defs/objectId"
+          },
+          "allowedActions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/sessionAction"
+            },
+            "description": "12 会话动作枚举子集;阶段动作不得超出公开包题目允许面(实现层细化)。"
+          },
+          "preconditions": {
+            "$ref": "#/$defs/conditionL1",
+            "description": "进入前置条件;恒真写作 {\"all\": []}。"
+          },
+          "transitions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["toStageId", "onCondition"],
+              "properties": {
+                "toStageId": {
+                  "$ref": "#/$defs/objectId"
+                },
+                "onCondition": {
+                  "$ref": "#/$defs/conditionL1"
+                }
+              }
+            },
+            "description": "迁移条件;目标必须存在且自首阶段全部可达(XS-STAGE-REACH)。"
+          },
+          "sideEffects": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "fileId"],
+              "properties": {
+                "type": {
+                  "const": "grant_virtual_file"
+                },
+                "fileId": {
+                  "$ref": "#/$defs/objectId"
+                }
+              }
+            },
+            "description": "有限副作用;v1 封闭仅 grant_virtual_file,结构化 fileId 引用——拒绝动态拼接 capability 名称(7.3 F-4/F-5)。"
+          },
+          "failureConditions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/$defs/conditionL1"
+            },
+            "description": "失败条件;触发即 failed(终态,D1 约束 5)。"
+          },
+          "resourceBudget": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["maxInstructionSteps"],
+            "properties": {
+              "maxInstructionSteps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000,
+                "description": "每状态指令预算**必填**(7.2 循环上限的落位;无预算的状态在 Schema 层拒绝,XS-STAGE-BUDGET)。"
+              },
+              "maxActions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              }
+            }
+          }
+        }
+      }
+    },
+    "compiledIr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["irFormatVersion", "instructions", "labels"],
+      "properties": {
+        "irFormatVersion": {
+          "const": 1,
+          "description": "IR 格式版本;IR 是版本化序列化格式,不是共享代码(Rust 以 serde + schemars 消费)。"
+        },
+        "entrypointIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "入口指令索引;必须 < instructions 长度(XS-IR-LABEL)。"
+        },
+        "instructions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "description": "指令 = 21 opcode 封闭枚举(docs/最小DSL范围.md §三)+ 类型化操作数槽;逐 opcode 合法性归 challenge-compiler(阶段二),封闭枚举防绕过编译器的手写包。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op"],
+            "properties": {
+              "op": {
+                "enum": [
+                  "mov",
+                  "push",
+                  "pop",
+                  "add",
+                  "sub",
+                  "cmp",
+                  "and",
+                  "or",
+                  "xor",
+                  "shl",
+                  "shr",
+                  "jmp",
+                  "je",
+                  "jne",
+                  "jb",
+                  "jae",
+                  "call",
+                  "ret",
+                  "read",
+                  "write",
+                  "syscall"
+                ]
+              },
+              "operands": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 4,
+                "items": {
+                  "$ref": "#/$defs/operand"
+                }
+              }
+            }
+          }
+        },
+        "labels": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 512,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["labelId", "instructionIndex"],
+            "properties": {
+              "labelId": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "instructionIndex": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "必须 < instructions 长度(XS-IR-LABEL)。"
+              }
+            }
+          },
+          "description": "labelId 唯一且引用可解析由 XS-IR-LABEL 检查(Schema 无唯一约束表达)。"
+        }
+      }
+    },
+    "judgingConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdictRuleVersion", "maxPredicateEvalSteps"],
+      "properties": {
+        "verdictRuleVersion": {
+          "$ref": "#/$defs/semver",
+          "description": "判题规则版本(7.4 正式判题记录项);新增内置谓词时递增。"
+        },
+        "maxPredicateEvalSteps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000,
+          "description": "单会话谓词求值步数预算(D1 约束 2 / I-6 / T-SC2 配置前提)。"
+        },
+        "timeoutMsPerAction": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "maxTotalActionBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        }
+      }
+    }
+  },
+  "$defs": {
+    "challengeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "objectId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,62}$",
+      "description": "regionId / fileId / objectId / stageId / testId 共用标识符模式。"
+    },
+    "registerName": {
+      "type": "string",
+      "pattern": "^R[A-Z0-9]{1,3}$",
+      "description": "基集寄存器名(冻结 14 个,清单由跨包一致性测试对照 protocol 锚定)。"
+    },
+    "flagName": {
+      "type": "string",
+      "pattern": "^FLAG[A-Z0-9_]*$",
+      "description": "FLAG 寄存器名(WP-1 §12.5);与基集模式结构性不相交。"
+    },
+    "vmRegisterName": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/registerName"
+        },
+        {
+          "$ref": "#/$defs/flagName"
+        }
+      ]
+    },
+    "hexValue64": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{1,16}$",
+      "description": "64 位十六进制,入站面大小写均可。"
+    },
+    "permissions": {
+      "type": "string",
+      "pattern": "^r?w?x?$",
+      "description": "规范序子集(rwx 合法、wr 非法),与协议 VisibleMemoryRegion 同形。"
+    },
+    "regionKind": {
+      "enum": ["code", "global", "stack", "heap", "key"]
+    },
+    "byteLength": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16777216,
+      "description": "1 – 16 MiB(协议 MAX_REGION_BYTE_LENGTH)。"
+    },
+    "sessionAction": {
+      "enum": [
+        "write_bytes",
+        "push",
+        "pop",
+        "call",
+        "ret",
+        "step",
+        "run_to_event",
+        "pause",
+        "undo",
+        "checkout_checkpoint",
+        "reset",
+        "create_checkpoint"
+      ],
+      "description": "12 会话动作冻结枚举;与 @stackmaster/protocol ActionRequest 判别式一致(跨包一致性测试强制)。"
+    },
+    "operand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "register"
+            },
+            "name": {
+              "$ref": "#/$defs/vmRegisterName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "valueHex"],
+          "properties": {
+            "kind": {
+              "const": "immediate"
+            },
+            "valueHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "memory"
+            },
+            "baseRegister": {
+              "$ref": "#/$defs/registerName"
+            },
+            "displacementHex": {
+              "type": "string",
+              "pattern": "^-?0x[0-9a-fA-F]{1,16}$"
+            }
+          }
+        }
+      ]
+    },
+    "predicate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "register", "valueHex"],
+          "properties": {
+            "type": {
+              "const": "register_equals"
+            },
+            "register": {
+              "$ref": "#/$defs/vmRegisterName"
+            },
+            "valueHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "register", "maskHex"],
+          "properties": {
+            "type": {
+              "const": "register_bits_set"
+            },
+            "register": {
+              "$ref": "#/$defs/vmRegisterName"
+            },
+            "maskHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "regionId", "offsetBytes", "bytesHex"],
+          "properties": {
+            "type": {
+              "const": "memory_equals"
+            },
+            "regionId": {
+              "$ref": "#/$defs/objectId"
+            },
+            "offsetBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bytesHex": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{2})+$",
+              "maxLength": 512,
+              "description": "固定长度切片(白名单第 7 项),≤ 256 字节。"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "regionId", "bytesHex"],
+          "properties": {
+            "type": {
+              "const": "memory_contains"
+            },
+            "regionId": {
+              "$ref": "#/$defs/objectId"
+            },
+            "bytesHex": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{2})+$",
+              "maxLength": 128,
+              "description": "有界字节匹配(白名单第 8 项),≤ 64 字节。"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "addressHex"],
+          "properties": {
+            "type": {
+              "const": "ret_target_equals"
+            },
+            "addressHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "stack_canary_intact"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "fileId"],
+          "properties": {
+            "type": {
+              "const": "virtual_file_read"
+            },
+            "fileId": {
+              "$ref": "#/$defs/objectId"
+            }
+          }
+        }
+      ],
+      "description": "七项内置谓词封闭集(docs/最小DSL范围.md §四);oneOf 以 type 判别;新增谓词 = 审计 + verdictRuleVersion / dslSchemaVersion 演进。"
+    },
+    "conditionL3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate"],
+      "properties": {
+        "predicate": {
+          "$ref": "#/$defs/predicate"
+        }
+      }
+    },
+    "conditionL2": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 3,
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/conditionL3"
+          }
+        },
+        "any": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/conditionL3"
+          }
+        },
+        "not": {
+          "$ref": "#/$defs/conditionL3"
+        }
+      },
+      "description": "第二级布尔组合;all/any 允许空数组(恒真/恒假)。"
+    },
+    "conditionL1": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 3,
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/conditionL2"
+          }
+        },
+        "any": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/conditionL2"
+          }
+        },
+        "not": {
+          "$ref": "#/$defs/conditionL2"
+        }
+      },
+      "description": "判题条件根(L1):布尔组合深度静态封顶——L1→L2→L3→谓词,第四层在结构上不可表达(XS-NESTING);$defs 引用无环,非递归。"
+    }
+  }
+}

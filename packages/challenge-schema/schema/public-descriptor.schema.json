@@ -1,0 +1,502 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/challenge/v1/public-descriptor.schema.json",
+  "title": "PublicChallengeDescriptor",
+  "x-sm-class": "public",
+  "description": "公开描述包(计划书 7.1):可被浏览器读取,只含公开面字段。字段级分类与硬门槛论证见 docs/数据分类与秘密零驻留清单.md 第十二章;语义见 packages/challenge-schema/docs/双包Schema语义.md §二。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "challengeId",
+    "challengeContentVersion",
+    "vmProfileVersion",
+    "locale",
+    "briefing",
+    "vmProfile",
+    "memoryLayout",
+    "allowedActions",
+    "resourceLimits",
+    "hintLadder",
+    "publicErrorMapping",
+    "initialProjection"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "双包格式信封版本(CHALLENGE_PACKAGE_SCHEMA_VERSION);演进走版本号,无预留字段。"
+    },
+    "challengeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+      "description": "题目公开标识符。"
+    },
+    "challengeContentVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Challenge Content Version(7.4 第 4 类)。"
+    },
+    "vmProfileVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "VM Profile Version(7.4 第 3 类):寄存器白名单与 VM Profile 演进的版本锚点;与私有包同值(XS-ID-CORR;WP-1 §12.1 共享身份字段)。版本号不编码秘密。"
+    },
+    "locale": {
+      "enum": ["zh-CN"],
+      "description": "语言标签;扩展走枚举演进。"
+    },
+    "briefing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "summary", "learningObjectives"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "题目标题;长度对齐协议 PUBLIC_TEXT_MAX_LENGTH。"
+        },
+        "summary": {
+          "type": "string",
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "learningObjectives": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "teachingNotes": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "vmProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registers", "endianness", "pageSizeBytes", "canary"],
+      "properties": {
+        "registers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "description": "教学可见寄存器白名单声明(ProjectionPolicy.visibleRegisters 的组装来源)。名称模式 ^R[A-Z0-9]{1,3}$ 结构性排除 FLAG 寄存器(XS-REG-FLAG;WP-1 §12.5)。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^R[A-Z0-9]{1,3}$"
+              },
+              "displayLabel": {
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        },
+        "flagRegisterNames": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "description": "FLAG 寄存器名称(仅名称公开,值永不公开);不要求是 registers 子集(WP-1 §12.5)。",
+          "items": {
+            "type": "string",
+            "pattern": "^FLAG[A-Z0-9_]*$"
+          }
+        },
+        "endianness": {
+          "const": "little"
+        },
+        "pageSizeBytes": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 65536,
+          "description": "描述性元数据(v1 无规则消费;权威分页语义归引擎)。"
+        },
+        "canary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "if": {
+            "required": ["enabled"],
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": ["sizeBytes"],
+            "properties": {
+              "sizeBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              }
+            }
+          },
+          "description": "教学目标与公开布局参数;canary 值在私有包(XS-CANARY-CORR 互证)。"
+        }
+      }
+    },
+    "memoryLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regions"],
+      "properties": {
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "description": "可见区域布局(7.1)。结构性无隐藏表达位:无 isHidden/visibility/containsSecret 字段——隐藏区域只能声明在私有包(D2-NO-HIDDEN-IN-PUBLIC)。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "regionId",
+              "kind",
+              "startAddressHex",
+              "byteLength",
+              "permissions",
+              "publicLabel"
+            ],
+            "properties": {
+              "regionId": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,62}$"
+              },
+              "kind": {
+                "enum": ["code", "global", "stack", "heap", "key"]
+              },
+              "startAddressHex": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{1,16}$"
+              },
+              "byteLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16777216,
+                "description": "1 – 16 MiB(协议 MAX_REGION_BYTE_LENGTH)。"
+              },
+              "permissions": {
+                "type": "string",
+                "pattern": "^r?w?x?$",
+                "description": "规范序子集(rwx 合法、wr 非法),与协议 VisibleMemoryRegion 同形。"
+              },
+              "publicLabel": {
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      }
+    },
+    "allowedActions": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 12,
+      "uniqueItems": true,
+      "description": "12 会话动作冻结枚举的子集选择;参数 Schema 单一来源是 @stackmaster/protocol 会话动作契约(不复述,5.6)。",
+      "items": {
+        "enum": [
+          "write_bytes",
+          "push",
+          "pop",
+          "call",
+          "ret",
+          "step",
+          "run_to_event",
+          "pause",
+          "undo",
+          "checkout_checkpoint",
+          "reset",
+          "create_checkpoint"
+        ]
+      }
+    },
+    "resourceLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "资源限制公开部分(D1 约束 5:预算的公开部分由公开描述包声明)。仅题目可裁量预算;协议冻结常量(MAX_PROJECTION_BYTES_PER_REVISION、CALL_STACK_MAX_DEPTH 等)不是题目可授权面,不得重新声明。",
+      "properties": {
+        "predicateEvalBudgetPerSession": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "rollbackBudgetPerSession": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "maxWriteBytesPerAction": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "description": "上限 = 协议 MAX_WRITE_BYTES。"
+        }
+      }
+    },
+    "hintLadder": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "description": "提示阶梯(7.1);提示讲方法不给答案(E-4/I-7 同纪律)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["order", "revealPolicy", "hintText"],
+        "properties": {
+          "order": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "revealPolicy": {
+            "enum": ["on_request", "after_n_failures"]
+          },
+          "failureThreshold": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "hintText": {
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "if": {
+          "required": ["revealPolicy"],
+          "properties": {
+            "revealPolicy": {
+              "const": "after_n_failures"
+            }
+          }
+        },
+        "then": {
+          "required": ["failureThreshold"],
+          "properties": {
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        }
+      }
+    },
+    "publicErrorMapping": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 16,
+      "description": "公开错误映射(7.1);错误码枚举与 @stackmaster/protocol PublicError 16 值一致(跨包一致性测试强制)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["errorCode", "teachingNote"],
+        "properties": {
+          "errorCode": {
+            "enum": [
+              "invalid_input_format",
+              "invalid_payload_length",
+              "offset_out_of_range",
+              "endianness_mismatch",
+              "permission_denied",
+              "invalid_rip",
+              "canary_violation",
+              "invalid_call_argument",
+              "objective_not_met",
+              "inaccessible_address",
+              "budget_exhausted",
+              "stale_base_revision",
+              "stale_client_seq",
+              "idempotency_conflict",
+              "session_terminal",
+              "internal_error"
+            ]
+          },
+          "teachingNote": {
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "randomizationNotice": {
+      "type": "string",
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "纯文案:仅声明存在随机化;禁策略、候选空间、熵上界(WP-1 §3.2 seedState 行)。"
+    },
+    "initialProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visibleRegions", "visibleRegisters"],
+      "description": "UI 所需非秘密初始投影(7.1)——部分镜像:仅作者可声明的三个子形状;revision/callStackSummary/controlFlow/status 结构性排除(WP-1 §12.2.1;排除集由跨包一致性测试精确断言)。",
+      "properties": {
+        "visibleRegions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "description": "与 memoryLayout.regions 按 regionId 双射且几何+标签逐项相等(XS-PROJ-GEOM);bytesHex 必须镜像私有初始内容(XS-PROJ-VALUES)。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "regionId",
+              "label",
+              "startAddressHex",
+              "byteLength",
+              "permissions",
+              "bytesHex",
+              "truncated"
+            ],
+            "properties": {
+              "regionId": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,62}$"
+              },
+              "label": {
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "startAddressHex": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{1,16}$"
+              },
+              "byteLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16777216
+              },
+              "permissions": {
+                "type": "string",
+                "pattern": "^r?w?x?$"
+              },
+              "bytesHex": {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{2})+$",
+                "maxLength": 512,
+                "description": "非空偶长 hex;≤ 512 hex 字符 = 默认 maxBytesPerRange(256 字节)的可见前缀。"
+              },
+              "truncated": {
+                "type": "boolean",
+                "description": "常态字段(非 presence-only):区域内容是否被裁剪,与协议 VisibleMemoryRegion 同形。"
+              }
+            }
+          }
+        },
+        "visibleRegisters": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "description": "名称模式结构性排除 FLAG 寄存器;值必须镜像私有初始寄存器(XS-PROJ-VALUES);⊆ vmProfile.registers(XS-PROJ-REG);∉ 秘密汇(I3-VISIBLE-REG)。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "valueHex"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^R[A-Z0-9]{1,3}$"
+              },
+              "valueHex": {
+                "type": "string",
+                "pattern": "^0x[0-9A-F]{1,16}$",
+                "description": "大写十六进制(协议公开输出面)。"
+              }
+            }
+          }
+        },
+        "semanticHighlights": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 32,
+          "description": "教学语义标注;目标区域必须可见且跨度在区域内(I2-HIGHLIGHT)。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "targetRegionId",
+              "startAddressHex",
+              "byteLength",
+              "label"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "buffer_start",
+                  "return_address_slot",
+                  "saved_rbp_slot",
+                  "canary_slot",
+                  "custom"
+                ]
+              },
+              "targetRegionId": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,62}$"
+              },
+              "startAddressHex": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{1,16}$"
+              },
+              "byteLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16777216
+              },
+              "label": {
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
