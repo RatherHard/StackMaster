@@ -1,0 +1,8 @@
+{
+  "revision": 43,
+  "dirtyRanges": [],
+  "changedRegisters": [],
+  "fullProjection": {
+    "note": "服务端绝不整体下发投影对象之外的字段"
+  }
+}

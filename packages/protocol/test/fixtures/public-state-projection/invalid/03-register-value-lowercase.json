@@ -1,0 +1,14 @@
+{
+  "revision": 0,
+  "visibleRegions": [],
+  "visibleRegisters": [
+    { "name": "RSP", "valueHex": "0x7fff00f8" }
+  ],
+  "callStackSummary": [],
+  "controlFlow": {
+    "currentInstruction": { "addressHex": "0x401000", "text": "push rbp" },
+    "pausedOn": null
+  },
+  "semanticHighlights": [],
+  "status": "running"
+}

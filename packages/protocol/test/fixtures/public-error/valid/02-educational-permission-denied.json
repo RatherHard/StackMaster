@@ -1,0 +1,14 @@
+{
+  "code": "permission_denied",
+  "message": "目标地址位于只读区域,写入被拒绝。",
+  "addressHex": "0x00405000",
+  "explanation": {
+    "regionId": "rodata",
+    "permissions": "rx",
+    "hints": [
+      "该区域权限为 rx(可读可执行,不可写)。",
+      "检查 payload 的目标地址是否为缓冲区起点。",
+      "可参考内存视图中 buffer_start 高亮定位可写区域。"
+    ]
+  }
+}

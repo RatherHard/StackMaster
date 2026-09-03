@@ -1,0 +1,9 @@
+{
+  "code": "objective_not_met",
+  "message": "目标条件尚未满足。",
+  "explanation": {
+    "hints": [
+      "已匹配 2 / 4 项条件。"
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "visibleRegions": ["stack-main"],
+  "visibleObjects": ["obj-input-buffer"],
+  "visibleRegisters": ["RSP", "RBP"],
+  "maxBytesPerRange": 256,
+  "errorDetailLevel": "coarse",
+  "hiddenRegions": ["secret-region"]
+}

@@ -1,8 +1,10 @@
 /**
- * ActionResponse 契约测试(信封为 WP-2 冻结面;载荷字段当前为 WP-3 前置声明)。
+ * ActionResponse 契约测试(信封与载荷均为 WP-2/WP-3 冻结面)。
  *
  * 重点断言:未知字段拒绝(ZR-P1 / I-1,含 VmState 序列化篡改形态)、
- * 每动作公开事件上限(D4)、projectionDelta 必填(无变化用 null 表达)。
+ * 每动作公开事件上限(D4)、projectionDelta 必填(无变化用 null 表达)、
+ * rejected 跨字段耦合(必有 userVisibleError、增量恒 null、事件恒空)、
+ * 增量 revision 与信封 revision 一致。
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +29,7 @@ function loadFixtures(kind: "valid" | "invalid"): readonly FixtureCase[] {
     }));
 }
 
-describe("ActionResponse 契约(WP-2)", () => {
+describe("ActionResponse 契约(WP-2 信封 + WP-3 载荷)", () => {
   it.each(loadFixtures("valid"))("接受典型样例 $name", ({ payload }) => {
     const result = ActionResponseSchema.safeParse(payload);
     expect(result.success).toBe(true);
@@ -62,7 +64,7 @@ describe("ActionResponse 契约(WP-2)", () => {
       requestId: "r-boundary",
       revision: 1,
       status: "running",
-      projectionDelta: { revision: 1 },
+      projectionDelta: { revision: 1, dirtyRanges: [], changedRegisters: [] },
       publicEvents: boundaryEvents,
     });
     expect(result.success).toBe(true);
@@ -83,9 +85,55 @@ describe("ActionResponse 契约(WP-2)", () => {
       requestId: "r-paused",
       revision: 1,
       status: "paused",
-      projectionDelta: { revision: 1 },
+      projectionDelta: { revision: 1, dirtyRanges: [], changedRegisters: [] },
       publicEvents: [],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejected 响应禁止携带非 null 增量(拒绝动作不产生投影)", () => {
+    const result = ActionResponseSchema.safeParse({
+      requestId: "r-rejected-delta",
+      revision: 3,
+      status: "rejected",
+      projectionDelta: { revision: 3, dirtyRanges: [], changedRegisters: [] },
+      publicEvents: [],
+      userVisibleError: { code: "invalid_input_format", message: "动作格式无法解析" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejected 响应禁止携带任何公开事件", () => {
+    const result = ActionResponseSchema.safeParse({
+      requestId: "r-rejected-events",
+      revision: 3,
+      status: "rejected",
+      projectionDelta: null,
+      publicEvents: [{ seq: 0, kind: "write" }],
+      userVisibleError: { code: "invalid_input_format", message: "动作格式无法解析" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejected 响应必须携带 userVisibleError(拒绝必须可解释)", () => {
+    const result = ActionResponseSchema.safeParse({
+      requestId: "r-rejected-no-error",
+      revision: 3,
+      status: "rejected",
+      projectionDelta: null,
+      publicEvents: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("增量 revision 必须等于信封 revision(投影一致性)", () => {
+    const result = ActionResponseSchema.safeParse({
+      requestId: "r-revision-mismatch",
+      revision: 5,
+      status: "running",
+      projectionDelta: { revision: 4, dirtyRanges: [], changedRegisters: [] },
+      publicEvents: [],
+    });
+    expect(result.success).toBe(false);
   });
 });

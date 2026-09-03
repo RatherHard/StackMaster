@@ -1,0 +1,11 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0008",
+  "revision": 45,
+  "status": "running",
+  "projectionDelta": {
+    "revision": 44,
+    "dirtyRanges": [],
+    "changedRegisters": []
+  },
+  "publicEvents": []
+}

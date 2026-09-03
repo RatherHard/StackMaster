@@ -1,0 +1,7 @@
+{
+  "code": "invalid_input_format",
+  "message": "输入格式非法:bytesHex 必须是偶数长度的十六进制串。",
+  "explanation": {
+    "valueHex": "0x4141"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "code": "internal_error",
+  "message": "引擎内部错误,请稍后重试。",
+  "addressHex": null,
+  "explanation": {
+    "hints": ["引擎堆栈:vm-engine/src/worker.rs:128"]
+  }
+}

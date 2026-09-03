@@ -1,0 +1,13 @@
+{
+  "code": "canary_violation",
+  "message": "栈保护值被破坏,程序终止。",
+  "addressHex": "0x7FFF00D8",
+  "explanation": {
+    "regionId": "stack-main",
+    "valueHex": "0x4141414141414141",
+    "hints": [
+      "Canary 是栈保护机制:返回前校验槽内值是否被覆盖。",
+      "覆盖返回地址前需要先绕过或保留 canary。"
+    ]
+  }
+}

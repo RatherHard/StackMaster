@@ -1,0 +1,8 @@
+{
+  "code": "inaccessible_address",
+  "message": "目标地址不可访问。",
+  "addressHex": "0x7FFE0000",
+  "explanation": {
+    "valueHex": "0x7FFE1234"
+  }
+}

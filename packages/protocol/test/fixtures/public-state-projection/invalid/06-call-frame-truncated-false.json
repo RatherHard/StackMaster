@@ -1,0 +1,19 @@
+{
+  "revision": 64,
+  "visibleRegions": [],
+  "visibleRegisters": [],
+  "callStackSummary": [
+    {
+      "index": 63,
+      "functionLabel": "deep_frame",
+      "returnAddressHex": "0x401300",
+      "truncated": false
+    }
+  ],
+  "controlFlow": {
+    "currentInstruction": { "addressHex": "0x401300", "text": "push rbp" },
+    "pausedOn": null
+  },
+  "semanticHighlights": [],
+  "status": "paused"
+}

@@ -1,0 +1,11 @@
+{
+  "revision": 43,
+  "dirtyRanges": [
+    {
+      "regionId": "stack main!",
+      "startAddressHex": "0x7FFF00D8",
+      "bytesHex": "41"
+    }
+  ],
+  "changedRegisters": []
+}

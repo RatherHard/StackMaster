@@ -65,6 +65,21 @@ module.exports = {
       from: { path: "^(packages|apps)/", pathNot: "^packages/protocol/" },
       to: { path: "^packages/protocol/(dist|src)/schema/" },
     },
+    {
+      name: "protocol-server-only-backend-consumers-only",
+      severity: "error",
+      comment:
+        "protocol 的 server-only 子路径(ProjectionPolicy 等,WP-1 §五)只允许后端包(challenge-compiler、session-api、verifier)依赖;浏览器可达包导入即违规——“Schema 存在不等于可下发”,projection 白名单的机制面不得进入浏览器构建图(WP-3)。",
+      from: {
+        path: "^(packages|apps)/",
+        pathNot: [
+          "^packages/(challenge-compiler|session-api|verifier)/",
+          // protocol 包自身装配该子树(生成管线与漂移测试),属可信内部边。
+          "^packages/protocol/",
+        ],
+      },
+      to: { path: "^packages/protocol/(dist|src)/server-only" },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

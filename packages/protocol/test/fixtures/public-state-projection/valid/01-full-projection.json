@@ -1,0 +1,58 @@
+{
+  "revision": 43,
+  "visibleRegions": [
+    {
+      "regionId": "stack-main",
+      "label": "主栈帧",
+      "startAddressHex": "0x7FFF0000",
+      "byteLength": 256,
+      "permissions": "rw",
+      "bytesHex": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+      "truncated": true
+    },
+    {
+      "regionId": "buffer-input",
+      "label": "输入缓冲区",
+      "startAddressHex": "0x7FFF0010",
+      "byteLength": 64,
+      "permissions": "rw",
+      "bytesHex": "48656c6c6f2c20737461636b2100",
+      "truncated": false
+    }
+  ],
+  "visibleRegisters": [
+    { "name": "RSP", "valueHex": "0x7FFF00F8" },
+    { "name": "RBP", "valueHex": "0x7FFF00E0" },
+    { "name": "RAX", "valueHex": "0x0" }
+  ],
+  "callStackSummary": [
+    { "index": 0, "functionLabel": "vulnerable_function", "returnAddressHex": "0x4011A5" },
+    {
+      "index": 1,
+      "functionLabel": "main",
+      "returnAddressHex": "0x401230",
+      "truncated": true
+    }
+  ],
+  "controlFlow": {
+    "currentInstruction": { "addressHex": "0x4011A0", "text": "ret" },
+    "pausedOn": "ret"
+  },
+  "semanticHighlights": [
+    {
+      "kind": "buffer_start",
+      "targetRegionId": "buffer-input",
+      "startAddressHex": "0x7FFF0010",
+      "byteLength": 64,
+      "label": "输入缓冲区起点(64 字节)"
+    },
+    {
+      "kind": "canary_slot",
+      "targetRegionId": "stack-main",
+      "startAddressHex": "0x7FFF00D8",
+      "byteLength": 8,
+      "label": "Canary 槽"
+    }
+  ],
+  "status": "paused"
+}

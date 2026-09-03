@@ -26,3 +26,10 @@ export const BytesHexSchema = z
   .string()
   .regex(/^(?:[0-9a-fA-F]{2})+$/, "必须是偶数长度的十六进制串(无 0x 前缀)")
   .max(MAX_WRITE_BYTES * 2, `字节内容超过协议级上限(${MAX_WRITE_BYTES} 字节)`);
+
+/**
+ * 非空字节序列(≥ 1 字节):公开投影的区域内容、dirty range 与事件 payload 的形态。
+ * 协议级上限与 BytesHexSchema 一致(4096 字节 = D3 的 maxBytesPerRange 单策略上限);
+ * 生效上限 maxBytesPerRange(默认 256)由服务端按策略收紧,契约层只卡协议上限。
+ */
+export const NonEmptyBytesHexSchema = BytesHexSchema.min(2, "至少携带 1 字节");

@@ -1,0 +1,7 @@
+{
+  "visibleRegions": ["stack-main"],
+  "visibleObjects": ["obj-input-buffer"],
+  "visibleRegisters": ["RSP", "1AX"],
+  "maxBytesPerRange": 256,
+  "errorDetailLevel": "educational"
+}

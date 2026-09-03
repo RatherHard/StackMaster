@@ -7,11 +7,16 @@
  *
  * 已冻结契约:
  * - WP-2 会话动作协议 v1:ActionRequest(12 种动作)、ActionResponse、11 种结果类型;
- *   语义见 docs/会话动作协议语义.md。
+ *   语义见 docs/会话动作协议语义.md;
+ * - WP-3 投影与错误契约:PublicStateProjection 及其子类型、ProjectionDelta /
+ *   DirtyRange、PublicError(16 值错误码 + 逐 code 能力矩阵);
+ *   语义见 docs/投影与错误契约语义.md。
+ *
+ * server-only 边界(WP-1 §五):ProjectionPolicy Schema 不从本入口导出,
+ * 仅经子路径 @stackmaster/protocol/server-only 供后端包消费——浏览器可达包
+ * 导入该子路径即违规(dependency-cruiser 强制);"Schema 存在不等于可下发"。
  *
  * 待后续 WP 填入:
- * - WP-3 投影与错误契约(projectionDelta / publicEvents / userVisibleError 的
- *   完整 Schema,当前为 src/session-action/provisional.ts 前置声明);
  * - WP-5 嵌入协议消息信封。
  *
  * 依赖纪律(5.5):本包是所有 TS 包唯一可依赖的跨域共享面,自身不得依赖任何
@@ -24,10 +29,22 @@ export * from "./common/limits.js";
 export * from "./common/hex.js";
 export * from "./common/identifiers.js";
 export * from "./common/classification.js";
+export * from "./common/public-text.js";
+export * from "./common/register-name.js";
 export * from "./session-action/action-args.js";
 export * from "./session-action/action-object.js";
 export * from "./session-action/action-request.js";
 export * from "./session-action/action-response.js";
 export * from "./session-action/verdict-result.js";
-export * from "./session-action/provisional.js";
+export * from "./projection/public-status.js";
+export * from "./projection/visible-memory-region.js";
+export * from "./projection/public-register.js";
+export * from "./projection/public-call-frame.js";
+export * from "./projection/public-control-flow.js";
+export * from "./projection/semantic-highlight.js";
+export * from "./projection/public-event.js";
+export * from "./projection/public-state-projection.js";
+export * from "./projection/projection-delta.js";
+export * from "./error/public-error-code.js";
+export * from "./error/public-error.js";
 export * from "./schema/registry.js";

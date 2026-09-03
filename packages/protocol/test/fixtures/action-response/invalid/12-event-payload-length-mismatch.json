@@ -1,0 +1,15 @@
+{
+  "requestId": "r-event-length-mismatch",
+  "revision": 1,
+  "status": "running",
+  "projectionDelta": null,
+  "publicEvents": [
+    {
+      "seq": 0,
+      "kind": "write",
+      "addressHex": "0x7FFF00F8",
+      "byteLength": 8,
+      "payloadHex": "41414141414141"
+    }
+  ]
+}

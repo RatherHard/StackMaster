@@ -1,0 +1,15 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0005",
+  "revision": 42,
+  "status": "rejected",
+  "projectionDelta": {
+    "revision": 42,
+    "dirtyRanges": [],
+    "changedRegisters": []
+  },
+  "publicEvents": [],
+  "userVisibleError": {
+    "code": "stale_base_revision",
+    "message": "baseRevision 已过期,请重新同步公开投影后重试。"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "code": "endianness_mismatch",
+  "message": "值的字节序与题目约定不一致。",
+  "explanation": {
+    "valueHex": "0x4847464544434241",
+    "interpretedAs": "little_endian_qword",
+    "hints": [
+      "本题目按 little-endian 解释栈上的多字节值。",
+      "构造地址 payload 时把低位字节放在前面。"
+    ]
+  }
+}

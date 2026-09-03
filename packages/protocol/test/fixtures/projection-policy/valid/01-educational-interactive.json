@@ -1,0 +1,7 @@
+{
+  "visibleRegions": ["stack-main", "buffer-input", "code-text"],
+  "visibleObjects": ["obj-input-buffer", "obj-canary"],
+  "visibleRegisters": ["RSP", "RBP", "RIP", "RAX", "RDI", "RSI"],
+  "maxBytesPerRange": 256,
+  "errorDetailLevel": "educational"
+}

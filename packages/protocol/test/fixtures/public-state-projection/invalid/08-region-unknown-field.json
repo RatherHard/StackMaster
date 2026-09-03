@@ -1,0 +1,23 @@
+{
+  "revision": 0,
+  "visibleRegions": [
+    {
+      "regionId": "stack-main",
+      "label": "主栈帧",
+      "startAddressHex": "0x7FFF0000",
+      "byteLength": 256,
+      "permissions": "rw",
+      "bytesHex": "4141414141414141",
+      "truncated": false,
+      "rawVmBytes": "4141414141414141"
+    }
+  ],
+  "visibleRegisters": [],
+  "callStackSummary": [],
+  "controlFlow": {
+    "currentInstruction": { "addressHex": "0x401000", "text": "push rbp" },
+    "pausedOn": null
+  },
+  "semanticHighlights": [],
+  "status": "running"
+}

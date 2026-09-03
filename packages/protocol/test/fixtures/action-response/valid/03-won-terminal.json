@@ -3,7 +3,9 @@
   "revision": 57,
   "status": "won",
   "projectionDelta": {
-    "revision": 57
+    "revision": 57,
+    "dirtyRanges": [],
+    "changedRegisters": []
   },
   "publicEvents": []
 }

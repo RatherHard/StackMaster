@@ -35,18 +35,214 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
+            },
+            "dirtyRanges": {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "regionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "startAddressHex": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{1,16}$"
+                  },
+                  "bytesHex": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 8192,
+                    "pattern": "^(?:[0-9a-fA-F]{2})+$"
+                  },
+                  "truncated": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "regionId",
+                  "startAddressHex",
+                  "bytesHex"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "changedRegisters": {
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,31}$"
+                  },
+                  "valueHex": {
+                    "type": "string",
+                    "pattern": "^0x[0-9A-F]{1,16}$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "valueHex"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "controlFlow": {
+              "type": "object",
+              "properties": {
+                "currentInstruction": {
+                  "type": "object",
+                  "properties": {
+                    "addressHex": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{1,16}$"
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                    }
+                  },
+                  "required": [
+                    "addressHex",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "pausedOn": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "write",
+                        "call",
+                        "ret",
+                        "exception"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "currentInstruction",
+                "pausedOn"
+              ],
+              "additionalProperties": false
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "running",
+                "paused",
+                "won",
+                "failed"
+              ]
+            },
+            "callStackSummary": {
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 63
+                  },
+                  "functionLabel": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                  },
+                  "returnAddressHex": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{1,16}$"
+                  },
+                  "truncated": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "index",
+                  "functionLabel",
+                  "returnAddressHex"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "semanticHighlights": {
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "buffer_start",
+                      "return_address_slot",
+                      "saved_rbp_slot",
+                      "canary_slot",
+                      "custom"
+                    ]
+                  },
+                  "targetRegionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "startAddressHex": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{1,16}$"
+                  },
+                  "byteLength": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16777216
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "targetRegionId",
+                  "startAddressHex",
+                  "byteLength",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
             }
           },
           "required": [
-            "revision"
+            "revision",
+            "dirtyRanges",
+            "changedRegisters"
           ],
           "additionalProperties": false
         },
         {
           "type": "null"
         }
-      ],
-      "x-sm-provisional": true
+      ]
     },
     "publicEvents": {
       "maxItems": 256,
@@ -57,7 +253,7 @@
           "seq": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 255
           },
           "kind": {
             "type": "string",
@@ -72,7 +268,7 @@
           },
           "addressHex": {
             "type": "string",
-            "maxLength": 18
+            "pattern": "^0x[0-9a-fA-F]{1,16}$"
           },
           "byteLength": {
             "type": "integer",
@@ -81,16 +277,20 @@
           },
           "payloadHex": {
             "type": "string",
+            "minLength": 2,
             "maxLength": 8192,
             "pattern": "^(?:[0-9a-fA-F]{2})+$"
+          },
+          "truncated": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": [
           "seq",
           "kind"
         ],
-        "additionalProperties": false,
-        "x-sm-provisional": true
+        "additionalProperties": false
       }
     },
     "userVisibleError": {
@@ -98,8 +298,24 @@
       "properties": {
         "code": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 64
+          "enum": [
+            "invalid_input_format",
+            "invalid_payload_length",
+            "offset_out_of_range",
+            "endianness_mismatch",
+            "permission_denied",
+            "invalid_rip",
+            "canary_violation",
+            "invalid_call_argument",
+            "objective_not_met",
+            "inaccessible_address",
+            "budget_exhausted",
+            "stale_base_revision",
+            "stale_client_seq",
+            "idempotency_conflict",
+            "session_terminal",
+            "internal_error"
+          ]
         },
         "message": {
           "type": "string",
@@ -110,20 +326,89 @@
           "anyOf": [
             {
               "type": "string",
-              "maxLength": 18
+              "pattern": "^0x[0-9a-fA-F]{1,16}$"
             },
             {
               "type": "null"
             }
           ]
+        },
+        "explanation": {
+          "type": "object",
+          "properties": {
+            "regionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "permissions": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^r?w?x?$"
+            },
+            "valueHex": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{1,16}$"
+            },
+            "interpretedAs": {
+              "type": "string",
+              "enum": [
+                "little_endian_qword",
+                "little_endian_dword",
+                "big_endian_qword",
+                "big_endian_dword"
+              ]
+            },
+            "alignmentBytes": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 1
+                },
+                {
+                  "type": "number",
+                  "const": 2
+                },
+                {
+                  "type": "number",
+                  "const": 4
+                },
+                {
+                  "type": "number",
+                  "const": 8
+                }
+              ]
+            },
+            "expectedBytesLength": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "actualBytesLength": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hints": {
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [
         "code",
         "message"
       ],
-      "additionalProperties": false,
-      "x-sm-provisional": true
+      "additionalProperties": false
     }
   },
   "required": [
@@ -133,5 +418,32 @@
     "projectionDelta",
     "publicEvents"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "rejected"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "userVisibleError"
+        ],
+        "properties": {
+          "projectionDelta": {
+            "const": null
+          },
+          "publicEvents": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
 }

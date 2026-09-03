@@ -1,0 +1,19 @@
+{
+  "requestId": "r-01J9KA7EXAMPLE0006",
+  "revision": 42,
+  "status": "rejected",
+  "projectionDelta": null,
+  "publicEvents": [
+    {
+      "seq": 0,
+      "kind": "write",
+      "addressHex": "0x7FFF00D8",
+      "byteLength": 1,
+      "payloadHex": "41"
+    }
+  ],
+  "userVisibleError": {
+    "code": "stale_base_revision",
+    "message": "baseRevision 已过期,请重新同步公开投影后重试。"
+  }
+}

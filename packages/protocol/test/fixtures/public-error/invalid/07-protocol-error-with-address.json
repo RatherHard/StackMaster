@@ -1,0 +1,5 @@
+{
+  "code": "stale_base_revision",
+  "message": "baseRevision 已过期,请重新同步公开投影后重试。",
+  "addressHex": null
+}

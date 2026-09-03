@@ -3,7 +3,9 @@
   "revision": 43,
   "status": "running",
   "projectionDelta": {
-    "revision": 43
+    "revision": 43,
+    "dirtyRanges": [],
+    "changedRegisters": []
   },
   "publicEvents": [],
   "vmStateSnapshot": {

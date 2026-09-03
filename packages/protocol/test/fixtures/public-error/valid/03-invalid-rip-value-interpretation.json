@@ -1,0 +1,14 @@
+{
+  "code": "invalid_rip",
+  "message": "弹出的返回地址不是有效的执行位置。",
+  "addressHex": null,
+  "explanation": {
+    "valueHex": "0x4141414141414141",
+    "interpretedAs": "little_endian_qword",
+    "hints": [
+      "弹出值 0x4141414141414141 被当作返回地址,这是 payload 覆盖的典型痕迹。",
+      "检查 padding 长度:缓冲区到保存的返回地址之间隔了多少字节?",
+      "返回地址应指向你想让程序跳去的位置。"
+    ]
+  }
+}

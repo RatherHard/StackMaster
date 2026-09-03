@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/session-action/v1/public-state-projection.schema.json",
+  "title": "PublicStateProjection",
+  "x-sm-class": "public",
+  "type": "object",
+  "properties": {
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "visibleRegions": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "regionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+          },
+          "startAddressHex": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{1,16}$"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16777216
+          },
+          "permissions": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^r?w?x?$"
+          },
+          "bytesHex": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 8192,
+            "pattern": "^(?:[0-9a-fA-F]{2})+$"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "regionId",
+          "label",
+          "startAddressHex",
+          "byteLength",
+          "permissions",
+          "bytesHex",
+          "truncated"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "visibleRegisters": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,31}$"
+          },
+          "valueHex": {
+            "type": "string",
+            "pattern": "^0x[0-9A-F]{1,16}$"
+          }
+        },
+        "required": [
+          "name",
+          "valueHex"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "callStackSummary": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          },
+          "functionLabel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+          },
+          "returnAddressHex": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{1,16}$"
+          },
+          "truncated": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "index",
+          "functionLabel",
+          "returnAddressHex"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "controlFlow": {
+      "type": "object",
+      "properties": {
+        "currentInstruction": {
+          "type": "object",
+          "properties": {
+            "addressHex": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{1,16}$"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+            }
+          },
+          "required": [
+            "addressHex",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "pausedOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "read",
+                "write",
+                "call",
+                "ret",
+                "exception"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "currentInstruction",
+        "pausedOn"
+      ],
+      "additionalProperties": false
+    },
+    "semanticHighlights": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "buffer_start",
+              "return_address_slot",
+              "saved_rbp_slot",
+              "canary_slot",
+              "custom"
+            ]
+          },
+          "targetRegionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "startAddressHex": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{1,16}$"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16777216
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+          }
+        },
+        "required": [
+          "kind",
+          "targetRegionId",
+          "startAddressHex",
+          "byteLength",
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "paused",
+        "won",
+        "failed"
+      ]
+    }
+  },
+  "required": [
+    "revision",
+    "visibleRegions",
+    "visibleRegisters",
+    "callStackSummary",
+    "controlFlow",
+    "semanticHighlights",
+    "status"
+  ],
+  "additionalProperties": false
+}

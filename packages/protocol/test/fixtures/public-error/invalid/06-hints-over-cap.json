@@ -1,0 +1,17 @@
+{
+  "code": "invalid_payload_length",
+  "message": "写入长度超出目标缓冲区边界。",
+  "addressHex": "0x7FFF0010",
+  "explanation": {
+    "regionId": "buffer-input",
+    "expectedBytesLength": 64,
+    "actualBytesLength": 96,
+    "hints": [
+      "提示一",
+      "提示二",
+      "提示三",
+      "提示四",
+      "提示五"
+    ]
+  }
+}

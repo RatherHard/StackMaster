@@ -1,0 +1,12 @@
+{
+  "code": "inaccessible_address",
+  "message": "目标地址不可访问。",
+  "addressHex": null,
+  "explanation": {
+    "valueHex": "0x7FFE1234",
+    "hints": [
+      "目标地址不在任何可见区域内。",
+      "使用内存视图确认可见区域的地址范围后再构造 payload。"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "code": "invalid_payload_length",
+  "message": "写入长度超出目标缓冲区边界。",
+  "addressHex": "0x7FFF0010",
+  "explanation": {
+    "regionId": "buffer-input",
+    "expectedBytesLength": 64,
+    "actualBytesLength": 96,
+    "hints": [
+      "输入缓冲区共 64 字节,超出的字节会落到相邻位置。",
+      "先计算 padding,再决定 payload 的长度。"
+    ]
+  }
+}

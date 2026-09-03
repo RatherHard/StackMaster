@@ -1,0 +1,5 @@
+{
+  "code": "permission_denied",
+  "message": "目标地址位于只读区域,写入被拒绝。",
+  "addressHex": "0x00405000"
+}

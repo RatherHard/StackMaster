@@ -1,13 +1,20 @@
 /**
- * Zod → JSON Schema 2020-12 产出管线(WP-2;计划书 5.6 / ADR-5)。
+ * Zod → JSON Schema 2020-12 产出管线(WP-2 建线,WP-3 扩面;计划书 5.6 / ADR-5)。
  *
  * - JSON Schema 是 TS 与 Rust 的共同权威:本脚本产出的文件提交入库,
  *   供 Rust 侧 serde + schemars 消费(WP-6 完成 Rust 消费冒烟验证);
  * - 每个根 Schema 生成一个自包含文件(reused: "inline",无任何 $ref),
  *   便于 Rust 校验器与 schemars 独立解析;
- * - 附带 schema/classification.json:字段分类清单(WP-1 §6),供 CI 的
+ * - 消费公开注册表 + server-only 注册表(后者产物打 x-sm-class: server-only,
+ *   Schema 存在不等于可下发,WP-1 §五);
+ * - 附带 schema/classification.json:字段分类清单(WP-1 §4–§6),供 CI 的
  *   ZR-P1 / I-1 机检直接引用;
  * - test/schema-drift.test.ts 断言入库文件与本管线输出一致,防止双端漂移。
+ *
+ * superRefine 纪律(实验结论,见任务 #1):refinement 对 z.toJSONSchema 透明,
+ * 不进落盘产物——跨字段规则由本管线以等价 if/then 显式注入(见下方
+ * ACTION_RESPONSE_REJECTED_COUPLING),无法表达求和 / 跨 Schema 比较的规则
+ * 则由 golden fixture 的违规反例承接(语义文档 §六)。
  *
  * 运行:先 `pnpm build`,再 `pnpm --filter @stackmaster/protocol generate`。
  * 本模块依赖 node:fs,刻意不从包入口(index.ts)导出,浏览器构建图不可达。
@@ -17,7 +24,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z, type ZodType } from "zod";
 import { PROTOCOL_PACKAGE_VERSION, SESSION_ACTION_PROTOCOL_VERSION } from "../version.js";
-import { classificationOf, SCHEMA_REGISTRY, type SchemaName } from "./registry.js";
+import { allSchemaEntries, assertRegistriesMatchClassifications } from "../server-only/schema-registry.js";
+import { classificationOf, type SchemaName } from "./registry.js";
 
 const SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema";
 
@@ -33,19 +41,29 @@ const OUTPUT_DIR = join(PACKAGE_ROOT, "schema");
 const MANIFEST_FILE_NAME = "classification.json";
 
 /**
- * provisional 子树标记路径(WP-2 安全评审 M-3 的机检化):载荷占位 Schema 在落盘
- * JSON Schema 中携带 `x-sm-provisional: true`,使"非冻结"声明从散文变成机检面
- * (drift 测试断言标记存在,Rust 消费方在落盘产物中即可识别临时子树);
- * WP-3 冻结这些类型时删除本表并整体替换 provisional.ts。
- * 路径相对根 Schema 的 `properties` 逐段下钻。
+ * ActionResponse 的 rejected 跨字段耦合(WP-2 移交,WP-3 冻结):
+ * status === "rejected" 时 userVisibleError 必有、projectionDelta 恒 null、
+ * publicEvents 恒空(拒绝动作不产生投影与事件,且必须可解释)。
+ * TS 侧等价规则在 ActionResponseSchema.superRefine;本常量是其 JSON Schema
+ * 形态——两侧必须同步修改(语义文档 §六)。
  */
-const PROVISIONAL_FIELD_PATHS: Partial<Record<SchemaName, readonly (readonly string[])[]>> = {
-  "action-response": [["projectionDelta"], ["publicEvents", "items"], ["userVisibleError"]],
-};
+const ACTION_RESPONSE_REJECTED_COUPLING = {
+  if: {
+    properties: { status: { const: "rejected" } },
+    required: ["status"],
+  },
+  then: {
+    required: ["userVisibleError"],
+    properties: {
+      projectionDelta: { const: null },
+      publicEvents: { maxItems: 0 },
+    },
+  },
+} as const;
 
 export type JsonSchemaDocument = Record<string, unknown>;
 
-/** 生成单个根 Schema 文档(自包含,携带 $schema / $id / title / x-sm-class / provisional 标记)。 */
+/** 生成单个根 Schema 文档(自包含,携带 $schema / $id / title / x-sm-class)。 */
 export function generateSchemaDocument(
   schema: ZodType,
   entryName: SchemaName,
@@ -58,7 +76,7 @@ export function generateSchemaDocument(
     cycles: "throw",
     reused: "inline",
   });
-  return markProvisionalSubtrees(
+  return injectCrossFieldRules(
     {
       $schema: SCHEMA_DRAFT,
       $id: `${SESSION_ACTION_SCHEMA_BASE_ID}/${entryName}.schema.json`,
@@ -70,61 +88,37 @@ export function generateSchemaDocument(
   );
 }
 
-/** 给 provisional 子树注入 x-sm-provisional 标记;路径落空即抛错(契约结构漂移的早期信号)。 */
-function markProvisionalSubtrees(
+/** 注入 TS 侧 superRefine 的 JSON Schema 等价形态(当前仅 action-response 一处)。 */
+function injectCrossFieldRules(
   document: JsonSchemaDocument,
   entryName: SchemaName,
 ): JsonSchemaDocument {
-  const paths = PROVISIONAL_FIELD_PATHS[entryName];
-  if (paths === undefined) {
+  if (entryName !== "action-response") {
     return document;
   }
-  const marked: JsonSchemaDocument = structuredClone(document);
-  const properties = marked.properties;
-  if (typeof properties !== "object" || properties === null) {
-    throw new Error(`Schema ${entryName} 无 properties,无法标记 provisional 子树`);
-  }
-  for (const path of paths) {
-    let node: unknown = properties;
-    for (const segment of path) {
-      if (typeof node !== "object" || node === null) {
-        throw new Error(`provisional 标记路径落空:${entryName} → ${path.join(".")}`);
-      }
-      node = (node as Record<string, unknown>)[segment];
-    }
-    if (typeof node !== "object" || node === null) {
-      throw new Error(`provisional 标记路径落空:${entryName} → ${path.join(".")}`);
-    }
-    (node as Record<string, unknown>)["x-sm-provisional"] = true;
-  }
-  return marked;
+  const injected: JsonSchemaDocument = structuredClone(document);
+  const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
+  injected.allOf = [...existing, ACTION_RESPONSE_REJECTED_COUPLING];
+  return injected;
 }
 
-/** 生成字段分类清单(WP-1 §6 → 机检产物)。 */
+/** 生成字段分类清单(WP-1 §4–§6 → 机检产物)。 */
 export function generateManifestDocument(): JsonSchemaDocument {
   const schemas: Record<string, JsonSchemaDocument> = {};
-  for (const entry of SCHEMA_REGISTRY) {
+  for (const entry of allSchemaEntries()) {
     const { rootClass, fieldClasses } = classificationOf(entry.name);
-    const provisionalFields = [
-      ...new Set(
-        (PROVISIONAL_FIELD_PATHS[entry.name] ?? [])
-          .map((path) => path[0])
-          .filter((name): name is string => name !== undefined),
-      ),
-    ];
     schemas[entry.name] = {
       file: `${entry.name}.schema.json`,
       title: entry.title,
       rootClass,
       fieldClasses,
-      ...(provisionalFields.length > 0 ? { provisionalFields } : {}),
     };
   }
   return {
     packageVersion: PROTOCOL_PACKAGE_VERSION,
     sessionActionProtocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
     note:
-      "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第六章;机检消费见 ZR-P1 / I-1。" +
+      "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。" +
       "Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
     schemas,
   };
@@ -132,8 +126,9 @@ export function generateManifestDocument(): JsonSchemaDocument {
 
 /** 生成全部落盘文件(文件名 → 内容);供生成脚本与漂移测试共用。 */
 export function generateAll(): Record<string, string> {
+  assertRegistriesMatchClassifications();
   const files: Record<string, string> = {};
-  for (const entry of SCHEMA_REGISTRY) {
+  for (const entry of allSchemaEntries()) {
     const document = generateSchemaDocument(entry.schema, entry.name, entry.title);
     files[`${entry.name}.schema.json`] = `${JSON.stringify(document, null, 2)}\n`;
   }

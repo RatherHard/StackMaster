@@ -1,0 +1,25 @@
+{
+  "revision": 45,
+  "dirtyRanges": [],
+  "changedRegisters": [
+    { "name": "RSP", "valueHex": "0x7FFF00F0" },
+    { "name": "RIP", "valueHex": "0x4011A5" }
+  ],
+  "controlFlow": {
+    "currentInstruction": { "addressHex": "0x4011A5", "text": "mov rax, [rbp-0x8]" },
+    "pausedOn": "read"
+  },
+  "status": "paused",
+  "callStackSummary": [
+    { "index": 0, "functionLabel": "vulnerable_function", "returnAddressHex": "0x4011A5" }
+  ],
+  "semanticHighlights": [
+    {
+      "kind": "return_address_slot",
+      "targetRegionId": "stack-main",
+      "startAddressHex": "0x7FFF00F8",
+      "byteLength": 8,
+      "label": "返回地址槽"
+    }
+  ]
+}

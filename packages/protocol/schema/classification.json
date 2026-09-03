@@ -1,7 +1,7 @@
 {
   "packageVersion": "0.1.0",
   "sessionActionProtocolVersion": 1,
-  "note": "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第六章;机检消费见 ZR-P1 / I-1。Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
+  "note": "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
   "schemas": {
     "action-request": {
       "file": "action-request.schema.json",
@@ -27,18 +27,64 @@
         "projectionDelta": "public",
         "publicEvents": "public",
         "userVisibleError": "public"
-      },
-      "provisionalFields": [
-        "projectionDelta",
-        "publicEvents",
-        "userVisibleError"
-      ]
+      }
     },
     "verdict-result": {
       "file": "verdict-result.schema.json",
       "title": "VerdictResult",
       "rootClass": "public",
       "fieldClasses": {}
+    },
+    "public-state-projection": {
+      "file": "public-state-projection.schema.json",
+      "title": "PublicStateProjection",
+      "rootClass": "public",
+      "fieldClasses": {
+        "revision": "public",
+        "visibleRegions": "public",
+        "visibleRegisters": "public",
+        "callStackSummary": "public",
+        "controlFlow": "public",
+        "semanticHighlights": "public",
+        "status": "public"
+      }
+    },
+    "projection-delta": {
+      "file": "projection-delta.schema.json",
+      "title": "ProjectionDelta",
+      "rootClass": "public",
+      "fieldClasses": {
+        "revision": "public",
+        "dirtyRanges": "public",
+        "changedRegisters": "public",
+        "controlFlow": "public",
+        "status": "public",
+        "callStackSummary": "public",
+        "semanticHighlights": "public"
+      }
+    },
+    "public-error": {
+      "file": "public-error.schema.json",
+      "title": "PublicError",
+      "rootClass": "public",
+      "fieldClasses": {
+        "code": "public",
+        "message": "public",
+        "addressHex": "public",
+        "explanation": "public"
+      }
+    },
+    "projection-policy": {
+      "file": "projection-policy.schema.json",
+      "title": "ProjectionPolicy",
+      "rootClass": "server-only",
+      "fieldClasses": {
+        "visibleRegions": "server-only",
+        "visibleObjects": "server-only",
+        "visibleRegisters": "server-only",
+        "maxBytesPerRange": "server-only",
+        "errorDetailLevel": "server-only"
+      }
     }
   }
 }

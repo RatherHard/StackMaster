@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./server-only": {
+      "types": "./dist/server-only/index.d.ts",
+      "default": "./dist/server-only/index.js"
     }
   },
   "main": "./dist/index.js",
