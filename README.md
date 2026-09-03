@@ -154,3 +154,10 @@ CLAUDE.md 是 Claude Code 在本仓库工作的操作规范(计划书的执行�
 - 文档、提交信息与面向人的注释用中文;代码标识符用英文;提交遵循 Conventional Commits(`feat|fix|refactor|docs|test|chore|perf|ci:`);
 - 新功能先写测试(TDD),测试用行为描述命名;
 - **不提交** `.env`、私有题目包样本、真实隐藏 flag;`private-bundles` 类内容永不进入 git。
+
+## 许可证
+
+本项目以 [**GPL-3.0-or-later**](LICENSE)(GNU 通用公共许可证第 3 版或(任选其)更新版本)发布。
+
+- 仓库内的代码与文档均适用该许可证;私有题目包内容与隐藏 flag 不属于本仓库,不受本许可证影响;
+- 阶段二起对外发包的 npm 包(`web-component`、`react-wrapper`、`embed-runtime`)发布时需随包附带 LICENSE 副本(workspaces 打包不会自动携带仓库根目录的 LICENSE),并保持 `license: "GPL-3.0-or-later"` 标注。

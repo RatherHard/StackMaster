@@ -2,6 +2,7 @@
   "name": "stackmaster",
   "version": "0.0.0",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "packageManager": "pnpm@11.25.0",
   "engines": {
     "node": ">=22"
