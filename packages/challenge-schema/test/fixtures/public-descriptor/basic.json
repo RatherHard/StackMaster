@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "challengeId": "ret-basics",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "locale": "zh-CN",
+  "briefing": {
+    "title": "返回地址覆写入门",
+    "summary": "通过覆写栈帧中的返回地址,观察控制流被劫持到 win 函数的完整因果链。",
+    "learningObjectives": [
+      "理解栈帧布局",
+      "理解返回地址被覆写的后果",
+      "理解 little-endian 下地址字节的写入顺序"
+    ],
+    "teachingNotes": [
+      "先观察 canary 槽与返回地址槽在栈帧中的相对位置",
+      "写入偏移从缓冲区起点计算"
+    ]
+  },
+  "vmProfile": {
+    "registers": [
+      { "name": "RAX", "displayLabel": "通用累加器" },
+      { "name": "RBX" },
+      { "name": "RCX" },
+      { "name": "RDX" },
+      { "name": "RSI" },
+      { "name": "RDI" },
+      { "name": "RSP", "displayLabel": "栈顶指针" },
+      { "name": "RBP", "displayLabel": "栈帧基址" },
+      { "name": "RIP", "displayLabel": "指令指针" },
+      { "name": "R8" },
+      { "name": "R9" },
+      { "name": "R10" },
+      { "name": "R11" },
+      { "name": "R12" }
+    ],
+    "flagRegisterNames": ["FLAG0"],
+    "endianness": "little",
+    "pageSizeBytes": 4096,
+    "canary": { "enabled": true, "sizeBytes": 8 }
+  },
+  "memoryLayout": {
+    "regions": [
+      {
+        "regionId": "code",
+        "kind": "code",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "publicLabel": "代码段"
+      },
+      {
+        "regionId": "stack",
+        "kind": "stack",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "publicLabel": "栈"
+      }
+    ]
+  },
+  "allowedActions": ["write_bytes", "push", "pop", "ret", "step"],
+  "resourceLimits": {
+    "predicateEvalBudgetPerSession": 10000,
+    "rollbackBudgetPerSession": 200,
+    "maxWriteBytesPerAction": 64
+  },
+  "hintLadder": [
+    {
+      "order": 1,
+      "revealPolicy": "on_request",
+      "hintText": "观察 canary 槽与返回地址槽在栈帧中的相对位置。"
+    },
+    {
+      "order": 2,
+      "revealPolicy": "after_n_failures",
+      "failureThreshold": 3,
+      "hintText": "write_bytes 的偏移从区域起点开始计算,地址按 little-endian 逐字节写入。"
+    }
+  ],
+  "publicErrorMapping": [
+    {
+      "errorCode": "offset_out_of_range",
+      "teachingNote": "写入越过区域边界:检查偏移与字节长度。"
+    },
+    {
+      "errorCode": "canary_violation",
+      "teachingNote": "canary 被破坏:写入长度越过了缓冲区。"
+    }
+  ],
+  "randomizationNotice": "本题使用固定布局与固定初始状态,无随机化面。",
+  "initialProjection": {
+    "visibleRegions": [
+      {
+        "regionId": "code",
+        "label": "代码段",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "bytesHex": "554889e5c39090909090909090909090",
+        "truncated": true
+      },
+      {
+        "regionId": "stack",
+        "label": "栈",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "bytesHex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "truncated": true
+      }
+    ],
+    "visibleRegisters": [
+      { "name": "RSP", "valueHex": "0x7FFFFFF8" },
+      { "name": "RBP", "valueHex": "0x7FFFFFF8" },
+      { "name": "RIP", "valueHex": "0x400100" },
+      { "name": "RAX", "valueHex": "0x0" }
+    ],
+    "semanticHighlights": [
+      {
+        "kind": "buffer_start",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFF000",
+        "byteLength": 16,
+        "label": "输入缓冲区"
+      },
+      {
+        "kind": "canary_slot",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFFFF0",
+        "byteLength": 8,
+        "label": "canary 槽(权威值由服务端守护)"
+      },
+      {
+        "kind": "return_address_slot",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFFFF8",
+        "byteLength": 8,
+        "label": "返回地址槽"
+      }
+    ]
+  }
+}
