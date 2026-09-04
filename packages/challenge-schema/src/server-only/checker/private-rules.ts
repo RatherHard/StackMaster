@@ -2,13 +2,21 @@
  * 私有判题包单侧检查规则(WP-1 §12.6 左列规则 ID):
  *  - I2-PRIV-PAIRWISE 私有初始内存区域两两不相交(BigInt 区间);
  *  - I3-SINK-HIDDEN containsSecret 的私有对象必须 hidden(秘密汇面);
- *  - XS-ID-UNIQUE 私有面引用 ID 唯一(区域 / 对象 / 隐藏测试 / 阶段 / 虚拟文件);
+ *  - XS-ID-UNIQUE 私有面引用 ID 唯一(区域 / 对象 / 隐藏测试 / 阶段 / 虚拟文件 /
+ *    自定义指令助记符 / 作者接口号);
  *  - XS-REG-NAMESPACE 私有初始寄存器键归属双命名空间之一(G2/D3:一般名
  *    ^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$ 或 FLAG 模式;Schema 负向前瞻之外的纵深防御,
  *    随 XS-REG-FROZEN 废止而接替其防线);
  *  - XS-MEM-TOTAL 区域字节总量 / 初始内容字节总量封顶;
  *  - XS-MEM-CONTENT contentHex 长度 = 2 × byteLength;
  *  - XS-IR-LABEL 标签 ID 唯一且索引落在指令范围内;
+ *  - XS-CUSTOM-DEF 自定义指令助记符不与基线 opcode 冲突(G4/D4 纵深防御,
+ *    大小写模式已结构性不相交;助记符唯一性归 XS-ID-UNIQUE);
+ *  - XS-CUSTOM-REF IR 中非基线 op 必须引用已声明的 customInstructions 助记符;
+ *  - XS-SYSCALL-DECL syscall 派发号落在保留系统号带(内置 exit)或已声明接口;
+ *  - XS-IFACE-REF call 的 interface 操作数与接口效果引用(fileId / FLAG 寄存器)可解析;
+ *  - XS-IR-LEAVE leave 要求私有初始寄存器集含 RBP(栈帧基);
+ *  - XS-CUSTOM-DISPLAY 自定义指令 / 接口 displayText 的 E-4/E-6 私有标识扫描;
  *  - XS-STAGE-REACH 迁移目标存在且全部阶段自 stages[0] 可达;
  *  - XS-STAGE-BUDGET 每阶段 maxInstructionSteps ≥ 1;
  *  - XS-PRED-REFS 谓词引用的寄存器 / 区域 / 文件必须存在且切片在界内;
@@ -29,6 +37,7 @@ import {
   MAX_MEMORY_CONTENT_BYTES,
   MAX_MEMORY_TOTAL_BYTES,
 } from "../../common/limits.js";
+import { DSL_OPCODES, RESERVED_SYSCALL_BAND_MAX } from "../../common/vocabulary.js";
 import type {
   ConditionL1,
   PrivateChallengeBundle,
@@ -127,6 +136,18 @@ export function checkPrivateReferenceUniqueness(
     (index) => `/stages/${index}/stageId`,
     (value) => `状态机阶段 stageId "${value}" `,
   );
+  pushDuplicateViolations(
+    violations,
+    (bundle.customInstructions ?? []).map((instruction) => instruction.mnemonic),
+    (index) => `/customInstructions/${index}/mnemonic`,
+    (value) => `自定义指令助记符 "${value}" `,
+  );
+  pushDuplicateViolations(
+    violations,
+    (bundle.interfaces ?? []).map((entry) => String(entry.interfaceId)),
+    (index) => `/interfaces/${index}/interfaceId`,
+    (value) => `作者接口 interfaceId "${value}" `,
+  );
   return violations;
 }
 
@@ -221,9 +242,189 @@ export function checkIrLabels(bundle: PrivateChallengeBundle): CheckerViolation[
   return violations;
 }
 
-/** XS-STAGE-BUDGET:每阶段 maxInstructionSteps 必须为 ≥ 1 的整数。 */
-export function checkStageBudgets(bundle: PrivateChallengeBundle): CheckerViolation[] {
+/** 基线 opcode 集合(G4:IR op 双形态中属基线面的判据)。 */
+const BASELINE_OP_SET = new Set<string>(DSL_OPCODES);
+
+/**
+ * XS-CUSTOM-DEF:自定义指令助记符不得与基线 opcode 冲突(G4/D4 纵深防御:
+ * 助记符大写模式与基线小写枚举结构性不相交,此规则拦截被类型断言绕过的
+ * 手写包);助记符条目间唯一性由 XS-ID-UNIQUE 承接。
+ */
+export function checkCustomInstructionDeclarations(
+  bundle: PrivateChallengeBundle,
+): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
+  (bundle.customInstructions ?? []).forEach((instruction, index) => {
+    if (BASELINE_OP_SET.has(instruction.mnemonic)) {
+      violations.push({
+        ruleId: "XS-CUSTOM-DEF",
+        message: `自定义指令助记符 "${instruction.mnemonic}" 与基线 opcode 冲突`,
+        path: `/customInstructions/${index}/mnemonic`,
+      });
+    }
+  });
+  return violations;
+}
+
+/** XS-CUSTOM-REF:IR 中非基线 op 必须引用已声明的自定义指令助记符(G4/D4)。 */
+export function checkCustomInstructionRefs(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const declared = new Set(
+    (bundle.customInstructions ?? []).map((instruction) => instruction.mnemonic),
+  );
+  bundle.compiledIr.instructions.forEach((instruction, index) => {
+    if (!BASELINE_OP_SET.has(instruction.op) && !declared.has(instruction.op)) {
+      violations.push({
+        ruleId: "XS-CUSTOM-REF",
+        message: `IR 指令 ${index} 的助记符 "${instruction.op}" 既非基线 opcode 也未在 customInstructions 声明`,
+        path: `/compiledIr/instructions/${index}/op`,
+      });
+    }
+  });
+  return violations;
+}
+
+/**
+ * XS-SYSCALL-DECL:syscall 派发号必须落在保留系统号带 [0x0, 0xFF]
+ * (内置 exit 语义不变)或精确匹配已声明的 interfaces[].interfaceId(G4/D4);
+ * 未声明即 invalid_action 的静态防线。syscall 是封闭单值伪操作:
+ * 操作数必须为恰好一个立即数。
+ */
+export function checkSyscallDeclarations(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const interfaceIds = new Set((bundle.interfaces ?? []).map((entry) => entry.interfaceId));
+  bundle.compiledIr.instructions.forEach((instruction, index) => {
+    if (instruction.op !== "syscall") {
+      return;
+    }
+    const operands = instruction.operands ?? [];
+    const operand = operands[0];
+    if (operands.length !== 1 || operand === undefined || operand.kind !== "immediate") {
+      violations.push({
+        ruleId: "XS-SYSCALL-DECL",
+        message: `syscall 指令 ${index} 是封闭单值伪操作,操作数必须为恰好一个立即数`,
+        path: `/compiledIr/instructions/${index}/operands`,
+      });
+      return;
+    }
+    const value = BigInt(operand.valueHex);
+    if (value > BigInt(RESERVED_SYSCALL_BAND_MAX) && !interfaceIds.has(Number(value))) {
+      violations.push({
+        ruleId: "XS-SYSCALL-DECL",
+        message: `syscall 派发号 ${operand.valueHex} 不在保留系统号带(内置 exit)且未匹配任何 interfaces[].interfaceId`,
+        path: `/compiledIr/instructions/${index}/operands/0`,
+      });
+    }
+  });
+  return violations;
+}
+
+/**
+ * XS-IFACE-REF:作者接口引用可解析(G4/D4)——call 的 interface 操作数
+ * 必须落在 interfaces[];接口效果引用的 fileId 必须在 secrets.virtualFiles,
+ * set_flag 的 FLAG 寄存器必须在私有初始寄存器集(经 I-3 污点检查的落位前提)。
+ */
+export function checkInterfaceRefs(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const interfaceIds = new Set((bundle.interfaces ?? []).map((entry) => entry.interfaceId));
+  const fileIds = new Set(bundle.secrets.virtualFiles.map((file) => file.fileId));
+  const registerNames = new Set(Object.keys(bundle.initialState.registers));
+  bundle.compiledIr.instructions.forEach((instruction, index) => {
+    (instruction.operands ?? []).forEach((operand, operandIndex) => {
+      if (operand.kind === "interface" && !interfaceIds.has(operand.interfaceId)) {
+        violations.push({
+          ruleId: "XS-IFACE-REF",
+          message: `interface 操作数引用的接口号 ${operand.interfaceId} 未在 interfaces 声明`,
+          path: `/compiledIr/instructions/${index}/operands/${operandIndex}`,
+        });
+      }
+    });
+  });
+  (bundle.interfaces ?? []).forEach((entry, index) => {
+    entry.effects.forEach((effect, effectIndex) => {
+      if (
+        (effect.effect === "grant_virtual_file" || effect.effect === "virtual_file_read") &&
+        !fileIds.has(effect.fileId)
+      ) {
+        violations.push({
+          ruleId: "XS-IFACE-REF",
+          message: `接口 ${entry.interfaceId} 的效果 ${effect.effect} 引用的虚拟文件 "${effect.fileId}" 不在 secrets.virtualFiles`,
+          path: `/interfaces/${index}/effects/${effectIndex}/fileId`,
+        });
+      }
+      if (effect.effect === "set_flag" && !registerNames.has(effect.flagRegister)) {
+        violations.push({
+          ruleId: "XS-IFACE-REF",
+          message: `接口 ${entry.interfaceId} 的效果 set_flag 引用的 FLAG 寄存器 "${effect.flagRegister}" 不在私有初始寄存器集`,
+          path: `/interfaces/${index}/effects/${effectIndex}/flagRegister`,
+        });
+      }
+    });
+  });
+  return violations;
+}
+
+/** XS-IR-LEAVE:leave 要求私有初始寄存器集含 RBP(G4:栈帧基,`RSP ← RBP` 的前提)。 */
+export function checkLeaveRequiresRbp(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  if ("RBP" in bundle.initialState.registers) {
+    return violations;
+  }
+  bundle.compiledIr.instructions.forEach((instruction, index) => {
+    if (instruction.op === "leave") {
+      violations.push({
+        ruleId: "XS-IR-LEAVE",
+        message: "IR 含 leave 指令但私有初始寄存器集不含必选核心寄存器 RBP(leave 语义为 RSP ← RBP 后 pop RBP)",
+        path: `/compiledIr/instructions/${index}/op`,
+      });
+    }
+  });
+  return violations;
+}
+
+/**
+ * XS-CUSTOM-DISPLAY:自定义指令 / 接口的 displayText 私有标识扫描
+ * (E-4/E-6,WP-1 §6.3)——展示文本(I-10 静态模板类)不得包含隐藏区域名
+ * (E-6)、隐藏测试 testId(E-4 谓词标识载体)与虚拟文件 fileId(E-6
+ * capability 关联);判定存在性泄露与值级泄露的静态防线,T-SC1 探针变体承接运行时面。
+ */
+export function checkAuthorDisplayTexts(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const forbidden: ReadonlyArray<{ readonly kind: string; readonly value: string }> = [
+    ...bundle.initialState.memoryRegions
+      .filter((region) => region.isHidden)
+      .map((region) => ({ kind: "隐藏区域名", value: region.regionId })),
+    ...(bundle.judging.hiddenTests ?? []).map((test) => ({
+      kind: "谓词标识(testId)",
+      value: test.testId,
+    })),
+    ...bundle.secrets.virtualFiles.map((file) => ({
+      kind: "虚拟文件 fileId",
+      value: file.fileId,
+    })),
+  ];
+  const scan = (displayText: string, path: string): void => {
+    for (const item of forbidden) {
+      if (displayText.includes(item.value)) {
+        violations.push({
+          ruleId: "XS-CUSTOM-DISPLAY",
+          message: `displayText 含${item.kind} "${item.value}"(E-4/E-6:展示文本不得泄露谓词信息或隐藏区域等私有标识)`,
+          path,
+        });
+      }
+    }
+  };
+  (bundle.customInstructions ?? []).forEach((instruction, index) => {
+    scan(instruction.displayText, `/customInstructions/${index}/displayText`);
+  });
+  (bundle.interfaces ?? []).forEach((entry, index) => {
+    scan(entry.displayText, `/interfaces/${index}/displayText`);
+  });
+  return violations;
+}
+
+/** XS-STAGE-BUDGET:每阶段 maxInstructionSteps 必须为 ≥ 1 的整数。 */
+export function checkStageBudgets(bundle: PrivateChallengeBundle): CheckerViolation[] {  const violations: CheckerViolation[] = [];
   (bundle.stages ?? []).forEach((stage, index) => {
     const steps = stage.resourceBudget.maxInstructionSteps;
     if (!Number.isInteger(steps) || steps < 1) {
@@ -487,6 +688,12 @@ export function checkPrivateBundleRules(bundle: PrivateChallengeBundle): Checker
     ...checkPrivateRegisterNamespaces(bundle),
     ...checkPrivateMemoryBudget(bundle),
     ...checkIrLabels(bundle),
+    ...checkCustomInstructionDeclarations(bundle),
+    ...checkCustomInstructionRefs(bundle),
+    ...checkSyscallDeclarations(bundle),
+    ...checkInterfaceRefs(bundle),
+    ...checkLeaveRequiresRbp(bundle),
+    ...checkAuthorDisplayTexts(bundle),
     ...checkStageBudgets(bundle),
     ...checkStageReachability(bundle),
     ...checkConditionTrees(bundle),

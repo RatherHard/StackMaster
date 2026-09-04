@@ -16,29 +16,38 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ARCH_BITS_VALUES,
+  BIT_MASK_LOGIC_OPS,
   CORE_REGISTER_NAMES,
+  CUSTOM_MNEMONIC_PATTERN_SOURCE,
   GENERAL_REGISTER_NAME_PATTERN,
   GENERAL_REGISTER_NAME_PATTERN_SOURCE,
   CHALLENGE_CLASSIFICATIONS,
   CHALLENGE_ID_PATTERN_SOURCE,
   CONTROL_CHARS_BAN_PATTERN_SOURCE,
   DSL_OPCODES,
+  EFFECT_PRIMITIVES,
   FLAG_REGISTER_NAME_PATTERN,
   FLAG_REGISTER_NAME_PATTERN_SOURCE,
   HEX_BYTES_PATTERN_SOURCE,
   HEX_VALUE_64_PATTERN_SOURCE,
+  INTERFACE_ID_MAX,
+  INTERFACE_ID_MIN,
   IR_LABEL_ID_PATTERN_SOURCE,
   MAX_BYTES_HEX_PER_RANGE,
   MAX_CONDITION_BRANCHES,
+  MAX_CUSTOM_INSTRUCTIONS,
   MAX_DECLARED_SEED_PATHS,
+  MAX_EFFECTS_PER_INTERFACE,
   MAX_HIDDEN_TESTS,
   MAX_HIDDEN_TEST_PAYLOAD_HEX,
   MAX_HINTS,
+  MAX_INTERFACES,
   MAX_IR_INSTRUCTIONS,
   MAX_IR_LABELS,
   MAX_MEMORY_CONTAINS_BYTES,
   MAX_MEMORY_EQUALS_BYTES,
   MAX_MEMORY_REGIONS,
+  MAX_MICRO_OPS_PER_INSTRUCTION,
   MAX_OPERANDS_PER_INSTRUCTION,
   MAX_PAGE_SIZE_BYTES,
   MAX_PREDICATE_EVAL_STEPS,
@@ -55,6 +64,7 @@ import {
   MAX_VIRTUAL_FILES,
   MAX_VIRTUAL_FILE_BYTES,
   MAX_WRITE_BYTES,
+  MICRO_OPS,
   MIN_PAGE_SIZE_BYTES,
   OBJECT_ID_PATTERN_SOURCE,
   PAGE_SIZE_MULTIPLE_BYTES,
@@ -196,6 +206,22 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
       MAX_OPERANDS_PER_INSTRUCTION,
     );
     expectNumberAt(privateSchema, "/properties/compiledIr/properties/labels", "maxItems", MAX_IR_LABELS);
+    expectNumberAt(privateSchema, "/properties/customInstructions", "maxItems", MAX_CUSTOM_INSTRUCTIONS);
+    expectNumberAt(
+      privateSchema,
+      "/properties/customInstructions/items/properties/semantics",
+      "maxItems",
+      MAX_MICRO_OPS_PER_INSTRUCTION,
+    );
+    expectNumberAt(privateSchema, "/properties/interfaces", "maxItems", MAX_INTERFACES);
+    expectNumberAt(
+      privateSchema,
+      "/properties/interfaces/items/properties/effects",
+      "maxItems",
+      MAX_EFFECTS_PER_INTERFACE,
+    );
+    expectNumberAt(privateSchema, "/properties/interfaces/items/properties/interfaceId", "minimum", INTERFACE_ID_MIN);
+    expectNumberAt(privateSchema, "/properties/interfaces/items/properties/interfaceId", "maximum", INTERFACE_ID_MAX);
     expectNumberAt(privateSchema, "/properties/judgingConfig/properties/maxPredicateEvalSteps", "maximum", MAX_PREDICATE_EVAL_STEPS);
     expectNumberAt(privateSchema, "/$defs/predicate/oneOf/2/properties/bytesHex", "maxLength", MAX_MEMORY_EQUALS_BYTES * 2);
     expectNumberAt(privateSchema, "/$defs/predicate/oneOf/3/properties/bytesHex", "maxLength", MAX_MEMORY_CONTAINS_BYTES * 2);
@@ -230,6 +256,7 @@ describe("Schema 模式字面量 ≡ patterns.ts(源串原样出现)", () => {
       expect(publicSchemaText).toContain(JSON.stringify(source));
     }
     for (const source of [
+      CUSTOM_MNEMONIC_PATTERN_SOURCE,
       DISPLACEMENT_HEX_PATTERN_SOURCE,
       IR_LABEL_ID_PATTERN_SOURCE,
       SEED_HEX_PATTERN_SOURCE,
@@ -263,7 +290,12 @@ describe("Schema enum ≡ vocabulary 封闭集", () => {
       "/properties/judging/properties/hiddenTests/items/properties/expectedResult",
       REACHABLE_HIDDEN_TEST_RESULTS,
     );
-    expectEnumAt(privateSchema, "/properties/compiledIr/properties/instructions/items/properties/op", DSL_OPCODES);
+    // G4:op 为双形态 anyOf(基线小写枚举 ∪ 大写助记符模式),词汇锚定基线分支。
+    expectEnumAt(
+      privateSchema,
+      "/properties/compiledIr/properties/instructions/items/properties/op/anyOf/0",
+      DSL_OPCODES,
+    );
     expectEnumAt(privateSchema, "/$defs/regionKind", REGION_KINDS);
     expectEnumAt(privateSchema, "/$defs/sessionAction", SESSION_ACTION_TYPES);
   });
@@ -283,6 +315,30 @@ describe("Schema enum ≡ vocabulary 封闭集", () => {
     const discriminators = oneOf.map((branch) => branch.properties.type.const);
     expect([...discriminators].sort()).toEqual([...PREDICATE_TYPES].sort());
   });
+
+  it("微算子判别式 oneOf ≡ MICRO_OPS(G4/D4 封闭集,直线语义)", () => {
+    const oneOf = resolveAt(privateSchema, "/$defs/microOp/oneOf") as Array<{
+      properties: { op: { const: string } };
+    }>;
+    const discriminators = oneOf.map((branch) => branch.properties.op.const);
+    expect([...discriminators].sort()).toEqual([...MICRO_OPS].sort());
+  });
+
+  it("接口效果判别式 oneOf ≡ EFFECT_PRIMITIVES(G4/D4 封闭集)", () => {
+    const oneOf = resolveAt(privateSchema, "/$defs/interfaceEffect/oneOf") as Array<{
+      properties: { effect: { const: string } };
+    }>;
+    const discriminators = oneOf.map((branch) => branch.properties.effect.const);
+    expect([...discriminators].sort()).toEqual([...EFFECT_PRIMITIVES].sort());
+  });
+
+  it("bit_mask 位逻辑 enum ≡ BIT_MASK_LOGIC_OPS", () => {
+    expectEnumAt(
+      privateSchema,
+      "/$defs/microOp/oneOf/5/properties/logic",
+      BIT_MASK_LOGIC_OPS,
+    );
+  });
 });
 
 describe("分类清单与字段清单防漂移", () => {
@@ -299,7 +355,7 @@ describe("分类清单与字段清单防漂移", () => {
     expect([...keys].sort()).toEqual([...PUBLIC_DESCRIPTOR_FIELDS].sort());
   });
 
-  it("私有 Schema 顶层 properties ≡ PRIVATE_BUNDLE_FIELDS(17 字段)", () => {
+  it("私有 Schema 顶层 properties ≡ PRIVATE_BUNDLE_FIELDS(19 字段)", () => {
     const keys = Object.keys(resolveAt(privateSchema, "/properties") as Record<string, unknown>);
     expect([...keys].sort()).toEqual([...PRIVATE_BUNDLE_FIELDS].sort());
   });

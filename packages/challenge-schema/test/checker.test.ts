@@ -3,7 +3,7 @@
  * - 绿灯基线 = fixture 公开包 × builder 派生私有包,必须零违规;
  * - 每条规则一个必触发红灯样例(单一定向破坏),测试名直接引用规则 ID;
  * - 部分规则(XS-REG-NAMESPACE / XS-MEM-TOTAL / XS-MEM-CONTENT / XS-STAGE-BUDGET /
- *   XS-NESTING / XS-MEM-PAGE-ALIGN)在 Schema 层已被拦截,红灯样例刻意绕过
+ *   XS-NESTING / XS-MEM-PAGE-ALIGN / XS-CUSTOM-DEF)在 Schema 层已被拦截,红灯样例刻意绕过
  *   前置条件直测检查器(纵深防御第二道防线;测试内注明)。
  * - XS-DUP-KEY 的落点在 json-strict-parse,红灯样例见 test/json-strict-parse.test.ts。
  */
@@ -372,6 +372,194 @@ describe("字段分类检查器:私有包单侧规则红灯样例", () => {
 
     const violation = expectRule(result, "XS-NESTING");
     expect(violation.message).toContain("嵌套深度");
+  });
+});
+
+describe("字段分类检查器:G4/D4 自定义指令与作者接口规则红灯样例", () => {
+  it("XS-CUSTOM-REF:IR 使用未声明的自定义助记符被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        { op: "LOAD_TWICE", operands: [] },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-CUSTOM-REF");
+    expect(violation.path).toBe("/compiledIr/instructions/0/op");
+    expect(violation.message).toContain("LOAD_TWICE");
+  });
+
+  it("XS-CUSTOM-DEF:助记符与基线 opcode 冲突被拒(纵深防御样例,小写形态被类型断言绕过)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.customInstructions = [
+        {
+          mnemonic: "mov",
+          displayText: "冒充基线指令",
+          semantics: [{ op: "load_imm", dst: "RAX", valueHex: "0x0" }],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-CUSTOM-DEF");
+    expect(violation.path).toBe("/customInstructions/0/mnemonic");
+  });
+
+  it("XS-SYSCALL-DECL:syscall 引用未声明的接口号被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x200" }] },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-SYSCALL-DECL");
+    expect(violation.path).toBe("/compiledIr/instructions/0/operands/0");
+  });
+
+  it("XS-SYSCALL-DECL:syscall 操作数非单一立即数被拒(封闭单值伪操作)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        { op: "syscall", operands: [{ kind: "register", name: "RAX" }] },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-SYSCALL-DECL");
+    expect(violation.message).toContain("封闭单值伪操作");
+  });
+
+  it("XS-IFACE-REF:call 的 interface 操作数引用不存在条目被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        { op: "call", operands: [{ kind: "interface", interfaceId: 999 }] },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-IFACE-REF");
+    expect(violation.path).toBe("/compiledIr/instructions/0/operands/0");
+  });
+
+  it("XS-IFACE-REF:接口效果引用不存在的虚拟文件被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.interfaces = [
+        {
+          interfaceId: 512,
+          displayText: "授予解题笔记读取权",
+          effects: [{ effect: "grant_virtual_file", fileId: "ghost-notes" }],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-IFACE-REF");
+    expect(violation.path).toBe("/interfaces/0/effects/0/fileId");
+  });
+
+  it("XS-IFACE-REF:接口效果 set_flag 引用未声明的 FLAG 寄存器被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.interfaces = [
+        {
+          interfaceId: 512,
+          displayText: "置位完成标志",
+          effects: [{ effect: "set_flag", flagRegister: "FLAG_GHOST", valueHex: "0x1" }],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-IFACE-REF");
+    expect(violation.message).toContain("FLAG_GHOST");
+  });
+
+  it("XS-IR-LEAVE:leave 出现在无 RBP 的寄存器集被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      const registers = (priv.initialState as { registers: Record<string, string> }).registers;
+      delete registers["RBP"];
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        { op: "leave", operands: [] },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-IR-LEAVE");
+    expect(violation.path).toBe("/compiledIr/instructions/0/op");
+  });
+
+  it("XS-CUSTOM-DISPLAY:displayText 含隐藏区域名 / 谓词标识被拒绝(E-4/E-6 扫描)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.customInstructions = [
+        {
+          mnemonic: "LOAD_TWICE",
+          displayText: "读取 canary-vault 内容",
+          semantics: [{ op: "load_imm", dst: "RAX", valueHex: "0x0" }],
+        },
+      ];
+      priv.interfaces = [
+        {
+          interfaceId: 512,
+          displayText: "通过 payload-72 校验",
+          effects: [{ effect: "noop" }],
+        },
+      ];
+    });
+
+    const displayViolations = result.violations.filter(
+      (candidate) => candidate.ruleId === "XS-CUSTOM-DISPLAY",
+    );
+    expect(
+      displayViolations.some((v) => v.path === "/customInstructions/0/displayText"),
+    ).toBe(true);
+    expect(displayViolations.some((v) => v.path === "/interfaces/0/displayText")).toBe(true);
+  });
+
+  it("XS-ID-UNIQUE:作者接口 interfaceId 重复被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.interfaces = [
+        { interfaceId: 512, displayText: "接口甲", effects: [{ effect: "noop" }] },
+        { interfaceId: 512, displayText: "接口乙", effects: [{ effect: "noop" }] },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-ID-UNIQUE");
+    expect(violation.path).toBe("/interfaces/1/interfaceId");
+    expect(violation.message).toContain("重复");
+  });
+
+  it("G4/D4 绿灯:自定义指令 + 作者接口全链路声明一致时零违规", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.customInstructions = [
+        {
+          mnemonic: "LOAD_TWICE",
+          displayText: "装载立即数并取低字节",
+          semantics: [
+            { op: "load_imm", dst: "RAX", valueHex: "0x2A" },
+            { op: "bit_mask", dst: "RAX", src: "RAX", maskHex: "0xFF", logic: "and" },
+          ],
+        },
+      ];
+      priv.interfaces = [
+        {
+          interfaceId: 512,
+          displayText: "授予解题笔记读取权",
+          effects: [
+            { effect: "grant_virtual_file", fileId: "win-notes" },
+            { effect: "set_flag", flagRegister: "FLAG0", valueHex: "0x1" },
+          ],
+        },
+      ];
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        { op: "push", operands: [{ kind: "register", name: "RBP" }] },
+        {
+          op: "mov",
+          operands: [
+            { kind: "register", name: "RBP" },
+            { kind: "register", name: "RSP" },
+          ],
+        },
+        { op: "LOAD_TWICE", operands: [] },
+        { op: "call", operands: [{ kind: "interface", interfaceId: 512 }] },
+        { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x200" }] },
+        { op: "leave", operands: [] },
+        { op: "ret", operands: [] },
+      ];
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
   });
 });
 

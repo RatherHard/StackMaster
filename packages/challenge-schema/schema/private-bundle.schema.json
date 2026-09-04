@@ -40,8 +40,8 @@
       "description": "VM Profile Version(7.4 第 3 类);与公开包相等(XS-ID-CORR)。"
     },
     "dslSchemaVersion": {
-      "const": 1,
-      "description": "DSL Schema Version(7.4 第 1 类);扩展 21 opcode / 7 谓词时递增。"
+      "const": 2,
+      "description": "DSL Schema Version(7.4 第 1 类);v2 = G4 重定基(docs/最小DSL范围.md v1.2):基线 21 → 20 opcode(移除 read/write、新增 leave)、syscall/call 作者接口派发、新增 customInstructions / interfaces 声明面;扩展封闭词汇时递增。"
     },
     "vmEngineVersion": {
       "$ref": "#/$defs/semver",
@@ -409,8 +409,8 @@
       "required": ["irFormatVersion", "instructions", "labels"],
       "properties": {
         "irFormatVersion": {
-          "const": 1,
-          "description": "IR 格式版本;IR 是版本化序列化格式,不是共享代码(Rust 以 serde + schemars 消费)。"
+          "const": 2,
+          "description": "IR 格式版本(v2 = G4:op 双形态 + 操作数第四 kind interface);IR 是版本化序列化格式,不是共享代码(Rust 以 serde + schemars 消费)。"
         },
         "entrypointIndex": {
           "type": "integer",
@@ -421,35 +421,43 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 4096,
-          "description": "指令 = 21 opcode 封闭枚举(docs/最小DSL范围.md §三)+ 类型化操作数槽;逐 opcode 合法性归 challenge-compiler(阶段二),封闭枚举防绕过编译器的手写包。",
+          "description": "指令 = 20 基线 opcode 封闭枚举 ∪ 大写自定义助记符(docs/最小DSL范围.md §三 v1.2,G4;两形态按大小写结构性不相交,助记符须在 customInstructions[] 声明,XS-CUSTOM-REF)+ 类型化操作数槽;逐 opcode 合法性归 challenge-compiler(阶段二),基线枚举防绕过编译器的手写包。",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["op"],
             "properties": {
               "op": {
-                "enum": [
-                  "mov",
-                  "push",
-                  "pop",
-                  "add",
-                  "sub",
-                  "cmp",
-                  "and",
-                  "or",
-                  "xor",
-                  "shl",
-                  "shr",
-                  "jmp",
-                  "je",
-                  "jne",
-                  "jb",
-                  "jae",
-                  "call",
-                  "ret",
-                  "read",
-                  "write",
-                  "syscall"
+                "anyOf": [
+                  {
+                    "enum": [
+                      "mov",
+                      "push",
+                      "pop",
+                      "leave",
+                      "add",
+                      "sub",
+                      "cmp",
+                      "and",
+                      "or",
+                      "xor",
+                      "shl",
+                      "shr",
+                      "jmp",
+                      "je",
+                      "jne",
+                      "jb",
+                      "jae",
+                      "call",
+                      "ret",
+                      "syscall"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{0,15}$",
+                    "description": "作者自定义指令助记符(G4/D4,全大写与基线小写结构性不相交);引用存在性由 XS-CUSTOM-REF 检查。"
+                  }
                 ]
               },
               "operands": {
@@ -484,6 +492,73 @@
             }
           },
           "description": "labelId 唯一且引用可解析由 XS-IR-LABEL 检查(Schema 无唯一约束表达)。"
+        }
+      }
+    },
+    "customInstructions": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 16,
+      "description": "作者自定义指令声明面(G4/D4,docs/最小DSL范围.md §三.2 v1.2):声明式映射表(数据),由引擎按微算子封闭集解释执行——不存在宿主侧处理函数注册,不存在脚本形态(四底线 4 不变)。直线语义(封闭集无控制转移,CFG 静态分析保持);恒定步数(步数 = 序列长度,T-SC2 逐条可断言)。助记符唯一且不与基线 opcode 冲突(XS-CUSTOM-DEF);displayText 属 I-10 静态模板,经 E-4/E-6 扫描(XS-CUSTOM-DISPLAY)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mnemonic", "displayText", "semantics"],
+        "properties": {
+          "mnemonic": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,15}$",
+            "description": "全大写助记符,与基线小写 opcode 结构性不相交。"
+          },
+          "displayText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "controlFlow.currentInstruction 展示文本(I-10 静态模板类);不得含谓词标识 / 隐藏区域名 / fileId 等私有标识(XS-CUSTOM-DISPLAY,E-4/E-6)。"
+          },
+          "semantics": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/$defs/microOp"
+            },
+            "description": "微算子有序组合(封闭集 v1);求值步数 = 序列长度,与操作数值无关。"
+          }
+        }
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 16,
+      "description": "作者接口声明面(G4/D4,docs/最小DSL范围.md §三.3 v1.2):syscall / call 的作者可调用封闭操作;效果原语封闭集,无宿主 IO 原语(F-4 保持)。interfaceId 整数带 [0x0100, 0xFFFF] 与保留系统号带 [0x0000, 0x00FF](内置 exit)结构性不相交;条目间唯一。效果存在性可见面遵守 I-2/I-3/I-9;每接口步数恒定(T-SC2 同断言)。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["interfaceId", "displayText", "effects"],
+        "properties": {
+          "interfaceId": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 65535,
+            "description": "整数接口号;syscall 立即数精确匹配此值派发(XS-SYSCALL-DECL),call 经 {kind:\"interface\"} 结构化引用(XS-IFACE-REF)。"
+          },
+          "displayText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "接口调用展示文本(I-10 静态模板类;XS-CUSTOM-DISPLAY 同扫描)。"
+          },
+          "effects": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/$defs/interfaceEffect"
+            },
+            "description": "效果原语有序列表(封闭集 v1);步数 = 序列长度,计入动作/谓词预算。"
+          }
         }
       }
     },
@@ -637,8 +712,206 @@
               "pattern": "^-?0x[0-9a-fA-F]{1,16}$"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "interfaceId"],
+          "properties": {
+            "kind": {
+              "const": "interface"
+            },
+            "interfaceId": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 65535,
+              "description": "作者接口结构化引用(G4/D4,沿 fileId 先例;不存在动态拼接 capability 的语法位置,F-4 保持);引用存在性由 XS-IFACE-REF 检查。"
+            }
+          }
         }
       ]
+    },
+    "microOp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "dst", "valueHex"],
+          "properties": {
+            "op": {
+              "const": "load_imm"
+            },
+            "dst": {
+              "$ref": "#/$defs/registerName"
+            },
+            "valueHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "dst", "src"],
+          "properties": {
+            "op": {
+              "const": "mov_reg"
+            },
+            "dst": {
+              "$ref": "#/$defs/registerName"
+            },
+            "src": {
+              "$ref": "#/$defs/vmRegisterName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "dst", "baseRegister", "displacementHex"],
+          "properties": {
+            "op": {
+              "const": "load_mem"
+            },
+            "dst": {
+              "$ref": "#/$defs/registerName"
+            },
+            "baseRegister": {
+              "$ref": "#/$defs/registerName"
+            },
+            "displacementHex": {
+              "type": "string",
+              "pattern": "^-?0x[0-9a-fA-F]{1,16}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "baseRegister", "displacementHex", "src"],
+          "properties": {
+            "op": {
+              "const": "store_mem"
+            },
+            "baseRegister": {
+              "$ref": "#/$defs/registerName"
+            },
+            "displacementHex": {
+              "type": "string",
+              "pattern": "^-?0x[0-9a-fA-F]{1,16}$"
+            },
+            "src": {
+              "$ref": "#/$defs/vmRegisterName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "flagRegister", "valueHex"],
+          "properties": {
+            "op": {
+              "const": "set_flag"
+            },
+            "flagRegister": {
+              "$ref": "#/$defs/flagName"
+            },
+            "valueHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "dst", "src", "maskHex", "logic"],
+          "properties": {
+            "op": {
+              "const": "bit_mask"
+            },
+            "dst": {
+              "$ref": "#/$defs/registerName"
+            },
+            "src": {
+              "$ref": "#/$defs/vmRegisterName"
+            },
+            "maskHex": {
+              "$ref": "#/$defs/hexValue64"
+            },
+            "logic": {
+              "enum": ["and", "or", "xor"]
+            }
+          }
+        }
+      ],
+      "description": "微算子封闭集 v1(G4/D4,docs/最小DSL范围.md §三.2):定步数直线原语,无控制转移(结构性保证 CFG 静态分析保持);数据写目标限一般命名空间(dst 负向前瞻排除 FLAG),FLAG 写入唯一落位是 set_flag(经 I-3 污点检查);内存访问走统一权限与 I-9 统一拒绝路径。新增微算子 = 审计 + dslSchemaVersion 演进。"
+    },
+    "interfaceEffect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect"],
+          "properties": {
+            "effect": {
+              "const": "exit"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect", "fileId"],
+          "properties": {
+            "effect": {
+              "const": "grant_virtual_file"
+            },
+            "fileId": {
+              "$ref": "#/$defs/objectId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect", "fileId"],
+          "properties": {
+            "effect": {
+              "const": "virtual_file_read"
+            },
+            "fileId": {
+              "$ref": "#/$defs/objectId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect", "flagRegister", "valueHex"],
+          "properties": {
+            "effect": {
+              "const": "set_flag"
+            },
+            "flagRegister": {
+              "$ref": "#/$defs/flagName"
+            },
+            "valueHex": {
+              "$ref": "#/$defs/hexValue64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect"],
+          "properties": {
+            "effect": {
+              "const": "noop"
+            }
+          }
+        }
+      ],
+      "description": "接口效果原语封闭集 v1(G4/D4,docs/最小DSL范围.md §三.3):exit 为保留内置语义;grant_virtual_file / virtual_file_read 沿结构化 fileId 先例(前者衔接 stage 副作用语义,后者衔接谓词 virtual_file_read);set_flag 经 I-3 污点检查;无宿主 IO / 进程 / 网络原语(F-4 保持)。新增效果原语 = 审计 + dslSchemaVersion 演进。"
     },
     "predicate": {
       "oneOf": [

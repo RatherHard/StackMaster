@@ -49,6 +49,12 @@ export const SEED_PATH_PATTERN_SOURCE =
 /** IR 标签名。 */
 export const IR_LABEL_ID_PATTERN_SOURCE = "^[a-z][a-z0-9_]{0,62}$";
 
+/**
+ * 作者自定义指令助记符模式(G4/D4):全大写,与基线小写 opcode 按
+ * 大小写结构性不相交;引用必须落在 customInstructions[] 声明面(XS-CUSTOM-REF)。
+ */
+export const CUSTOM_MNEMONIC_PATTERN_SOURCE = "^[A-Z][A-Z0-9_]{0,15}$";
+
 /** 内存操作数位移(有符号 64 位 hex)。 */
 export const DISPLACEMENT_HEX_PATTERN_SOURCE = "^-?0x[0-9a-fA-F]{1,16}$";
 
@@ -67,3 +73,4 @@ export const CHALLENGE_ID_PATTERN = new RegExp(CHALLENGE_ID_PATTERN_SOURCE);
 export const GENERAL_REGISTER_NAME_PATTERN = new RegExp(GENERAL_REGISTER_NAME_PATTERN_SOURCE);
 export const FLAG_REGISTER_NAME_PATTERN = new RegExp(FLAG_REGISTER_NAME_PATTERN_SOURCE);
 export const CONTROL_CHARS_BAN_PATTERN = new RegExp(CONTROL_CHARS_BAN_PATTERN_SOURCE);
+export const CUSTOM_MNEMONIC_PATTERN = new RegExp(CUSTOM_MNEMONIC_PATTERN_SOURCE);

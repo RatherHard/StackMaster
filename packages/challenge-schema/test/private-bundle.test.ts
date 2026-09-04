@@ -106,11 +106,11 @@ describe("私有判题包校验器", () => {
     expect(canaryObject?.containsSecret).toBe(true);
   });
 
-  it("dslSchemaVersion 只接受冻结常量 1", () => {
+  it("dslSchemaVersion 只接受冻结常量 2(G4/D4:opcode v2 定基,v1 包不再受纳)", () => {
     const publicDescriptor = loadPublicDescriptor();
     const violations = assertFail(
       validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
-        clone.dslSchemaVersion = 2;
+        clone.dslSchemaVersion = 1;
       })),
     );
 
@@ -301,5 +301,131 @@ describe("私有判题包校验器", () => {
     );
 
     expect(bundle.initialState.memoryRegions[0]?.kind).toBe("custom");
+  });
+
+  it("已废止 opcode read / write 被拒绝(G4/D4 v2:教学 IO 收敛,21 → 20 定基)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    for (const abolished of ["read", "write"]) {
+      const violations = assertFail(
+        validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+          clone.compiledIr = {
+            ...(clone.compiledIr as Record<string, unknown>),
+            instructions: [{ op: abolished, operands: [] }],
+          };
+        })),
+      );
+
+      expect(
+        violations.some((v) => v.path.includes("/compiledIr/instructions")),
+        `已废止 opcode ${abolished}`,
+      ).toBe(true);
+    }
+  });
+
+  it("自定义指令语义含未知微算子(控制转移变体)被拒(G4/D4:封闭集直线语义)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.customInstructions = [
+          {
+            mnemonic: "LOAD_TWICE",
+            displayText: "装载两次",
+            semantics: [
+              { op: "load_imm", dst: "RAX", valueHex: "0x2A" },
+              // jmp_back 不在微算子封闭集 v1(load_imm/mov_reg/load_mem/
+              // store_mem/set_flag/bit_mask):控制转移语义在 Schema 层结构性不可表达。
+              { op: "jmp_back" },
+            ],
+          },
+        ];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/customInstructions/0/semantics/1"))).toBe(
+      true,
+    );
+  });
+
+  it("小写助记符不满足自定义指令形态被拒(G4/D4:与基线枚举大小写结构性不相交)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.customInstructions = [
+          {
+            mnemonic: "load_twice",
+            displayText: "装载两次",
+            semantics: [{ op: "load_imm", dst: "RAX", valueHex: "0x0" }],
+          },
+        ];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/customInstructions/0/mnemonic"))).toBe(true);
+  });
+
+  it("interfaceId 低于 0x100 被拒(G4/D4:保留系统号带 [0x0, 0xFF] 不开放声明)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.interfaces = [
+          {
+            interfaceId: 255,
+            displayText: "闯入保留带的接口",
+            effects: [{ effect: "noop" }],
+          },
+        ];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/interfaces/0/interfaceId"))).toBe(true);
+  });
+
+  it("G4/D4 绿灯:customInstructions + interfaces 声明面与双形态 IR 通过 Schema 校验", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const bundle = assertOk(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.customInstructions = [
+          {
+            mnemonic: "LOAD_TWICE",
+            displayText: "装载立即数并取低字节",
+            semantics: [
+              { op: "load_imm", dst: "RAX", valueHex: "0x2A" },
+              { op: "bit_mask", dst: "RAX", src: "RAX", maskHex: "0xFF", logic: "and" },
+            ],
+          },
+        ];
+        clone.interfaces = [
+          {
+            interfaceId: 512,
+            displayText: "授予解题笔记读取权",
+            effects: [
+              { effect: "grant_virtual_file", fileId: "win-notes" },
+              { effect: "set_flag", flagRegister: "FLAG0", valueHex: "0x1" },
+            ],
+          },
+        ];
+        clone.compiledIr = {
+          ...(clone.compiledIr as Record<string, unknown>),
+          instructions: [
+            { op: "push", operands: [{ kind: "register", name: "RBP" }] },
+            {
+              op: "mov",
+              operands: [
+                { kind: "register", name: "RBP" },
+                { kind: "register", name: "RSP" },
+              ],
+            },
+            { op: "LOAD_TWICE", operands: [] },
+            { op: "call", operands: [{ kind: "interface", interfaceId: 512 }] },
+            { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x200" }] },
+            { op: "leave", operands: [] },
+            { op: "ret", operands: [] },
+          ],
+        };
+      })),
+    );
+
+    expect(bundle.customInstructions?.[0]?.mnemonic).toBe("LOAD_TWICE");
+    expect(bundle.interfaces?.[0]?.interfaceId).toBe(512);
   });
 });

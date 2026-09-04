@@ -7,7 +7,10 @@
  */
 
 import type {
+  BitMaskLogic,
+  DslMicroOp,
   DslOpcode,
+  EffectPrimitive,
   HiddenTestKind,
   PredicateType,
   PrivateObjectKind,
@@ -91,10 +94,21 @@ export interface ConditionL1 {
 export type IrOperand =
   | { readonly kind: "register"; readonly name: string }
   | { readonly kind: "immediate"; readonly valueHex: string }
-  | { readonly kind: "memory"; readonly baseRegister?: string; readonly displacementHex?: string };
+  | { readonly kind: "memory"; readonly baseRegister?: string; readonly displacementHex?: string }
+  | { readonly kind: "interface"; readonly interfaceId: number };
+
+/**
+ * IR 指令操作码双形态(G4/D4):基线小写 opcode 枚举或大写自定义助记符
+ * (两形态按大小写结构性不相交;助记符引用必须落在 customInstructions[],
+ * XS-CUSTOM-REF)。
+ */
+export type IrInstructionOp = DslOpcode | CustomInstructionMnemonic;
+
+/** 作者自定义指令助记符(模式与存在性由 Schema + 检查器强制)。 */
+export type CustomInstructionMnemonic = string;
 
 export interface IrInstruction {
-  readonly op: DslOpcode;
+  readonly op: IrInstructionOp;
   readonly operands?: readonly IrOperand[];
 }
 
@@ -109,6 +123,112 @@ export interface CompiledIr {
   readonly entrypointIndex?: number;
   readonly instructions: readonly IrInstruction[];
   readonly labels: readonly IrLabel[];
+}
+
+/** 微算子:立即数装载(定步数直线原语,G4/D4 封闭集 v1)。 */
+export interface MicroOpLoadImm {
+  readonly op: Extract<DslMicroOp, "load_imm">;
+  readonly dst: string;
+  readonly valueHex: string;
+}
+
+/** 微算子:寄存器间传送。 */
+export interface MicroOpMovReg {
+  readonly op: Extract<DslMicroOp, "mov_reg">;
+  readonly dst: string;
+  readonly src: string;
+}
+
+/** 微算子:基址 + 位移内存读(统一权限检查与 I-9 统一拒绝路径)。 */
+export interface MicroOpLoadMem {
+  readonly op: Extract<DslMicroOp, "load_mem">;
+  readonly dst: string;
+  readonly baseRegister: string;
+  readonly displacementHex: string;
+}
+
+/** 微算子:基址 + 位移内存写(同上)。 */
+export interface MicroOpStoreMem {
+  readonly op: Extract<DslMicroOp, "store_mem">;
+  readonly baseRegister: string;
+  readonly displacementHex: string;
+  readonly src: string;
+}
+
+/** 微算子:标志置位(FLAG 写入的唯一微算子,I-3 污点检查落点)。 */
+export interface MicroOpSetFlag {
+  readonly op: Extract<DslMicroOp, "set_flag">;
+  readonly flagRegister: string;
+  readonly valueHex: string;
+}
+
+/** 微算子:位掩蔽运算。 */
+export interface MicroOpBitMask {
+  readonly op: Extract<DslMicroOp, "bit_mask">;
+  readonly dst: string;
+  readonly src: string;
+  readonly maskHex: string;
+  readonly logic: BitMaskLogic;
+}
+
+/** 微算子封闭集 v1(直线语义:集合内无控制转移,CFG 静态分析保持)。 */
+export type DslMicroOpInstruction =
+  | MicroOpLoadImm
+  | MicroOpMovReg
+  | MicroOpLoadMem
+  | MicroOpStoreMem
+  | MicroOpSetFlag
+  | MicroOpBitMask;
+
+/** 作者自定义指令 = 声明式映射表条目(数据,非代码;恒定步数 = semantics 长度)。 */
+export interface CustomInstruction {
+  readonly mnemonic: CustomInstructionMnemonic;
+  readonly displayText: string;
+  readonly semantics: readonly DslMicroOpInstruction[];
+}
+
+/** 效果原语:程序终止(保留内置语义,等效 exit(0))。 */
+export interface EffectExit {
+  readonly effect: Extract<EffectPrimitive, "exit">;
+}
+
+/** 效果原语:授予虚拟文件 capability(结构化 fileId 引用)。 */
+export interface EffectGrantVirtualFile {
+  readonly effect: Extract<EffectPrimitive, "grant_virtual_file">;
+  readonly fileId: string;
+}
+
+/** 效果原语:标记虚拟文件已读(衔接谓词 virtual_file_read)。 */
+export interface EffectVirtualFileRead {
+  readonly effect: Extract<EffectPrimitive, "virtual_file_read">;
+  readonly fileId: string;
+}
+
+/** 效果原语:置 FLAG 汇寄存器(经 I-3 污点检查)。 */
+export interface EffectSetFlag {
+  readonly effect: Extract<EffectPrimitive, "set_flag">;
+  readonly flagRegister: string;
+  readonly valueHex: string;
+}
+
+/** 效果原语:无操作。 */
+export interface EffectNoop {
+  readonly effect: Extract<EffectPrimitive, "noop">;
+}
+
+/** 接口效果原语封闭集 v1(无宿主 IO 原语,F-4 保持)。 */
+export type InterfaceEffect =
+  | EffectExit
+  | EffectGrantVirtualFile
+  | EffectVirtualFileRead
+  | EffectSetFlag
+  | EffectNoop;
+
+/** 作者接口 = syscall / call 的可调用封闭操作(恒定步数 = effects 长度)。 */
+export interface AuthorInterface {
+  readonly interfaceId: number;
+  readonly displayText: string;
+  readonly effects: readonly InterfaceEffect[];
 }
 
 /** 初始内存区域(含隐藏区域全字节;contentHex 长度 = 2 × byteLength)。 */
@@ -219,5 +339,7 @@ export interface PrivateChallengeBundle {
   readonly judging: PrivateJudging;
   readonly stages?: readonly Stage[];
   readonly compiledIr: CompiledIr;
+  readonly customInstructions?: readonly CustomInstruction[];
+  readonly interfaces?: readonly AuthorInterface[];
   readonly judgingConfig: JudgingConfig;
 }

@@ -135,7 +135,7 @@ function buildBaseBundle(publicDescriptor: PublicChallengeDescriptor): PrivateCh
     challengeId: publicDescriptor.challengeId,
     challengeContentVersion: publicDescriptor.challengeContentVersion,
     vmProfileVersion: publicDescriptor.vmProfileVersion,
-    dslSchemaVersion: 1,
+    dslSchemaVersion: 2,
     vmEngineVersion: "0.1.0",
     declaredSeedPublicPaths: [],
     seedPolicy: { strategy: "fixed", seedHex: SEED_HEX_FIXTURE },
@@ -168,7 +168,7 @@ function buildBaseBundle(publicDescriptor: PublicChallengeDescriptor): PrivateCh
       ],
     },
     compiledIr: {
-      irFormatVersion: 1,
+      irFormatVersion: 2,
       entrypointIndex: 0,
       instructions: [
         { op: "push", operands: [{ kind: "register", name: "RBP" }] },

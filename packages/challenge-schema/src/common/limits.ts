@@ -46,6 +46,18 @@ export const MAX_IR_LABELS = 512;
 /** 每指令操作数槽上限。 */
 export const MAX_OPERANDS_PER_INSTRUCTION = 4;
 
+/** 作者自定义指令条数上限(G4/D4 声明面资源护栏)。 */
+export const MAX_CUSTOM_INSTRUCTIONS = 16;
+
+/** 作者接口条数上限(G4/D4 声明面资源护栏)。 */
+export const MAX_INTERFACES = 16;
+
+/** 单条自定义指令微算子序列长度上限(G4:恒定步数上界 = 求值步数上限)。 */
+export const MAX_MICRO_OPS_PER_INSTRUCTION = 16;
+
+/** 单个接口效果原语序列长度上限(G4:恒定步数上界)。 */
+export const MAX_EFFECTS_PER_INTERFACE = 16;
+
 /** 判题条件布尔组合静态深度(L1→L2→L3→谓词;XS-NESTING)。 */
 export const MAX_CONDITION_DEPTH = 3;
 

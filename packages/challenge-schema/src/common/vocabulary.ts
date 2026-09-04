@@ -64,11 +64,12 @@ export const SEMANTIC_HIGHLIGHT_KINDS = [
 ] as const;
 export type SemanticHighlightKind = (typeof SEMANTIC_HIGHLIGHT_KINDS)[number];
 
-/** 21 opcode 封闭枚举(docs/最小DSL范围.md §三;与私有包 Schema 枚举一致)。 */
+/** 20 基线 opcode 封闭枚举(docs/最小DSL范围.md §三.1 v1.2;G4/D4 重定基:移除教学 IO read/write,新增栈帧 leave;与私有包 Schema 基线枚举一致)。 */
 export const DSL_OPCODES = [
   "mov",
   "push",
   "pop",
+  "leave",
   "add",
   "sub",
   "cmp",
@@ -84,11 +85,47 @@ export const DSL_OPCODES = [
   "jae",
   "call",
   "ret",
-  "read",
-  "write",
   "syscall",
 ] as const;
 export type DslOpcode = (typeof DSL_OPCODES)[number];
+
+/** 保留系统号带上限(G4/D4:syscall 立即数 ∈ [0x0000, 0x00FF] 走内置语义,当前仅 exit(I),语义不变;作者接口号带从 0x0100 起,两带结构性不相交)。 */
+export const RESERVED_SYSCALL_BAND_MAX = 0xff;
+
+/** 作者接口 interfaceId 下限(G4/D4;与保留系统号带结构性不相交)。 */
+export const INTERFACE_ID_MIN = 0x100;
+
+/** 作者接口 interfaceId 上限。 */
+export const INTERFACE_ID_MAX = 0xffff;
+
+/**
+ * 微算子封闭集 v1(G4/D4 作者自定义指令,docs/最小DSL范围.md §三.2):
+ * 全部为定步数直线原语——集合内不存在控制转移,自定义指令的 CFG 静态分析
+ * 完全保持;求值步数 = 序列长度,与操作数值无关(T-SC2 逐条可断言)。
+ */
+export const MICRO_OPS = [
+  "load_imm",
+  "mov_reg",
+  "load_mem",
+  "store_mem",
+  "set_flag",
+  "bit_mask",
+] as const;
+export type DslMicroOp = (typeof MICRO_OPS)[number];
+
+/** bit_mask 微算子的位逻辑枚举。 */
+export const BIT_MASK_LOGIC_OPS = ["and", "or", "xor"] as const;
+export type BitMaskLogic = (typeof BIT_MASK_LOGIC_OPS)[number];
+
+/** 接口效果原语封闭集 v1(G4/D4 作者接口面,docs/最小DSL范围.md §三.3;无宿主 IO 原语,F-4 保持)。 */
+export const EFFECT_PRIMITIVES = [
+  "exit",
+  "grant_virtual_file",
+  "virtual_file_read",
+  "set_flag",
+  "noop",
+] as const;
+export type EffectPrimitive = (typeof EFFECT_PRIMITIVES)[number];
 
 /** 七项内置谓词封闭集(docs/最小DSL范围.md §四)。 */
 export const PREDICATE_TYPES = [

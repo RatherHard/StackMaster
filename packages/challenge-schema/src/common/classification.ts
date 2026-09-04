@@ -45,7 +45,7 @@ export const PUBLIC_DESCRIPTOR_FIELDS = [
   "initialProjection",
 ] as const;
 
-/** 私有判题包 17 个顶层字段(整体 SERVER_ONLY;与 Schema properties 键严格一致)。 */
+/** 私有判题包 19 个顶层字段(整体 SERVER_ONLY;与 Schema properties 键严格一致;customInstructions / interfaces 为 G4/D4 新增声明面)。 */
 export const PRIVATE_BUNDLE_FIELDS = [
   "schemaVersion",
   "challengeId",
@@ -63,6 +63,8 @@ export const PRIVATE_BUNDLE_FIELDS = [
   "judging",
   "stages",
   "compiledIr",
+  "customInstructions",
+  "interfaces",
   "judgingConfig",
 ] as const;
 

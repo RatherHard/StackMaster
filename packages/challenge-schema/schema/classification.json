@@ -45,6 +45,8 @@
         "judging": "server-only",
         "stages": "server-only",
         "compiledIr": "server-only",
+        "customInstructions": "server-only",
+        "interfaces": "server-only",
         "judgingConfig": "server-only"
       }
     }
