@@ -26,11 +26,11 @@
       }
     },
     "visibleRegisters": {
-      "maxItems": 32,
+      "maxItems": 64,
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,31}$"
+        "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$"
       }
     },
     "maxBytesPerRange": {

@@ -46,14 +46,14 @@
       }
     },
     "changedRegisters": {
-      "maxItems": 32,
+      "maxItems": 64,
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,31}$"
+            "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$"
           },
           "valueHex": {
             "type": "string",

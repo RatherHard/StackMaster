@@ -193,18 +193,45 @@ describe("私有判题包校验器", () => {
     expect(violations.some((v) => v.path.includes("/judging/hiddenTests/0"))).toBe(true);
   });
 
-  it("寄存器键必须匹配基集或 FLAG 模式(XS-REG-FROZEN 结构面)", () => {
+  it("寄存器键必须归属双命名空间之一(G2/D3:XS-REG-NAMESPACE 结构面,不属任何命名空间的键拒绝)", () => {
     const publicDescriptor = loadPublicDescriptor();
     const violations = assertFail(
       validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
         clone.initialState = {
           ...(clone.initialState as Record<string, unknown>),
-          registers: { RSP: "0x7FFFFFF8", EAX: "0x0" },
+          registers: { RSP: "0x7FFFFFF8", rsp: "0x0" },
         };
       })),
     );
 
     expect(violations.some((v) => v.path.includes("/initialState/registers"))).toBe(true);
+  });
+
+  it("自定义寄存器键通过 Schema(G2/D3 验收绿灯样例:R_MYDATA)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const bundle = assertOk(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        const registers = (clone.initialState as { registers: Record<string, string> }).registers;
+        registers["R_MYDATA"] = "0x2A";
+      })),
+    );
+
+    expect(bundle.initialState.registers["R_MYDATA"]).toBe("0x2A");
+  });
+
+  it("registers 超过 256 键被拒绝(G2/D3.1:上限 64 → 256,资源护栏样例)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const oversized: Record<string, string> = {};
+    for (let index = 0; index < 257; index += 1) {
+      oversized[`R${index}`] = "0x0";
+    }
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        (clone.initialState as { registers: Record<string, string> }).registers = oversized;
+      })),
+    );
+
+    expect(violations.some((v) => v.path === "/initialState/registers")).toBe(true);
   });
 
   it("阶段 resourceBudget.maxInstructionSteps 必填(XS-STAGE-BUDGET 结构面)", () => {

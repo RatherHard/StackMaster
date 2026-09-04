@@ -47,12 +47,13 @@ export type {
   SeedStrategy,
   StageSideEffectType,
 } from "./common/vocabulary.js";
-export { BASE_REGISTER_NAMES } from "./common/patterns.js";
+export { CORE_REGISTER_NAMES } from "./common/patterns.js";
+export type { CoreRegisterName } from "./common/patterns.js";
 export {
   CHALLENGE_ID_PATTERN_SOURCE,
   SEMVER_PATTERN_SOURCE,
   OBJECT_ID_PATTERN_SOURCE,
-  BASE_REGISTER_NAME_PATTERN_SOURCE,
+  GENERAL_REGISTER_NAME_PATTERN_SOURCE,
   FLAG_REGISTER_NAME_PATTERN_SOURCE,
   HEX_VALUE_64_PATTERN_SOURCE,
   PUBLIC_HEX_VALUE_64_PATTERN_SOURCE,
@@ -65,7 +66,7 @@ export {
   DISPLACEMENT_HEX_PATTERN_SOURCE,
   CONTROL_CHARS_BAN_PATTERN_SOURCE,
   CHALLENGE_ID_PATTERN,
-  BASE_REGISTER_NAME_PATTERN,
+  GENERAL_REGISTER_NAME_PATTERN,
   FLAG_REGISTER_NAME_PATTERN,
   CONTROL_CHARS_BAN_PATTERN,
 } from "./common/patterns.js";

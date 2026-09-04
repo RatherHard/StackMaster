@@ -100,14 +100,17 @@ describe("PublicStateProjection 契约(WP-3)", () => {
     expect(PublicValueHex64Schema.safeParse("0x7FFF00F8090A0B0C0D").success).toBe(false);
   });
 
-  it("寄存器名称形态宽松(允许题目 VM Profile 扩展),非法字符拒绝", () => {
+  it("寄存器名称须为一般命名空间(G2/D3:题目自由命名,负向前瞻排除 FLAG 保留区)", () => {
     expect(RegisterNameSchema.safeParse("RSP").success).toBe(true);
     expect(RegisterNameSchema.safeParse("R12").success).toBe(true);
-    expect(RegisterNameSchema.safeParse("flag_carry").success).toBe(true);
-    expect(RegisterNameSchema.safeParse("author_custom_reg_name").success).toBe(true);
+    expect(RegisterNameSchema.safeParse("R_MYDATA").success).toBe(true);
+    expect(RegisterNameSchema.safeParse("CTRL").success).toBe(true);
+    expect(RegisterNameSchema.safeParse("FLAGX").success).toBe(false);
+    expect(RegisterNameSchema.safeParse("flag_carry").success).toBe(false);
+    expect(RegisterNameSchema.safeParse("author_custom_reg_name").success).toBe(false);
     expect(RegisterNameSchema.safeParse("1AX").success).toBe(false);
     expect(RegisterNameSchema.safeParse("R SP").success).toBe(false);
-    expect(RegisterNameSchema.safeParse("R".repeat(33)).success).toBe(false);
+    expect(RegisterNameSchema.safeParse("R".repeat(17)).success).toBe(false);
   });
 
   it("permissions 只接受 r/w/x 非空规范序子集", () => {

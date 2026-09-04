@@ -7,7 +7,8 @@
  *   且顶层 properties 键 ≡ 字段清单常量(14 公开 / 17 私有);
  * - 共享身份字段:4 个版本/身份字段必须同时出现在两个 Schema 的 required
  *   (WP-1 §12.1;XS-ID-CORR 的 Schema 侧前提);
- * - 结构性不相交:基集寄存器模式 × FLAG 模式(WP-1 §12.5)。
+ * - 结构性不相交:一般命名空间(负向前瞻排除 FLAG 保留区,G2/D3)× FLAG 模式
+ *   (WP-1 §12.5 v1.5)。
  */
 
 import { readFileSync } from "node:fs";
@@ -15,9 +16,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ARCH_BITS_VALUES,
-  BASE_REGISTER_NAMES,
-  BASE_REGISTER_NAME_PATTERN,
-  BASE_REGISTER_NAME_PATTERN_SOURCE,
+  CORE_REGISTER_NAMES,
+  GENERAL_REGISTER_NAME_PATTERN,
+  GENERAL_REGISTER_NAME_PATTERN_SOURCE,
   CHALLENGE_CLASSIFICATIONS,
   CHALLENGE_ID_PATTERN_SOURCE,
   CONTROL_CHARS_BAN_PATTERN_SOURCE,
@@ -149,6 +150,7 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
   it("私有 Schema 数值锚点", () => {
     expectNumberAt(privateSchema, "/properties/declaredSeedPublicPaths", "maxItems", MAX_DECLARED_SEED_PATHS);
     expectNumberAt(privateSchema, "/properties/initialState/properties/memoryRegions", "maxItems", MAX_MEMORY_REGIONS);
+    expectNumberAt(privateSchema, "/properties/initialState/properties/registers", "maxProperties", MAX_VM_REGISTERS);
     expectNumberAt(
       privateSchema,
       "/properties/initialState/properties/memoryRegions/items/properties/contentHex",
@@ -208,7 +210,7 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
 describe("Schema 模式字面量 ≡ patterns.ts(源串原样出现)", () => {
   it("两个 Schema 均携带共用模式源串", () => {
     const shared = [
-      BASE_REGISTER_NAME_PATTERN_SOURCE,
+      GENERAL_REGISTER_NAME_PATTERN_SOURCE,
       CHALLENGE_ID_PATTERN_SOURCE,
       FLAG_REGISTER_NAME_PATTERN_SOURCE,
       HEX_BYTES_PATTERN_SOURCE,
@@ -339,14 +341,22 @@ describe("共享身份字段(WP-1 §12.1 四类版本/身份字段)", () => {
   });
 });
 
-describe("结构性不相交(WP-1 §12.5)", () => {
-  it("基集寄存器模式与 FLAG 模式不相交,14 基集逐一匹配自身模式", () => {
-    expect(BASE_REGISTER_NAME_PATTERN.test("FLAG0")).toBe(false);
+describe("结构性不相交(G2/D3 双命名空间保留模型,WP-1 §12.5 v1.5)", () => {
+  it("一般命名空间与 FLAG 保留区不相交;核心三寄存器与自由命名匹配一般模式", () => {
+    expect(GENERAL_REGISTER_NAME_PATTERN.test("FLAG0")).toBe(false);
     expect(FLAG_REGISTER_NAME_PATTERN.test("RAX")).toBe(false);
-    for (const name of BASE_REGISTER_NAMES) {
-      expect(BASE_REGISTER_NAME_PATTERN.test(name), name).toBe(true);
+    for (const name of CORE_REGISTER_NAMES) {
+      expect(GENERAL_REGISTER_NAME_PATTERN.test(name), name).toBe(true);
       expect(FLAG_REGISTER_NAME_PATTERN.test(name), name).toBe(false);
     }
+    // 自由命名面(R_MYDATA / CTRL 为验收绿灯样例);不属任何命名空间的键拒绝。
+    expect(GENERAL_REGISTER_NAME_PATTERN.test("R_MYDATA")).toBe(true);
+    expect(GENERAL_REGISTER_NAME_PATTERN.test("CTRL")).toBe(true);
+    expect(GENERAL_REGISTER_NAME_PATTERN.test("rsp")).toBe(false);
+    expect(FLAG_REGISTER_NAME_PATTERN.test("rsp")).toBe(false);
+    // 一般名长度界:恰 16 字符通过,17 字符拒绝。
+    expect(GENERAL_REGISTER_NAME_PATTERN.test("R".repeat(16))).toBe(true);
+    expect(GENERAL_REGISTER_NAME_PATTERN.test("R".repeat(17))).toBe(false);
   });
 
   it("副作用类型封闭集非空且仅含 grant_virtual_file(v1 封闭面)", () => {

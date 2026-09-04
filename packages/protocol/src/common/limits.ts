@@ -57,8 +57,8 @@ export const MAX_VISIBLE_REGIONS = 64;
 /** ProjectionPolicy.visibleObjects 数组护栏(策略整体 SERVER_ONLY,本值仅为组装期外圈护栏)。 */
 export const MAX_VISIBLE_OBJECTS = 64;
 
-/** 投影可见寄存器数护栏(PublicStateProjection.visibleRegisters / changedRegisters / 策略白名单共用)。 */
-export const MAX_VISIBLE_REGISTERS = 32;
+/** 投影可见寄存器数护栏(PublicStateProjection.visibleRegisters / changedRegisters / 策略声明集共用;G2/D3.1:32 → 64,与 challenge-schema 上限对齐)。 */
+export const MAX_VISIBLE_REGISTERS = 64;
 
 /** 单投影 / 单增量的语义高亮数护栏。 */
 export const MAX_SEMANTIC_HIGHLIGHTS = 32;

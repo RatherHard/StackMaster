@@ -1,13 +1,13 @@
-# 双包 Schema 语义(WP-4 · v1.1)
+# 双包 Schema 语义(WP-4 · v1.2)
 
 | 项 | 值 |
 |---|---|
 | 题目包 Schema 版本 | `1`(`CHALLENGE_PACKAGE_SCHEMA_VERSION`,破坏性变更递增,见 §7) |
-| 状态 | 阶段一 WP-4 交付物,双包 Schema 与分类检查器冻结;v1.1 按《Vm 模块设计冲突与整改方案》完成 G1/G3 重定基 |
-| 修订 | v1.1(2026-09-04):G1——`vmProfile.archBits`(32/64)位宽声明入公开包,架构值 = archBits 位宽、64 位容器承载、高位掩蔽,新增检查器规则 XS-ARCH-WIDTH;G3——区域类型增补作者自定义 `custom` 类,区域大小与 `pageSizeBytes` 收紧为 4KB 的倍数,新增检查器规则 XS-MEM-PAGE-ALIGN。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改方案裁决整体重定基(`dslSchemaVersion` 的递增归 G4/P3 批次);v1(2026-09-03):阶段一 WP-4 冻结初版 |
+| 状态 | 阶段一 WP-4 交付物,双包 Schema 与分类检查器冻结;v1.2 按《Vm 模块设计冲突与整改方案》完成 G2 重定基(v1.1 已完成 G1/G3) |
+| 修订 | v1.2(2026-09-04):G2——寄存器命名放开为双命名空间保留模型:一般寄存器自由命名 `^[A-Z][A-Z0-9_]{0,15}$`(负向前瞻排除 FLAG 保留区),冻结 14 基集废止,新增必选核心寄存器 `RSP`/`RBP`/`RIP`;`vmProfile.registers` 语义改为"本题目寄存器集的定义性声明";数量护栏放宽(`registers` 1–64、私有初始寄存器 ≤ 256);检查器规则 `XS-REG-FROZEN` 废止,新增 `XS-REG-CORE` / `XS-REG-NAMESPACE`,`XS-REG-SUBSET` 重锚为声明集子集;v1.1(2026-09-04):G1——`vmProfile.archBits`(32/64)位宽声明入公开包,架构值 = archBits 位宽、64 位容器承载、高位掩蔽,新增检查器规则 XS-ARCH-WIDTH;G3——区域类型增补作者自定义 `custom` 类,区域大小与 `pageSizeBytes` 收紧为 4KB 的倍数,新增检查器规则 XS-MEM-PAGE-ALIGN。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改方案裁决整体重定基(`dslSchemaVersion` 的递增归 G4/P3 批次);v1(2026-09-03):阶段一 WP-4 冻结初版 |
 | 日期 | 2026-09-04 |
 | 契约单一来源 | 本包 `schema/*.schema.json`(手写 JSON Schema 2020-12 + Ajv;计划书 5.4 技术选型原文);TS 类型为手工镜像,完整正反样例测试防漂移(§6) |
-| 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、13.2(题目包测试);WP-1 清单 **v1.4** 第十二章(双包字段级分类)、§3.2(寄存器基集)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/最小DSL范围.md`(指令面 / 谓词面 / 编排面词汇);`docs/develop/Vm 模块设计冲突与整改方案.md`(G1/G3 裁决) |
+| 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、13.2(题目包测试);WP-1 清单 **v1.5** 第十二章(双包字段级分类)、§3.2(寄存器命名与双命名空间保留模型)、§12.5(FLAG 保留区)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/最小DSL范围.md`(指令面 / 谓词面 / 编排面词汇);`docs/develop/Vm 模块设计冲突与整改方案.md`(G1/G3/G2 裁决) |
 | 效力范围 | 公开描述包与私有判题包的 JSON Schema、字段分类清单(`schema/classification.json`)、字段分类检查器(`./server-only` 子路径);阶段二 `challenge-compiler` / session-api / verifier 消费;与计划书、WP-1 清单冲突时依次以计划书、WP-1 清单为准 |
 
 **变更纪律**:与 protocol 语义文档相同——任何字段、枚举值或语义变更须先走 WP-1 §1.3 契约变更流程(先改 WP-1 第十二章分类论证 → 改本包 Schema 与正反 fixture → 评审 → 再改实现);破坏性变更递增 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 并保留 N-1 兼容窗口(§7)。
@@ -60,8 +60,8 @@
 
 | 字段 | 类型(冻结) | 语义与规则 |
 |---|---|---|
-| `registers[]` | 数组(1–32)× `{name, displayLabel?}` | **教学可见寄存器白名单声明**(ProjectionPolicy 组装来源);名称不得匹配 FLAG 模式(XS-REG-FLAG);名称唯一(XS-ID-UNIQUE) |
-| `flagRegisterNames?[]` | FLAG 模式字符串数组 | 只承载**名称**;**不要求**是 `registers` 子集(通常恰相反,WP-1 §12.5);须存在于私有包初始寄存器集 |
+| `registers[]` | 数组(1–64)× `{name, displayLabel?}`(v1.2 上限放宽,D3.1) | **本题目寄存器集的定义性声明**(v1.2,G2/D3;ProjectionPolicy.visibleRegisters 的组装来源);一般命名模式 `^[A-Z][A-Z0-9_]{0,15}$` 且不得落入 FLAG 保留区 `^FLAG[A-Z0-9_]*$`(Schema 负向前瞻 + XS-REG-NAMESPACE / XS-REG-FLAG);必含核心寄存器 `RSP`/`RBP`/`RIP`(XS-REG-CORE);名称唯一(XS-ID-UNIQUE) |
+| `flagRegisterNames?[]` | FLAG 模式字符串数组 | 只承载**名称**;**不要求**是 `registers` 子集(通常恰相反,WP-1 §12.5 v1.5);须存在于私有包初始寄存器集(XS-REG-FLAG) |
 | `archBits` | enum `32` / `64`(v1.1 必填) | **架构位宽声明**(G1/D1:出题人指定 32 或 64 位);双包全部架构值(初始寄存器值、IR 立即数与位移、公开镜像值)按此位宽校验域(XS-ARCH-WIDTH);值以 64 位容器承载、高位按位宽掩蔽(计划书 6.2)。私有包不复制本字段——位宽是公开常量,从公开包单点读取,防双真相源 |
 | `endianness` | const `"little"` | 架构公开常量 |
 | `pageSizeBytes` | 整数,4096 的倍数,4096–65536(v1.1) | VMA 页大小(4KB 的倍数,G3/D2);权威分页语义归引擎,对齐由 XS-MEM-PAGE-ALIGN 复核 |
@@ -89,7 +89,7 @@
 | 子形状 | 形态(冻结) | 规则 |
 |---|---|---|
 | `visibleRegions[]` | 1–64 × 完整区域实例 `{regionId, label, startAddressHex, byteLength, permissions, bytesHex, truncated}` | 与 `memoryLayout.regions[]` 按 regionId **双射**,且几何 + 标签逐项相等(XS-PROJ-GEOM);`bytesHex` ≤ 512 hex 字符(= 协议默认 `maxBytesPerRange` 256 字节)、非空,必须等于私有区域 `contentHex` 的同长前缀切片,`truncated === (byteLength × 2 > bytesHex 长度)`(XS-PROJ-VALUES) |
-| `visibleRegisters[]` | 1–32 × `{name, valueHex}` | `valueHex` 大写 `^0x[0-9A-F]{1,16}$`(输出面对齐,§2.5;v1.1:值须落在 `archBits` 位宽域内,XS-ARCH-WIDTH);`name` ⊆ `vmProfile.registers`(XS-PROJ-REG)且 ∉ 秘密汇(I3-VISIBLE-REG);值必须等于私有初始寄存器值(XS-PROJ-VALUES) |
+| `visibleRegisters[]` | 1–64 × `{name, valueHex}`(v1.2 上限放宽,D3.1) | `valueHex` 大写 `^0x[0-9A-F]{1,16}$`(输出面对齐,§2.5;v1.1:值须落在 `archBits` 位宽域内,XS-ARCH-WIDTH);`name` 匹配一般命名模式(FLAG 保留区由 Schema 排除)且 ⊆ `vmProfile.registers`(XS-PROJ-REG)且 ∉ 秘密汇(I3-VISIBLE-REG);值必须等于私有初始寄存器值(XS-PROJ-VALUES) |
 | `semanticHighlights?[]` | 0–32 × `{kind(5 值枚举), targetRegionId, startAddressHex, byteLength, label(1–128)}` | `targetRegionId` ∈ 初始投影可见区域且高亮跨度在区域内(I2-HIGHLIGHT) |
 
 ## 三、私有判题包(Private Challenge Bundle,整体 SERVER_ONLY)
@@ -117,7 +117,7 @@
 
 ### 3.2 `initialState`(VmState 初始形态)
 
-- `registers`:对象,`propertyNames` = 寄存器名模式(基集名或 FLAG 模式),值 = 架构值十六进制(≤ 16 位,入站面大小写均可;v1.1:值须落在题目 `archBits` 位宽域内,XS-ARCH-WIDTH);键 ⊆ 冻结基集 ∪ FLAG 模式(XS-REG-FROZEN);含 FLAG 值——FLAG 值永不进入公开面;
+- `registers`:对象(≤ 256 键,v1.2 D3.1),`propertyNames` = 双命名空间之一(v1.2,G2/D3:一般名 `^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$`——负向前瞻排除 FLAG 保留区——或 FLAG 模式 `^FLAG[A-Z0-9_]*$`),值 = 架构值十六进制(≤ 16 位,入站面大小写均可;v1.1:值须落在题目 `archBits` 位宽域内,XS-ARCH-WIDTH);键归属检查由 XS-REG-NAMESPACE 纵深防御复核;含 FLAG 值——FLAG 值永不进入公开面;
 - `memoryRegions[]`(1–64):`{regionId, kind(6 值,含 `custom`), startAddressHex, byteLength(1–16 MiB 且 4096 的倍数,v1.1 G3), permissions, contentHex, isHidden}`;`contentHex` 长度必须等于 `2 × byteLength`(XS-MEM-CONTENT);非隐藏区域与公开布局**双射**(I2-PUB-MIRROR)。
 
 ## 四、判题条件、seed 声明与 IR 信封
@@ -163,12 +163,13 @@ L3: { predicate: <内置谓词> }
 | XS-ID-CORR | 双包 `challengeId` / `challengeContentVersion` / `vmProfileVersion` 相等 |
 | XS-ID-NO-PRIVATE | 公开包全部字符串值 ∩ {`objectId`, `fileId` 集合} = ∅(7.1 禁止经引用 ID 推导私有字段;`regionId` 是共享公开镜像,豁免) |
 | XS-ID-UNIQUE | 公开/私有 regionId、公开寄存器名、`flagRegisterNames`、hint `order`、`errorCode`、`objectId`、`testId`、`stageId`、`fileId` 各自唯一 |
-| XS-REG-SUBSET | 初始投影寄存器 ⊆ `vmProfile.registers` |
-| XS-REG-FROZEN | 私有寄存器键 ⊆ 冻结基集 14 ∪ `^FLAG[A-Z0-9_]*$` |
-| XS-REG-FLAG | FLAG 模式命名约定:基集名不匹配 FLAG 模式;`vmProfile.registers` 不含 FLAG 名;FLAG 名存在于私有初始寄存器集(WP-1 §12.5) |
+| XS-REG-SUBSET(v1.2 重锚) | 初始面:私有初始寄存器 ⊆ `vmProfile.registers` 声明集 ∪ `flagRegisterNames`(FLAG 名经后者豁免);投影面:初始投影寄存器 ⊆ 声明集(G2:`registers` 是定义性声明,不再是冻结基集的可见子集) |
+| XS-REG-NAMESPACE(v1.2) | 双命名空间保留模型(G2/D3):私有初始寄存器键须归属两个命名空间之一——一般名 `^[A-Z][A-Z0-9_]{0,15}$`(Schema 负向前瞻已排除 FLAG 保留区)或 FLAG 模式 `^FLAG[A-Z0-9_]*$`;不属任何命名空间的键拒绝(Schema 之外纵深防御;`XS-REG-FROZEN` 随冻结基集废止) |
+| XS-REG-CORE(v1.2) | 必选核心寄存器(G2/D3):`RSP` / `RBP` / `RIP` 必须存在于 `vmProfile.registers` 声明集——会话动作(push/pop/call/ret)、栈语义 opcode 与 MVP 栈帧闭环的公共底座 |
+| XS-REG-FLAG | FLAG 模式命名约定:一般命名不匹配 FLAG 模式;`vmProfile.registers` 不含 FLAG 名;FLAG 名存在于私有初始寄存器集(WP-1 §12.5 v1.5) |
 | XS-PROJ-GEOM | 初始投影区域与公开布局双射且几何 + 标签相等 |
 | XS-PROJ-VALUES | 初始投影公开值镜像私有初始态:`bytesHex` = 私有区域前缀切片且 `truncated` 语义一致;`valueHex` = 私有初始寄存器值 |
-| XS-PROJ-REG | 初始投影寄存器 ⊆ `vmProfile.registers`(与 XS-REG-SUBSET 同规则双锚点:投影面与白名单面) |
+| XS-PROJ-REG | 初始投影寄存器 ⊆ `vmProfile.registers` 声明集;私有初始寄存器 ⊆ 声明集 ∪ `flagRegisterNames`(与 XS-REG-SUBSET 同规则双锚点:投影面与初始面,违规统一记投影面规则 ID) |
 | XS-CANARY-CORR | `canary.enabled = true` ⇒ 私有包 ≥ 1 个 `kind = canary`、`hidden`、`containsSecret` 的私有对象,区间不与公开区域相交 |
 | XS-MEM-TOTAL | Σ`byteLength` ≤ 64 MiB;Σ`contentHex` 字节 ≤ 2 MiB |
 | XS-MEM-CONTENT | 私有区域 `contentHex` 长度 = 2 × `byteLength` |
@@ -194,7 +195,7 @@ TS 类型为手工镜像(本包保持叶子包,不依赖 protocol/Zod)。防漂�
 
 1. **完整正反样例**:公开包 fixture(JSON,入 git,兼作 WP-6 golden fixture 源);私有包样例由测试 helper 的 builder 构造(**私有包样例永不入 git**,CLAUDE.md 红线),覆盖每条规则的红灯变体;
 2. **Schema 严格性测试**(`schema-strictness.test.ts`):递归断言每层 `additionalProperties: false`;公开 Schema 零 `$ref`/`$defs`,私有 Schema `$defs` 引用图无环(非递归);公开 Schema 无 `default`/`examples`;`classification.json` ≡ 常量;`fieldClasses` 键 ≡ 顶层 `properties` 键;
-3. **跨包一致性测试**(`cross-package-consistency.test.ts`):仅测试代码以 `node:fs` 读取 `../protocol/schema/*.schema.json` 比对(数据文件读取不是 import 边,dependency-cruiser 边界不受影响;**src/ 永不做此读取**):12 动作 / 16 错误码枚举一致;区域、寄存器、高亮三个复用子形状深等价;投影排除集 ≡ {revision, callStackSummary, controlFlow, status};寄存器基集 ≡ 冻结 14;21 opcode ≡ DSL 文档 §三。
+3. **跨包一致性测试**(`cross-package-consistency.test.ts`):仅测试代码以 `node:fs` 读取 `../protocol/schema/*.schema.json` 比对(数据文件读取不是 import 边,dependency-cruiser 边界不受影响;**src/ 永不做此读取**):12 动作 / 16 错误码枚举一致;区域、寄存器、高亮三个复用子形状深等价;投影排除集 ≡ {revision, callStackSummary, controlFlow, status};寄存器命名模式 ≡ 一般命名空间(G2/D3,协议 `RegisterNameSchema` 与本包 `$defs/vmRegisterName` 同串;v1.2 起不再比对冻结基集——基集已废止);opcode 集 ≡ DSL 文档 §三。
 
 ## 七、版本与演进
 

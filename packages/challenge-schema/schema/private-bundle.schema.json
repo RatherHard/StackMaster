@@ -104,14 +104,14 @@
         "registers": {
           "type": "object",
           "minProperties": 1,
-          "maxProperties": 64,
+          "maxProperties": 256,
           "propertyNames": {
             "$ref": "#/$defs/vmRegisterName"
           },
           "additionalProperties": {
             "$ref": "#/$defs/hexValue64"
           },
-          "description": "VmState 初始寄存器;可含 FLAG 寄存器值——FLAG 值永不进入公开面(I-3)。键 ⊆ 冻结基集 ∪ FLAG 模式(XS-REG-FROZEN,基集清单见跨包一致性测试)。"
+          "description": "VmState 初始寄存器;可含 FLAG 寄存器值——FLAG 值永不进入公开面(I-3)。键须归属双命名空间之一(G2/D3,WP-1 §12.5 v1.5):一般名 ^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$ 或 FLAG 模式 ^FLAG[A-Z0-9_]*$(XS-REG-NAMESPACE 纵深防御)。"
         },
         "memoryRegions": {
           "type": "array",
@@ -164,9 +164,9 @@
     "secretSinkRegisters": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 64,
+      "maxItems": 256,
       "uniqueItems": true,
-      "description": "I-3 作者显式声明的补充秘密汇;纪律是仅收紧不得放宽——检查器始终叠加 FLAG 模式寄存器(I3-VISIBLE-REG)。",
+      "description": "I-3 作者显式声明的补充秘密汇;纪律是仅收紧不得放宽——检查器始终叠加 FLAG 模式寄存器(I3-VISIBLE-REG)。上限随 MAX_VM_REGISTERS 同锚(G2/D3.1:64 → 256,资源护栏)。",
       "items": {
         "$ref": "#/$defs/vmRegisterName"
       }
@@ -531,13 +531,13 @@
     },
     "registerName": {
       "type": "string",
-      "pattern": "^R[A-Z0-9]{1,3}$",
-      "description": "基集寄存器名(冻结 14 个,清单由跨包一致性测试对照 protocol 锚定)。"
+      "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$",
+      "description": "一般寄存器名(G2/D3 双命名空间保留模型:出题人自由命名,负向前瞻排除 FLAG 保留区,与 FLAG 模式结构性不相交;WP-1 §12.5 v1.5)。"
     },
     "flagName": {
       "type": "string",
       "pattern": "^FLAG[A-Z0-9_]*$",
-      "description": "FLAG 寄存器名(WP-1 §12.5);与基集模式结构性不相交。"
+      "description": "FLAG 寄存器名(WP-1 §12.5 保留区);与一般名模式结构性不相交,秘密汇仍可静态枚举。"
     },
     "vmRegisterName": {
       "anyOf": [

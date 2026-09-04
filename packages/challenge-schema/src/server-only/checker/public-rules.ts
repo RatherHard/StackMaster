@@ -4,6 +4,8 @@
  *  - I2-HIGHLIGHT 语义高亮目标必须在可见区域且区间完全落在其中;
  *  - D2-CODE-PUBLIC 代码区域恒公开:kind=code 区域至多一个且必须出现在初始投影;
  *  - XS-ID-UNIQUE 公开面引用 ID 唯一(区域 / 寄存器 / FLAG / 提示阶 / 错误码);
+ *  - XS-REG-CORE vmProfile.registers 声明集必含核心寄存器 RSP/RBP/RIP
+ *    (G2/D3:会话动作 push/pop/call/ret 与栈语义建立在其上,WP-1 §12.5 v1.5);
  *  - XS-MEM-PAGE-ALIGN pageSizeBytes 与区域 byteLength 均为 4KB 的倍数
  *    (G3/D2;Schema multipleOf 之外的纵深防御,见 arch-rules.ts)。
  *
@@ -12,6 +14,7 @@
  */
 
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
+import { CORE_REGISTER_NAMES } from "../../common/patterns.js";
 import { checkPublicPageAlignment } from "./arch-rules.js";
 import { toAddressRange, rangesOverlap, rangeContains } from "./address-ranges.js";
 import type { AddressRange } from "./address-ranges.js";
@@ -123,6 +126,28 @@ export function checkPublicCodeRegionPolicy(
   return violations;
 }
 
+/**
+ * XS-REG-CORE:vmProfile.registers 声明集必含核心寄存器 RSP/RBP/RIP(G2/D3,WP-1 §12.5 v1.5)。
+ * 寄存器集是定义性声明,但会话动作(push/pop/call/ret)、栈操作码与 MVP 栈帧闭环
+ * 一律建立在核心三寄存器上,故保留为必选;缺失即拒绝。
+ */
+export function checkRegisterCoreSet(
+  descriptor: PublicChallengeDescriptor,
+): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const declared = new Set(descriptor.vmProfile.registers.map((register) => register.name));
+  for (const coreName of CORE_REGISTER_NAMES) {
+    if (!declared.has(coreName)) {
+      violations.push({
+        ruleId: "XS-REG-CORE",
+        message: `vmProfile.registers 缺少必选核心寄存器 ${coreName}(会话动作与栈语义建立其上)`,
+        path: "/vmProfile/registers",
+      });
+    }
+  }
+  return violations;
+}
+
 function pushPublicDuplicates(
   violations: CheckerViolation[],
   values: readonly string[],
@@ -193,6 +218,7 @@ export function checkPublicDescriptorRules(
     ...checkPublicHighlights(descriptor),
     ...checkPublicCodeRegionPolicy(descriptor),
     ...checkPublicReferenceUniqueness(descriptor),
+    ...checkRegisterCoreSet(descriptor),
     ...checkPublicPageAlignment(descriptor),
   ];
 }

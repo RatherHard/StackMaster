@@ -9,7 +9,8 @@
  *  - I3-VISIBLE-REG 可见寄存器与秘密汇寄存器(secretSinkRegisters ∪ FLAG 命名)不相交;
  *  - ZR-B8-CAP-SCAN 公开包全部字符串值不得携带 capability 前缀(如 `virtual_file:`);
  *  - XS-ID-NO-PRIVATE 公开字符串值不得等于私有引用 ID(objectId / fileId;regionId 豁免);
- *  - XS-PROJ-REG(= XS-REG-SUBSET,见 RULE_ID_ALIASES)可见寄存器 ⊆ VM Profile 寄存器白名单;
+ *  - XS-PROJ-REG(= XS-REG-SUBSET,见 RULE_ID_ALIASES;G2/D3 重锚为声明集面)
+ *    可见寄存器 ⊆ vmProfile.registers 声明集,私有初始寄存器 ⊆ 声明集 ∪ flagRegisterNames;
  *  - XS-REG-FLAG 公开 VM Profile 不得携带 FLAG 名;FLAG 名必须存在于私有初始寄存器集;
  *  - XS-PROJ-GEOM 初始投影区域 ↔ 公开布局双射,几何与标签逐项相等;
  *  - XS-PROJ-VALUES 公开 bytesHex 是私有 contentHex 的前缀、truncated 自洽、寄存器值同值;
@@ -266,21 +267,53 @@ export function checkNoPrivateIdsInPublic(
   return violations;
 }
 
-/** XS-PROJ-REG:可见寄存器 ⊆ VM Profile 寄存器白名单(XS-REG-SUBSET 的投影面锚点)。 */
-export function checkVisibleRegistersInWhitelist(
+/**
+ * XS-PROJ-REG:可见寄存器 ⊆ vmProfile.registers 声明集(XS-REG-SUBSET 的投影面锚点)。
+ * G2/D3 重锚:registers 是本题目寄存器集的定义性声明(WP-1 §12.5 v1.5),
+ * "白名单"语义随之改为"声明集"。
+ */
+export function checkVisibleRegistersInDeclarationSet(
   publicDescriptor: PublicChallengeDescriptor,
 ): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
-  const whitelist = new Set(publicDescriptor.vmProfile.registers.map((register) => register.name));
+  const declarationSet = new Set(publicDescriptor.vmProfile.registers.map((register) => register.name));
   publicDescriptor.initialProjection.visibleRegisters.forEach((register, index) => {
-    if (!whitelist.has(register.name)) {
+    if (!declarationSet.has(register.name)) {
       violations.push({
         ruleId: "XS-PROJ-REG",
-        message: `可见寄存器 ${register.name} 不在 VM Profile 寄存器白名单(白名单面规则 XS-REG-SUBSET 同锚)`,
+        message: `可见寄存器 ${register.name} 不在 VM Profile 寄存器声明集(声明集面规则 XS-REG-SUBSET 同锚)`,
         path: `/initialProjection/visibleRegisters/${index}`,
       });
     }
   });
+  return violations;
+}
+
+/**
+ * XS-PROJ-REG(XS-REG-SUBSET 重锚的初始面,G2/D3):私有初始寄存器 ⊆ 声明集 ∪ flagRegisterNames。
+ * FLAG 名经 flagRegisterNames 豁免(WP-1 §12.5:不要求是 registers 子集);
+ * 违规仍记投影面规则 ID(实现只报一次的别名纪律),路径落在初始面。
+ */
+export function checkPrivateRegistersInDeclarationSet(
+  publicDescriptor: PublicChallengeDescriptor,
+  privateBundle: PrivateChallengeBundle,
+): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const declarationSet = new Set(
+    publicDescriptor.vmProfile.registers.map((register) => register.name),
+  );
+  for (const name of publicDescriptor.vmProfile.flagRegisterNames ?? []) {
+    declarationSet.add(name);
+  }
+  for (const [name] of Object.entries(privateBundle.initialState.registers)) {
+    if (!declarationSet.has(name)) {
+      violations.push({
+        ruleId: "XS-PROJ-REG",
+        message: `私有初始寄存器 ${name} 不在 VM Profile 寄存器声明集(registers ∪ flagRegisterNames;XS-REG-SUBSET 重锚的初始面)`,
+        path: `/initialState/registers/${name}`,
+      });
+    }
+  }
   return violations;
 }
 

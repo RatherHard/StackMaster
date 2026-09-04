@@ -31,11 +31,11 @@ export const MAX_BYTES_HEX_PER_RANGE = 512;
 /** 单动作写字节上限(协议 MAX_WRITE_BYTES;公开 resourceLimits 上限引用)。 */
 export const MAX_WRITE_BYTES = 4096;
 
-/** 公开可见寄存器 / 初始投影寄存器数量上限。 */
-export const MAX_VISIBLE_REGISTERS = 32;
+/** 公开可见寄存器 / 初始投影寄存器数量上限(G2/D3.1:32 → 64,资源护栏非自由度限制)。 */
+export const MAX_VISIBLE_REGISTERS = 64;
 
-/** 私有初始寄存器键数量上限。 */
-export const MAX_VM_REGISTERS = 64;
+/** 私有初始寄存器键数量上限(G2/D3.1:64 → 256,资源护栏非自由度限制)。 */
+export const MAX_VM_REGISTERS = 256;
 
 /** IR 指令数上限(7.2 循环上限的结构性兜底之一)。 */
 export const MAX_IR_INSTRUCTIONS = 4096;

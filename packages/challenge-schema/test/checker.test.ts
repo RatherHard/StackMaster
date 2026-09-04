@@ -2,7 +2,7 @@
  * 字段分类检查器测试(WP-1 §12.6 扫描器自检纪律):
  * - 绿灯基线 = fixture 公开包 × builder 派生私有包,必须零违规;
  * - 每条规则一个必触发红灯样例(单一定向破坏),测试名直接引用规则 ID;
- * - 部分规则(XS-REG-FROZEN / XS-MEM-TOTAL / XS-MEM-CONTENT / XS-STAGE-BUDGET /
+ * - 部分规则(XS-REG-NAMESPACE / XS-MEM-TOTAL / XS-MEM-CONTENT / XS-STAGE-BUDGET /
  *   XS-NESTING / XS-MEM-PAGE-ALIGN)在 Schema 层已被拦截,红灯样例刻意绕过
  *   前置条件直测检查器(纵深防御第二道防线;测试内注明)。
  * - XS-DUP-KEY 的落点在 json-strict-parse,红灯样例见 test/json-strict-parse.test.ts。
@@ -105,6 +105,27 @@ describe("字段分类检查器:绿灯基线", () => {
     expect(RULE_ID_ALIASES["XS-REG-SUBSET"]).toBe("XS-PROJ-REG");
     expect(CAPABILITY_SCAN_PREFIXES).toContain("virtual_file:");
   });
+
+  it("G2/D3 自由命名绿灯:自定义寄存器名全链路声明一致时零违规", () => {
+    const result = checkPairWith(
+      (pub) => {
+        const profile = pub.vmProfile as { registers: Array<{ name: string }> };
+        profile.registers.push({ name: "R_MYDATA" }, { name: "CTRL" });
+        (pub.initialProjection as { visibleRegisters: unknown[] }).visibleRegisters.push(
+          { name: "R_MYDATA", valueHex: "0x0" },
+          { name: "CTRL", valueHex: "0x0" },
+        );
+      },
+      (priv) => {
+        const registers = (priv.initialState as { registers: Record<string, string> }).registers;
+        registers["R_MYDATA"] = "0x0";
+        registers["CTRL"] = "0x0";
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
 });
 
 describe("字段分类检查器:公开包单侧规则红灯样例", () => {
@@ -161,6 +182,19 @@ describe("字段分类检查器:公开包单侧规则红灯样例", () => {
     const violation = expectRule(result, "XS-ID-UNIQUE");
     expect(violation.message).toContain("重复");
   });
+
+  it("XS-REG-CORE:声明集缺必选核心寄存器 RSP 被拒绝(G2/D3)", () => {
+    const result = checkPairWith((pub) => {
+      const profile = pub.vmProfile as {
+        registers: Array<{ name: string }>;
+      };
+      profile.registers = profile.registers.filter((register) => register.name !== "RSP");
+    });
+
+    const violation = expectRule(result, "XS-REG-CORE");
+    expect(violation.path).toBe("/vmProfile/registers");
+    expect(violation.message).toContain("RSP");
+  });
 });
 
 describe("字段分类检查器:私有包单侧规则红灯样例", () => {
@@ -193,13 +227,14 @@ describe("字段分类检查器:私有包单侧规则红灯样例", () => {
     expect(violation.message).toContain("input-buffer");
   });
 
-  it("XS-REG-FROZEN:基集外寄存器键被拒(纵深防御,Schema 层已先行拦截)", () => {
+  it("XS-REG-NAMESPACE:不属任何命名空间的寄存器键被拒(纵深防御,G2/D3;Schema 负向前瞻已先行拦截)", () => {
     const result = checkPairWith(undefined, (priv) => {
-      (priv.initialState as { registers: Record<string, string> }).registers["EAX"] = "0x0";
+      // 小写 "rsp" 既不匹配一般命名空间 ^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$,也不匹配 FLAG 保留区。
+      (priv.initialState as { registers: Record<string, string> }).registers["rsp"] = "0x0";
     });
 
-    const violation = expectRule(result, "XS-REG-FROZEN");
-    expect(violation.path).toBe("/initialState/registers/EAX");
+    const violation = expectRule(result, "XS-REG-NAMESPACE");
+    expect(violation.path).toBe("/initialState/registers/rsp");
   });
 
   it("XS-MEM-TOTAL:区域字节总量超限被拒(纵深防御样例)", () => {
@@ -388,6 +423,26 @@ describe("字段分类检查器:跨包一致性规则红灯样例", () => {
     expect(violation.message).toContain("RAX");
   });
 
+  it("I3-VISIBLE-REG:自由命名下秘密汇仍被拦截(G2/D3:自定义名进入可见面被拒绝)", () => {
+    const result = checkPairWith(
+      (pub) => {
+        const profile = pub.vmProfile as { registers: Array<{ name: string }> };
+        profile.registers.push({ name: "R_SECRET" });
+        (pub.initialProjection as { visibleRegisters: unknown[] }).visibleRegisters.push({
+          name: "R_SECRET",
+          valueHex: "0x0",
+        });
+      },
+      (priv) => {
+        (priv.initialState as { registers: Record<string, string> }).registers["R_SECRET"] = "0x0";
+        priv.secretSinkRegisters = ["R_SECRET"];
+      },
+    );
+
+    const violation = expectRule(result, "I3-VISIBLE-REG");
+    expect(violation.message).toContain("R_SECRET");
+  });
+
   it("ZR-B8-CAP-SCAN:capability 前缀字符串进入公开包被拒绝", () => {
     const result = checkPairWith((pub) => {
       pub.randomizationNotice = "virtual_file:win-notes";
@@ -406,7 +461,7 @@ describe("字段分类检查器:跨包一致性规则红灯样例", () => {
     expect(violation.message).toContain("input-buffer");
   });
 
-  it("XS-PROJ-REG(= XS-REG-SUBSET):可见寄存器越出白名单被拒绝", () => {
+  it("XS-PROJ-REG(= XS-REG-SUBSET):可见寄存器越出声明集被拒绝(G2/D3 重锚)", () => {
     const result = checkPairWith(
       (pub) => {
         (pub.initialProjection as { visibleRegisters: unknown[] }).visibleRegisters.push({
@@ -421,6 +476,15 @@ describe("字段分类检查器:跨包一致性规则红灯样例", () => {
 
     const violation = expectRule(result, "XS-PROJ-REG");
     expect(violation.message).toContain("R13");
+  });
+
+  it("XS-PROJ-REG(XS-REG-SUBSET 初始面):私有初始寄存器越出声明集被拒绝(G2/D3)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.initialState as { registers: Record<string, string> }).registers["R_UNDECLARED"] = "0x0";
+    });
+
+    const violation = expectRule(result, "XS-PROJ-REG");
+    expect(violation.path).toBe("/initialState/registers/R_UNDECLARED");
   });
 
   it("XS-REG-FLAG:FLAG 寄存器未在私有包初始寄存器集声明被拒绝", () => {

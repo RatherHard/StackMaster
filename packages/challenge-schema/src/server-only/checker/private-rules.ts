@@ -3,7 +3,9 @@
  *  - I2-PRIV-PAIRWISE 私有初始内存区域两两不相交(BigInt 区间);
  *  - I3-SINK-HIDDEN containsSecret 的私有对象必须 hidden(秘密汇面);
  *  - XS-ID-UNIQUE 私有面引用 ID 唯一(区域 / 对象 / 隐藏测试 / 阶段 / 虚拟文件);
- *  - XS-REG-FROZEN 私有初始寄存器键 ⊆ 14 基集 ∪ FLAG 模式(纵深防御);
+ *  - XS-REG-NAMESPACE 私有初始寄存器键归属双命名空间之一(G2/D3:一般名
+ *    ^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$ 或 FLAG 模式;Schema 负向前瞻之外的纵深防御,
+ *    随 XS-REG-FROZEN 废止而接替其防线);
  *  - XS-MEM-TOTAL 区域字节总量 / 初始内容字节总量封顶;
  *  - XS-MEM-CONTENT contentHex 长度 = 2 × byteLength;
  *  - XS-IR-LABEL 标签 ID 唯一且索引落在指令范围内;
@@ -19,7 +21,7 @@
  */
 
 import {
-  BASE_REGISTER_NAMES,
+  GENERAL_REGISTER_NAME_PATTERN,
   FLAG_REGISTER_NAME_PATTERN,
 } from "../../common/patterns.js";
 import {
@@ -128,17 +130,20 @@ export function checkPrivateReferenceUniqueness(
   return violations;
 }
 
-/** XS-REG-FROZEN:私有初始寄存器键 ⊆ 14 基集 ∪ FLAG 模式。 */
-export function checkPrivateRegisterFrozenSet(
+/**
+ * XS-REG-NAMESPACE:私有初始寄存器键归属双命名空间之一(G2/D3,WP-1 §12.5 v1.5)。
+ * 一般名(负向前瞻排除 FLAG 保留区)或 FLAG 模式;不属任何命名空间的键拒绝。
+ * Schema 已先行拦截,此处是纵深防御第二道防线(秘密汇可静态枚举的依据)。
+ */
+export function checkPrivateRegisterNamespaces(
   bundle: PrivateChallengeBundle,
 ): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
-  const baseNames = new Set<string>(BASE_REGISTER_NAMES);
   for (const [name] of Object.entries(bundle.initialState.registers)) {
-    if (!baseNames.has(name) && !FLAG_REGISTER_NAME_PATTERN.test(name)) {
+    if (!GENERAL_REGISTER_NAME_PATTERN.test(name) && !FLAG_REGISTER_NAME_PATTERN.test(name)) {
       violations.push({
-        ruleId: "XS-REG-FROZEN",
-        message: `私有初始寄存器 "${name}" 不在 14 基集内且不匹配 FLAG 命名模式`,
+        ruleId: "XS-REG-NAMESPACE",
+        message: `私有初始寄存器 "${name}" 不属任何命名空间(一般名 ^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$ 或 FLAG 保留区 ^FLAG[A-Z0-9_]*$)`,
         path: `/initialState/registers/${name}`,
       });
     }
@@ -479,7 +484,7 @@ export function checkPrivateBundleRules(bundle: PrivateChallengeBundle): Checker
     ...checkPrivateRegionsPairwiseDisjoint(bundle),
     ...checkSecretSinksAreHidden(bundle),
     ...checkPrivateReferenceUniqueness(bundle),
-    ...checkPrivateRegisterFrozenSet(bundle),
+    ...checkPrivateRegisterNamespaces(bundle),
     ...checkPrivateMemoryBudget(bundle),
     ...checkIrLabels(bundle),
     ...checkStageBudgets(bundle),

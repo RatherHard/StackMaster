@@ -98,6 +98,50 @@ describe("公开描述包校验器", () => {
     expect(violations.some((v) => v.path.startsWith("/vmProfile/registers"))).toBe(true);
   });
 
+  it("一般命名空间拒绝 FLAGX(G2/D3:负向前瞻排除 FLAG 保留区,验收红灯样例)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        clone.vmProfile = {
+          ...(clone.vmProfile as Record<string, unknown>),
+          registers: [{ name: "FLAGX" }],
+        };
+      })),
+    );
+
+    expect(violations.some((v) => v.path.startsWith("/vmProfile/registers"))).toBe(true);
+  });
+
+  it("registers 超过 64 项被拒绝(G2/D3.1:上限 32 → 64,资源护栏样例)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        clone.vmProfile = {
+          ...(clone.vmProfile as Record<string, unknown>),
+          registers: Array.from({ length: 65 }, (_, index) => ({ name: `R${index}` })),
+        };
+      })),
+    );
+
+    expect(violations.some((v) => v.path === "/vmProfile/registers")).toBe(true);
+  });
+
+  it("自定义寄存器名通过 Schema(G2/D3 验收绿灯样例:R_MYDATA / CTRL)", () => {
+    const descriptor = assertOk(
+      validatePublicDescriptor(breakFixture((clone) => {
+        const profile = clone.vmProfile as { registers: unknown[] };
+        profile.registers = [
+          ...profile.registers,
+          { name: "R_MYDATA" },
+          { name: "CTRL", displayLabel: "控制寄存器" },
+        ];
+        (clone.initialProjection as { visibleRegisters: Array<Record<string, unknown>> })
+          .visibleRegisters.push({ name: "CTRL", valueHex: "0x0" });
+      })),
+    );
+
+    expect(descriptor.vmProfile.registers.map((register) => register.name)).toContain("R_MYDATA");
+    expect(descriptor.vmProfile.registers.map((register) => register.name)).toContain("CTRL");
+  });
+
   it("初始投影寄存器值必须是大写 hex(公开输出面)", () => {
     const violations = assertFail(
       validatePublicDescriptor(breakFixture((clone) => {

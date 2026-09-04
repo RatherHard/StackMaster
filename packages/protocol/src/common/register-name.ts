@@ -1,23 +1,24 @@
 /**
- * 寄存器名称 Schema(WP-3;公开投影 PublicRegister 与 ProjectionPolicy 白名单共用)。
+ * 寄存器名称 Schema(WP-3;公开投影 PublicRegister 与 ProjectionPolicy 声明集共用)。
  *
- * MVP 基础名称集合(RSP/RBP/RIP/RAX/…/R12 + FLAG 子集)由 WP-1 §3.2 冻结;
- * 但名称集合本身允许题目 VM Profile 扩展(docs/develop/Vm 模块设计.md:寄存器
- * 名称、种类与数量应允许出题人自由设定),协议层只约束标识符形态:
- * 字母或下划线开头,仅含字母数字下划线,最长 32 字符。
+ * G2/D3 双命名空间保留模型(WP-1 §12.5 v1.5,《Vm 模块设计冲突与整改方案》§3.2):
+ * 题目寄存器集由出题人自由声明(challenge-schema vmProfile.registers 定义性声明),
+ * 协议层约束名称形态与题目侧同一模式:一般命名空间 ^[A-Z][A-Z0-9_]{0,15}$,
+ * 负向前瞻排除 FLAG 保留区 ^FLAG[A-Z0-9_]*$(FLAG 值永不进入公开投影,I-3;
+ * 双命名空间结构性不相交,秘密汇可静态枚举)。
  *
- * 名称是否属于题目白名单由服务端按题目重新校验(6.2 第 6 条);
+ * 名称是否属于题目声明集由服务端按题目重新校验(6.2 第 6 条);
  * "秘密汇寄存器不得进入白名单"由编译期污点推导强制(WP-1 I-3)。
  */
 import { z } from "zod";
 
-export const REGISTER_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
+export const REGISTER_NAME_PATTERN = /^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$/;
 
 export const RegisterNameSchema = z
   .string()
   .regex(
     REGISTER_NAME_PATTERN,
-    "寄存器名称必须以字母或下划线开头,仅含字母数字下划线,最长 32 字符",
+    "寄存器名称须为一般命名空间形式:大写字母开头,仅含大写字母数字下划线,最长 16 字符,且不得落入 FLAG 保留区",
   );
 
 export type RegisterName = z.infer<typeof RegisterNameSchema>;

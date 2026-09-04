@@ -31,7 +31,8 @@ import {
   checkProjectionValuesMirrored,
   checkPublicPrivateRegionMirror,
   checkSeedDeclarations,
-  checkVisibleRegistersInWhitelist,
+  checkPrivateRegistersInDeclarationSet,
+  checkVisibleRegistersInDeclarationSet,
   checkVisibleRegistersNotSecretSinks,
 } from "./pair-rules.js";
 import { checkPublicDescriptorRules } from "./public-rules.js";
@@ -55,7 +56,8 @@ export function checkPairRules(
     ...checkVisibleRegistersNotSecretSinks(publicDescriptor, privateBundle),
     ...checkNoCapabilityStringsInPublic(publicDescriptor),
     ...checkNoPrivateIdsInPublic(publicDescriptor, privateBundle),
-    ...checkVisibleRegistersInWhitelist(publicDescriptor),
+    ...checkVisibleRegistersInDeclarationSet(publicDescriptor),
+    ...checkPrivateRegistersInDeclarationSet(publicDescriptor, privateBundle),
     ...checkFlagRegisterPolicy(publicDescriptor, privateBundle),
     ...checkProjectionGeometry(publicDescriptor),
     ...checkProjectionValuesMirrored(publicDescriptor, privateBundle),
