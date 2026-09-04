@@ -239,28 +239,28 @@
                         "name": {
                           "type": "string",
                           "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$",
-                          "description": "烘焙进 token 的寄存器(一般命名空间;须 ∈ vmProfile.registers 声明集,XS-ENC-TOKEN)。"
+                          "description": "烘焙进 token 的寄存器(一般命名空间;FLAG 寄存器不可编码,R11:条件码语义不进入表层编码,须 ∈ vmProfile.registers 声明集,XS-ENC-TOKEN)。"
                         }
                       }
                     },
                     {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["kind"],
+                      "required": ["kind", "width"],
                       "properties": {
                         "kind": {
                           "const": "immediate"
                         },
                         "width": {
                           "const": "arch",
-                          "description": "内联立即数字宽 = archBits/8 字节(位宽由公开包 vmProfile.archBits 单点决定);const arch 为 v1 唯一值,未来子字宽挂版本演进。"
+                          "description": "内联立即数字宽 = archBits/8 字节(位宽由公开包 vmProfile.archBits 单点决定);必填且 v1 唯一合法值为 arch(R12 冻结:表层机器码长度与译码不得依赖隐式推断,省略即拒绝),未来子字宽挂版本演进。"
                         }
                       }
                     },
                     {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["kind", "baseRegister"],
+                      "required": ["kind", "baseRegister", "displacementWidth"],
                       "properties": {
                         "kind": {
                           "const": "memory"
@@ -268,11 +268,11 @@
                         "baseRegister": {
                           "type": "string",
                           "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$",
-                          "description": "基址寄存器(烘焙;须 ∈ vmProfile.registers 声明集,XS-ENC-TOKEN)。"
+                          "description": "基址寄存器(烘焙;一般命名空间,FLAG 不可编码,R11;须 ∈ vmProfile.registers 声明集,XS-ENC-TOKEN)。"
                         },
                         "displacementWidth": {
                           "const": "arch",
-                          "description": "内联位移字宽 = archBits/8 字节、小端、有符号域。"
+                          "description": "内联位移字宽 = archBits/8 字节、小端、有符号域;必填且 v1 唯一合法值为 arch(R12 冻结)。"
                         }
                       }
                     },

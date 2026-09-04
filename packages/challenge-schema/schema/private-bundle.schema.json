@@ -74,7 +74,7 @@
         "seedHex": {
           "type": "string",
           "pattern": "^([0-9a-fA-F]{2}){8,32}$",
-          "description": "16 – 64 hex 字符(8–32 字节熵);仅 fixed 策略允许。"
+          "description": "16 – 64 hex 字符(8–32 字节熵);仅 fixed 策略允许(server_random_per_session 时被 else 分支结构性禁止,R5)。"
         }
       },
       "if": {
@@ -94,7 +94,12 @@
           }
         }
       },
-      "description": "随机化只用可复现服务端 seed;无 algorithmId——确定性由 vmEngineVersion 锁定(6.3)。seed 是秘密:禁入公开面。"
+      "else": {
+        "properties": {
+          "seedHex": false
+        }
+      },
+      "description": "随机化只用可复现服务端 seed;无 algorithmId——确定性由 vmEngineVersion 锁定(6.3)。策略与 seed 互斥(R5):fixed ⇒ seedHex 必填(then),server_random_per_session ⇒ seedHex 禁止(else)——同时出现即拒绝,消除策略歧义。seed 是秘密:禁入公开面;seed 的驻留与回放元数据边界见 XS-SEED-POLICY(检查器纵深防御)与 docs/数据分类与秘密零驻留清单.md。"
     },
     "initialState": {
       "type": "object",

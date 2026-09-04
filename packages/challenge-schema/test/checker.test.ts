@@ -1122,3 +1122,532 @@ describe("字段分类检查器:Schema 文档元检查(XS-1 / D2-NO-HIDDEN-IN-PU
     expect(violation?.message).toContain("default");
   });
 });
+
+describe("字段分类检查器:R3 架构宽度递归覆盖私有声明面", () => {
+  function withArchBits32(editPrivate: PairEdit): CheckerResult {
+    return checkPairWith(
+      (pub) => {
+        (pub.vmProfile as Record<string, unknown>)["archBits"] = 32;
+      },
+      editPrivate,
+    );
+  }
+
+  it("XS-ARCH-WIDTH:32 位下微算子 load_imm / set_flag / bit_mask / load_mem 越界被拒绝", () => {
+    const result = withArchBits32((priv) => {
+      priv.customInstructions = [
+        {
+          mnemonic: "LOAD_TWICE",
+          displayText: "越界语义组合",
+          semantics: [
+            { op: "load_imm", dst: "RAX", valueHex: "0x100000000" },
+            { op: "set_flag", flagRegister: "FLAG0", valueHex: "0x100000000" },
+            { op: "bit_mask", dst: "RAX", src: "RAX", maskHex: "0x1FFFFFFFF", logic: "and" },
+            { op: "load_mem", dst: "RBX", baseRegister: "RBP", displacementHex: "0x80000000" },
+          ],
+        },
+      ];
+    });
+
+    const widthViolations = result.violations.filter((c) => c.ruleId === "XS-ARCH-WIDTH");
+    expect(widthViolations.map((v) => v.path)).toEqual([
+      "/customInstructions/0/semantics/0/valueHex",
+      "/customInstructions/0/semantics/1/valueHex",
+      "/customInstructions/0/semantics/2/maskHex",
+      "/customInstructions/0/semantics/3/displacementHex",
+    ]);
+  });
+
+  it("XS-ARCH-WIDTH:32 位下接口效果 set_flag 的 valueHex 越界被拒绝", () => {
+    const result = withArchBits32((priv) => {
+      priv.interfaces = [
+        {
+          interfaceId: 512,
+          displayText: "置位完成标志",
+          effects: [{ effect: "set_flag", flagRegister: "FLAG0", valueHex: "0x100000000" }],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-ARCH-WIDTH");
+    expect(violation.path).toBe("/interfaces/0/effects/0/valueHex");
+  });
+
+  it("XS-ARCH-WIDTH:64 位域上界之外的值(绕过 Schema 形态)仍被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.customInstructions = [
+        {
+          mnemonic: "LOAD_TWICE",
+          displayText: "越界语义",
+          semantics: [{ op: "load_imm", dst: "RAX", valueHex: "0x1FFFFFFFFFFFFFFFF" }],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-ARCH-WIDTH");
+    expect(violation.path).toBe("/customInstructions/0/semantics/0/valueHex");
+  });
+
+  it("XS-ARCH-WIDTH:32 位边界值 0xFFFFFFFF 保持绿灯(不因声明面检查误伤)", () => {
+    const result = withArchBits32((priv) => {
+      priv.customInstructions = [
+        {
+          mnemonic: "LOAD_TWICE",
+          displayText: "边界值语义",
+          semantics: [
+            { op: "load_imm", dst: "RAX", valueHex: "0xFFFFFFFF" },
+            { op: "load_mem", dst: "RBX", baseRegister: "RBP", displacementHex: "-0x80000000" },
+          ],
+        },
+      ];
+    });
+
+    expect(result.violations.filter((c) => c.ruleId === "XS-ARCH-WIDTH")).toHaveLength(0);
+  });
+});
+
+describe("字段分类检查器:R4 地址区间 64 位上溢统一检查", () => {
+  /**
+   * 代码区平移到地址空间末尾(公开布局 + 投影 + 私有镜像三处同步;
+   * 0xFFFFFFFFFFFFF000 = 2^64 − 4096,byteLength 4096 ⇒ 结束地址恰为 2^64)。
+   */
+  function moveCodeRegion(byteLength: number): { editPublic: PairEdit; editPrivate: PairEdit } {
+    return {
+      editPublic: (pub) => {
+        const layout = pub.memoryLayout as { regions: Array<Record<string, unknown>> };
+        const codeRegion = layout.regions.find((region) => region.kind === "code");
+        if (codeRegion === undefined) {
+          throw new Error("fixture 缺少代码区域");
+        }
+        codeRegion.startAddressHex = "0xFFFFFFFFFFFFF000";
+        codeRegion.byteLength = byteLength;
+        const projection = pub.initialProjection as {
+          visibleRegions: Array<Record<string, unknown>>;
+        };
+        const codeProjection = projection.visibleRegions.find((region) => region.regionId === "code");
+        if (codeProjection === undefined) {
+          throw new Error("fixture 缺少代码投影");
+        }
+        codeProjection.startAddressHex = "0xFFFFFFFFFFFFF000";
+        codeProjection.byteLength = byteLength;
+      },
+      editPrivate: (priv) => {
+        const regions = (priv.initialState as {
+          memoryRegions: Array<{ contentHex: string; startAddressHex: string; byteLength: number }>;
+        }).memoryRegions;
+        const codeRegion = regions.find((region) => (region as { kind?: string }).kind === "code");
+        if (codeRegion === undefined) {
+          throw new Error("fixture 缺少私有代码区域");
+        }
+        codeRegion.startAddressHex = "0xFFFFFFFFFFFFF000";
+        const previousContent = codeRegion.contentHex;
+        codeRegion.byteLength = byteLength;
+        const prefixBytes = previousContent.length / 2;
+        codeRegion.contentHex = previousContent + "00".repeat(byteLength - prefixBytes);
+      },
+    };
+  }
+
+  it("XS-ADDR-SPACE:结束地址恰好 2^64 合法(末字节 0xFFFFFFFFFFFFFFFF 可表示)", () => {
+    const edits = moveCodeRegion(4096);
+    const result = checkPairWith(edits.editPublic, edits.editPrivate);
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("XS-ADDR-SPACE:公开区域越过 2^64 被拒绝", () => {
+    const edits = moveCodeRegion(8192);
+    const result = checkPairWith(edits.editPublic, edits.editPrivate);
+
+    const violation = expectRule(result, "XS-ADDR-SPACE");
+    expect(violation.path).toBe("/memoryLayout/regions/0");
+    expect(violation.message).toContain("2^64");
+  });
+
+  it("XS-ADDR-SPACE:私有隐藏区域越过 2^64 被拒绝(不与公开侧共用路径差异)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      const regions = (priv.initialState as { memoryRegions: Array<Record<string, unknown>> })
+        .memoryRegions;
+      const vault = regions.find((region) => region.isHidden);
+      if (vault === undefined) {
+        throw new Error("fixture 缺少隐藏区域");
+      }
+      vault.startAddressHex = "0xFFFFFFFFFFFFF000";
+      vault.byteLength = 8192;
+    });
+
+    const violation = expectRule(result, "XS-ADDR-SPACE");
+    expect(violation.path).toBe("/initialState/memoryRegions/2");
+  });
+
+  it("XS-ADDR-SPACE:私有对象登记越过 2^64 被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      const objects = priv.privateObjects as Array<Record<string, unknown>>;
+      const canaryObject = objects.find((object) => object.visibility === "hidden");
+      if (canaryObject === undefined) {
+        throw new Error("fixture 缺少 hidden 对象");
+      }
+      canaryObject.addressHex = "0xFFFFFFFFFFFFF000";
+      canaryObject.byteLength = 8192;
+    });
+
+    const violation = expectRule(result, "XS-ADDR-SPACE");
+    expect(violation.path).toBe("/privateObjects/2");
+  });
+
+  it("XS-ADDR-SPACE:私有非隐藏区域与公开区域同越界时双侧报告(半开区间统一)", () => {
+    const edits = moveCodeRegion(8192);
+    const result = checkPairWith(edits.editPublic, edits.editPrivate);
+
+    const bounds = result.violations.filter((c) => c.ruleId === "XS-ADDR-SPACE");
+    expect(bounds.length).toBeGreaterThanOrEqual(2);
+    expect(bounds.some((v) => v.path === "/memoryLayout/regions/0")).toBe(true);
+    expect(bounds.some((v) => (v.path ?? "").startsWith("/initialState/memoryRegions/0"))).toBe(
+      true,
+    );
+  });
+});
+
+describe("字段分类检查器:R10-R13 契约冻结纵深防御", () => {
+  it("R10:字节模式出现第二个私有代码区被拒绝(单代码区模型)", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      const regions = (priv.initialState as { memoryRegions: Array<Record<string, unknown>> })
+        .memoryRegions;
+      regions.push({
+        regionId: "code2",
+        kind: "code",
+        startAddressHex: "0x500000",
+        byteLength: 4096,
+        permissions: "rx",
+        contentHex: "00".repeat(4096),
+        isHidden: false,
+      });
+    });
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("恰有一个公开且非隐藏的代码区");
+  });
+
+  it("R10:IR 模式私有代码区不得隐藏(代码区恒公开,D2 私有面)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      const regions = (priv.initialState as { memoryRegions: Array<{ isHidden: boolean }> })
+        .memoryRegions;
+      const code = regions.find((region) => (region as { kind?: string }).kind === "code");
+      if (code === undefined) {
+        throw new Error("fixture 缺少代码区域");
+      }
+      code.isHidden = true;
+    });
+
+    const violation = expectRule(result, "D2-CODE-PUBLIC");
+    expect(violation.message).toContain("不得隐藏");
+  });
+
+  it("R11:编码操作数引用 FLAG 寄存器被拒绝(绕过 Schema 直测,FLAG 不可编码)", () => {
+    const registerResult = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).operands = [{ kind: "register", name: "FLAG0" }];
+    });
+    const baseRegisterResult = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).op = "mov";
+      at(table, 1).operands = [{ kind: "memory", baseRegister: "FLAG0", displacementWidth: "arch" }];
+    });
+
+    const registerViolation = expectRule(registerResult, "XS-ENC-TOKEN");
+    expect(registerViolation.message).toContain("FLAG0");
+    const baseViolation = expectRule(baseRegisterResult, "XS-ENC-TOKEN");
+    expect(baseViolation.message).toContain("FLAG0");
+  });
+
+  it("R12:immediate 缺 width 被拒绝(绕过 Schema 直测,宽度不得依赖隐式推断)", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 0).op = "syscall";
+      at(table, 0).operands = [{ kind: "immediate" }];
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.path).toBe("/vmProfile/encodingTable/0/operands/0/width");
+    expect(violation.message).toContain("必填");
+  });
+
+  it("R12:memory 缺 displacementWidth 被拒绝(绕过 Schema 直测)", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).op = "mov";
+      at(table, 1).operands = [{ kind: "memory", baseRegister: "RBP" }];
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.path).toBe("/vmProfile/encodingTable/1/operands/0/displacementWidth");
+    expect(violation.message).toContain("必填");
+  });
+
+  it("R13:程序模式三态判定——undefined 走 IR 模式、空数组失败关闭、有效表字节模式", () => {
+    const irMode = checkPairWith(undefined);
+    expect(irMode.ok).toBe(true);
+
+    const emptyTable = checkBytePairWith((pub) => {
+      (pub.vmProfile as { encodingTable: unknown[] }).encodingTable = [];
+    });
+    const emptyTableViolation = expectRule(emptyTable, "XS-ENC-TOKEN");
+    expect(emptyTableViolation.message).toContain("空数组");
+    expect(emptyTableViolation.path).toBe("/vmProfile/encodingTable");
+    // 空表按字节模式处理(存在即字节模式),不得静默退回 IR 模式:
+    // 缺少可解析 token 表时探测必然报未知 token,失败关闭。
+    expect(emptyTable.violations.some((v) => v.ruleId === "XS-ENC-PROBE")).toBe(true);
+
+    const validTable = checkBytePairWith(undefined);
+    expect(validTable.ok).toBe(true);
+  });
+});
+
+describe("字段分类检查器:R14 P5 专项测试矩阵补齐", () => {
+  /**
+   * 字节代码同步编辑:公开投影 bytesHex 与私有 contentHex 前缀镜像
+   * (XS-PROJ-VALUES 前提),私有侧以 00(ret token)填充至区域尾。
+   */
+  function byteCode(bytesHex: string): { editPublic: PairEdit; editPrivate: PairEdit } {
+    return {
+      editPublic: (pub) => {
+        const projection = pub.initialProjection as {
+          visibleRegions: Array<Record<string, unknown>>;
+        };
+        const code = projection.visibleRegions.find((region) => region.regionId === "code");
+        if (code === undefined) {
+          throw new Error("fixture 缺少代码投影");
+        }
+        code.bytesHex = bytesHex;
+      },
+      editPrivate: (priv) => {
+        const regions = (priv.initialState as {
+          memoryRegions: Array<{ contentHex: string }>;
+        }).memoryRegions;
+        const code = regions.find((region) => (region as { kind?: string }).kind === "code");
+        if (code === undefined) {
+          throw new Error("fixture 缺少私有代码区域");
+        }
+        code.contentHex = bytesHex + "00".repeat(4096 - bytesHex.length / 2);
+      },
+    };
+  }
+
+  /** 在编码表追加一条 syscall 条目并按给定内联字节布置代码(0x00 = ret 填充)。 */
+  function syscallScenario(dispatchBytesHex: string): {
+    editPublic: PairEdit;
+    editPrivate: PairEdit;
+  } {
+    const code = `f1${dispatchBytesHex}`;
+    return {
+      editPublic: (pub) => {
+        const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> })
+          .encodingTable;
+        table.push({
+          tokenHex: "0xf1",
+          op: "syscall",
+          operands: [{ kind: "immediate", width: "arch" }],
+        });
+        byteCode(code).editPublic(pub);
+      },
+      editPrivate: (priv) => {
+        byteCode(code).editPrivate(priv);
+      },
+    };
+  }
+
+  it("32 位 syscall 探测:按 archBits/8 = 4 字节读取小端派发号(保留带绿灯)", () => {
+    const edits = syscallScenario("02000000");
+    const result = checkBytePairWith(
+      (pub) => {
+        (pub.vmProfile as Record<string, unknown>)["archBits"] = 32;
+        edits.editPublic(pub);
+      },
+      edits.editPrivate,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("syscall 派发号已声明接口时绿灯;未声明时拒绝(探测译码产物)", () => {
+    const edits = syscallScenario("0002000000000000");
+
+    const green = checkBytePairWith(edits.editPublic, (priv) => {
+      edits.editPrivate(priv);
+      priv.interfaces = [
+        { interfaceId: 512, displayText: "接口甲", effects: [{ effect: "noop" }] },
+      ];
+    });
+    expect(green.ok).toBe(true);
+
+    const red = checkBytePairWith(edits.editPublic, edits.editPrivate);
+
+    const violation = expectRule(red, "XS-ENC-PROBE");
+    expect(violation.message).toContain("未在保留带或 interfaces 声明");
+  });
+
+  it("字节模式代码区地址范围越出 2^64 时探测拒绝(R4 与 XS-ADDR-SPACE 同公式)", () => {
+    // 私有代码区平移到 2^64 − 8192 处并越界;公开侧保持原几何
+    // (I2-PUB-MIRROR 噪声可接受,断言探测的区间越界语义)。
+    const result = checkBytePairWith(undefined, (priv) => {
+      const regions = (priv.initialState as {
+        memoryRegions: Array<{ startAddressHex: string; byteLength: number }>;
+      }).memoryRegions;
+      const code = regions.find((region) => (region as { kind?: string }).kind === "code");
+      if (code === undefined) {
+        throw new Error("fixture 缺少私有代码区域");
+      }
+      code.startAddressHex = "0xFFFFFFFFFFFFF000";
+      code.byteLength = 8192;
+      priv.entrypointAddressHex = "0xFFFFFFFFFFFFF000";
+    });
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("64 位地址空间");
+  });
+
+  it("call 的 immediate / register / interface 三种操作数形态均为绿灯", () => {
+    const edits = byteCode(`55${"e8"}${"0102030405060708"}e9ea`);
+    const result = checkBytePairWith(
+      (pub) => {
+        const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+        table.push(
+          { tokenHex: "0xe8", op: "call", operands: [{ kind: "immediate", width: "arch" }] },
+          { tokenHex: "0xe9", op: "call", operands: [{ kind: "register", name: "RAX" }] },
+          { tokenHex: "0xea", op: "call", operands: [{ kind: "interface", interfaceId: 512 }] },
+        );
+        edits.editPublic(pub);
+      },
+      (priv) => {
+        edits.editPrivate(priv);
+        priv.interfaces = [
+          { interfaceId: 512, displayText: "接口甲", effects: [{ effect: "noop" }] },
+        ];
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("ret / leave 编码条目携带操作数被拒绝(封闭零操作数)", () => {
+    const retResult = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 0).operands = [{ kind: "register", name: "RAX" }];
+    });
+    const leaveResult = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).op = "leave";
+    });
+
+    expect(expectRule(retResult, "XS-ENC-TOKEN").message).toContain("不得声明操作数");
+    expect(expectRule(leaveResult, "XS-ENC-TOKEN").message).toContain("不得声明操作数");
+  });
+
+  it("自定义助记符条目携带操作数被拒绝(操作数必须烘焙在 token 中)", () => {
+    const result = checkBytePairWith(
+      (pub) => {
+        const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+        at(table, 1).op = "LOAD_TWICE";
+      },
+      (priv) => {
+        priv.customInstructions = [
+          {
+            mnemonic: "LOAD_TWICE",
+            displayText: "装载语义",
+            semantics: [{ op: "load_imm", dst: "RAX", valueHex: "0x2A" }],
+          },
+        ];
+      },
+    );
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.message).toContain("操作数必须烘焙在 token 中");
+  });
+
+  it("token 大小写拼写差异视作重复(XS-ENC-TOKEN 大小写不敏感唯一)", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 0).tokenHex = "0x5A";
+      table.push({ tokenHex: "0x5a", op: "ret", operands: [] });
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.path).toBe("/vmProfile/encodingTable/3/tokenHex");
+    expect(violation.message).toContain("重复");
+  });
+
+  it("字节模式代码区缺失被拒绝(恰有一个公开代码区前提)", () => {
+    const result = checkBytePairWith((pub) => {
+      const layout = pub.memoryLayout as { regions: Array<Record<string, unknown>> };
+      const codeRegion = layout.regions.find((region) => region.kind === "code");
+      if (codeRegion === undefined) {
+        throw new Error("fixture 缺少代码区域");
+      }
+      codeRegion.kind = "global";
+    });
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("恰有一个公开且非隐藏的代码区");
+  });
+
+  it("入口可达指令数超过 MAX_IR_INSTRUCTIONS 被拒绝(区域扩充且双包同步)", () => {
+    const result = checkBytePairWith(
+      (pub) => {
+        const layout = pub.memoryLayout as { regions: Array<Record<string, unknown>> };
+        const codeRegion = layout.regions.find((region) => region.kind === "code");
+        if (codeRegion === undefined) {
+          throw new Error("fixture 缺少代码区域");
+        }
+        codeRegion.byteLength = 8192;
+        const projection = pub.initialProjection as {
+          visibleRegions: Array<Record<string, unknown>>;
+        };
+        const codeProjection = projection.visibleRegions.find((region) => region.regionId === "code");
+        if (codeProjection === undefined) {
+          throw new Error("fixture 缺少代码投影");
+        }
+        codeProjection.byteLength = 8192;
+      },
+      (priv) => {
+        const regions = (priv.initialState as {
+          memoryRegions: Array<{ contentHex: string; byteLength: number }>;
+        }).memoryRegions;
+        const code = regions.find((region) => (region as { kind?: string }).kind === "code");
+        if (code === undefined) {
+          throw new Error("fixture 缺少私有代码区域");
+        }
+        code.byteLength = 8192;
+        code.contentHex += "00".repeat(4096);
+      },
+    );
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("上限");
+  });
+
+  it("字节模式 leave 携带 RBP 时绿灯(栈帧语义前提成立)", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).op = "leave";
+      at(table, 1).operands = [];
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("截断 displacement:内联位移越出代码区末尾被拒绝", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 0).op = "mov";
+      at(table, 0).operands = [{ kind: "memory", baseRegister: "RBP", displacementWidth: "arch" }];
+    }, (priv) => {
+      priv.entrypointAddressHex = "0x400fff";
+    });
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("越出代码区末尾");
+  });
+});

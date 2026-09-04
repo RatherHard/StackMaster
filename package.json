@@ -12,7 +12,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "eslint --config tooling/eslint.config.mjs packages",
-    "lint:deps": "dependency-cruiser --config tooling/dependency-cruiser.cjs packages"
+    "lint:deps": "dependency-cruiser --config tooling/dependency-cruiser.cjs packages",
+    "scan:public": "node tooling/scan-public-artifacts.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

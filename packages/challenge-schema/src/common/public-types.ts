@@ -25,6 +25,12 @@ export interface PublicCanarySpec {
   readonly sizeBytes?: number;
 }
 
+/**
+ * 编码表操作数形态(G5/D6;R12 冻结:immediate.width 与
+ * memory.displacementWidth 必填且恒为 "arch"——内联字节宽度不得依赖
+ * 执行层隐式推断;R11:register / memory.baseRegister 限一般命名空间,
+ * FLAG 寄存器结构性不可编码)。
+ */
 export type EncodingOperandShape =
   | {
       readonly kind: "register";
@@ -32,12 +38,12 @@ export type EncodingOperandShape =
     }
   | {
       readonly kind: "immediate";
-      readonly width?: "arch";
+      readonly width: "arch";
     }
   | {
       readonly kind: "memory";
       readonly baseRegister: string;
-      readonly displacementWidth?: "arch";
+      readonly displacementWidth: "arch";
     }
   | {
       readonly kind: "interface";

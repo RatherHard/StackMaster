@@ -45,7 +45,12 @@ export const PUBLIC_DESCRIPTOR_FIELDS = [
   "initialProjection",
 ] as const;
 
-/** 私有判题包 19 个顶层字段(整体 SERVER_ONLY;与 Schema properties 键严格一致;customInstructions / interfaces 为 G4/D4 新增声明面)。 */
+/**
+ * 私有判题包 20 个顶层字段(整体 SERVER_ONLY;与 Schema properties 键严格一致,
+ * 防漂移测试强制)。字段数量变化必须同步:本数组、schema/classification.json、
+ * 两份 Schema 的 properties、本注释与 docs/双包Schema语义.md §3.1
+ * (customInstructions / interfaces 为 G4/D4 新增声明面)。
+ */
 export const PRIVATE_BUNDLE_FIELDS = [
   "schemaVersion",
   "challengeId",
@@ -93,7 +98,7 @@ function toFieldClasses(
 }
 
 const NOTE =
-  "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。";
+  "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。R1/R2 裁决(公开 ISA 引用面):公开包 encodingTable[].op 的自定义助记符与 operands[].interfaceId 是公开 ISA 引用——仅揭示指令 / 接口的存在性与公开标识;customInstructions 的微算子语义与 displayText、interfaces 的效果序列等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝,隐藏声明不产生存在性信号。";
 
 /** 分类清单常量(与 schema/classification.json 严格一致;测试强制)。 */
 export const CHALLENGE_CLASSIFICATIONS: ClassificationManifest = {

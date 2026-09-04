@@ -7,6 +7,10 @@
  *  - XS-REG-NAMESPACE 私有初始寄存器键归属双命名空间之一(G2/D3:一般名
  *    ^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$ 或 FLAG 模式;Schema 负向前瞻之外的纵深防御,
  *    随 XS-REG-FROZEN 废止而接替其防线);
+ *  - XS-SEED-POLICY seed 策略与固定 seed 互斥(R5:fixed ⇒ seedHex 必填,
+ *    server_random_per_session ⇒ seedHex 禁止;Schema if/then/else 之外第二道防线);
+ *  - D2-CODE-PUBLIC 私有面 kind=code 区域不得隐藏(R10 冻结:代码区恒公开);
+ *  - XS-ADDR-SPACE 私有区域与私有对象地址区间不得越出 2^64(R4 统一半开区间);
  *  - XS-MEM-TOTAL 区域字节总量 / 初始内容字节总量封顶;
  *  - XS-MEM-CONTENT contentHex 长度 = 2 × byteLength;
  *  - XS-IR-LABEL 标签 ID 唯一且索引落在指令范围内;
@@ -44,7 +48,7 @@ import type {
   PrivatePredicate,
 } from "../private-types.js";
 import { checkPrivatePageAlignment } from "./arch-rules.js";
-import { toAddressRange, rangesOverlap } from "./address-ranges.js";
+import { toAddressRange, rangesOverlap, rangeExceedsAddressSpace } from "./address-ranges.js";
 import type { AddressRange } from "./address-ranges.js";
 import { pushDuplicateViolations } from "./duplicates.js";
 import type { CheckerViolation } from "./types.js";
@@ -54,6 +58,32 @@ function memoryRegionRange(region: {
   readonly byteLength: number;
 }): AddressRange {
   return toAddressRange(region.startAddressHex, region.byteLength);
+}
+
+/**
+ * XS-SEED-POLICY:seed 策略与固定 seed 互斥(R5;Schema seedPolicy if/then/else
+ * 之外的第二道防线)。fixed ⇒ seedHex 必填;server_random_per_session ⇒ seedHex
+ * 必须省略——同时出现或双缺都会造成实例化与回放策略歧义,失败关闭。
+ */
+export function checkSeedPolicy(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const { strategy, seedHex } = bundle.seedPolicy;
+  if (strategy === "fixed" && seedHex === undefined) {
+    violations.push({
+      ruleId: "XS-SEED-POLICY",
+      message: "seedPolicy.strategy = fixed 时必须提供固定 seedHex(可回放前提,6.3)",
+      path: "/seedPolicy/seedHex",
+    });
+  }
+  if (strategy === "server_random_per_session" && seedHex !== undefined) {
+    violations.push({
+      ruleId: "XS-SEED-POLICY",
+      message:
+        "seedPolicy.strategy = server_random_per_session 时禁止携带固定 seedHex(会话随机与固定 seed 互斥,R5;实例化 seed 只由服务端按会话派生)",
+      path: "/seedPolicy/seedHex",
+    });
+  }
+  return violations;
 }
 
 /** I2-PRIV-PAIRWISE:私有初始内存区域两两不相交。 */
@@ -81,6 +111,54 @@ export function checkPrivateRegionsPairwiseDisjoint(
       }
     }
   }
+  return violations;
+}
+
+/**
+ * D2-CODE-PUBLIC 私有面:kind = code 的初始区域不得隐藏(R10 冻结:
+ * 代码区域恒公开,公开侧 ≤ 1 个由 public-rules 承接;字节模式恰一公开 +
+ * 恰一非隐藏私有代码区由 XS-ENC-PROBE 承接;此处封住 IR 模式下隐藏代码区
+ * 的表达位)。
+ */
+export function checkPrivateCodeRegionVisibility(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  bundle.initialState.memoryRegions.forEach((region, index) => {
+    if (region.kind === "code" && region.isHidden) {
+      violations.push({
+        ruleId: "D2-CODE-PUBLIC",
+        message: `私有代码区域 ${region.regionId} 不得隐藏(代码区域恒公开,D2)`,
+        path: `/initialState/memoryRegions/${index}`,
+      });
+    }
+  });
+  return violations;
+}
+
+/**
+ * XS-ADDR-SPACE 私有侧(R4 统一化):私有初始区域与私有对象登记的
+ * 起始地址 + byteLength 不得越出 64 位地址空间(与公开侧同一半开区间
+ * 约定、同一常量;上溢必须失败关闭,不得接受差异化的校验路径)。
+ */
+export function checkPrivateAddressSpaceBounds(bundle: PrivateChallengeBundle): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  bundle.initialState.memoryRegions.forEach((region, index) => {
+    if (rangeExceedsAddressSpace(memoryRegionRange(region))) {
+      violations.push({
+        ruleId: "XS-ADDR-SPACE",
+        message: `私有内存区域 ${region.regionId} 地址区间 [${region.startAddressHex}, +${region.byteLength} 字节)越出 64 位地址空间(结束地址必须 ≤ 2^64,R4 半开区间统一约定)`,
+        path: `/initialState/memoryRegions/${index}`,
+      });
+    }
+  });
+  bundle.privateObjects.forEach((object, index) => {
+    if (rangeExceedsAddressSpace(toAddressRange(object.addressHex, object.byteLength))) {
+      violations.push({
+        ruleId: "XS-ADDR-SPACE",
+        message: `私有对象 ${object.objectId} 地址区间 [${object.addressHex}, +${object.byteLength} 字节)越出 64 位地址空间(结束地址必须 ≤ 2^64)`,
+        path: `/privateObjects/${index}`,
+      });
+    }
+  });
   return violations;
 }
 
@@ -703,7 +781,10 @@ export function checkConditionTrees(bundle: PrivateChallengeBundle): CheckerViol
 export function checkPrivateBundleRules(bundle: PrivateChallengeBundle): CheckerViolation[] {
   return [
     ...checkPrivateRegionsPairwiseDisjoint(bundle),
+    ...checkPrivateCodeRegionVisibility(bundle),
+    ...checkPrivateAddressSpaceBounds(bundle),
     ...checkSecretSinksAreHidden(bundle),
+    ...checkSeedPolicy(bundle),
     ...checkPrivateReferenceUniqueness(bundle),
     ...checkPrivateRegisterNamespaces(bundle),
     ...checkPrivateMemoryBudget(bundle),

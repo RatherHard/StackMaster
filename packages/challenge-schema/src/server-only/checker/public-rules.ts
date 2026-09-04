@@ -16,7 +16,7 @@
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
 import { CORE_REGISTER_NAMES } from "../../common/patterns.js";
 import { checkPublicPageAlignment } from "./arch-rules.js";
-import { toAddressRange, rangesOverlap, rangeContains } from "./address-ranges.js";
+import { toAddressRange, rangesOverlap, rangeContains, rangeExceedsAddressSpace } from "./address-ranges.js";
 import type { AddressRange } from "./address-ranges.js";
 import { pushDuplicateViolations } from "./duplicates.js";
 import type { CheckerViolation } from "./types.js";
@@ -127,6 +127,27 @@ export function checkPublicCodeRegionPolicy(
 }
 
 /**
+ * XS-ADDR-SPACE 公开侧(R4 统一化):公开区域起始地址 + byteLength 不得越出
+ * 64 位地址空间(半开区间,末字节 0xFFFFFFFFFFFFFFFF 合法,越过 2^64 拒绝;
+ * BigInt 不回绕,统一经 address-ranges 的常量与谓词判定)。
+ */
+export function checkPublicAddressSpaceBounds(
+  descriptor: PublicChallengeDescriptor,
+): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  descriptor.memoryLayout.regions.forEach((region, index) => {
+    if (rangeExceedsAddressSpace(regionRange(region))) {
+      violations.push({
+        ruleId: "XS-ADDR-SPACE",
+        message: `公开区域 ${region.regionId} 地址区间 [${region.startAddressHex}, +${region.byteLength} 字节)越出 64 位地址空间(结束地址必须 ≤ 2^64,R4 半开区间统一约定)`,
+        path: `/memoryLayout/regions/${index}`,
+      });
+    }
+  });
+  return violations;
+}
+
+/**
  * XS-REG-CORE:vmProfile.registers 声明集必含核心寄存器 RSP/RBP/RIP(G2/D3,WP-1 §12.5 v1.5)。
  * 寄存器集是定义性声明,但会话动作(push/pop/call/ret)、栈操作码与 MVP 栈帧闭环
  * 一律建立在核心三寄存器上,故保留为必选;缺失即拒绝。
@@ -217,6 +238,7 @@ export function checkPublicDescriptorRules(
     ...checkPublicRegionsPairwiseDisjoint(descriptor),
     ...checkPublicHighlights(descriptor),
     ...checkPublicCodeRegionPolicy(descriptor),
+    ...checkPublicAddressSpaceBounds(descriptor),
     ...checkPublicReferenceUniqueness(descriptor),
     ...checkRegisterCoreSet(descriptor),
     ...checkPublicPageAlignment(descriptor),

@@ -1,10 +1,10 @@
-# 双包 Schema 语义(WP-4 · v1.4)
+# 双包 Schema 语义(WP-4 · v1.5)
 
 | 项 | 值 |
 |---|---|
 | 题目包 Schema 版本 | `1`(`CHALLENGE_PACKAGE_SCHEMA_VERSION`,破坏性变更递增,见 §7) |
-| 状态 | 阶段一 WP-4 交付物,双包 Schema 与分类检查器冻结;v1.4 按《Vm 模块设计冲突与整改方案》P5 批次完成 G5/D6 字节权威执行模式重定基(v1.3 已完成 G4/D4,v1.2 已完成 G2,v1.1 已完成 G1/G3) |
-| 修订 | v1.4(2026-09-04):G5/P5/D6——公开包 `vmProfile.encodingTable`(≤ 64 条,`tokenHex` 定宽 1 字节 ↔ 具体指令字典,操作数形态声明;ISA 公开);私有包新增条件字段 `entrypointAddressHex`,`compiledIr` 转**条件字段**(字节模式省略)——双程序形态恰一由 `XS-PROG-MODE` 强制;代码区 W^X(`XS-CODE-WRX`);编码表自检(`XS-ENC-TOKEN`)与入口探测译码(`XS-ENC-PROBE`);微决策 D4.4–D4.7(token 定宽、操作数内联 archBits/8 小端、取指译码缓存、探测部分覆盖 + 运行时 `invalid_rip` 兜底);`dslSchemaVersion` / `irFormatVersion` 冻结常量维持 2(执行语义层零变化,新增面属声明性数据);v1.3(2026-09-04):G4/D4——基线 opcode 21→20(`read`/`write` 废止,教学 IO 收敛;新增 `leave` 栈帧伪指令);IR `op` 双形态 anyOf(基线小写枚举 ∪ 大写自定义助记符 `^[A-Z][A-Z0-9_]{0,15}$`,大小写结构性不相交);新增顶层声明面 `customInstructions`(≤ 16 条,`semantics` = 微算子封闭集 v1 直线序列 ≤ 16)与 `interfaces`(≤ 16 条,`interfaceId` ∈ [0x100, 0xFFFF],`effects` = 效果原语封闭集 v1 直线序列 ≤ 16);操作数槽新增 `interface` 形态(`call` 的结构化接口引用);`dslSchemaVersion` / `irFormatVersion` 冻结常量 1→2;syscall 定基为封闭单值伪操作(保留系统号带 [0x0, 0xFF] 内置 exit 不变);检查器新增 `XS-CUSTOM-DEF` / `XS-CUSTOM-REF` / `XS-SYSCALL-DECL` / `XS-IFACE-REF` / `XS-IR-LEAVE` / `XS-CUSTOM-DISPLAY`,`XS-ID-UNIQUE` 承接助记符与接口号唯一性;v1.2(2026-09-04):G2——寄存器命名放开为双命名空间保留模型:一般寄存器自由命名 `^[A-Z][A-Z0-9_]{0,15}$`(负向前瞻排除 FLAG 保留区),冻结 14 基集废止,新增必选核心寄存器 `RSP`/`RBP`/`RIP`;`vmProfile.registers` 语义改为"本题目寄存器集的定义性声明";数量护栏放宽(`registers` 1–64、私有初始寄存器 ≤ 256);检查器规则 `XS-REG-FROZEN` 废止,新增 `XS-REG-CORE` / `XS-REG-NAMESPACE`,`XS-REG-SUBSET` 重锚为声明集子集;v1.1(2026-09-04):G1——`vmProfile.archBits`(32/64)位宽声明入公开包,架构值 = archBits 位宽、64 位容器承载、高位掩蔽,新增检查器规则 XS-ARCH-WIDTH;G3——区域类型增补作者自定义 `custom` 类,区域大小与 `pageSizeBytes` 收紧为 4KB 的倍数,新增检查器规则 XS-MEM-PAGE-ALIGN。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改方案裁决整体重定基(`dslSchemaVersion` 的递增随 G4/P3 批次落地);v1(2026-09-03):阶段一 WP-4 冻结初版 |
+| 状态 | 阶段一 WP-4 交付物,双包 Schema 与分类检查器冻结;v1.5 按《Vm 模块后续审查事项与整改清单》完成 R1–R15 整改(P5 批次收尾);v1.4 按《Vm 模块设计冲突与整改方案》P5 批次完成 G5/D6 字节权威执行模式重定基(v1.3 已完成 G4/D4,v1.2 已完成 G2,v1.1 已完成 G1/G3) |
+| 修订 | v1.5(2026-09-04):R1/R2——**公开 ISA 引用面裁决**:公开 `encodingTable[].op` 自定义助记符与 `operands[].interfaceId` 定义为经裁决的公开 ISA 引用(仅揭示存在性与公开标识);微算子语义 / 效果序列 / displayText 等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝(隐藏声明不产生存在性信号),扫描测试 `test/isa-reference-face.test.ts` 证明公开包无法反推私有语义;R5——`seedPolicy` if/then/else 冻结策略互斥(`fixed` ⇒ `seedHex` 必填,`server_random_per_session` ⇒ `seedHex` 禁止),检查器新增 `XS-SEED-POLICY` 纵深防御;R6——Ajv 编译启用 `ownProperties: true`(继承属性不满足 required、不被视为包字段),入站原型污染形态拒绝测试补齐;R7——检查器错误两层模型固化(内部诊断 vs `internal_error` 公开兜底,见 §五前置说明),违规消息泄漏扫描测试与错误回显截断;R10——字节模式代码区模型冻结为恰一个公开 + 恰一个非隐藏私有代码区,D2-CODE-PUBLIC 增私有面(代码区不得隐藏);R11——FLAG 寄存器不可编码(Schema 负向前瞻结构化排除 + XS-ENC-TOKEN 复核);R12——`immediate.width` / `memory.displacementWidth` **必填**且恒为 `"arch"`(表层机器码长度与译码不依赖隐式推断;本批次内重定基,信封版本不递增);R13——空 `encodingTable` 失败关闭(存在即字节模式,不回退 IR);R3——`XS-ARCH-WIDTH` 递归覆盖 `customInstructions[].semantics`(load_imm / set_flag valueHex、bit_mask maskHex、load_mem / store_mem displacementHex)与 `interfaces[].effects`(set_flag valueHex);R4——地址区间统一半开区间与 2^64 上界(`ADDRESS_SPACE_END_EXCLUSIVE`),新增 `XS-ADDR-SPACE`(公开区域 / 私有区域 / 私有对象三面);R9——`PRIVATE_BUNDLE_FIELDS` 数量注释同步为 20 并数量锁定;R8——公开构建图与产物隔离扫描固化(`tooling/scan-public-artifacts.mjs`,`pnpm scan:public`)。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改清单裁决整体重定基;v1.4(2026-09-04):G5/P5/D6——公开包 `vmProfile.encodingTable`(≤ 64 条,`tokenHex` 定宽 1 字节 ↔ 具体指令字典,操作数形态声明;ISA 公开);私有包新增条件字段 `entrypointAddressHex`,`compiledIr` 转**条件字段**(字节模式省略)——双程序形态恰一由 `XS-PROG-MODE` 强制;代码区 W^X(`XS-CODE-WRX`);编码表自检(`XS-ENC-TOKEN`)与入口探测译码(`XS-ENC-PROBE`);微决策 D4.4–D4.7(token 定宽、操作数内联 archBits/8 小端、取指译码缓存、探测部分覆盖 + 运行时 `invalid_rip` 兜底);`dslSchemaVersion` / `irFormatVersion` 冻结常量维持 2(执行语义层零变化,新增面属声明性数据);v1.3(2026-09-04):G4/D4——基线 opcode 21→20(`read`/`write` 废止,教学 IO 收敛;新增 `leave` 栈帧伪指令);IR `op` 双形态 anyOf(基线小写枚举 ∪ 大写自定义助记符 `^[A-Z][A-Z0-9_]{0,15}$`,大小写结构性不相交);新增顶层声明面 `customInstructions`(≤ 16 条,`semantics` = 微算子封闭集 v1 直线序列 ≤ 16)与 `interfaces`(≤ 16 条,`interfaceId` ∈ [0x100, 0xFFFF],`effects` = 效果原语封闭集 v1 直线序列 ≤ 16);操作数槽新增 `interface` 形态(`call` 的结构化接口引用);`dslSchemaVersion` / `irFormatVersion` 冻结常量 1→2;syscall 定基为封闭单值伪操作(保留系统号带 [0x0, 0xFF] 内置 exit 不变);检查器新增 `XS-CUSTOM-DEF` / `XS-CUSTOM-REF` / `XS-SYSCALL-DECL` / `XS-IFACE-REF` / `XS-IR-LEAVE` / `XS-CUSTOM-DISPLAY`,`XS-ID-UNIQUE` 承接助记符与接口号唯一性;v1.2(2026-09-04):G2——寄存器命名放开为双命名空间保留模型:一般寄存器自由命名 `^[A-Z][A-Z0-9_]{0,15}$`(负向前瞻排除 FLAG 保留区),冻结 14 基集废止,新增必选核心寄存器 `RSP`/`RBP`/`RIP`;`vmProfile.registers` 语义改为"本题目寄存器集的定义性声明";数量护栏放宽(`registers` 1–64、私有初始寄存器 ≤ 256);检查器规则 `XS-REG-FROZEN` 废止,新增 `XS-REG-CORE` / `XS-REG-NAMESPACE`,`XS-REG-SUBSET` 重锚为声明集子集;v1.1(2026-09-04):G1——`vmProfile.archBits`(32/64)位宽声明入公开包,架构值 = archBits 位宽、64 位容器承载、高位掩蔽,新增检查器规则 XS-ARCH-WIDTH;G3——区域类型增补作者自定义 `custom` 类,区域大小与 `pageSizeBytes` 收紧为 4KB 的倍数,新增检查器规则 XS-MEM-PAGE-ALIGN。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改方案裁决整体重定基(`dslSchemaVersion` 的递增随 G4/P3 批次落地);v1(2026-09-03):阶段一 WP-4 冻结初版 |
 | 日期 | 2026-09-04 |
 | 契约单一来源 | 本包 `schema/*.schema.json`(手写 JSON Schema 2020-12 + Ajv;计划书 5.4 技术选型原文);TS 类型为手工镜像,完整正反样例测试防漂移(§6) |
 | 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、13.2(题目包测试);WP-1 清单 **v1.7** 第十二章(双包字段级分类)、§3.2(寄存器命名与双命名空间保留模型)、§12.5(FLAG 保留区)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/最小DSL范围.md` v1.3(指令面 / 谓词面 / 编排面 / 表层机器码面词汇,G5/D6 重定基);`docs/develop/Vm 模块设计冲突与整改方案.md`(G1/G3/G2/G4、G5/D6 裁决) |
@@ -66,7 +66,7 @@
 | `endianness` | const `"little"` | 架构公开常量 |
 | `pageSizeBytes` | 整数,4096 的倍数,4096–65536(v1.1) | VMA 页大小(4KB 的倍数,G3/D2);权威分页语义归引擎,对齐由 XS-MEM-PAGE-ALIGN 复核 |
 | `canary` | `{enabled: boolean, sizeBytes?}`(必填) | `enabled = true` ⇒ `sizeBytes`(1–8)必填(if/then);canary **值**在私有包(XS-CANARY-CORR 互证) |
-| `encodingTable?[]`(v1.4) | 数组(0–64)× `{tokenHex, op, operands?}` | **表层机器码 token 字典**(G5/P5/D6;声明即选择**字节模式**,§三.4);`tokenHex` = 定宽 1 字节 `^0x[0-9a-fA-F]{2}$`(D4.7,变长 token 挂 T2/T3);`op` = 双形态 anyOf(基线 20 opcode 小写枚举 ∪ 大写自定义助记符,与 IR 同词汇);`operands?` = 操作数**形态声明**(≤ 4,与 IR 槽同四种 kind,`width: "arch"` 承载内联立即数 / 位移宽度 = `archBits/8` 字节小端)。公开面立场:ISA 公开(解题性),私有包不复制(单一来源,沿 `archBits` 先例);自定义助记符仍须私有包声明(XS-ENC-TOKEN)。存在性 × 私有 `compiledIr` 由 XS-PROG-MODE 强制恰一 |
+| `encodingTable?[]`(v1.4) | 数组(1–64)× `{tokenHex, op, operands?}` | **表层机器码 token 字典**(G5/P5/D6;声明即选择**字节模式**,§三.4);`tokenHex` = 定宽 1 字节 `^0x[0-9a-fA-F]{2}$`(D4.7,变长 token 挂 T2/T3);`op` = 双形态 anyOf(基线 20 opcode 小写枚举 ∪ 大写自定义助记符,与 IR 同词汇);`operands?` = 操作数**形态声明**(≤ 4,与 IR 槽同四种 kind;v1.5 R12:`immediate.width` / `memory.displacementWidth` **必填**且恒为 `"arch"` = `archBits/8` 字节小端——机器码长度与译码不得依赖隐式推断;v1.5 R11:寄存器 / 基址限一般命名空间,**FLAG 寄存器不可编码**)。公开面立场:**公开 ISA 引用面**(v1.5 R1/R2 裁决)——ISA 公开(解题性),助记符与接口号仅揭示指令 / 接口的存在性与公开标识;私有包不复制编码表(单一来源,沿 `archBits` 先例);自定义助记符 / 接口号仍须私有包声明(XS-ENC-TOKEN),未声明引用即拒——隐藏声明不产生存在性信号;扫描测试(`test/isa-reference-face.test.ts`)证明公开包不含微算子语义 / 效果细节 / displayText / fileId / FLAG 名。v1.5 R13:空数组失败关闭(存在即字节模式,不回退 IR 模式)。字节模式代码区模型冻结为**恰一个公开 + 恰一个非隐藏私有代码区**(R10)。存在性 × 私有 `compiledIr` 由 XS-PROG-MODE 强制恰一 |
 
 ### 2.3 `memoryLayout.regions[]`(可见区域布局)
 
@@ -106,7 +106,7 @@
 | `vmEngineVersion` | `^\d+\.\d+\.\d+$`(**必填**) | 7.4 第 2 类;锁定执行环境 |
 | `engineBuildId?` | `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` | 引擎构建 ID(7.4 正式判题记录项) |
 | `declaredSeedPublicPaths` | 字符串数组(**必填**,可空) | 路径语法见 §4;T-SC4 / ZR-P2 判定基准 |
-| `seedPolicy` | `{strategy: fixed\|server_random_per_session, seedHex?}` | `fixed` ⇒ `seedHex`(16–64 hex 字符)必填(if/then);无 `algorithmId`(确定性由 `vmEngineVersion` 锁定) |
+| `seedPolicy` | `{strategy: fixed\|server_random_per_session, seedHex?}` | **策略与 seed 互斥**(v1.5,R5):`fixed` ⇒ `seedHex`(16–64 hex 字符)必填(then);`server_random_per_session` ⇒ `seedHex` 禁止(else,boolean schema `false`)——同时出现即拒绝,消除实例化与回放策略歧义;纵深防御 XS-SEED-POLICY。无 `algorithmId`(确定性由 `vmEngineVersion` 锁定);seed 是秘密:禁入公开面,回放元数据只承载 seed 策略与派生路径声明,不承载 seed 值 |
 | `initialState` | 对象(必填) | 见 3.2 |
 | `secretSinkRegisters?` | 寄存器名数组(uniqueItems) | I-3 作者显式声明补充面,"仅收紧不得放宽" |
 | `secrets` | 对象(必填) | `flag`(8–128 字符)、`virtualFiles[]`(0–8 × `{fileId, content(0–4096 字符)}`) |
@@ -153,7 +153,11 @@ L3: { predicate: <内置谓词> }
 
 ## 五、字段分类检查器(`./server-only/checker/`)
 
-入口 `checkChallengePair(public, private): { ok, violations: Violation[] }`;`Violation = { ruleId, message, path? }`。每条规则带必触发红灯样例(扫描器自检纪律);规则 ID 与 WP-1 条目对照见 WP-1 §12.6。地址区间运算一律 BigInt(`address-ranges.ts`)。
+入口 `checkChallengePair(public, private): { ok, violations: Violation[] }`;`Violation = { ruleId, message, path? }`。每条规则带必触发红灯样例(扫描器自检纪律);规则 ID 与 WP-1 条目对照见 WP-1 §12.6。地址区间运算一律 BigInt(`address-ranges.ts`,半开区间,统一 2^64 上界)。
+
+**错误两层模型**(v1.5,R7):`CheckerViolation` 是**内部诊断层**——面向服务端审查日志、开发测试与管理后台(信任域 4)的作者反馈,允许私有上下文,永不进入玩家可达载荷(投影、错误、回放、日志)。玩家可达错误只允许稳定 `PublicError` code;题目包校验失败对玩家一律表现为 `internal_error`(`PUBLIC_FACING_ERROR_CODE_FOR_VIOLATIONS` 导出常量),由会话服务层(阶段二 session-api)执行映射,禁止透传 message / path;错误长度 / 分类 / 时序侧信道在服务层落地时按 WP-1 §10.1 复核。泄漏扫描测试(`test/hardening.test.ts`)断言违规消息不含 flag / seed / 虚拟文件内容等秘密值。
+
+**公开 ISA 引用面**(v1.5,R1/R2 裁决):公开 `encodingTable[].op` 的自定义助记符与 `operands[].interfaceId` 是经裁决的公开 ISA 引用——仅揭示"存在哪些指令 / 接口及其公开标识"(字节模式 ISA 公开立场的必然推论:代码区恒公开、谜题在 gadget 构造不在解码);`customInstructions` 的微算子语义与 `displayText`、`interfaces` 的效果序列整体 SERVER_ONLY;未声明引用被 XS-ENC-TOKEN 拒绝,隐藏声明不产生存在性信号。
 
 | 规则 ID | 语义 |
 |---|---|
@@ -163,7 +167,7 @@ L3: { predicate: <内置谓词> }
 | I2-HIGHLIGHT | 语义高亮目标 ∈ 初始投影可见区域且跨度在区域内 |
 | I3-SINK-HIDDEN | `containsSecret = true` ⇒ `visibility = hidden` |
 | I3-VISIBLE-REG | 初始投影寄存器 ∩ (`secretSinkRegisters` ∪ FLAG 模式寄存器) = ∅ |
-| D2-CODE-PUBLIC | `kind = code` 区域 ≤ 1,必须非隐藏且出现在初始投影;可见区域 ≥ 1 |
+| D2-CODE-PUBLIC | `kind = code` 区域 ≤ 1,必须非隐藏且出现在初始投影;可见区域 ≥ 1;v1.5 R10 私有面:私有 `kind = code` 初始区域不得隐藏(IR 模式下封住隐藏代码区表达位;字节模式恰一公开 + 恰一非隐藏私有代码区归 XS-ENC-PROBE) |
 | D2-NO-HIDDEN-IN-PUBLIC | 公开 Schema 结构上无隐藏表达位(元检查,§6) |
 | ZR-B8-CAP-SCAN | 公开包实例全部字符串值深扫描 capability 前缀(`virtual_file:` 等),命中即拒 |
 | XS-ID-CORR | 双包 `challengeId` / `challengeContentVersion` / `vmProfileVersion` 相等 |
@@ -179,9 +183,11 @@ L3: { predicate: <内置谓词> }
 | XS-CANARY-CORR | `canary.enabled = true` ⇒ 私有包 ≥ 1 个 `kind = canary`、`hidden`、`containsSecret` 的私有对象,区间不与公开区域相交 |
 | XS-MEM-TOTAL | Σ`byteLength` ≤ 64 MiB;Σ`contentHex` 字节 ≤ 2 MiB |
 | XS-MEM-CONTENT | 私有区域 `contentHex` 长度 = 2 × `byteLength` |
-| XS-ARCH-WIDTH(v1.1) | 架构值位宽域(跨包规则):私有初始寄存器值、IR 立即数(无符号 ≤ 2^archBits−1)与内存位移(有符号 −2^(archBits−1)…2^(archBits−1)−1)、公开镜像寄存器值均须落在公开包 `vmProfile.archBits` 声明的位宽域内(64 位容器承载,高位掩蔽;G1/D1) |
+| XS-ARCH-WIDTH(v1.1) | 架构值位宽域(跨包规则):私有初始寄存器值、IR 立即数(无符号 ≤ 2^archBits−1)与内存位移(有符号 −2^(archBits−1)…2^(archBits−1)−1)、公开镜像寄存器值均须落在公开包 `vmProfile.archBits` 声明的位宽域内(64 位容器承载,高位掩蔽;G1/D1)。v1.5 R3 递归覆盖私有声明面:`customInstructions[].semantics` 中 load_imm / set_flag 的 `valueHex`、bit_mask 的 `maskHex`(无符号)与 load_mem / store_mem 的 `displacementHex`(有符号位移)、`interfaces[].effects` 中 set_flag 的 `valueHex`——声明面存在即检查,与程序模式、`compiledIr` 是否存在无关 |
 | XS-MEM-PAGE-ALIGN(v1.1) | VMA 页对齐:公开/私有区域 `byteLength` 与公开 `pageSizeBytes` 均为 4096 的倍数(Schema `multipleOf` 之外的跨包纵深防御;G3/D2) |
 | XS-SEED-DECL | 路径根 ∈ 投影七字段且可解析到 `initialProjection` 叶子 |
+| XS-SEED-POLICY(v1.5) | seed 策略与固定 seed 互斥(R5):`fixed` ⇒ `seedHex` 必填,`server_random_per_session` ⇒ `seedHex` 禁止——Schema if/then/else 之外的第二道防线(检查器可被类型断言绕过单包 Schema 直测) |
+| XS-ADDR-SPACE(v1.5) | 地址区间 64 位上界统一(R4):公开区域 / 私有区域 / 私有对象登记的 `[start, start + byteLength)` 半开区间不得越出 2^64(末字节 `0xFFFFFFFFFFFFFFFF` 合法,越过即拒;BigInt 不回绕,统一经 `address-ranges.ts` 的 `ADDRESS_SPACE_END_EXCLUSIVE` 与 `rangeExceedsAddressSpace` 判定,禁止各检查内联公式) |
 | XS-STAGE-REACH / XS-STAGE-BUDGET | 迁移目标存在且自首阶段全可达;每状态 `maxInstructionSteps` 必填 |
 | XS-IR-LABEL | `labelId` 唯一;指令 / 入口索引 < 长度 |
 | XS-CUSTOM-DEF(v1.3) | 自定义助记符不与基线 opcode 冲突(纵深防御:Schema 大小写形态已结构性不相交,本规则拦截被类型断言绕过的手写包;条目唯一性归 XS-ID-UNIQUE;G4/D4) |
@@ -192,7 +198,7 @@ L3: { predicate: <内置谓词> }
 | XS-CUSTOM-DISPLAY(v1.3) | `customInstructions` / `interfaces` 的 `displayText` 扫描 E-4/E-6 私有标识:隐藏区域 `regionId`、隐藏测试 `testId`、虚拟文件 `fileId`,命中即拒(I-10 静态模板类的编译期防线;运行时存在性泄露归 T-SC1 探针变体) |
 | XS-PROG-MODE(v1.4) | **双程序形态恰一**(G5/P5/D6):公开包 `encodingTable` 与私有包 `compiledIr` 恰有一方存在(双给 = 双真源,双缺 = 无程序,均拒);`entrypointAddressHex` 仅允许字节模式出现,IR 模式出现即拒 |
 | XS-CODE-WRX(v1.4) | **代码区 W^X**(G5/P5/D4.5):字节模式代码区(`kind = code`)权限不得含 `w`;写代码区运行时报 `memory_fault`(与写只读区同路径);自修改代码挂 T2/T3;IR 模式无表层机器码,不受此约束 |
-| XS-ENC-TOKEN(v1.4) | **编码表自检**(G5/P5/D4.7):`tokenHex` 域内且表内唯一;`op` 可解析(基线枚举或已声明助记符,复用 XS-CUSTOM-DEF 立场);寄存器烘焙引用(`{kind:"register", name}` / `memory.baseRegister`)∈ 公开声明集;`interface` 引用可解析(复用 XS-IFACE-REF 立场);`syscall` 条目必须恰一个 `immediate` 操作数(封闭单值伪操作,复用 XS-SYSCALL-DECL 形态立场);自定义助记符条目必须**零操作数**(语义由微算子表承载,操作数在 token 编码外无位置);`leave` 条目零操作数(§三.1) |
+| XS-ENC-TOKEN(v1.4) | **编码表自检**(G5/P5/D4.7):`tokenHex` 域内且表内唯一(大小写不敏感);`op` 可解析(基线枚举或已声明助记符,复用 XS-CUSTOM-DEF 立场);寄存器烘焙引用(`{kind:"register", name}` / `memory.baseRegister`)∈ 公开声明集且限一般命名空间(**FLAG 不可编码**,R11);`interface` 引用可解析(复用 XS-IFACE-REF 立场);`syscall` 条目必须恰一个 `immediate` 操作数(封闭单值伪操作,复用 XS-SYSCALL-DECL 形态立场);自定义助记符条目必须**零操作数**(语义由微算子表承载,操作数在 token 编码外无位置);`leave` / `ret` 条目零操作数(§三.1);v1.5 R12:`immediate.width` / `memory.displacementWidth` 必填且恒为 `"arch"`(不依赖执行层隐式推断);v1.5 R13:空数组失败关闭(存在即字节模式,不回退 IR 模式) |
 | XS-ENC-PROBE(v1.4) | **入口探测译码**(G5/P5/D4.6):字节模式 `entrypointAddressHex` 必填且落在某代码区内(允许非首字节);自入口线性取指译码 ≤ 4096 条(`MAX_IR_INSTRUCTIONS` 同护栏)或区域尾止;token 必须落编码表;指令不得越过区域尾截断;值型检查作用于译码产物:`syscall` 内联立即数 ∈ 保留带 ∪ 已声明接口(复用 XS-SYSCALL-DECL)、`interface` 引用可解析(复用 XS-IFACE-REF)、非基线助记符已声明(复用 XS-CUSTOM-REF)、`leave` ⇒ `RBP` ∈ 私有初始寄存器集(复用 XS-IR-LEAVE);操作数宽度自证(恰 `archBits/8` 字节,位型全在域内,XS-ARCH-WIDTH 结构性不触发);**探测覆盖 = 入口可达直线流,不可达字节不静态判罚**(运行时取指未知 token / 截断 → `invalid_rip` 兜底) |
 | XS-PRED-REFS | 谓词引用可解析(寄存器 ∈ 初始寄存器集;`regionId` / `fileId` 存在;内存谓词偏移 + 长度在区域内) |
 | XS-DUP-KEY | 重复 JSON 键拒绝(`JSON.parse` 静默去重且 reviver 观察不到;装载器以字符级严格扫描器在解析前拒绝,§5.1) |
@@ -202,7 +208,8 @@ L3: { predicate: <内置谓词> }
 ### 5.1 装载纪律(`internal/schema-loader.ts`,不导出)
 
 - `node:fs` 读取 `schema/*.json`(构建产物同仓库布局);**重复键拒绝严格扫描器**(XS-DUP-KEY:`JSON.parse` 之前的字符级状态机,reviver 观察不到重复键);
-- Ajv 2020-12,`strict: true`、`coerceTypes: false`、`allErrors: false`,按 `$id` 编译缓存;
+- Ajv 2020-12,`strict: true`、`coerceTypes: false`、`allErrors: false`、**`ownProperties: true`**(v1.5 R6:required / properties / additionalProperties 只看自有属性——继承属性不得满足 required、不得被当作包字段,入站原型污染形态由公开/私有 Schema 结构面拒绝,拒绝测试见 `test/hardening.test.ts`),按 `$id` 编译缓存;
+- 违规消息对回显的未知属性名截断至 80 字符(错误回显不成为超长恶意输入的通道,R7 配套);
 - 本模块不进浏览器构建图:私有包 Schema 与检查器仅经 `./server-only` 子路径导出。
 
 ## 六、TS 类型与 Schema 防漂移

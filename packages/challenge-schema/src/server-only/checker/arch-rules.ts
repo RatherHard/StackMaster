@@ -1,7 +1,9 @@
 /**
  * 架构位宽与 VMA 页对齐检查规则(WP-1 v1.4 §12.6;《Vm 模块设计冲突与整改方案》G1/G3):
  *  - XS-ARCH-WIDTH 跨包规则:私有初始寄存器值、IR 立即数(无符号)与内存位移
- *    (有符号)、公开镜像寄存器值均须落在公开包 vmProfile.archBits 声明的位宽域内
+ *    (有符号)、公开镜像寄存器值、私有声明面常量(customInstructions 微算子的
+ *    valueHex / maskHex / displacementHex 与 interfaces set_flag 的 valueHex,
+ *    R3 递归覆盖)均须落在公开包 vmProfile.archBits 声明的位宽域内
  *    ——archBits 位宽的值,以 64 位容器承载,高位按位宽掩蔽(计划书 6.2);
  *  - XS-MEM-PAGE-ALIGN 公开/私有区域 byteLength 与公开 pageSizeBytes 均为
  *    PAGE_SIZE_MULTIPLE_BYTES(4096)的倍数(G3/D2;Schema multipleOf 之外的
@@ -105,6 +107,59 @@ export function checkArchWidth(
         path: `/initialProjection/visibleRegisters/${index}/valueHex`,
       });
     }
+  });
+
+  // R3:私有声明面递归覆盖——customInstructions 微算子与 interfaces 效果中的
+  // 数值常量同样受 archBits 位宽域约束;与 IR 同区分:无符号架构值
+  // (valueHex / maskHex)与有符号位移(displacementHex)。与程序模式、
+  // compiledIr 是否存在无关,声明面存在即检查(不静默跳过)。
+  (privateBundle.customInstructions ?? []).forEach((instruction, instructionIndex) => {
+    instruction.semantics.forEach((microOp, microOpIndex) => {
+      const checkUnsigned = (valueHex: string, field: string): void => {
+        const value = BigInt(valueHex);
+        if (value < 0n || value > maxValue) {
+          violations.push({
+            ruleId: "XS-ARCH-WIDTH",
+            message: `自定义指令 ${instructionIndex}(${instruction.mnemonic})微算子 ${microOp.op} 的 ${field} ${valueHex} 超出 archBits=${archBits} 无符号域 [0, 2^${archBits} − 1]`,
+            path: `/customInstructions/${instructionIndex}/semantics/${microOpIndex}/${field}`,
+          });
+        }
+      };
+      const checkDisplacement = (valueHex: string, field: string): void => {
+        const value = parseSignedHex(valueHex);
+        if (value < displacementMin || value > displacementMax) {
+          violations.push({
+            ruleId: "XS-ARCH-WIDTH",
+            message: `自定义指令 ${instructionIndex}(${instruction.mnemonic})微算子 ${microOp.op} 的 ${field} ${valueHex} 超出 archBits=${archBits} 有符号域 [−2^${archBits - 1}, 2^${archBits - 1} − 1]`,
+            path: `/customInstructions/${instructionIndex}/semantics/${microOpIndex}/${field}`,
+          });
+        }
+      };
+      if (microOp.op === "load_imm") {
+        checkUnsigned(microOp.valueHex, "valueHex");
+      } else if (microOp.op === "set_flag") {
+        checkUnsigned(microOp.valueHex, "valueHex");
+      } else if (microOp.op === "bit_mask") {
+        checkUnsigned(microOp.maskHex, "maskHex");
+      } else if (microOp.op === "load_mem" || microOp.op === "store_mem") {
+        checkDisplacement(microOp.displacementHex, "displacementHex");
+      }
+    });
+  });
+
+  (privateBundle.interfaces ?? []).forEach((entry, interfaceIndex) => {
+    entry.effects.forEach((effect, effectIndex) => {
+      if (effect.effect === "set_flag") {
+        const value = BigInt(effect.valueHex);
+        if (value < 0n || value > maxValue) {
+          violations.push({
+            ruleId: "XS-ARCH-WIDTH",
+            message: `作者接口 ${entry.interfaceId} 效果 set_flag 的 valueHex ${effect.valueHex} 超出 archBits=${archBits} 无符号域 [0, 2^${archBits} − 1]`,
+            path: `/interfaces/${interfaceIndex}/effects/${effectIndex}/valueHex`,
+          });
+        }
+      }
+    });
   });
 
   return violations;

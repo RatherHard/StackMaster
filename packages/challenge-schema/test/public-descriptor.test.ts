@@ -304,6 +304,170 @@ describe("公开描述包校验器", () => {
   });
 });
 
+describe("公开描述包:编码表 Schema 严格性(R12 / R13 / R15)", () => {
+  /** 构造最小合法字节模式公开包(编码表 + 代码前缀)。 */
+  function withEncodingTable(
+    editTable: (table: Array<Record<string, unknown>>) => void,
+  ): unknown {
+    return breakFixture((clone) => {
+      const profile = clone.vmProfile as Record<string, unknown>;
+      profile.encodingTable = [
+        { tokenHex: "0x00", op: "ret", operands: [] },
+        { tokenHex: "0x55", op: "push", operands: [{ kind: "register", name: "RBP" }] },
+      ];
+      editTable(profile.encodingTable as Array<Record<string, unknown>>);
+    });
+  }
+
+  it("合法编码表通过校验(R15:byte-mode 字段面绿灯)", () => {
+    const descriptor = assertOk(validatePublicDescriptor(withEncodingTable(() => {})));
+    expect(descriptor.vmProfile.encodingTable).toHaveLength(2);
+  });
+
+  it("空 encodingTable 被拒绝(minItems = 1,R13 Schema 前置)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table.splice(0, table.length);
+      })),
+    );
+
+    expect(violations.some((v) => v.path === "/vmProfile/encodingTable")).toBe(true);
+  });
+
+  it("超过 64 条上限被拒绝(MAX_ENCODING_TABLE_ENTRIES,R15)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table.splice(1);
+        for (let index = 0; index < 64; index += 1) {
+          table.push({ tokenHex: `0x${(0x10 + index).toString(16)}`, op: "ret", operands: [] });
+        }
+      })),
+    );
+
+    expect(violations.some((v) => v.path === "/vmProfile/encodingTable")).toBe(true);
+  });
+
+  it("非法 tokenHex 形态被拒绝(定宽 1 字节,R15)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[0]!["tokenHex"] = "0x123";
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("tokenHex"))).toBe(true);
+  });
+
+  it("immediate 操作数缺 width 被拒绝(R12:宽度必填,不依赖隐式推断)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["operands"] = [{ kind: "immediate" }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("operands/0"))).toBe(true);
+  });
+
+  it("immediate 操作数 width 非约定值被拒绝(R12:const arch)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["operands"] = [{ kind: "immediate", width: "half" }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("width"))).toBe(true);
+  });
+
+  it("memory 操作数缺 displacementWidth 被拒绝(R12)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["operands"] = [{ kind: "memory", baseRegister: "RBP" }];
+      })),
+    );
+
+    expect(
+      violations.some(
+        (v) => v.path.includes("operands/0") && v.message.includes("displacementWidth"),
+      ),
+    ).toBe(true);
+  });
+
+  it("编码操作数引用 FLAG 寄存器被拒绝(R11:FLAG 不可编码,负向前瞻)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["operands"] = [{ kind: "register", name: "FLAG0" }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("operands/0/name"))).toBe(true);
+  });
+
+  it("编码操作数携带未知附加属性被拒绝(additionalProperties: false,R15)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["operands"] = [{ kind: "register", name: "RBP", extra: true }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("operands/0"))).toBe(true);
+  });
+
+  it("interface 操作数落在保留系统号带被拒绝(interfaceId ≥ 0x100,R15)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["op"] = "call";
+        table[1]!["operands"] = [{ kind: "interface", interfaceId: 255 }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("interfaceId"))).toBe(true);
+  });
+
+  it("interface 操作数超过 0xFFFF 上限被拒绝(R15)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(withEncodingTable((table) => {
+        table[1]!["op"] = "call";
+        table[1]!["operands"] = [{ kind: "interface", interfaceId: 65536 }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("interfaceId"))).toBe(true);
+  });
+});
+
+describe("公开描述包:R15 补充严格性场景", () => {
+  it("custom 区域 byteLength 非 4KB 倍数被拒绝(G3/D2 对齐含 custom 类)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        const layout = clone.memoryLayout as {
+          regions: Array<Record<string, unknown>>;
+        };
+        layout.regions.push({
+          regionId: "guard",
+          kind: "custom",
+          startAddressHex: "0x500000",
+          byteLength: 6144,
+          permissions: "rw",
+          publicLabel: "自定义守卫区",
+        });
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/memoryLayout/regions/2/byteLength"))).toBe(
+      true,
+    );
+  });
+
+  it("私有面字段(secretSinkRegisters)进入公开包被拒绝(双包严格分离,R15 复核)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        clone.secretSinkRegisters = ["RAX"];
+      })),
+    );
+
+    expect(violations.some((v) => v.message.includes("secretSinkRegisters"))).toBe(true);
+  });
+});
+
 describe("公开描述包文本解析", () => {
   it("从 JSON 文本解析出强类型", () => {
     const descriptor = assertOk(parsePublicDescriptorText(basicText));

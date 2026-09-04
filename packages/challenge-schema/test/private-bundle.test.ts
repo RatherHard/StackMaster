@@ -428,4 +428,147 @@ describe("私有判题包校验器", () => {
     expect(bundle.customInstructions?.[0]?.mnemonic).toBe("LOAD_TWICE");
     expect(bundle.interfaces?.[0]?.interfaceId).toBe(512);
   });
+
+  it("interfaceId 超过 0xFFFF 被拒(G4/D4 声明带上限)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.interfaces = [
+          {
+            interfaceId: 65536,
+            displayText: "越界接口",
+            effects: [{ effect: "noop" }],
+          },
+        ];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/interfaces/0/interfaceId"))).toBe(true);
+  });
+
+  it("自定义指令条目携带未知附加属性被拒(R15:声明面严格对象边界)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.customInstructions = [
+          {
+            mnemonic: "LOAD_TWICE",
+            displayText: "装载两次",
+            semantics: [{ op: "load_imm", dst: "RAX", valueHex: "0x0" }],
+            hostHandler: "eval",
+          },
+        ];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/customInstructions/0"))).toBe(true);
+  });
+
+  it("接口条目携带未知附加属性被拒(R15:声明面严格对象边界)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.interfaces = [
+          {
+            interfaceId: 512,
+            displayText: "接口甲",
+            effects: [{ effect: "noop" }],
+            handlerPointer: "0x401000",
+          },
+        ];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/interfaces/0"))).toBe(true);
+  });
+});
+
+describe("私有判题包:程序形态与公开面隔离(R15)", () => {
+  function loadBytePublicDescriptor(): PublicChallengeDescriptor {
+    const descriptor = JSON.parse(basicText) as Record<string, unknown>;
+    const profile = descriptor.vmProfile as Record<string, unknown>;
+    profile.encodingTable = [
+      { tokenHex: "0x00", op: "ret", operands: [] },
+      { tokenHex: "0x55", op: "push", operands: [{ kind: "register", name: "RBP" }] },
+    ];
+    const projection = descriptor.initialProjection as {
+      visibleRegions: Array<Record<string, unknown>>;
+    };
+    const codeProjection = projection.visibleRegions.find((region) => region.regionId === "code");
+    if (codeProjection === undefined) {
+      throw new Error("字节模式 fixture 缺少代码投影");
+    }
+    codeProjection.bytesHex = "55c3c3c3c3c3c3c3c3c3c3c3c3c3c3";
+    const result = validatePublicDescriptor(descriptor);
+    if (!result.ok) {
+      throw new Error(`字节模式 fixture 应通过校验:${JSON.stringify(result.violations)}`);
+    }
+    return result.value;
+  }
+
+  it("字节模式形态:私有包携带 entrypointAddressHex 且无 compiledIr 通过 Schema", () => {
+    const bundle = buildPrivateBundle(loadBytePublicDescriptor());
+
+    expect(bundle.entrypointAddressHex).toBeDefined();
+    expect(bundle.compiledIr).toBeUndefined();
+    expect(validatePrivateBundle(JSON.parse(JSON.stringify(bundle))).ok).toBe(true);
+  });
+
+  it("字节模式形态:非法入口地址被拒(hexValue64 形态,R15)", () => {
+    const publicDescriptor = loadBytePublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.entrypointAddressHex = "0xZZZZ";
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("entrypointAddressHex"))).toBe(true);
+  });
+
+  it("双程序字段双给:Schema 层放行(跨包条件不可表达),交由 XS-PROG-MODE 拒绝", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const mutated = JSON.parse(JSON.stringify(buildPrivateBundle(publicDescriptor))) as Record<
+      string,
+      unknown
+    >;
+    mutated.entrypointAddressHex = "0x400000";
+
+    // Schema 层无条件约束 compiledIr × entrypointAddressHex(字节模式由公开包
+    // encodingTable 决定,单包 Schema 不可见);此处固化"Schema 放行、检查器拒绝"
+    // 的分层事实,防止误以为 Schema 已拦截。
+    expect(validatePrivateBundle(mutated).ok).toBe(true);
+  });
+
+  it("双程序字段双缺:Schema 层放行(同上,跨包约束归 XS-PROG-MODE)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const mutated = JSON.parse(JSON.stringify(buildPrivateBundle(publicDescriptor))) as Record<
+      string,
+      unknown
+    >;
+    delete mutated.compiledIr;
+
+    expect(validatePrivateBundle(mutated).ok).toBe(true);
+  });
+
+  it("私有包携带公开面字段 memoryLayout 被拒(additionalProperties,R15)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.memoryLayout = { regions: [] };
+      })),
+    );
+
+    expect(violations.some((v) => v.message.includes("memoryLayout"))).toBe(true);
+  });
+
+  it("私有包复制 archBits 被拒(位宽是公开常量,私有包不复制防双真相源,G1/R15)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        clone.archBits = 64;
+      })),
+    );
+
+    expect(violations.some((v) => v.message.includes("archBits"))).toBe(true);
+  });
 });

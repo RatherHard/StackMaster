@@ -65,5 +65,6 @@ export {
   checkSchemaMeta,
   CAPABILITY_SCAN_PREFIXES,
   RULE_ID_ALIASES,
+  PUBLIC_FACING_ERROR_CODE_FOR_VIOLATIONS,
 } from "./checker/index.js";
 export type { CheckerResult, CheckerViolation } from "./checker/index.js";

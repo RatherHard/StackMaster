@@ -71,24 +71,26 @@
 
 ## 四、待整改事项总表
 
+> 2026-09-04 整改批次关闭后的状态;逐项关闭证据见第十六章关闭记录。
+
 | 编号 | 类别 | 事项 | 优先级 | 当前状态 |
 |---|---|---|---|---|
-| R1 | 安全边界 | 公开自定义助记符与私有 `customInstructions` 的泄露边界 | P0 | 待裁决与重定分类 |
-| R2 | 安全边界 | 公开 `interfaceId` 与私有 `interfaces` 的泄露边界 | P0 | 待裁决与重定分类 |
-| R3 | 架构宽度 | `customInstructions` / `interfaces` 中的架构值检查 | P1 | 部分覆盖 |
-| R4 | 地址边界 | 全部地址区间检查统一覆盖 64 位上溢 | P1 | 部分覆盖 |
-| R5 | 随机化 | `server_random_per_session` 与固定 `seedHex` 互斥 | P0 | 待补约束与测试 |
-| R6 | 输入校验 | Ajv `ownProperties: true` 与原型污染防御 | P0 | 待确认与补测 |
-| R7 | 信息泄露 | 检查器错误消息粗化及内部诊断分层 | P0 | 待安全审查 |
-| R8 | 构建隔离 | 公开入口依赖图与产物扫描 | P0 | 待执行专项检查 |
-| R9 | 契约同步 | `PRIVATE_BUNDLE_FIELDS` 字段数量注释 | P2 | 待同步 |
-| R10 | 契约语义 | byte-mode 是否只允许一个 code region | P1 | 待冻结 |
-| R11 | 契约语义 | FLAG 寄存器是否允许出现在 encoding operand | P1 | 待冻结 |
-| R12 | 契约语义 | `width` / `displacementWidth` 是否必填 | P1 | 待冻结 |
-| R13 | 契约语义 | 空 `encodingTable` 的纵深防御语义 | P2 | 待补直接测试 |
-| R14 | 测试覆盖 | P5 专项边界、正反和回归测试 | P1 | 仍需补齐 |
-| R15 | 测试覆盖 | 双包 Schema 严格性测试 | P1 | 仍需补齐 |
-| R16 | 交付审查 | 最终代码审查与安全审查 | P0 | 尚未关闭 |
+| R1 | 安全边界 | 公开自定义助记符与私有 `customInstructions` 的泄露边界 | P0 | 已关闭(公开 ISA 引用面裁决) |
+| R2 | 安全边界 | 公开 `interfaceId` 与私有 `interfaces` 的泄露边界 | P0 | 已关闭(同 R1 裁决) |
+| R3 | 架构宽度 | `customInstructions` / `interfaces` 中的架构值检查 | P1 | 已关闭(XS-ARCH-WIDTH 递归覆盖) |
+| R4 | 地址边界 | 全部地址区间检查统一覆盖 64 位上溢 | P1 | 已关闭(XS-ADDR-SPACE) |
+| R5 | 随机化 | `server_random_per_session` 与固定 `seedHex` 互斥 | P0 | 已关闭(Schema else + XS-SEED-POLICY) |
+| R6 | 输入校验 | Ajv `ownProperties: true` 与原型污染防御 | P0 | 已关闭 |
+| R7 | 信息泄露 | 检查器错误消息粗化及内部诊断分层 | P0 | 已关闭(服务层接线挂阶段二) |
+| R8 | 构建隔离 | 公开入口依赖图与产物扫描 | P0 | 已关闭(`pnpm scan:public`;CI 接线挂 CI workflow 落地) |
+| R9 | 契约同步 | `PRIVATE_BUNDLE_FIELDS` 字段数量注释 | P2 | 已关闭(20 字段,数量锁定) |
+| R10 | 契约语义 | byte-mode 是否只允许一个 code region | P1 | 已关闭(单代码区冻结) |
+| R11 | 契约语义 | FLAG 寄存器是否允许出现在 encoding operand | P1 | 已关闭(不可编码) |
+| R12 | 契约语义 | `width` / `displacementWidth` 是否必填 | P1 | 已关闭(必填且恒为 arch) |
+| R13 | 契约语义 | 空 `encodingTable` 的纵深防御语义 | P2 | 已关闭(失败关闭) |
+| R14 | 测试覆盖 | P5 专项边界、正反和回归测试 | P1 | 已关闭(运行时 `invalid_rip` 挂 P4) |
+| R15 | 测试覆盖 | 双包 Schema 严格性测试 | P1 | 已关闭 |
+| R16 | 交付审查 | 最终代码审查与安全审查 | P0 | 已关闭(见第十六章) |
 
 ---
 
@@ -475,3 +477,154 @@ P4 引擎实现进入阶段二时，至少应携带以下契约验收清单：
 | 遗留风险 | 若未完全关闭，记录临时约束、负责人和目标批次 |
 
 在所有 P0 和 P1 项关闭、专项测试通过、公开构建隔离通过、最终代码审查与安全审查完成前，不得将 VM 契约整改标记为“全部完成”。
+
+---
+
+## 十六、关闭记录(2026-09-04 整改批次)
+
+> 本批次按第十四章顺序执行:R1/R2/R5/R6/R7/R8(P0)→ R10–R13(契约冻结)→ R3/R4(边界)→ R14/R15(测试)→ R9(文档)→ R16(审查)。
+> 除本章记录外,`PRIVATE_BUNDLE_FIELDS` 实际长度为 **20**(本章记录之前,清单原文 v1.0 所记"21"与代码注释"19"均为漂移值,以当前数组为准)。
+
+### R1 / R2 — 公开 ISA 引用面裁决(P0)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R1、R2(合并裁决) |
+| 关闭日期 | 2026-09-04 |
+| 裁决 | 二选一中采纳**方案 2 变体(公开 ISA 引用面)**:公开 `encodingTable[].op` 的自定义助记符与 `operands[].interfaceId` 是经裁决的公开 ISA 引用——仅揭示"存在哪些指令 / 接口及其公开标识"(字节模式 ISA 公开立场的必然推论:代码区恒公开、谜题在 gadget 构造不在解码);`customInstructions` 微算子语义 / `displayText`、`interfaces` 效果序列整体 SERVER_ONLY 不变。未采纳方案 1(公开无语义 token):其仍泄露"非基线 token = 自定义指令"的存在性信号,却要引入 publicRef 双键映射的契约改动,收益不成比例 |
+| 实现位置 | `packages/challenge-schema/src/server-only/checker/index.ts`(裁决记录与 `PUBLIC_FACING_ERROR_CODE_FOR_VIOLATIONS` 相邻);`src/common/classification.ts` 与 `schema/classification.json` 的 note 补充裁决;检查器行为不变(未声明引用由 `XS-ENC-TOKEN` 拒绝,原有规则即裁决的机制面) |
+| 测试证据 | `test/isa-reference-face.test.ts`:全链路绿灯、公开包深扫描断言不含微算子词汇 / 效果原语 / displayText / fileId / FLAG 名 / 秘密值、未声明助记符与接口号红灯、公开面携带裁决标识的正面断言 |
+| 安全审查 | 公开引用的存在性信号只在作者选择暴露时产生(未声明引用即拒),与 objectId / fileId 的值级引用不同——助记符与接口号是 ISA 标识而非私有对象指针;公共投影 / 错误 / 回放不出现私有接口定义(私有声明面整体 server-only,机制原样) |
+| 文档同步 | `双包Schema语义.md` v1.5(§2.2 encodingTable 行 + §五裁决段)、WP-1 清单 v1.8(§12.2 语义补全 + 变更记录)、CLAUDE.md |
+
+### R3 — 架构宽度递归覆盖(P1)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R3 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `src/server-only/checker/arch-rules.ts` `checkArchWidth`:递归覆盖 `customInstructions[].semantics`(load_imm / set_flag `valueHex`、bit_mask `maskHex` 无符号;load_mem / store_mem `displacementHex` 有符号位移)与 `interfaces[].effects` set_flag `valueHex`;声明面存在即检查,与程序模式 / `compiledIr` 存在与否无关 |
+| 测试证据 | `test/checker.test.ts` R3 describe:32 位四类微算子越界(路径逐项断言)、32 位接口 set_flag 越界、64 位域上界之外绕过 Schema 直测、32 位边界值 0xFFFFFFFF / −0x80000000 绿灯 |
+| 安全审查 | 不涉及公开/私有边界变化;统一区分无符号架构值与有符号位移,TS 与后续 Rust 引擎同一语义(计划书 6.2) |
+| 文档同步 | `双包Schema语义.md` §5 XS-ARCH-WIDTH 行、WP-1 清单 v1.8 |
+
+### R4 — 地址区间 64 位上界统一(P1)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R4 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `src/server-only/checker/address-ranges.ts`:`ADDRESS_SPACE_END_EXCLUSIVE`(2^64)与 `rangeExceedsAddressSpace`(半开区间,末字节 0xFFFFFFFFFFFFFFFF 合法);`public-rules.ts` `checkPublicAddressSpaceBounds`(公开区域)、`private-rules.ts` `checkPrivateAddressSpaceBounds`(私有区域 + 私有对象)、`encoding-rules.ts` 探测复用同一常量(不再内联 `1n << 64n`) |
+| 测试证据 | `test/checker.test.ts` R4 describe:结束地址恰 2^64 绿灯、公开 / 私有隐藏区域 / 私有对象 / 双侧越界红灯(路径逐项)、字节模式代码区越界探测红灯;0 起点 / 最大合法末字节 / 上溢三类边界覆盖 |
+| 安全审查 | BigInt 不回绕,上溢失败关闭;TS 与 Rust 引擎(阶段二)共用半开区间约定,写入 P4 移交契约 |
+| 文档同步 | `双包Schema语义.md` §5 XS-ADDR-SPACE 行 |
+
+### R5 — seed 策略互斥(P0)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R5 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `schema/private-bundle.schema.json` seedPolicy:`then`(fixed ⇒ seedHex 必填)+ 新增 `else`(server_random_per_session ⇒ `seedHex: false` 禁止);`src/server-only/checker/private-rules.ts` `checkSeedPolicy`(XS-SEED-POLICY 两向检查,Schema 之外第二道防线) |
+| 测试证据 | `test/hardening.test.ts`:Schema 层四组合(2 绿 2 红)+ 检查器层红灯双向与正确组合绿灯 |
+| 安全审查 | seed 仍整体秘密:互斥只消除实例化 / 回放策略歧义;回放元数据承载 seed 策略与派生路径声明,不承载 seed 值;`declaredSeedPublicPaths` 与 T-SC4 机制原样 |
+| 文档同步 | `双包Schema语义.md` §3.1 seedPolicy 行、WP-1 清单 v1.8、CLAUDE.md |
+
+### R6 — Ajv ownProperties 与原型污染防御(P0)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R6 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `src/internal/schema-loader.ts`:`compileSchema` 统一启用 `ownProperties: true`(公开 / 私有面同一实例配置);`toSchemaViolations` 回显属性名截断至 80 字符 |
+| 测试证据 | `test/hardening.test.ts`:原型继承属性不满足 required、`__proto__` / `constructor` / `prototype` 键形态拒绝且无原型污染、寄存器映射 `__proto__` 键拒绝、超长恶意属性名不回显 |
+| 安全审查 | 继承属性不再满足 required / 不被视为包字段;JSON.parse 产物本无原型链,防线覆盖手写对象与服务端合并路径;检查器输入以 Object.entries(自有键)遍历,生产输入经 Schema 校验前置 |
+| 文档同步 | `双包Schema语义.md` §5.1 |
+
+### R7 — 错误两层模型(P0)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R7 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `src/server-only/checker/index.ts`:头部两层模型说明 + `PUBLIC_FACING_ERROR_CODE_FOR_VIOLATIONS = "internal_error"` 导出常量(server-only 面);`schema-loader.ts` 回显截断 |
+| 测试证据 | `test/hardening.test.ts`:多场景违规消息 / 路径对 flag / seedHex / 虚拟文件内容哨兵零携带;映射目标在协议 `public-error.schema.json` 16 码词汇内(跨包防漂移) |
+| 安全审查 | 违规题目包在装载期被拒,不存在带病服务会话;玩家侧统一 internal_error,逐规则细分仅存于内部诊断与管理后台(信任域 4) |
+| 文档同步 | `双包Schema语义.md` §5 前置说明、WP-1 清单 v1.8 |
+| 遗留风险 | 错误长度 / 分类 / 返回时序的运行时侧信道复核在 session-api(阶段二)落地时按 WP-1 §10.1 执行;负责人:阶段二 session-api 实现者 |
+
+### R8 — 公开构建图与产物隔离(P0)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R8 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `tooling/scan-public-artifacts.mjs`(新):公开包(protocol / vm-ui / web-component / embed-runtime / react-wrapper,未落地自动跳过)从 exports 公开入口(排除 server-only 子路径)做 dist 静态依赖图 BFS;可达文件禁止 server-only 子树、node 内建、challenge-schema / vm-engine 引用;剥离注释后扫描私有面标记(私有 Schema 名、私有顶层字段、capability 前缀、require);豁免表 `ALLOWLIST` 带原因与到期机制;根 `package.json` 固化 `pnpm scan:public` |
+| 测试证据 | 本批次真实执行:`pnpm scan:public` 通过(protocol 25 个可达文件,0 违规;其余包 dist 未落地自动跳过并显式报告);自检确认 BFS 覆盖正确(server-only / generate 不可达) |
+| 安全审查 | 门禁以退出码 1 失败(非提示);私有 Schema 文件名与字段名不在可达产物 |
+| 文档同步 | 根 package.json scripts;CI workflow 建立时纳入(见遗留风险) |
+| 遗留风险 | 仓库尚无 CI workflow,`pnpm scan:public` 在 CI 建立时作为必过步骤接入;负责人:CI 落地批次;浏览器侧包(vm-ui 等)落地后扫描自动纳入 |
+
+### R9 — 字段数量同步(P2)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R9 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `src/common/classification.ts`:注释 19 → **20**(实数核对:数组 20 项),注释明确"字段数量变化必须同步数组、classification.json、两份 Schema、语义文档" |
+| 测试证据 | `test/strictness.test.ts`:分类清单 ≡ 常量(含 note 深比较)、顶层 properties ≡ 数组、`PRIVATE_BUNDLE_FIELDS` 数量锁定 20(字段增删时先红) |
+| 安全审查 | 不涉及 |
+| 文档同步 | CLAUDE.md(19 → 20)、本清单 v1.0 总表"21"更正说明、`双包Schema语义.md` §3.1 字段行核对 |
+
+### R10–R13 — 契约语义冻结(P1/P2)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R10、R11、R12、R13 |
+| 关闭日期 | 2026-09-04 |
+| 裁决 | R10:字节模式代码区冻结为**恰一个公开 + 恰一个非隐藏私有代码区**(公开侧 ≤ 1 原有 D2 承接;新增私有面"代码区不得隐藏",封住 IR 模式下隐藏代码区表达位);R11:**FLAG 寄存器不可编码**(寄存器 / 基址限一般命名空间,Schema 负向前瞻结构性排除 + 检查器复核;IR 内 FLAG 可读性归引擎语义,微算子封闭集唯一 FLAG 写入是 set_flag,原状);R12:`immediate.width` / `memory.displacementWidth` **必填**且恒为 `"arch"`(机器码长度、译码、探测、回放不依赖隐式推断;编码长度 = 表条目纯函数);R13:`encodingTable` **存在即字节模式**,空数组失败关闭报 XS-ENC-TOKEN,不回退 IR 模式 |
+| 实现位置 | `schema/public-descriptor.schema.json`(required 迁移 + 描述)、`src/common/public-types.ts`(镜像类型同步)、`src/server-only/checker/encoding-rules.ts`(checkShapeReferences 无条件宽度检查、checkEncodingTable 空表防线、checkProgramMode 语义注释)、`src/server-only/checker/private-rules.ts`(checkPrivateCodeRegionVisibility,记 D2-CODE-PUBLIC) |
+| 测试证据 | `test/checker.test.ts` R10–R13 describe(私有双代码区 / 隐藏代码区 / FLAG operand 绕过 / 双宽度绕过 / 三态判定)与 `test/public-descriptor.test.ts`(Schema 层 width / displacementWidth 缺失与非法值、FLAG operand、空表 minItems) |
+| 安全审查 | 全部为失败关闭方向的收紧;信封版本不递增(仓库尚无发布题目,整改清单裁决整体重定基,与 v1.1–v1.4 先例一致) |
+| 文档同步 | `双包Schema语义.md` v1.5(§2.2、§5 XS-ENC-TOKEN / D2-CODE-PUBLIC 行)、`docs/最小DSL范围.md` §三.4.1(内联操作数必填 / FLAG 不可编码 / 单代码区 / 空表)、WP-1 清单 v1.8、CLAUDE.md |
+
+### R14 — P5 专项测试矩阵(P1)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R14 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `test/checker.test.ts` 新增 R14 describe(12 项)+ 既有 P5 describe(原有 13 项) |
+| 测试证据 | 矩阵逐项:32 位 immediate(4 字节派发号探测)、64 位 immediate(既有)、memory displacement(截断位移红灯)、syscall 保留号绿灯 / 已声明接口绿灯 / 未声明接口红灯、call 三形态绿灯、ret / leave 非零操作数红灯、自定义助记符及其操作数红灯、token 大小写重复红灯、代码区缺失红灯、尾地址边界与上溢(R4 块)、达到(字节绿灯基线恰 4096 条)与超过(8192 字节区域)MAX_IR_INSTRUCTIONS、leave 带 RBP 绿灯、非零入口偏移(gadget 绿灯)、未知 token / 截断 immediate / 截断 displacement 红灯;断言覆盖规则 ID + 路径 + 可解释消息,红灯样例真实触发检查器(Schema 放行的绕过形态以类型断言直测并注明) |
+| 安全审查 | 不涉及 |
+| 文档同步 | — |
+| 遗留风险 | 「运行时未知 token / 截断统一落 `invalid_rip`」为引擎行为测试,随 P4 进入阶段二执行(P4 移交条件已含) |
+
+### R15 — 双包 Schema 严格性测试(P1)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R15 |
+| 关闭日期 | 2026-09-04 |
+| 实现位置 | `test/public-descriptor.test.ts`(编码表严格性 + R15 补充 describe,12 项)、`test/private-bundle.test.ts`(程序形态与公开面隔离 describe,6 项 + 声明面边界 2 项) |
+| 测试证据 | 矩阵逐项:字节模式省略 `compiledIr` 且有入口绿灯、IR 模式有 `compiledIr`(基线)、双给 / 双缺 Schema 放行 + 检查器拒绝的分层事实固化、非法入口地址、非法 tokenHex、operand additionalProperties、私有包拒绝公开字段(memoryLayout / archBits)、编码表上限、interfaceId 255 / 65536、width / displacementWidth 仅接受约定值、archBits 缺失 / 非法 / 私有复制拒绝、custom 区域 4KB 对齐、声明面严格对象边界(hostHandler / handlerPointer 形态) |
+| 安全审查 | 正反 fixture 全部在测试内构造,无私有样例入 git(红线保持) |
+| 文档同步 | — |
+
+### R16 — 最终审查门禁(P0)
+
+| 字段 | 内容 |
+|---|---|
+| 编号 | R16 |
+| 关闭日期 | 2026-09-04 |
+| 执行内容 | 1) 通读全部改动(规则 ID / 路径 / 错误码 / 版本一致性核对:新增规则 XS-SEED-POLICY、XS-ADDR-SPACE 均已同步 §12.6 对照与语义文档;D2-CODE-PUBLIC 私有面沿用既有规则 ID);2) TS 代码审查 + 安全审查由独立审查代理执行(重点:不可达分支、可选字段解引用、JSON Pointer 对位、BigInt 边界、公开/私有边界、原型污染、错误信息、构建产物、seed、server-only 依赖);3) 依赖边界 `pnpm lint:deps` 通过(187 模块 549 依赖 0 违规);4) 公开产物扫描 `pnpm scan:public` 通过;5) 全量回归真实执行(非缓存引用):`pnpm build`、`pnpm typecheck`、`pnpm lint`、`pnpm test`(challenge-schema 7 文件 221 用例全绿,较整改前 154 例新增 67 例)、`git diff --check` 干净 |
+| 审查发现与处理 | 审查结论:无 CRITICAL / HIGH,APPROVE。发现 2 MEDIUM + 3 LOW,全部当场修复并回归:MEDIUM-1 扫描器注释剥离不识别正则字面量(可致私有面标记漏报)→ 剥离器增正则字面量感知 + 启动自检(`selfTest`,失败即拒扫);MEDIUM-2 exports 条件缺 default 时静默漏扫 → default/import 回退解析,均缺失即显式报错,specifier 解析扩展 .mjs/.cjs;LOW-1 错误回显截断未覆盖 instancePath → 路径同截断(200 字符);LOW-2 探测违规路径取过滤数组下标(代码区非首位时指错区域)→ 改锚 initialState.memoryRegions 全数组真实下标;LOW-3 两处测试注释指令数算术错误 → 更正(断言本就正确) |
+| 审查结论 | P0/P1 项全部关闭;R7 运行时侧信道复核与 R8 CI 接线为已登记的阶段二遗留义务(见各自关闭记录) |
+| 状态 | 工作树保持未提交、未 push(清单 §2.2 排除项:对外发布操作需另行授权) |
+
+### 阶段二 P4 移交补充
+
+第十三章移交条件清单维持原文,本批次新增两条随移交执行的契约验收项:
+
+- 地址区间半开区间语义与 `2^64` 上界(R4:TS 侧 `ADDRESS_SPACE_END_EXCLUSIVE` 同公式,Rust 侧不得引入第二条上界规则);
+- 编码操作数宽度必填(R12:译码器不得对缺失宽度做任何隐式推断——Schema 已拒绝,引擎按前置条件信任表条目)。

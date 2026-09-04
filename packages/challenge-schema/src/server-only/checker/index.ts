@@ -13,6 +13,15 @@
  *
  * SERVER_ONLY:本模块仅经 @stackmaster/challenge-schema/server-only 导出,
  * 只允许后端包消费;检查器输入含私有判题包完整状态,永不跨域。
+ *
+ * 错误两层模型(R7):
+ *  - **内部诊断层**(本模块输出的 CheckerViolation):消息与路径面向服务端
+ *    审查日志、开发测试与管理后台(信任域 4,作者修复自身题目包)反馈,
+ *    允许保留私有上下文;永不进入玩家可达的任何载荷(投影、错误、回放、日志)。
+ *  - **公开错误层**:玩家可达错误只允许稳定的 PublicError code;题目包
+ *    校验失败对玩家一律表现为 internal_error(PUBLIC_FACING_ERROR_CODE),
+ *    由会话服务层(session-api,阶段二)执行映射——禁止透传 violation 的
+ *    message / path。侧信道约束(长度 / 分类 / 时序)在服务层落地时复核。
  */
 
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
@@ -48,6 +57,32 @@ export type { CheckerResult, CheckerViolation } from "./types.js";
 export { RULE_ID_ALIASES } from "./types.js";
 export { CAPABILITY_SCAN_PREFIXES } from "./pair-rules.js";
 export { checkSchemaMeta } from "./schema-meta.js";
+
+/**
+ * 违规对应的玩家可达 PublicError code(R7 错误分层;与
+ * @stackmaster/protocol PUBLIC_ERROR_CODES 第 16 值一致的字符串字面量——
+ * 本包是叶子包,不依赖 protocol,由严格性测试对照词汇表防漂移)。
+ *
+ * 裁决:全部检查器违规统一映射 internal_error——违规题目包在装载期被拒,
+ * 不存在"带病服务"的会话,玩家侧永远收不到任何违规细节;逐规则细分
+ * 只保留在内部诊断层与管理后台(信任域 4)。会话服务层禁止透传
+ * CheckerViolation 的 message / path。
+ */
+export const PUBLIC_FACING_ERROR_CODE_FOR_VIOLATIONS = "internal_error";
+
+/**
+ * R1/R2 裁决记录:公开 ISA 引用面。
+ *
+ * 公开包 `vmProfile.encodingTable[].op` 的自定义助记符与
+ * `operands[].interfaceId` 定义为**公开 ISA 引用面**(sanctioned public
+ * references):玩家可学习"存在哪些指令 / 接口及其公开标识"——这是字节
+ * 模式 ISA 公开立场的必然推论(代码区恒公开、谜题在 gadget 构造不在解码)。
+ * 私有声明面(customInstructions 的微算子语义与 displayText、interfaces 的
+ * 效果序列)整体 SERVER_ONLY,公开引用的存在性检查由 XS-ENC-TOKEN 承接:
+ * 未声明助记符 / 未声明接口号的公开条目即拒——隐藏声明不产生存在性信号。
+ * 该裁决的扫描测试见 test/isa-reference-face.test.ts(公开包不含微算子
+ * 语义、效果细节、displayText、fileId、FLAG 名等私有派生信息)。
+ */
 
 /** 跨包一致性规则(公开 × 私有)。 */
 export function checkPairRules(

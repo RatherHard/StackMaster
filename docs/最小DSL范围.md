@@ -154,7 +154,7 @@ G5 裁决(D6):「指令作用 ↔ 机器码表现」的映射自由度落为**�
 
 **ISA 公开立场**:编码表在**公开**包——教学可解性要求 ISA 公开(真实 pwn 中二进制与 ISA 都是选手可见的,谜题在 gadget 构造不在解码);私有包**不复制**编码表(单一来源,沿 `archBits` 公开先例),私有面只补执行所需的最小私有信息(`entrypointAddressHex`);自定义指令的**语义**(微算子组合)仍只存在于私有包——选手看到的是"字节 ↔ 助记符 ↔ 展示文本",不是语义。
 
-**操作数内联**(D4.7):寄存器烘焙进 token(同一助记符不同寄存器 = 不同 token);立即数 / 位移**内联在指令字节流中**,定宽 `archBits/8` 字节、小端(端序随 `vmProfile.endianness`)。因此指令**变长**,表条目以操作数形态声明编码格式:`{kind:"register", name}`(烘焙,无内联字节)、`{kind:"immediate", width:"arch"}`、`{kind:"memory", baseRegister, displacementWidth?:"arch"}`、`{kind:"interface", interfaceId}`(烘焙)。
+**操作数内联**(D4.7):寄存器烘焙进 token(同一助记符不同寄存器 = 不同 token);立即数 / 位移**内联在指令字节流中**,定宽 `archBits/8` 字节、小端(端序随 `vmProfile.endianness`)。因此指令**变长**,表条目以操作数形态声明编码格式:`{kind:"register", name}`(烘焙,无内联字节;一般命名空间,FLAG 寄存器不可编码,R11)、`{kind:"immediate", width:"arch"}`(width **必填**,R12)、`{kind:"memory", baseRegister, displacementWidth:"arch"}`(displacementWidth **必填**,R12:表层机器码长度与译码不得依赖隐式推断)、`{kind:"interface", interfaceId}`(烘焙)。编码表存在即字节模式:空数组按违规失败关闭,不回退 IR 模式(R13);字节模式代码区模型冻结为**恰一个公开 + 恰一个非隐藏私有代码区**(R10)。
 
 #### 三.4.2 字节权威:代码空间以表层机器码为基准(D4.4)
 

@@ -29,7 +29,10 @@ function loadSchemaDocument(fileName: string): Record<string, unknown> {
 }
 
 function compileSchema(fileName: string): ValidateFunction {
-  const ajv = new Ajv2020({ strict: true, allErrors: false, coerceTypes: false });
+  // ownProperties: true(R6):required / properties / additionalProperties 只看
+  // 自有属性——继承属性(如 Object.prototype 上的 toString)不得满足 required,
+  // 也不得被当作题目包字段;配合 json-strict-parse 的重复键拒绝构成入站防线。
+  const ajv = new Ajv2020({ strict: true, allErrors: false, coerceTypes: false, ownProperties: true });
   ajv.addKeyword("x-sm-class");
   return ajv.compile(loadSchemaDocument(fileName));
 }
@@ -54,7 +57,18 @@ export function getPrivateBundleValidator(): ValidateFunction {
   return privateBundleValidator;
 }
 
-/** Ajv 错误对象 → 违规记录;附加属性违规补充具体属性名(可解释性)。 */
+/**
+ * Ajv 错误对象 → 违规记录;附加属性违规补充具体属性名(可解释性)。
+ * R7 错误粗化:回显的属性名与实例路径都截断——违规消息与路径是服务端
+ * 诊断面,但仍不得成为超长恶意输入(如超长寄存器键)的回显通道。
+ */
+const MAX_ECHOED_PROPERTY_NAME = 80;
+const MAX_ECHOED_PATH = 200;
+
+function truncateEchoed(text: string, limit: number): string {
+  return text.length <= limit ? text : `${text.slice(0, limit)}…(截断)`;
+}
+
 export function toSchemaViolations(errors: readonly ErrorObject[]): SchemaViolation[] {
   return errors.map((error) => {
     const additionalProperty =
@@ -63,8 +77,8 @@ export function toSchemaViolations(errors: readonly ErrorObject[]): SchemaViolat
         : undefined;
     const message =
       additionalProperty !== undefined
-        ? `${error.message ?? "校验失败"}:${additionalProperty}`
+        ? `${error.message ?? "校验失败"}:${truncateEchoed(additionalProperty, MAX_ECHOED_PROPERTY_NAME)}`
         : (error.message ?? "校验失败");
-    return { path: error.instancePath, message };
+    return { path: truncateEchoed(error.instancePath, MAX_ECHOED_PATH), message };
   });
 }

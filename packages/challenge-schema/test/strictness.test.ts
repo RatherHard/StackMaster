@@ -4,7 +4,7 @@
  * - 模式字面量:patterns.ts 的每个模式源串必须原样出现在对应 Schema 文档中;
  * - 词汇封闭:Schema enum 数组 ≡ vocabulary.ts 封闭集(双文件同锚);
  * - 分类清单:schema/classification.json ≡ CHALLENGE_CLASSIFICATIONS 常量,
- *   且顶层 properties 键 ≡ 字段清单常量(14 公开 / 17 私有);
+ *   且顶层 properties 键 ≡ 字段清单常量(14 公开 / 20 私有,R9 数量锁定);
  * - 共享身份字段:4 个版本/身份字段必须同时出现在两个 Schema 的 required
  *   (WP-1 §12.1;XS-ID-CORR 的 Schema 侧前提);
  * - 结构性不相交:一般命名空间(负向前瞻排除 FLAG 保留区,G2/D3)× FLAG 模式
@@ -358,14 +358,18 @@ describe("分类清单与字段清单防漂移", () => {
     expect(manifest).toEqual(CHALLENGE_CLASSIFICATIONS);
   });
 
-  it("公开 Schema 顶层 properties ≡ PUBLIC_DESCRIPTOR_FIELDS(14 字段)", () => {
+  it("公开 Schema 顶层 properties ≡ PUBLIC_DESCRIPTOR_FIELDS(锁定 14 字段)", () => {
     const keys = Object.keys(resolveAt(publicSchema, "/properties") as Record<string, unknown>);
     expect([...keys].sort()).toEqual([...PUBLIC_DESCRIPTOR_FIELDS].sort());
+    expect(PUBLIC_DESCRIPTOR_FIELDS).toHaveLength(14);
   });
 
-  it("私有 Schema 顶层 properties ≡ PRIVATE_BUNDLE_FIELDS(19 字段)", () => {
+  it("私有 Schema 顶层 properties ≡ PRIVATE_BUNDLE_FIELDS(锁定 20 字段,R9 防漂移)", () => {
     const keys = Object.keys(resolveAt(privateSchema, "/properties") as Record<string, unknown>);
     expect([...keys].sort()).toEqual([...PRIVATE_BUNDLE_FIELDS].sort());
+    // 字段数量锁定(R9):数组、本测试与 classification.json / Schema properties
+    // 必须同步演进;新增或删除字段时此处先红,提示同步四处。
+    expect(PRIVATE_BUNDLE_FIELDS).toHaveLength(20);
   });
 
   it("禁用属性集 = 私有顶层 − 4 共享身份字段,且与公开清单不相交", () => {

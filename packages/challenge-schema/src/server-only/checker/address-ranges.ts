@@ -12,6 +12,19 @@ export interface AddressRange {
   readonly endExclusive: bigint;
 }
 
+/**
+ * 64 位地址空间统一上界(R4):半开区间 [start, start + byteLength),
+ * 结束地址 ≤ 2^64 合法(末字节 0xFFFFFFFF_FFFFFFFF 可表示),> 2^64 拒绝。
+ * BigInt 不回绕,溢出表现为 endExclusive 越过本常量——全部地址 × 长度
+ * 检查(XS-ADDR-SPACE 与 XS-ENC-PROBE)共用本常量,禁止各自内联公式。
+ */
+export const ADDRESS_SPACE_END_EXCLUSIVE = 1n << 64n;
+
+/** 区间是否越出 64 位地址空间(endExclusive > 2^64;起始地址形态由 Schema 保证)。 */
+export function rangeExceedsAddressSpace(range: AddressRange): boolean {
+  return range.endExclusive > ADDRESS_SPACE_END_EXCLUSIVE;
+}
+
 /** 解析 `0x` 前缀十六进制地址(Schema 已保证形态;畸形即抛出)。 */
 export function parseAddressHex(hex: string): bigint {
   if (!/^0x[0-9a-fA-F]{1,16}$/.test(hex)) {

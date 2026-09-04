@@ -14,7 +14,7 @@ import { CUSTOM_MNEMONIC_PATTERN, GENERAL_REGISTER_NAME_PATTERN } from "../../co
 import { DSL_OPCODES, RESERVED_SYSCALL_BAND_MAX } from "../../common/vocabulary.js";
 import type { EncodingTableEntry, PublicChallengeDescriptor } from "../../common/public-types.js";
 import type { PrivateChallengeBundle } from "../private-types.js";
-import { parseAddressHex } from "./address-ranges.js";
+import { parseAddressHex, rangeExceedsAddressSpace } from "./address-ranges.js";
 import type { CheckerViolation } from "./types.js";
 
 const BASELINE_OP_SET = new Set<string>(DSL_OPCODES);
@@ -128,6 +128,9 @@ function checkShapeReferences(
   const interfaceIds = new Set((privateBundle.interfaces ?? []).map((entry) => entry.interfaceId));
   (entry.operands ?? []).forEach((operand, operandIndex) => {
     const path = `/vmProfile/encodingTable/${entryIndex}/operands/${operandIndex}`;
+    // R12 冻结:immediate.width 与 memory.displacementWidth 必填且恰为 arch
+    // ——表层机器码内联字节宽度不得依赖任何执行层的隐式推断;FLAG 寄存器
+    // 由 GENERAL_REGISTER_NAME_PATTERN 结构性排除(R11:FLAG 不可编码)。
     if (operand.kind === "register") {
       if (!GENERAL_REGISTER_NAME_PATTERN.test(operand.name) || !registerNames.has(operand.name)) {
         violations.push(violation(
@@ -144,10 +147,10 @@ function checkShapeReferences(
           `${path}/baseRegister`,
         ));
       }
-      if (operand.displacementWidth !== undefined && operand.displacementWidth !== ARCH_OPERAND_WIDTH) {
+      if (operand.displacementWidth !== ARCH_OPERAND_WIDTH) {
         violations.push(violation(
           "XS-ENC-TOKEN",
-          `编码表条目 ${entryIndex} 的 displacementWidth 必须为 arch`,
+          `编码表条目 ${entryIndex} 的 displacementWidth 必填且必须为 arch(内联位移 = archBits/8 字节,R12)`,
           `${path}/displacementWidth`,
         ));
       }
@@ -157,10 +160,10 @@ function checkShapeReferences(
         `编码表条目 ${entryIndex} 引用的接口号 ${operand.interfaceId} 未在 interfaces 声明`,
         `${path}/interfaceId`,
       ));
-    } else if (operand.kind === "immediate" && operand.width !== undefined && operand.width !== ARCH_OPERAND_WIDTH) {
+    } else if (operand.kind === "immediate" && operand.width !== ARCH_OPERAND_WIDTH) {
       violations.push(violation(
         "XS-ENC-TOKEN",
-        `编码表条目 ${entryIndex} 的 immediate width 必须为 arch`,
+        `编码表条目 ${entryIndex} 的 immediate width 必填且必须为 arch(内联立即数 = archBits/8 字节,R12)`,
         `${path}/width`,
       ));
     }
@@ -216,6 +219,16 @@ export function checkEncodingTable(
   }
   const table = publicDescriptor.vmProfile.encodingTable ?? [];
   const violations: CheckerViolation[] = [];
+  // R13 纵深防御:encodingTable 存在即字节模式,空表必须失败关闭,
+  // 不得静默退回 IR 模式(Schema minItems = 1 之外的直接调用防线)。
+  if (table.length === 0) {
+    violations.push(violation(
+      "XS-ENC-TOKEN",
+      "encodingTable 存在但为空数组:字节模式声明必须是非空有效表(R13 失败关闭,不回退 IR 模式)",
+      "/vmProfile/encodingTable",
+    ));
+    return violations;
+  }
   if (table.length > MAX_ENCODING_TABLE_ENTRIES) {
     violations.push(violation("XS-ENC-TOKEN", `encodingTable 条数 ${table.length} 超过上限 ${MAX_ENCODING_TABLE_ENTRIES}`, "/vmProfile/encodingTable"));
   }
@@ -268,12 +281,19 @@ export function checkEncodingProbe(
   }
   const codeStart = parseAddressHex(codeRegion.startAddressHex);
   const codeEnd = codeStart + BigInt(codeRegion.byteLength);
-  if (codeEnd > (1n << 64n)) {
-    return [violation("XS-ENC-PROBE", "代码区域地址范围超出 64 位地址空间", "/initialState/memoryRegions")];
+  // R4:统一经 address-ranges 常量判定 64 位上溢(与 XS-ADDR-SPACE 同一公式)。
+  if (rangeExceedsAddressSpace({ start: codeStart, endExclusive: codeEnd })) {
+    return [violation("XS-ENC-PROBE", "代码区域地址范围越出 64 位地址空间(结束地址必须 ≤ 2^64,R4)", "/initialState/memoryRegions")];
   }
   if (startAddress < codeStart || startAddress >= codeEnd) {
     return [violation("XS-ENC-PROBE", `入口地址 ${privateBundle.entrypointAddressHex} 不在私有代码区`, "/entrypointAddressHex")];
   }
+  // 诊断路径必须锚定区域在 initialState.memoryRegions 全数组中的真实下标
+  // (过滤后的 code 数组下标在代码区非首位时指错区域)。
+  const codeIndex = privateBundle.initialState.memoryRegions.findIndex(
+    (region) => region === codeRegion,
+  );
+  const codeContentPath = `/initialState/memoryRegions/${codeIndex}/contentHex`;
   const offset = Number(startAddress - codeStart);
   let cursor = offset;
   let instructionCount = 0;
@@ -283,7 +303,7 @@ export function checkEncodingProbe(
     const byteHex = codeRegion.contentHex.slice(cursor * 2, cursor * 2 + 2);
     const entry = byToken.get(Number.parseInt(byteHex, 16));
     if (entry === undefined) {
-      violations.push(violation("XS-ENC-PROBE", `代码区地址 ${cursor} 的 token ${byteHex} 未在 encodingTable 声明`, `/initialState/memoryRegions/${code.indexOf(codeRegion)}/contentHex`));
+      violations.push(violation("XS-ENC-PROBE", `代码区地址 ${cursor} 的 token ${byteHex} 未在 encodingTable 声明`, codeContentPath));
       break;
     }
     const inlineBytes = (entry.operands ?? []).reduce((total, operand) => {
@@ -293,7 +313,7 @@ export function checkEncodingProbe(
       return total;
     }, 0);
     if (cursor + 1 + inlineBytes > codeRegion.byteLength) {
-      violations.push(violation("XS-ENC-PROBE", `入口探测到 ${entry.op} 时操作数字节越出代码区末尾`, `/initialState/memoryRegions/${code.indexOf(codeRegion)}/contentHex`));
+      violations.push(violation("XS-ENC-PROBE", `入口探测到 ${entry.op} 时操作数字节越出代码区末尾`, codeContentPath));
       break;
     }
     if (entry.op === "syscall") {
@@ -302,7 +322,7 @@ export function checkEncodingProbe(
         const value = readLittleEndian(codeRegion.contentHex, (cursor + 1), archBytes);
         const interfaceIds = new Set((privateBundle.interfaces ?? []).map((item) => item.interfaceId));
         if (value > BigInt(RESERVED_SYSCALL_BAND_MAX) && !interfaceIds.has(Number(value))) {
-          violations.push(violation("XS-ENC-PROBE", `syscall 内联派发号 ${value.toString()} 未在保留带或 interfaces 声明`, `/initialState/memoryRegions/${code.indexOf(codeRegion)}/contentHex`));
+          violations.push(violation("XS-ENC-PROBE", `syscall 内联派发号 ${value.toString()} 未在保留带或 interfaces 声明`, codeContentPath));
         }
       }
     }
