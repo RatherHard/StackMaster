@@ -25,6 +25,31 @@ export interface PublicCanarySpec {
   readonly sizeBytes?: number;
 }
 
+export type EncodingOperandShape =
+  | {
+      readonly kind: "register";
+      readonly name: string;
+    }
+  | {
+      readonly kind: "immediate";
+      readonly width?: "arch";
+    }
+  | {
+      readonly kind: "memory";
+      readonly baseRegister: string;
+      readonly displacementWidth?: "arch";
+    }
+  | {
+      readonly kind: "interface";
+      readonly interfaceId: number;
+    };
+
+export interface EncodingTableEntry {
+  readonly tokenHex: string;
+  readonly op: string;
+  readonly operands?: readonly EncodingOperandShape[];
+}
+
 export interface PublicVmProfile {
   readonly registers: readonly PublicRegisterSpec[];
   readonly flagRegisterNames?: readonly string[];
@@ -33,6 +58,8 @@ export interface PublicVmProfile {
   readonly endianness: "little";
   readonly pageSizeBytes: number;
   readonly canary: PublicCanarySpec;
+  /** 表层机器码 token 字典(G5/D6);存在即选择字节权威执行模式。 */
+  readonly encodingTable?: readonly EncodingTableEntry[];
 }
 
 export interface PublicRegionSpec {

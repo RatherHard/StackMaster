@@ -63,6 +63,7 @@ export const PRIVATE_BUNDLE_FIELDS = [
   "judging",
   "stages",
   "compiledIr",
+  "entrypointAddressHex",
   "customInstructions",
   "interfaces",
   "judgingConfig",

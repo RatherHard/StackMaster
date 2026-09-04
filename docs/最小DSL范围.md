@@ -2,15 +2,15 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | v1.2 |
+| 版本 | v1.3 |
 | 日期 | 2026-09-04 |
-| 状态 | 阶段一 WP-4 交付物,指令面 / 谓词面 / 编排面词汇冻结;v1.2 按《Vm 模块设计冲突与整改方案》完成 G4 重定基 |
-| 修订 | v1.2(2026-09-04):G4——基线指令面 21 → 20 opcode(移除教学 IO `read`/`write`,新增栈帧指令 `leave`),`syscall` / `call` 开放作者接口派发,新增作者自定义指令声明面 `customInstructions[]` 与作者接口声明面 `interfaces[]`(声明式映射表,微算子 / 效果原语封闭集,直线语义,恒定步数);`dslSchemaVersion` 1 → 2、`irFormatVersion` 1 → 2;§二寄存器表述同步 G2 双命名空间保留模型;v1.1(2026-09-04):G1——字长改为题目 `vmProfile.archBits` 位宽声明(32/64),新增操作数宽度域(立即数无符号、位移有符号,按 archBits 掩蔽,6.2);G3——内存区域增补作者自定义 `custom` 类(五类扩为六类),区域大小与页大小收紧为 4KB 的倍数(VMA 页对齐,D2);v1(2026-09-03):冻结初版 |
-| 契约载体 | `@stackmaster/challenge-schema`:`schema/private-bundle.schema.json` 的 `compiledIr` / `customInstructions` / `interfaces` / `judging` / `stages` / `allowedActions`;分类检查器规则见 WP-1 清单第十二章 §12.6 |
-| 上游依据 | 计划书 6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、7.2(可扩展内容与扩展语义)、7.3(DSL 安全边界)、7.4(版本管理);`docs/develop/Vm 模块设计.md`(D4:指令集自由映射)+ `docs/develop/Vm 模块设计冲突与整改方案.md`(G1–G4 裁决与实现立场) |
+| 状态 | 阶段一 WP-4 交付物,指令面 / 谓词面 / 编排面词汇冻结;v1.3 按《Vm 模块设计冲突与整改方案》P5 批次(D6)完成字节权威执行模式定基 |
+| 修订 | v1.3(2026-09-04):G5/P5——三层指令结构(执行语义 / 表层机器码 / 汇编语义显示)与**字节权威执行模式**定基(§三.4 新章):公开包 `vmProfile.encodingTable`(token ↔ 具体指令字典,ISA 公开)+ 私有包 `entrypointAddressHex`;`compiledIr` 转条件字段,双程序形态恰一(XS-PROG-MODE);代码区 W^X(XS-CODE-WRX);取指译码缓存执行模型(D4.4);微决策 D4.4–D4.7 定稿;v1.2(2026-09-04):G4——基线指令面 21 → 20 opcode(移除教学 IO `read`/`write`,新增栈帧指令 `leave`),`syscall` / `call` 开放作者接口派发,新增作者自定义指令声明面 `customInstructions[]` 与作者接口声明面 `interfaces[]`(声明式映射表,微算子 / 效果原语封闭集,直线语义,恒定步数);`dslSchemaVersion` 1 → 2、`irFormatVersion` 1 → 2;§二寄存器表述同步 G2 双命名空间保留模型;v1.1(2026-09-04):G1——字长改为题目 `vmProfile.archBits` 位宽声明(32/64),新增操作数宽度域(立即数无符号、位移有符号,按 archBits 掩蔽,6.2);G3——内存区域增补作者自定义 `custom` 类(五类扩为六类),区域大小与页大小收紧为 4KB 的倍数(VMA 页对齐,D2);v1(2026-09-03):冻结初版 |
+| 契约载体 | `@stackmaster/challenge-schema`:公开包 `schema/public-descriptor.schema.json` 的 `vmProfile.encodingTable`;`schema/private-bundle.schema.json` 的 `compiledIr`(条件字段)/ `entrypointAddressHex` / `customInstructions` / `interfaces` / `judging` / `stages` / `allowedActions`;分类检查器规则见 WP-1 清单第十二章 §12.6 |
+| 上游依据 | 计划书 6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、7.2(可扩展内容与扩展语义)、7.3(DSL 安全边界)、7.4(版本管理);`docs/develop/Vm 模块设计.md`(D4:指令集自由映射)+ `docs/develop/Vm 模块设计冲突与整改方案.md`(G1–G4、G5/D6 裁决与实现立场) |
 | 效力范围 | 阶段二 `challenge-compiler` 与 vm-engine 的指令实现、题目包校验与判题条件求值;与计划书冲突时以计划书为准 |
 
-**冻结声明**:本文冻结的是 DSL 的**词汇上限**——指令面封闭 20 基线 opcode + 微算子封闭集 v1 + 效果原语封闭集 v1、谓词面封闭 7 内置谓词 + 九项表达式白名单、编排面封闭状态机六要素。任何扩展(新增 opcode、微算子、效果原语、谓词、副作用类型)必须先走 WP-1 §1.3 契约变更流程并递增对应版本字段,再落 Schema 与 fixture。
+**冻结声明**:本文冻结的是 DSL 的**词汇上限**——指令面封闭 20 基线 opcode + 微算子封闭集 v1 + 效果原语封闭集 v1、谓词面封闭 7 内置谓词 + 九项表达式白名单、编排面封闭状态机六要素、表层机器码面封闭 token 字典(≤64,§三.4)。任何扩展(新增 opcode、微算子、效果原语、谓词、副作用类型)必须先走 WP-1 §1.3 契约变更流程并递增对应版本字段,再落 Schema 与 fixture。
 
 ---
 
@@ -23,6 +23,15 @@
 | 指令面 | 20 基线 opcode + 微算子封闭集 v1(§三) | 私有包 `compiledIr.instructions[].op` + `customInstructions[]` |
 | 谓词面 | 九项表达式白名单(§四)+ 7 内置谓词 | 私有包 `judging` / `stages[].preconditions` 等的条件结构 |
 | 编排面 | 状态机六要素 + 循环预算(§七) | 私有包 `stages[]` |
+
+**双程序形态**(G5/D6,v1.3):题目以**恰一**形态声明可执行程序——
+
+| 形态 | 公开包声明 | 私有包声明 | 执行模型 |
+|---|---|---|---|
+| **IR 模式**(默认,经编译器) | `vmProfile`(无 `encodingTable`) | `compiledIr`(必填形态) | 引擎直接解释 IR 指令序列(§八);无表层机器码,内存里的字节只是数据 |
+| **字节模式**(表层机器码) | `vmProfile.encodingTable`(token 字典,§三.4) | `entrypointAddressHex`(必填),`compiledIr` 省略 | 代码区 `contentHex` 即可执行空间,取指译码后执行(§三.4) |
+
+两形态互斥由检查器 `XS-PROG-MODE` 强制(双给 / 双缺均拒);执行语义层(20 opcode ∪ 自定义助记符)对两形态完全同一——字节模式只是给同一语义层换了**取指方式**,不引入第二套指令语义。
 
 扩展语义采用计划书 7.2 原文口径:**"扩展"仅指选择固定 Runtime 中经过审计的内置 opcode、predicate 和操作 ID,并配置其受 Schema 约束的参数**;题目包不得动态注册处理函数、加载模块或注入新的执行代码。
 
@@ -121,6 +130,78 @@
 - **预算**:接口效果求值计入动作 / 谓词预算;每接口步数 = 效果原语定步数之和,恒定(T-SC2 同断言);
 - **侧信道**:效果是否可见遵守 I-2 / I-3 / I-9;`displayText` 属 I-10 静态模板;接口的存在性对玩家可见面 = 公开包显式声明(作者选择公开或隐藏接口清单——v1 Schema 不设公开声明位,阶段二按教学需要增补;隐藏接口的存在性本身不得从任何公开通道推断,由 T-SC1 探针变体覆盖)。
 
+### 三.4 表层机器码与字节权威执行模式(G5/D6,v1.3)
+
+G5 裁决(D6):「指令作用 ↔ 机器码表现」的映射自由度落为**三层结构**——
+
+```text
+层 1  执行语义   20 基线 opcode ∪ 大写自定义助记符(§三.1/三.2;封闭集,引擎解释的权威)
+层 2  表层机器码  token 字典(公开包 encodingTable;出题人自由设定每个字节值 ↔ 具体指令)
+层 3  汇编显示   displayText / 助记符文本(§三.2/三.3 已有面;currentInstruction 展示)
+```
+
+层 2 → 层 1 的方向是**执行方向**(取指译码),层 1 → 层 3 的方向是**展示方向**(displayText);两层映射都是声明式数据表,层 2 的 `op` 指向层 1 的封闭集,不存在可注入逻辑的语法位置——F-1–F-5 全部保持。
+
+#### 三.4.1 编码表(`vmProfile.encodingTable`,公开)
+
+公开包 `vmProfile.encodingTable` ≤ 64 条(D4.7),每条 = `{tokenHex, op, operands?}`:
+
+| 字段 | 形态 | 约束 |
+|---|---|---|
+| `tokenHex` | `0x00`–`0xFF`(定宽 1 字节) | 表内唯一(D4.7:token 定宽,变长 token 挂 T2/T3) |
+| `op` | 双形态(基线小写 opcode ∪ 大写自定义助记符) | 与 IR `op` 同词汇(§三.1 双形态);自定义助记符必须在私有包 `customInstructions[]` 声明(XS-ENC-TOKEN);不得与已废止的 `read`/`write` 相关(基线集已无此二值) |
+| `operands` | 类型化操作数形态声明(≤ 4,与 IR 槽同四种 kind) | 声明该 token **内联操作数的形态与宽度**;基线无操作数指令(如 `ret` / `leave`)省略 |
+
+**ISA 公开立场**:编码表在**公开**包——教学可解性要求 ISA 公开(真实 pwn 中二进制与 ISA 都是选手可见的,谜题在 gadget 构造不在解码);私有包**不复制**编码表(单一来源,沿 `archBits` 公开先例),私有面只补执行所需的最小私有信息(`entrypointAddressHex`);自定义指令的**语义**(微算子组合)仍只存在于私有包——选手看到的是"字节 ↔ 助记符 ↔ 展示文本",不是语义。
+
+**操作数内联**(D4.7):寄存器烘焙进 token(同一助记符不同寄存器 = 不同 token);立即数 / 位移**内联在指令字节流中**,定宽 `archBits/8` 字节、小端(端序随 `vmProfile.endianness`)。因此指令**变长**,表条目以操作数形态声明编码格式:`{kind:"register", name}`(烘焙,无内联字节)、`{kind:"immediate", width:"arch"}`、`{kind:"memory", baseRegister, displacementWidth?:"arch"}`、`{kind:"interface", interfaceId}`(烘焙)。
+
+#### 三.4.2 字节权威:代码空间以表层机器码为基准(D4.4)
+
+字节模式下,代码区 `initialState.memoryRegions[].contentHex` **就是**可执行代码空间;执行模型:
+
+1. **取指**:从 `RIP` 所指字节读 1 字节 token,查编码表;
+2. **译码**:表条目 + 内联操作数字节 → 层 1 指令(opcode + 操作数)。译码是**纯函数** `(表, 字节, 地址) → 指令`,无时钟、无随机、无 IO(6.3 纪律天然满足);
+3. **执行**:按层 1 语义(§三.1/三.2)求值,写回寄存器 / 内存 / 标志。
+
+**字节权威的含义**:地址 = 代码区内的**字节偏移**——不维护第二套指令索引,不存在「表层机器码偏移 ↔ opcode 索引」对不齐的问题(出题人插一个字节、改一个立即数宽度,地址语义自动正确);标签在**编译期**消解为字节偏移(目标地址内联进跳转 / `call` 立即数),私有包不存在 `instructionIndex` 形态,入口即 `entrypointAddressHex` 字节地址。
+
+**取指译码缓存**(D4.4):译码结果**(地址 → 指令)按代码区缓存**——缓存是性能优化**不是状态**:W^X(三.4.3)保证代码区内容在会话内不变,缓存永不失效;COW 快照只保护寄存器 / 内存状态,缓存可按代码区内容哈希重建;回放确定性不受影响(译码纯函数,缓存命中与否只影响耗时)。
+
+**指令中间 gadget**:取指从**任意 RIP 地址**开始,RIP 可以落在任何 token 边界——`ret` 到一个栈上地址、跳到指令第二个字节,都是合法执行路径(v1 即支持,ROP 教学 requires);不可达字节不参与校验(见探测译码)。
+
+#### 三.4.3 代码区约束:纯指令流 + W^X
+
+| 约束 | 内容 | 机检 |
+|---|---|---|
+| **纯指令流约定** | 字节模式代码区 `contentHex` 从入口到区域尾由**已声明 token + 内联操作数 + 填充 token** 连续构成;数据(字符串、表、常量)放 `global` / `key` 等其他区域(沿 `.text` / `.rodata` 分离先例) | `XS-ENC-PROBE` 探测译码 |
+| **W^X**(D4.5) | 字节模式代码区权限不得含 `w`(代码不可写);自修改代码挂 T2/T3(与 DEP/NX 教学叙事一致);写代码区 → `memory_fault`(与写只读区同路径) | `XS-CODE-WRX` |
+| **入口必填** | `entrypointAddressHex` 必填,必须落在某代码区内(允许不在区域首字节——入口即 gadget 场景) | `XS-ENC-PROBE` |
+| **填充 token 化** | 尾部填充不能用任意字节,必须落编码表(自定义 NOP 可经 `bit_mask` `and` `dst=src` 表达,或直接用表内无副作用指令填充) | `XS-ENC-PROBE` |
+
+**为什么不全量静态译码**:代码区字节流的线性扫描**图灵歧义**——数据内嵌在代码区时无法区分「操作数字节」与「数据字节」(x86 反汇编同源问题);v1 以「纯指令流约定 + 入口探测」规避,通用反汇编挂 T2/T3。
+
+#### 三.4.4 探测译码校验(`XS-ENC-PROBE`)
+
+发布管线以**入口线性探测译码**验证字节模式代码区的可执行性,规则作用于**译码产物**:
+
+1. 自 `entrypointAddressHex` 起线性取指译码,直至**区域尾**或 **4096 条上限**(`MAX_IR_INSTRUCTIONS`,与 IR 模式同护栏);
+2. 每 token 必须落编码表(未知 token → 违规);指令不得越过区域尾截断(截断 → 违规);
+3. 操作数**宽度自证**(D4.6):内联操作数恰 `archBits/8` 字节,任意位型都在掩蔽域内——`XS-ARCH-WIDTH` 在探测中结构性不触发;仅**值型检查**适用:`syscall` 内联立即数须落保留带或已声明接口(复用 `XS-SYSCALL-DECL`)、`interface` 引用须落 `interfaces[]`(复用 `XS-IFACE-REF`)、自定义助记符引用可解析(复用 `XS-CUSTOM-REF`)、`leave` 要求 `RBP`(复用 `XS-IR-LEAVE`);
+4. 探测覆盖 = 入口可达直线流;**不可达字节不判罚**——运行时取指遇到未知 token / 截断指令 → `invalid_rip` 兜底(与 `ret` 弹出不可执行值同规则)。
+
+#### 三.4.5 与 IR 模式的能力边界
+
+| 能力 | IR 模式 | 字节模式 |
+|---|---|---|
+| 标签 / 跳转 | `labels[]` 编译期索引 | 目标地址内联立即数(编译期消解,无标签形态) |
+| 自定义指令 | 助记符直接引用 | 经 token 映射(助记符仍需 `customInstructions[]` 声明) |
+| 代码即数据 | 可任意混合(字节只是数据) | 代码区纯指令流;数据入其他区域 |
+| 自修改代码 | IR 无写码面,问题不存在 | W^X 禁止,挂 T2/T3 |
+| gadget 教学 | 不适用(无机器码形态) | **一等公民**(任意 token 边界取指) |
+
+两形态共享:层 1 语义、谓词面、编排面、资源预算(4096 条 / 步数预算)、判题链路;`XS-PROG-MODE` 保证恰一,阶段二编译器(challenge-compiler)按目标形态产出对应私有包字段。
+
 ## 四、表达式与谓词词汇上限(7.3 九项白名单)
 
 计划书 7.3:"表达式只支持常量、只读寄存器引用、命名内存区域查询、有界整数和位运算、比较、布尔组合、固定长度切片、有界字节匹配及枚举值比较。" 九项逐一落位:
@@ -177,11 +258,12 @@
 
 ## 八、IR 信封与编译边界
 
-- `compiledIr`(私有包必填字段):`{irFormatVersion: const 2, entrypointIndex?, instructions: 1..4096, labels: 0..512 × {labelId, instructionIndex}}`;指令 = **基线 20 opcode 枚举 ∪ 大写自定义助记符**(双形态,结构性不相交)+ 类型化操作数槽(四种 kind:`register` / `immediate` / `memory` / `interface`,结构安全);
-- **WP-4 检查器只做结构性校验**:op ∈ 基线枚举或已声明助记符(XS-CUSTOM-REF)、syscall 派发号落在保留带或已声明接口(XS-SYSCALL-DECL)、interface 操作数与效果引用可解析(XS-IFACE-REF)、`leave` 要求 `RBP` 在初始寄存器集(XS-IR-LEAVE)、标签引用可解析且索引界内(XS-IR-LABEL)、谓词引用可解析(XS-PRED-REFS)、声明面文本 E-4/E-6 扫描(XS-CUSTOM-DISPLAY);
-- **归 `challenge-compiler`(阶段二)**:逐 opcode 操作数合法性与数量、CFG 可达性与终止性、循环回边与预算的一致性——编译器产出的 IR 才进入私有包,Schema 封闭枚举防的是绕过编译器的手写包;
-- IR 是版本化**序列化格式**,不是共享代码(CLAUDE.md 跨语言规则):JSON Schema 是 TS 与 Rust 的共同权威,Rust 侧以 serde + schemars 消费;
-- 完整 IR 与自定义指令 / 接口映射表只存在于私有判题包(7.3 / ZR-B3);浏览器展示的伪指令文本由服务端从展示数据单独生成(D5,`displayText` 即其权威模板),IR 永不下发。
+- `compiledIr`(私有包**条件字段**,G5/P5):IR 模式下必填,字节模式下**必须省略**(与公开包 `encodingTable` 恰一,XS-PROG-MODE——双程序形态不存在双真源);`{irFormatVersion: const 2, entrypointIndex?, instructions: 1..4096, labels: 0..512 × {labelId, instructionIndex}}`;指令 = **基线 20 opcode 枚举 ∪ 大写自定义助记符**(双形态,结构性不相交)+ 类型化操作数槽(四种 kind:`register` / `immediate` / `memory` / `interface`,结构安全);
+- `entrypointAddressHex`(私有包**条件字段**):字节模式必填(入口字节地址,须落某代码区,XS-ENC-PROBE);IR 模式下入口由 `entrypointIndex` 承载,二者各属一个形态,永不同时出现;
+- **WP-4 检查器只做结构性校验**:op ∈ 基线枚举或已声明助记符(XS-CUSTOM-REF)、syscall 派发号落在保留带或已声明接口(XS-SYSCALL-DECL)、interface 操作数与效果引用可解析(XS-IFACE-REF)、`leave` 要求 `RBP` 在初始寄存器集(XS-IR-LEAVE)、标签引用可解析且索引界内(XS-IR-LABEL)、谓词引用可解析(XS-PRED-REFS)、声明面文本 E-4/E-6 扫描(XS-CUSTOM-DISPLAY);字节模式新增:双程序形态恰一(XS-PROG-MODE)、代码区 W^X(XS-CODE-WRX)、编码表自检(XS-ENC-TOKEN)、入口探测译码(XS-ENC-PROBE);
+- **归 `challenge-compiler`(阶段二)**:逐 opcode 操作数合法性与数量、CFG 可达性与终止性、循环回边与预算的一致性——编译器产出的 IR 才进入私有包,Schema 封闭枚举防的是绕过编译器的手写包;字节模式同理:token 流(标签编译期消解为内联地址)是编译器产物,手写字节流经探测译码兜底;
+- IR 与编码表都是版本化**序列化格式**,不是共享代码(CLAUDE.md 跨语言规则):JSON Schema 是 TS 与 Rust 的共同权威,Rust 侧以 serde + schemars 消费;
+- 完整 IR、编码表执行语义侧(自定义指令 / 接口映射表)只存在于私有判题包(7.3 / ZR-B3;编码表本身在公开包,ISA 公开立场见 §三.4.1);浏览器展示的伪指令文本由服务端从展示数据单独生成(D5,`displayText` 即其权威模板;字节模式下服务端从译码产物生成),IR 永不下发。
 
 ## 九、机检与测试锚点
 
@@ -190,8 +272,12 @@
 | 20 基线 opcode 白名单(§三.1) | `compiledIr.instructions[].op` 基线枚举(∪ 助记符模式);跨包一致性测试断言枚举面与本文一致 |
 | 微算子 / 效果原语封闭集(§三.2 / §三.3) | `customInstructions[].semantics[].op` / `interfaces[].effects[].effect` 封闭枚举;表容量 ≤ 16;直线语义结构性成立 |
 | 自定义助记符与接口引用(§三) | XS-CUSTOM-DEF / XS-CUSTOM-REF / XS-SYSCALL-DECL / XS-IFACE-REF / XS-IR-LEAVE;displayText E-4/E-6 扫描(XS-CUSTOM-DISPLAY) |
+| 双程序形态恰一(§一/§三.4) | XS-PROG-MODE(`encodingTable` ↔ `compiledIr` 恰一;`entrypointAddressHex` 仅字节模式) |
+| 代码区 W^X(§三.4.3) | XS-CODE-WRX(字节模式代码区权限不含 `w`) |
+| 编码表词汇(§三.4.1) | Schema:≤ 64 条、tokenHex 定宽 1 字节、op 双形态、操作数形态封闭;XS-ENC-TOKEN(token 唯一、助记符 / 寄存器 / 接口可解析、syscall 形态、自定义助记符空操作数、`leave` 无操作数) |
+| 探测译码(§三.4.4) | XS-ENC-PROBE(入口存在且落代码区、线性译码 ≤ 4096 条、token 已知、无截断、syscall / interface 值型复检) |
 | 九项表达式白名单 + 7 谓词(§四) | `judging` 条件结构仅含封闭谓词枚举;三级深度为静态 Schema 属性(XS-NESTING) |
-| F-1–F-5(§五) | Schema 结构性不可表达 + ZR-B8-CAP-SCAN 实例深扫描 + XS-1 Schema 元检查 |
+| F-1–F-5(§五) | Schema 结构性不可表达 + ZR-B8-CAP-SCAN 实例深扫描 + XS-1 Schema 元检查;编码表是指向封闭集的数据(F-1/F-3 不变) |
 | 状态机六要素 + 循环预算(§七) | XS-STAGE-REACH / XS-STAGE-BUDGET |
 | 四类版本(7.4) | 公开包 3 版本字段 + 私有包 `dslSchemaVersion`(v2)/ `vmEngineVersion` / `verdictRuleVersion`(WP-1 §12.3) |
 

@@ -18,6 +18,12 @@
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
 import type { PrivateChallengeBundle } from "../private-types.js";
 import { checkArchWidth } from "./arch-rules.js";
+import {
+  checkCodeRegionWritability,
+  checkEncodingProbe,
+  checkEncodingTable,
+  checkProgramMode,
+} from "./encoding-rules.js";
 import { checkPrivateBundleRules } from "./private-rules.js";
 import {
   checkCanaryCorrespondence,
@@ -64,6 +70,10 @@ export function checkPairRules(
     ...checkCanaryCorrespondence(publicDescriptor, privateBundle),
     ...checkSeedDeclarations(publicDescriptor, privateBundle),
     ...checkArchWidth(publicDescriptor, privateBundle),
+    ...checkProgramMode(publicDescriptor, privateBundle),
+    ...checkCodeRegionWritability(publicDescriptor, privateBundle),
+    ...checkEncodingTable(publicDescriptor, privateBundle),
+    ...checkEncodingProbe(publicDescriptor, privateBundle),
   ];
 }
 

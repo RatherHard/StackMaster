@@ -72,7 +72,7 @@ export function checkArchWidth(
     }
   }
 
-  privateBundle.compiledIr.instructions.forEach((instruction, instructionIndex) => {
+  privateBundle.compiledIr?.instructions.forEach((instruction, instructionIndex) => {
     (instruction.operands ?? []).forEach((operand, operandIndex) => {
       if (operand.kind === "immediate") {
         const value = BigInt(operand.valueHex);

@@ -43,6 +43,14 @@ export function buildPrivateBundle(
   return bundle;
 }
 
+function atCodeEntrypoint(publicDescriptor: PublicChallengeDescriptor): string {
+  const codeRegion = publicDescriptor.memoryLayout.regions.find((region) => region.kind === "code");
+  if (codeRegion === undefined) {
+    throw new Error("字节模式 fixture 缺少代码区域");
+  }
+  return codeRegion.startAddressHex;
+}
+
 function buildBaseBundle(publicDescriptor: PublicChallengeDescriptor): PrivateChallengeBundle {
   const visibleRegionById = new Map(
     publicDescriptor.initialProjection.visibleRegions.map((region) => [region.regionId, region]),
@@ -130,6 +138,8 @@ function buildBaseBundle(publicDescriptor: PublicChallengeDescriptor): PrivateCh
     ? [{ not: { all: [{ predicate: { type: "stack_canary_intact" } }] } }]
     : undefined;
 
+  const codeMode = publicDescriptor.vmProfile.encodingTable !== undefined;
+
   return {
     schemaVersion: publicDescriptor.schemaVersion,
     challengeId: publicDescriptor.challengeId,
@@ -167,22 +177,26 @@ function buildBaseBundle(publicDescriptor: PublicChallengeDescriptor): PrivateCh
         },
       ],
     },
-    compiledIr: {
-      irFormatVersion: 2,
-      entrypointIndex: 0,
-      instructions: [
-        { op: "push", operands: [{ kind: "register", name: "RBP" }] },
-        {
-          op: "mov",
-          operands: [
-            { kind: "register", name: "RBP" },
-            { kind: "register", name: "RSP" },
-          ],
-        },
-        { op: "ret", operands: [] },
-      ],
-      labels: [{ labelId: "entry", instructionIndex: 0 }],
-    },
+    ...(codeMode
+      ? { entrypointAddressHex: atCodeEntrypoint(publicDescriptor) }
+      : {
+          compiledIr: {
+            irFormatVersion: 2,
+            entrypointIndex: 0,
+            instructions: [
+              { op: "push", operands: [{ kind: "register", name: "RBP" }] },
+              {
+                op: "mov",
+                operands: [
+                  { kind: "register", name: "RBP" },
+                  { kind: "register", name: "RSP" },
+                ],
+              },
+              { op: "ret", operands: [] },
+            ],
+            labels: [{ labelId: "entry", instructionIndex: 0 }],
+          },
+        }),
     judgingConfig: {
       verdictRuleVersion: "1.0.0",
       maxPredicateEvalSteps: 10000,

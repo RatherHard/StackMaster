@@ -35,6 +35,43 @@ function loadPublicDescriptor(): PublicChallengeDescriptor {
   return result.value;
 }
 
+function loadByteDescriptor(): PublicChallengeDescriptor {
+  const descriptor = JSON.parse(basicText) as Record<string, unknown>;
+  const profile = descriptor.vmProfile as Record<string, unknown>;
+  profile.encodingTable = [
+    { tokenHex: "0x00", op: "ret", operands: [] },
+    { tokenHex: "0x55", op: "push", operands: [{ kind: "register", name: "RBP" }] },
+    { tokenHex: "0xc3", op: "ret", operands: [] },
+  ];
+  const projection = descriptor.initialProjection as {
+    visibleRegions: Array<Record<string, unknown>>;
+  };
+  const codeProjection = projection.visibleRegions.find((region) => region.regionId === "code");
+  if (codeProjection === undefined) {
+    throw new Error("字节模式 fixture 缺少公开代码投影");
+  }
+  codeProjection.bytesHex = "55c3c3c3c3c3c3c3c3c3c3c3c3c3c3";
+  const result = validatePublicDescriptor(descriptor);
+  if (!result.ok) {
+    throw new Error(`字节模式 fixture 应通过校验:${JSON.stringify(result.violations, null, 2)}`);
+  }
+  return result.value;
+}
+
+function checkBytePairWith(editPublic?: PairEdit, editPrivate?: PairEdit): CheckerResult {
+  const base = loadByteDescriptor();
+  const publicClone = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+  editPublic?.(publicClone);
+  const privateClone = JSON.parse(
+    JSON.stringify(buildPrivateBundle(base)),
+  ) as Record<string, unknown>;
+  editPrivate?.(privateClone);
+  return checkChallengePair(
+    publicClone as unknown as PublicChallengeDescriptor,
+    privateClone as unknown as PrivateChallengeBundle,
+  );
+}
+
 type PairEdit = (clone: Record<string, unknown>) => void;
 
 /** 构造(可定向破坏的)双包输入并执行联合检查。 */
@@ -563,6 +600,194 @@ describe("字段分类检查器:G4/D4 自定义指令与作者接口规则红灯
   });
 });
 
+describe("字段分类检查器:P5 字节权威执行规则", () => {
+  it("字节模式绿灯:公开 token 表与私有字节代码从入口线性译码时零违规", () => {
+    const base = loadByteDescriptor();
+    const result = checkChallengePair(base, buildPrivateBundle(base));
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("XS-IR-LEAVE:字节模式 leave 出现在无 RBP 的寄存器集被拒绝", () => {
+    const result = checkBytePairWith(
+      (pub) => {
+        const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+        at(table, 1).op = "leave";
+      },
+      (priv) => {
+        const registers = (priv.initialState as { registers: Record<string, string> }).registers;
+        delete registers["RBP"];
+      },
+    );
+
+    const violation = expectRule(result, "XS-IR-LEAVE");
+    expect(violation.path).toBe("/vmProfile/encodingTable/1/op");
+  });
+
+  it("XS-PROG-MODE:字节模式同时提供 compiledIr 被拒绝", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      priv.compiledIr = { irFormatVersion: 2, instructions: [], labels: [] };
+    });
+
+    const violation = expectRule(result, "XS-PROG-MODE");
+    expect(violation.path).toBe("/compiledIr");
+  });
+
+  it("XS-PROG-MODE:字节模式缺入口地址被拒绝", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      delete priv.entrypointAddressHex;
+    });
+
+    const violation = expectRule(result, "XS-PROG-MODE");
+    expect(violation.path).toBe("/entrypointAddressHex");
+  });
+
+  it("XS-PROG-MODE:IR 模式缺 compiledIr 被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      delete priv.compiledIr;
+    });
+
+    const violation = expectRule(result, "XS-PROG-MODE");
+    expect(violation.path).toBe("/compiledIr");
+  });
+
+  it("XS-PROG-MODE:IR 模式携带字节入口被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      priv.entrypointAddressHex = "0x400000";
+    });
+
+    const violation = expectRule(result, "XS-PROG-MODE");
+    expect(violation.path).toBe("/entrypointAddressHex");
+  });
+
+  it("XS-CODE-WRX:字节模式公开代码区含写权限被拒绝", () => {
+    const result = checkBytePairWith((pub) => {
+      const regions = (pub.memoryLayout as { regions: Array<Record<string, unknown>> }).regions;
+      at(regions, 0).permissions = "rwx";
+    });
+
+    const violation = expectRule(result, "XS-CODE-WRX");
+    expect(violation.path).toBe("/memoryLayout/regions/0/permissions");
+  });
+
+  it("XS-CODE-WRX:字节模式私有代码区含写权限被拒绝", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      const regions = (priv.initialState as { memoryRegions: Array<Record<string, unknown>> })
+        .memoryRegions;
+      at(regions, 0).permissions = "rwx";
+    });
+
+    const violation = expectRule(result, "XS-CODE-WRX");
+    expect(violation.path).toBe("/initialState/memoryRegions/0/permissions");
+  });
+
+  it("XS-ENC-TOKEN:重复 token 被拒绝", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      table.push({ tokenHex: "0x55", op: "ret", operands: [] });
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.path).toBe("/vmProfile/encodingTable/3/tokenHex");
+  });
+
+  it("XS-ENC-TOKEN:未声明自定义助记符被拒绝", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).op = "LOAD_TWICE";
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.path).toBe("/vmProfile/encodingTable/1/op");
+  });
+
+  it("XS-ENC-TOKEN:syscall 未声明单一立即数被拒绝", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      at(table, 1).op = "syscall";
+      at(table, 1).operands = [];
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.message).toContain("immediate");
+  });
+
+  it("XS-ENC-TOKEN:编码条目引用未声明寄存器被拒绝", () => {
+    const result = checkBytePairWith((pub) => {
+      const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+      const operands = at(table, 1).operands as Array<Record<string, unknown>>;
+      at(operands, 0).name = "R_GHOST";
+    });
+
+    const violation = expectRule(result, "XS-ENC-TOKEN");
+    expect(violation.path).toBe("/vmProfile/encodingTable/1/operands/0/name");
+  });
+
+  it("XS-ENC-PROBE:入口不在代码区被拒绝", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      priv.entrypointAddressHex = "0x7ffff000";
+    });
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.path).toBe("/entrypointAddressHex");
+  });
+
+  it("XS-ENC-PROBE:入口可达位置出现未知 token 被拒绝", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      const regions = (priv.initialState as { memoryRegions: Array<{ contentHex: string }> })
+        .memoryRegions;
+      const code = at(regions, 0);
+      code.contentHex = `ff${code.contentHex.slice(2)}`;
+    });
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("未在 encodingTable 声明");
+  });
+
+  it("XS-ENC-PROBE:内联立即数越出代码区末尾被拒绝", () => {
+    const result = checkBytePairWith(
+      (pub) => {
+        const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+        at(table, 0).op = "syscall";
+        at(table, 0).operands = [{ kind: "immediate", width: "arch" }];
+      },
+      (priv) => {
+        priv.entrypointAddressHex = "0x400fff";
+      },
+    );
+
+    const violation = expectRule(result, "XS-ENC-PROBE");
+    expect(violation.message).toContain("越出代码区末尾");
+  });
+
+  it("XS-ENC-PROBE:syscall 按字节偏移读取小端派发号", () => {
+    const result = checkBytePairWith(
+      (pub) => {
+        const table = (pub.vmProfile as { encodingTable: Array<Record<string, unknown>> }).encodingTable;
+        at(table, 0).op = "syscall";
+        at(table, 0).operands = [{ kind: "immediate", width: "arch" }];
+      },
+      (priv) => {
+        const regions = (priv.initialState as { memoryRegions: Array<Record<string, unknown>> }).memoryRegions;
+        const code = at(regions, 0) as { contentHex: string };
+        code.contentHex = `00${"0200000000000000"}${"c3".repeat(4087)}`;
+      },
+    );
+
+    const violation = result.violations.find((candidate) => candidate.ruleId === "XS-ENC-PROBE");
+    expect(violation).toBeUndefined();
+  });
+
+  it("XS-ENC-PROBE:非首字节 gadget 入口可被独立线性译码", () => {
+    const result = checkBytePairWith(undefined, (priv) => {
+      priv.entrypointAddressHex = "0x400001";
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+});
 describe("字段分类检查器:跨包一致性规则红灯样例", () => {
   it("XS-ID-CORR:challengeContentVersion 两包不同值被拒绝", () => {
     const result = checkPairWith(undefined, (priv) => {

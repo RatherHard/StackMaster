@@ -338,7 +338,10 @@ export interface PrivateChallengeBundle {
   readonly privateObjects: readonly PrivateObjectRecord[];
   readonly judging: PrivateJudging;
   readonly stages?: readonly Stage[];
-  readonly compiledIr: CompiledIr;
+  /** IR 模式程序信封;字节模式必须省略(G5/D6,XS-PROG-MODE)。 */
+  readonly compiledIr?: CompiledIr;
+  /** 字节模式入口地址;IR 模式必须省略(G5/D6,XS-PROG-MODE)。 */
+  readonly entrypointAddressHex?: string;
   readonly customInstructions?: readonly CustomInstruction[];
   readonly interfaces?: readonly AuthorInterface[];
   readonly judgingConfig: JudgingConfig;

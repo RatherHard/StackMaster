@@ -19,9 +19,9 @@
     "secrets",
     "privateObjects",
     "judging",
-    "compiledIr",
     "judgingConfig"
   ],
+  "$comment": "compiledIr 与 entrypointAddressHex 均为条件字段(G5/P5/D6):公开包声明 encodingTable(字节模式)⇒ entrypointAddressHex 必填、compiledIr 必须省略;IR 模式 ⇒ compiledIr 必填、entrypointAddressHex 必须省略。双程序形态恰一由 XS-PROG-MODE 跨包强制(Schema 层不可跨包表达),此处仅放行两种合法形态。",
   "properties": {
     "schemaVersion": {
       "const": 1,
@@ -494,6 +494,10 @@
           "description": "labelId 唯一且引用可解析由 XS-IR-LABEL 检查(Schema 无唯一约束表达)。"
         }
       }
+    },
+    "entrypointAddressHex": {
+      "$ref": "#/$defs/hexValue64",
+      "description": "字节模式入口地址(G5/P5/D6):仅在公开包存在 vmProfile.encodingTable 时允许且必填;表层机器码代码空间是唯一权威,地址为代码区字节地址,允许非首字节(gadget 入口);IR 模式不得出现。跨包形态由 XS-PROG-MODE / XS-ENC-PROBE 强制。"
     },
     "customInstructions": {
       "type": "array",

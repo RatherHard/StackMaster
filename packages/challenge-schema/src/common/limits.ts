@@ -46,6 +46,9 @@ export const MAX_IR_LABELS = 512;
 /** 每指令操作数槽上限。 */
 export const MAX_OPERANDS_PER_INSTRUCTION = 4;
 
+/** 表层机器码 token 字典条数上限(G5/D6 资源护栏;docs/最小DSL范围.md §三.4)。 */
+export const MAX_ENCODING_TABLE_ENTRIES = 64;
+
 /** 作者自定义指令条数上限(G4/D4 声明面资源护栏)。 */
 export const MAX_CUSTOM_INSTRUCTIONS = 16;
 

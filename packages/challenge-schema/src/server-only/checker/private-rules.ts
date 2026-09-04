@@ -210,9 +210,13 @@ export function checkPrivateMemoryBudget(
 /** XS-IR-LABEL:标签 ID 唯一;标签与入口索引必须落在指令范围内。 */
 export function checkIrLabels(bundle: PrivateChallengeBundle): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
-  const instructionCount = bundle.compiledIr.instructions.length;
+  const compiledIr = bundle.compiledIr;
+  if (compiledIr === undefined) {
+    return violations;
+  }
+  const instructionCount = compiledIr.instructions.length;
   const seen = new Map<string, number>();
-  bundle.compiledIr.labels.forEach((label, index) => {
+  compiledIr.labels.forEach((label, index) => {
     const firstIndex = seen.get(label.labelId);
     if (firstIndex === undefined) {
       seen.set(label.labelId, index);
@@ -231,7 +235,7 @@ export function checkIrLabels(bundle: PrivateChallengeBundle): CheckerViolation[
       });
     }
   });
-  const entrypoint = bundle.compiledIr.entrypointIndex;
+  const entrypoint = compiledIr.entrypointIndex;
   if (entrypoint !== undefined && (entrypoint < 0 || entrypoint >= instructionCount)) {
     violations.push({
       ruleId: "XS-IR-LABEL",
@@ -269,10 +273,14 @@ export function checkCustomInstructionDeclarations(
 /** XS-CUSTOM-REF:IR 中非基线 op 必须引用已声明的自定义指令助记符(G4/D4)。 */
 export function checkCustomInstructionRefs(bundle: PrivateChallengeBundle): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
+  const compiledIr = bundle.compiledIr;
+  if (compiledIr === undefined) {
+    return violations;
+  }
   const declared = new Set(
     (bundle.customInstructions ?? []).map((instruction) => instruction.mnemonic),
   );
-  bundle.compiledIr.instructions.forEach((instruction, index) => {
+  compiledIr.instructions.forEach((instruction, index) => {
     if (!BASELINE_OP_SET.has(instruction.op) && !declared.has(instruction.op)) {
       violations.push({
         ruleId: "XS-CUSTOM-REF",
@@ -292,8 +300,12 @@ export function checkCustomInstructionRefs(bundle: PrivateChallengeBundle): Chec
  */
 export function checkSyscallDeclarations(bundle: PrivateChallengeBundle): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
+  const compiledIr = bundle.compiledIr;
+  if (compiledIr === undefined) {
+    return violations;
+  }
   const interfaceIds = new Set((bundle.interfaces ?? []).map((entry) => entry.interfaceId));
-  bundle.compiledIr.instructions.forEach((instruction, index) => {
+  compiledIr.instructions.forEach((instruction, index) => {
     if (instruction.op !== "syscall") {
       return;
     }
@@ -326,10 +338,14 @@ export function checkSyscallDeclarations(bundle: PrivateChallengeBundle): Checke
  */
 export function checkInterfaceRefs(bundle: PrivateChallengeBundle): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
+  const compiledIr = bundle.compiledIr;
+  if (compiledIr === undefined) {
+    return violations;
+  }
   const interfaceIds = new Set((bundle.interfaces ?? []).map((entry) => entry.interfaceId));
   const fileIds = new Set(bundle.secrets.virtualFiles.map((file) => file.fileId));
   const registerNames = new Set(Object.keys(bundle.initialState.registers));
-  bundle.compiledIr.instructions.forEach((instruction, index) => {
+  compiledIr.instructions.forEach((instruction, index) => {
     (instruction.operands ?? []).forEach((operand, operandIndex) => {
       if (operand.kind === "interface" && !interfaceIds.has(operand.interfaceId)) {
         violations.push({
@@ -367,10 +383,14 @@ export function checkInterfaceRefs(bundle: PrivateChallengeBundle): CheckerViola
 /** XS-IR-LEAVE:leave 要求私有初始寄存器集含 RBP(G4:栈帧基,`RSP ← RBP` 的前提)。 */
 export function checkLeaveRequiresRbp(bundle: PrivateChallengeBundle): CheckerViolation[] {
   const violations: CheckerViolation[] = [];
+  const compiledIr = bundle.compiledIr;
+  if (compiledIr === undefined) {
+    return violations;
+  }
   if ("RBP" in bundle.initialState.registers) {
     return violations;
   }
-  bundle.compiledIr.instructions.forEach((instruction, index) => {
+  compiledIr.instructions.forEach((instruction, index) => {
     if (instruction.op === "leave") {
       violations.push({
         ruleId: "XS-IR-LEAVE",

@@ -92,6 +92,10 @@ export type DslOpcode = (typeof DSL_OPCODES)[number];
 /** 保留系统号带上限(G4/D4:syscall 立即数 ∈ [0x0000, 0x00FF] 走内置语义,当前仅 exit(I),语义不变;作者接口号带从 0x0100 起,两带结构性不相交)。 */
 export const RESERVED_SYSCALL_BAND_MAX = 0xff;
 
+/** 表层机器码操作数形态判别封闭集(G5/D6:编码表条目 operands 的 kind;与 IR 操作数槽同词汇,encoding 专有的 width 字段承载内联宽度声明)。 */
+export const ENCODING_OPERAND_KINDS = ["register", "immediate", "memory", "interface"] as const;
+export type EncodingOperandKind = (typeof ENCODING_OPERAND_KINDS)[number];
+
 /** 作者接口 interfaceId 下限(G4/D4;与保留系统号带结构性不相交)。 */
 export const INTERFACE_ID_MIN = 0x100;
 

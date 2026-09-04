@@ -43,6 +43,7 @@ import {
   MAX_HINTS,
   MAX_INTERFACES,
   MAX_IR_INSTRUCTIONS,
+  MAX_ENCODING_TABLE_ENTRIES,
   MAX_IR_LABELS,
   MAX_MEMORY_CONTAINS_BYTES,
   MAX_MEMORY_EQUALS_BYTES,
@@ -199,6 +200,7 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
       1,
     );
     expectNumberAt(privateSchema, "/properties/compiledIr/properties/instructions", "maxItems", MAX_IR_INSTRUCTIONS);
+    expectNumberAt(publicSchema, "/properties/vmProfile/properties/encodingTable", "maxItems", MAX_ENCODING_TABLE_ENTRIES);
     expectNumberAt(
       privateSchema,
       "/properties/compiledIr/properties/instructions/items/properties/operands",
@@ -300,7 +302,13 @@ describe("Schema enum ≡ vocabulary 封闭集", () => {
     expectEnumAt(privateSchema, "/$defs/sessionAction", SESSION_ACTION_TYPES);
   });
 
-  it("vmProfile.archBits enum ≡ ARCH_BITS_VALUES(G1 位宽冻结枚举,数值面)", () => {
+  it("私有 compiledIr is conditional and byte entrypoint is declared", () => {
+    const required = resolveAt(privateSchema, "/required") as string[];
+    expect(required).not.toContain("compiledIr");
+    expect(resolveAt(privateSchema, "/properties/entrypointAddressHex")).toBeDefined();
+  });
+
+  it("公开 Schema archBits 词汇锚点", () => {
     const values = resolveAt(
       publicSchema,
       "/properties/vmProfile/properties/archBits/enum",

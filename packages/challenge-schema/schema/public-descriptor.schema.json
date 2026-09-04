@@ -172,6 +172,131 @@
             }
           },
           "description": "教学目标与公开布局参数;canary 值在私有包(XS-CANARY-CORR 互证)。"
+        },
+        "encodingTable": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "description": "表层机器码 token 字典(G5/D6,P5 批次;docs/最小DSL范围.md §三.4)。本字段存在即选择字节模式:表层机器码构成的代码空间为唯一权威,执行时取指译码,与私有包 compiledIr 恰一(XS-PROG-MODE)。ISA 公开立场:解题性要求 ISA 公开(谜题在 gadget 构造不在解码),私有包不复制本字段(单一来源,沿 archBits 先例)。token 字典是指向封闭 opcode 集的声明式数据,不引入任何代码形态(F-1/F-3 保持);自定义助记符语义仍在私有包 customInstructions。表自检(token 唯一、op 与烘焙引用可解析、syscall/自定义/leave 条目形态)归 XS-ENC-TOKEN;入口探测译码归 XS-ENC-PROBE。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tokenHex", "op"],
+            "properties": {
+              "tokenHex": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{2}$",
+                "description": "定宽 1 字节 token(D4.7:变长 token 挂 T2/T3;表内唯一由 XS-ENC-TOKEN 强制)。"
+              },
+              "op": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "mov",
+                      "push",
+                      "pop",
+                      "leave",
+                      "add",
+                      "sub",
+                      "cmp",
+                      "and",
+                      "or",
+                      "xor",
+                      "shl",
+                      "shr",
+                      "jmp",
+                      "je",
+                      "jne",
+                      "jb",
+                      "jae",
+                      "call",
+                      "ret",
+                      "syscall"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{0,15}$"
+                  }
+                ],
+                "description": "双形态(与 IR op 同词汇,docs/最小DSL范围.md §三.1):基线 20 opcode 小写枚举 ∪ 大写自定义助记符;两形态按大小写结构性不相交,自定义助记符必须在私有包 customInstructions 声明(XS-ENC-TOKEN)。"
+              },
+              "operands": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 4,
+                "description": "操作数形态声明(与 IR 槽同四种 kind;D4.7:register/interface 烘焙进 token、无内联字节,immediate/memory 内联定宽 archBits/8 字节、小端——指令变长;宽度自证 archBits 位宽域,XS-ARCH-WIDTH 在探测译码中结构性不触发)。",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind", "name"],
+                      "properties": {
+                        "kind": {
+                          "const": "register"
+                        },
+                        "name": {
+                          "type": "string",
+                          "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$",
+                          "description": "烘焙进 token 的寄存器(一般命名空间;须 ∈ vmProfile.registers 声明集,XS-ENC-TOKEN)。"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind"],
+                      "properties": {
+                        "kind": {
+                          "const": "immediate"
+                        },
+                        "width": {
+                          "const": "arch",
+                          "description": "内联立即数字宽 = archBits/8 字节(位宽由公开包 vmProfile.archBits 单点决定);const arch 为 v1 唯一值,未来子字宽挂版本演进。"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind", "baseRegister"],
+                      "properties": {
+                        "kind": {
+                          "const": "memory"
+                        },
+                        "baseRegister": {
+                          "type": "string",
+                          "pattern": "^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$",
+                          "description": "基址寄存器(烘焙;须 ∈ vmProfile.registers 声明集,XS-ENC-TOKEN)。"
+                        },
+                        "displacementWidth": {
+                          "const": "arch",
+                          "description": "内联位移字宽 = archBits/8 字节、小端、有符号域。"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["kind", "interfaceId"],
+                      "properties": {
+                        "kind": {
+                          "const": "interface"
+                        },
+                        "interfaceId": {
+                          "type": "integer",
+                          "minimum": 256,
+                          "maximum": 65535,
+                          "description": "作者接口号域 [0x100, 0xFFFF](保留系统号带不开放声明);引用须落私有包 interfaces[](XS-ENC-TOKEN 复用 XS-IFACE-REF 立场)。"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     },
