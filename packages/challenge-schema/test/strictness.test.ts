@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ARCH_BITS_VALUES,
   BASE_REGISTER_NAMES,
   BASE_REGISTER_NAME_PATTERN,
   BASE_REGISTER_NAME_PATTERN_SOURCE,
@@ -38,6 +39,7 @@ import {
   MAX_MEMORY_EQUALS_BYTES,
   MAX_MEMORY_REGIONS,
   MAX_OPERANDS_PER_INSTRUCTION,
+  MAX_PAGE_SIZE_BYTES,
   MAX_PREDICATE_EVAL_STEPS,
   MAX_PRIVATE_OBJECTS,
   MAX_PUBLIC_ERROR_MAPPINGS,
@@ -52,7 +54,9 @@ import {
   MAX_VIRTUAL_FILES,
   MAX_VIRTUAL_FILE_BYTES,
   MAX_WRITE_BYTES,
+  MIN_PAGE_SIZE_BYTES,
   OBJECT_ID_PATTERN_SOURCE,
+  PAGE_SIZE_MULTIPLE_BYTES,
   PREDICATE_TYPES,
   PERMISSIONS_PATTERN_SOURCE,
   PUBLIC_DESCRIPTOR_FIELDS,
@@ -119,6 +123,15 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
       "maximum",
       MAX_REGION_BYTE_LENGTH,
     );
+    expectNumberAt(
+      publicSchema,
+      "/properties/memoryLayout/properties/regions/items/properties/byteLength",
+      "multipleOf",
+      PAGE_SIZE_MULTIPLE_BYTES,
+    );
+    expectNumberAt(publicSchema, "/properties/vmProfile/properties/pageSizeBytes", "minimum", MIN_PAGE_SIZE_BYTES);
+    expectNumberAt(publicSchema, "/properties/vmProfile/properties/pageSizeBytes", "maximum", MAX_PAGE_SIZE_BYTES);
+    expectNumberAt(publicSchema, "/properties/vmProfile/properties/pageSizeBytes", "multipleOf", PAGE_SIZE_MULTIPLE_BYTES);
     expectNumberAt(publicSchema, "/properties/resourceLimits/properties/maxWriteBytesPerAction", "maximum", MAX_WRITE_BYTES);
     expectNumberAt(publicSchema, "/properties/hintLadder", "maxItems", MAX_HINTS);
     expectNumberAt(publicSchema, "/properties/publicErrorMapping", "maxItems", MAX_PUBLIC_ERROR_MAPPINGS);
@@ -187,6 +200,8 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
     expectNumberAt(privateSchema, "/$defs/conditionL1/properties/all", "maxItems", MAX_CONDITION_BRANCHES);
     expectNumberAt(privateSchema, "/$defs/conditionL2/properties/all", "maxItems", MAX_CONDITION_BRANCHES);
     expectNumberAt(privateSchema, "/$defs/byteLength", "maximum", MAX_REGION_BYTE_LENGTH);
+    expectNumberAt(privateSchema, "/$defs/regionByteLength", "maximum", MAX_REGION_BYTE_LENGTH);
+    expectNumberAt(privateSchema, "/$defs/regionByteLength", "multipleOf", PAGE_SIZE_MULTIPLE_BYTES);
   });
 });
 
@@ -249,6 +264,14 @@ describe("Schema enum ≡ vocabulary 封闭集", () => {
     expectEnumAt(privateSchema, "/properties/compiledIr/properties/instructions/items/properties/op", DSL_OPCODES);
     expectEnumAt(privateSchema, "/$defs/regionKind", REGION_KINDS);
     expectEnumAt(privateSchema, "/$defs/sessionAction", SESSION_ACTION_TYPES);
+  });
+
+  it("vmProfile.archBits enum ≡ ARCH_BITS_VALUES(G1 位宽冻结枚举,数值面)", () => {
+    const values = resolveAt(
+      publicSchema,
+      "/properties/vmProfile/properties/archBits/enum",
+    ) as unknown[];
+    expect([...values]).toEqual([...ARCH_BITS_VALUES]);
   });
 
   it("谓词判别式 oneOf ≡ PREDICATE_TYPES", () => {

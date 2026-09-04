@@ -3,8 +3,8 @@
  * - 绿灯基线 = fixture 公开包 × builder 派生私有包,必须零违规;
  * - 每条规则一个必触发红灯样例(单一定向破坏),测试名直接引用规则 ID;
  * - 部分规则(XS-REG-FROZEN / XS-MEM-TOTAL / XS-MEM-CONTENT / XS-STAGE-BUDGET /
- *   XS-NESTING)在 Schema 层已被拦截,红灯样例刻意绕过前置条件直测检查器
- *   (纵深防御第二道防线;测试内注明)。
+ *   XS-NESTING / XS-MEM-PAGE-ALIGN)在 Schema 层已被拦截,红灯样例刻意绕过
+ *   前置条件直测检查器(纵深防御第二道防线;测试内注明)。
  * - XS-DUP-KEY 的落点在 json-strict-parse,红灯样例见 test/json-strict-parse.test.ts。
  */
 
@@ -495,6 +495,88 @@ describe("字段分类检查器:跨包一致性规则红灯样例", () => {
     });
 
     expectRule(result, "XS-SEED-DECL");
+  });
+
+  it("XS-ARCH-WIDTH:archBits=32 时寄存器值超出位宽域被拒绝(公开镜像与私有初值同改,隔离目标规则)", () => {
+    const result = checkPairWith(
+      (pub) => {
+        (pub.vmProfile as Record<string, unknown>)["archBits"] = 32;
+        const registers = (pub.initialProjection as {
+          visibleRegisters: Array<Record<string, unknown>>;
+        }).visibleRegisters;
+        at(registers, 0).valueHex = "0x7FFFFFFF0000";
+      },
+      (priv) => {
+        (priv.initialState as { registers: Record<string, string> }).registers["RSP"] =
+          "0x7FFFFFFF0000";
+      },
+    );
+
+    const violation = expectRule(result, "XS-ARCH-WIDTH");
+    expect(violation.path).toBe("/initialState/registers/RSP");
+  });
+
+  it("XS-ARCH-WIDTH:IR 立即数超出无符号位宽域被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        {
+          op: "mov",
+          operands: [
+            { kind: "register", name: "RAX" },
+            { kind: "immediate", valueHex: "0x10000000000000000" },
+          ],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-ARCH-WIDTH");
+    expect(violation.path).toBe("/compiledIr/instructions/0/operands/1/valueHex");
+  });
+
+  it("XS-ARCH-WIDTH:内存位移超出有符号位宽域被拒绝", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      (priv.compiledIr as { instructions: unknown[] }).instructions = [
+        {
+          op: "mov",
+          operands: [
+            { kind: "register", name: "RAX" },
+            { kind: "memory", baseRegister: "RBP", displacementHex: "-0x10000000000000000" },
+          ],
+        },
+      ];
+    });
+
+    const violation = expectRule(result, "XS-ARCH-WIDTH");
+    expect(violation.path).toBe("/compiledIr/instructions/0/operands/1/displacementHex");
+  });
+
+  it("XS-ARCH-WIDTH:archBits=32 且全部架构值落在 32 位域时保持绿灯(fixture 值域兼容双位宽)", () => {
+    const result = checkPairWith((pub) => {
+      (pub.vmProfile as Record<string, unknown>)["archBits"] = 32;
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("XS-MEM-PAGE-ALIGN:公开区域 byteLength 非 4KB 倍数被拒绝(纵深防御样例,Schema multipleOf 已先行拦截)", () => {
+    const result = checkPairWith((pub) => {
+      const layout = pub.memoryLayout as { regions: Array<Record<string, unknown>> };
+      at(layout.regions, 0).byteLength = 6144;
+    });
+
+    const violation = expectRule(result, "XS-MEM-PAGE-ALIGN");
+    expect(violation.path).toBe("/memoryLayout/regions/0/byteLength");
+  });
+
+  it("XS-MEM-PAGE-ALIGN:私有区域 byteLength 非 4KB 倍数被拒绝(纵深防御样例)", () => {
+    const result = checkPairWith(undefined, (priv) => {
+      const regions = (priv.initialState as { memoryRegions: Array<Record<string, unknown>> })
+        .memoryRegions;
+      at(regions, 2).byteLength = 100;
+    });
+
+    const violation = expectRule(result, "XS-MEM-PAGE-ALIGN");
+    expect(violation.path).toBe("/initialState/memoryRegions/2/byteLength");
   });
 });
 

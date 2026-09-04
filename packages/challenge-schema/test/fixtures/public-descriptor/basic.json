@@ -37,6 +37,7 @@
     "flagRegisterNames": ["FLAG0"],
     "endianness": "little",
     "pageSizeBytes": 4096,
+    "archBits": 64,
     "canary": { "enabled": true, "sizeBytes": 8 }
   },
   "memoryLayout": {

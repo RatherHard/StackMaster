@@ -10,7 +10,8 @@
  *  - XS-STAGE-REACH 迁移目标存在且全部阶段自 stages[0] 可达;
  *  - XS-STAGE-BUDGET 每阶段 maxInstructionSteps ≥ 1;
  *  - XS-PRED-REFS 谓词引用的寄存器 / 区域 / 文件必须存在且切片在界内;
- *  - XS-NESTING 判题条件布尔层深度 ≤ 3(对已过 Schema 的输入是纵深防御)。
+ *  - XS-NESTING 判题条件布尔层深度 ≤ 3(对已过 Schema 的输入是纵深防御);
+ *  - XS-MEM-PAGE-ALIGN 私有区域 byteLength 均为 4KB 的倍数(G3/D2;纵深防御,见 arch-rules.ts)。
  *
  * 前置条件:输入已通过 private-bundle.schema.json 校验;对部分仅 Schema
  * 可拒的形态(如深度、EAX 键),本模块做第二道防线,红灯样例经类型断言
@@ -31,6 +32,7 @@ import type {
   PrivateChallengeBundle,
   PrivatePredicate,
 } from "../private-types.js";
+import { checkPrivatePageAlignment } from "./arch-rules.js";
 import { toAddressRange, rangesOverlap } from "./address-ranges.js";
 import type { AddressRange } from "./address-ranges.js";
 import { pushDuplicateViolations } from "./duplicates.js";
@@ -483,5 +485,6 @@ export function checkPrivateBundleRules(bundle: PrivateChallengeBundle): Checker
     ...checkStageBudgets(bundle),
     ...checkStageReachability(bundle),
     ...checkConditionTrees(bundle),
+    ...checkPrivatePageAlignment(bundle),
   ];
 }

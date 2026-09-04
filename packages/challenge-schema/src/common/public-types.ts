@@ -6,7 +6,7 @@
  * 全部只读:公开包一旦通过校验即视为不可变输入。
  */
 
-import type { PublicErrorCode, RegionKind, SemanticHighlightKind, SessionActionType } from "./vocabulary.js";
+import type { ArchBits, PublicErrorCode, RegionKind, SemanticHighlightKind, SessionActionType } from "./vocabulary.js";
 
 export interface PublicBriefing {
   readonly title: string;
@@ -28,6 +28,8 @@ export interface PublicCanarySpec {
 export interface PublicVmProfile {
   readonly registers: readonly PublicRegisterSpec[];
   readonly flagRegisterNames?: readonly string[];
+  /** 架构位宽声明(G1/D1):双包全部架构值的位宽域(XS-ARCH-WIDTH),私有包不复制本字段。 */
+  readonly archBits: ArchBits;
   readonly endianness: "little";
   readonly pageSizeBytes: number;
   readonly canary: PublicCanarySpec;

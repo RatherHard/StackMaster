@@ -1,12 +1,13 @@
-# 双包 Schema 语义(WP-4 · v1)
+# 双包 Schema 语义(WP-4 · v1.1)
 
 | 项 | 值 |
 |---|---|
 | 题目包 Schema 版本 | `1`(`CHALLENGE_PACKAGE_SCHEMA_VERSION`,破坏性变更递增,见 §7) |
-| 状态 | 阶段一 WP-4 交付物,双包 Schema 与分类检查器冻结 |
-| 日期 | 2026-09-03 |
+| 状态 | 阶段一 WP-4 交付物,双包 Schema 与分类检查器冻结;v1.1 按《Vm 模块设计冲突与整改方案》完成 G1/G3 重定基 |
+| 修订 | v1.1(2026-09-04):G1——`vmProfile.archBits`(32/64)位宽声明入公开包,架构值 = archBits 位宽、64 位容器承载、高位掩蔽,新增检查器规则 XS-ARCH-WIDTH;G3——区域类型增补作者自定义 `custom` 类,区域大小与 `pageSizeBytes` 收紧为 4KB 的倍数,新增检查器规则 XS-MEM-PAGE-ALIGN。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改方案裁决整体重定基(`dslSchemaVersion` 的递增归 G4/P3 批次);v1(2026-09-03):阶段一 WP-4 冻结初版 |
+| 日期 | 2026-09-04 |
 | 契约单一来源 | 本包 `schema/*.schema.json`(手写 JSON Schema 2020-12 + Ajv;计划书 5.4 技术选型原文);TS 类型为手工镜像,完整正反样例测试防漂移(§6) |
-| 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、13.2(题目包测试);WP-1 清单 **v1.3** 第十二章(双包字段级分类)、§3.2(寄存器基集)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/最小DSL范围.md`(指令面 / 谓词面 / 编排面词汇) |
+| 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、13.2(题目包测试);WP-1 清单 **v1.4** 第十二章(双包字段级分类)、§3.2(寄存器基集)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/最小DSL范围.md`(指令面 / 谓词面 / 编排面词汇);`docs/develop/Vm 模块设计冲突与整改方案.md`(G1/G3 裁决) |
 | 效力范围 | 公开描述包与私有判题包的 JSON Schema、字段分类清单(`schema/classification.json`)、字段分类检查器(`./server-only` 子路径);阶段二 `challenge-compiler` / session-api / verifier 消费;与计划书、WP-1 清单冲突时依次以计划书、WP-1 清单为准 |
 
 **变更纪律**:与 protocol 语义文档相同——任何字段、枚举值或语义变更须先走 WP-1 §1.3 契约变更流程(先改 WP-1 第十二章分类论证 → 改本包 Schema 与正反 fixture → 评审 → 再改实现);破坏性变更递增 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 并保留 N-1 兼容窗口(§7)。
@@ -61,8 +62,9 @@
 |---|---|---|
 | `registers[]` | 数组(1–32)× `{name, displayLabel?}` | **教学可见寄存器白名单声明**(ProjectionPolicy 组装来源);名称不得匹配 FLAG 模式(XS-REG-FLAG);名称唯一(XS-ID-UNIQUE) |
 | `flagRegisterNames?[]` | FLAG 模式字符串数组 | 只承载**名称**;**不要求**是 `registers` 子集(通常恰相反,WP-1 §12.5);须存在于私有包初始寄存器集 |
+| `archBits` | enum `32` / `64`(v1.1 必填) | **架构位宽声明**(G1/D1:出题人指定 32 或 64 位);双包全部架构值(初始寄存器值、IR 立即数与位移、公开镜像值)按此位宽校验域(XS-ARCH-WIDTH);值以 64 位容器承载、高位按位宽掩蔽(计划书 6.2)。私有包不复制本字段——位宽是公开常量,从公开包单点读取,防双真相源 |
 | `endianness` | const `"little"` | 架构公开常量 |
-| `pageSizeBytes` | 整数 256–65536 | **描述性**(v1 无规则消费;语义文档明示,防误当权威分页参数) |
+| `pageSizeBytes` | 整数,4096 的倍数,4096–65536(v1.1) | VMA 页大小(4KB 的倍数,G3/D2);权威分页语义归引擎,对齐由 XS-MEM-PAGE-ALIGN 复核 |
 | `canary` | `{enabled: boolean, sizeBytes?}`(必填) | `enabled = true` ⇒ `sizeBytes`(1–8)必填(if/then);canary **值**在私有包(XS-CANARY-CORR 互证) |
 
 ### 2.3 `memoryLayout.regions[]`(可见区域布局)
@@ -72,11 +74,11 @@
 | 字段 | 类型(冻结) |
 |---|---|
 | `regionId` | `^[a-z][a-z0-9-]{0,62}$` |
-| `kind` | enum `code` / `global` / `stack` / `heap` / `key` |
+| `kind` | enum `code` / `global` / `stack` / `heap` / `key` / `custom`(v1.1:`custom` = 作者自定义类型,`publicLabel` 必填承载类型名,同 `SemanticHighlight.custom` 先例;G3) |
 | `startAddressHex` | `^0x[0-9a-fA-F]{1,16}$`(入站面大小写均可) |
-| `byteLength` | 整数 1 – 16 MiB(协议 `MAX_REGION_BYTE_LENGTH`) |
+| `byteLength` | 整数 1 – 16 MiB 且为 4096 的倍数(v1.1 G3/D2:VMA 基本单元按页对齐;**区域内对象**——canary 1–8 字节、buffer 切片等——不受此约束,对齐只约束 VMA 边界) |
 | `permissions` | `^r?w?x?$`(规范序子集,同协议) |
-| `publicLabel` | 字符串 1–128 |
+| `publicLabel` | 字符串 1–128(全部 kind 必填;`custom` 类型的名称载体) |
 
 **结构性无隐藏表达位**:本 Schema 不存在 `isHidden` / `visibility` / `containsSecret` 类字段——隐藏区域只能声明在私有包(D2-NO-HIDDEN-IN-PUBLIC 元检查)。
 
@@ -87,7 +89,7 @@
 | 子形状 | 形态(冻结) | 规则 |
 |---|---|---|
 | `visibleRegions[]` | 1–64 × 完整区域实例 `{regionId, label, startAddressHex, byteLength, permissions, bytesHex, truncated}` | 与 `memoryLayout.regions[]` 按 regionId **双射**,且几何 + 标签逐项相等(XS-PROJ-GEOM);`bytesHex` ≤ 512 hex 字符(= 协议默认 `maxBytesPerRange` 256 字节)、非空,必须等于私有区域 `contentHex` 的同长前缀切片,`truncated === (byteLength × 2 > bytesHex 长度)`(XS-PROJ-VALUES) |
-| `visibleRegisters[]` | 1–32 × `{name, valueHex}` | `valueHex` 大写 `^0x[0-9A-F]{1,16}$`(输出面对齐,§2.5);`name` ⊆ `vmProfile.registers`(XS-PROJ-REG)且 ∉ 秘密汇(I3-VISIBLE-REG);值必须等于私有初始寄存器值(XS-PROJ-VALUES) |
+| `visibleRegisters[]` | 1–32 × `{name, valueHex}` | `valueHex` 大写 `^0x[0-9A-F]{1,16}$`(输出面对齐,§2.5;v1.1:值须落在 `archBits` 位宽域内,XS-ARCH-WIDTH);`name` ⊆ `vmProfile.registers`(XS-PROJ-REG)且 ∉ 秘密汇(I3-VISIBLE-REG);值必须等于私有初始寄存器值(XS-PROJ-VALUES) |
 | `semanticHighlights?[]` | 0–32 × `{kind(5 值枚举), targetRegionId, startAddressHex, byteLength, label(1–128)}` | `targetRegionId` ∈ 初始投影可见区域且高亮跨度在区域内(I2-HIGHLIGHT) |
 
 ## 三、私有判题包(Private Challenge Bundle,整体 SERVER_ONLY)
@@ -115,8 +117,8 @@
 
 ### 3.2 `initialState`(VmState 初始形态)
 
-- `registers`:对象,`propertyNames` = 寄存器名模式(基集名或 FLAG 模式),值 = 64 位 hex(入站面大小写均可);键 ⊆ 冻结基集 ∪ FLAG 模式(XS-REG-FROZEN);含 FLAG 值——FLAG 值永不进入公开面;
-- `memoryRegions[]`(1–64):`{regionId, kind(5 值), startAddressHex, byteLength(1–16 MiB), permissions, contentHex, isHidden}`;`contentHex` 长度必须等于 `2 × byteLength`(XS-MEM-CONTENT);非隐藏区域与公开布局**双射**(I2-PUB-MIRROR)。
+- `registers`:对象,`propertyNames` = 寄存器名模式(基集名或 FLAG 模式),值 = 架构值十六进制(≤ 16 位,入站面大小写均可;v1.1:值须落在题目 `archBits` 位宽域内,XS-ARCH-WIDTH);键 ⊆ 冻结基集 ∪ FLAG 模式(XS-REG-FROZEN);含 FLAG 值——FLAG 值永不进入公开面;
+- `memoryRegions[]`(1–64):`{regionId, kind(6 值,含 `custom`), startAddressHex, byteLength(1–16 MiB 且 4096 的倍数,v1.1 G3), permissions, contentHex, isHidden}`;`contentHex` 长度必须等于 `2 × byteLength`(XS-MEM-CONTENT);非隐藏区域与公开布局**双射**(I2-PUB-MIRROR)。
 
 ## 四、判题条件、seed 声明与 IR 信封
 
@@ -170,6 +172,8 @@ L3: { predicate: <内置谓词> }
 | XS-CANARY-CORR | `canary.enabled = true` ⇒ 私有包 ≥ 1 个 `kind = canary`、`hidden`、`containsSecret` 的私有对象,区间不与公开区域相交 |
 | XS-MEM-TOTAL | Σ`byteLength` ≤ 64 MiB;Σ`contentHex` 字节 ≤ 2 MiB |
 | XS-MEM-CONTENT | 私有区域 `contentHex` 长度 = 2 × `byteLength` |
+| XS-ARCH-WIDTH(v1.1) | 架构值位宽域(跨包规则):私有初始寄存器值、IR 立即数(无符号 ≤ 2^archBits−1)与内存位移(有符号 −2^(archBits−1)…2^(archBits−1)−1)、公开镜像寄存器值均须落在公开包 `vmProfile.archBits` 声明的位宽域内(64 位容器承载,高位掩蔽;G1/D1) |
+| XS-MEM-PAGE-ALIGN(v1.1) | VMA 页对齐:公开/私有区域 `byteLength` 与公开 `pageSizeBytes` 均为 4096 的倍数(Schema `multipleOf` 之外的跨包纵深防御;G3/D2) |
 | XS-SEED-DECL | 路径根 ∈ 投影七字段且可解析到 `initialProjection` 叶子 |
 | XS-STAGE-REACH / XS-STAGE-BUDGET | 迁移目标存在且自首阶段全可达;每状态 `maxInstructionSteps` 必填 |
 | XS-IR-LABEL | `labelId` 唯一;指令 / 入口索引 < 长度 |

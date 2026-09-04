@@ -17,6 +17,7 @@
 
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
 import type { PrivateChallengeBundle } from "../private-types.js";
+import { checkArchWidth } from "./arch-rules.js";
 import { checkPrivateBundleRules } from "./private-rules.js";
 import {
   checkCanaryCorrespondence,
@@ -60,6 +61,7 @@ export function checkPairRules(
     ...checkProjectionValuesMirrored(publicDescriptor, privateBundle),
     ...checkCanaryCorrespondence(publicDescriptor, privateBundle),
     ...checkSeedDeclarations(publicDescriptor, privateBundle),
+    ...checkArchWidth(publicDescriptor, privateBundle),
   ];
 }
 

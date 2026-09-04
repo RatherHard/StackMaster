@@ -80,7 +80,7 @@ stackmaster/
 - 每个 crate 顶部 `#![forbid(unsafe_code)]`,纯 safe Rust 同步状态机;
 - 无 async、无直接 IO;禁用 `std::time`、`rand`、`std::io`、`std::net` 与文件系统;时钟与随机源由 trait 注入(6.3);
 - release 构建 `overflow-checks = true`;溢出触发时按 `engine_error` 安全终止,不得静默回绕;
-- 地址与 64 位值在 VM Core 内是一等公民(端序内建);题目 DSL 与公开 API 用明确的十六进制字符串(6.2);
+- 地址与 archBits 位宽架构值(G1/D1:出题人指定 32/64,以 64 位容器承载、高位按位宽掩蔽)在 VM Core 内是一等公民(端序内建);题目 DSL 与公开 API 用明确的十六进制字符串(6.2);
 - verifier 与交互执行复用**同一份**回放引擎代码(ADR-8),禁止写第二套实现;
 - Rust 收益来自安全与语义保真,不是速度——不要为性能引入 unsafe、async 或低层优化。
 
@@ -136,7 +136,7 @@ stackmaster/
 
 ## 常用命令
 
-> WP-0 已落地 TS 工程基线:pnpm workspaces + Turborepo,含 `packages/protocol`、`packages/challenge-schema`、`tooling/`(ESLint flat config 与 dependency-cruiser 配置)。WP-1 已冻结数据分类与秘密零驻留清单(`docs/数据分类与秘密零驻留清单.md`);WP-2 已冻结会话动作协议 v1(`packages/protocol`:Zod 契约 + JSON Schema 2020-12 落盘 + `docs/会话动作协议语义.md`);WP-3 已冻结投影与错误契约(`PublicStateProjection` 7 字段及子类型、`ProjectionDelta`/`DirtyRange` 增量、`PublicError` 16 值错误码 + 逐 code 能力矩阵、`ProjectionPolicy` server-only 专用面;语义见 `packages/protocol/docs/投影与错误契约语义.md`;`ProjectionPolicy` Schema 仅经 `@stackmaster/protocol/server-only` 子路径供后端包消费,浏览器可达包导入即 dependency-cruiser 违规)。WP-4 已冻结题目双包 Schema 与最小 DSL 范围(`packages/challenge-schema`:公开描述包 / 私有判题包 JSON Schema 2020-12、`schema/classification.json` 字段分类清单、严格 JSON 扫描器、Ajv 校验器与 `checkChallengePair` 字段分类检查器(规则 ID 对齐 WP-1 §12.6,逐规则红灯样例);私有面仅经 `@stackmaster/challenge-schema/server-only` 子路径供后端包消费,Schema 存在不等于可下发;DSL 范围见 `docs/最小DSL范围.md`,契约语义见 `packages/challenge-schema/docs/双包Schema语义.md`)。`apps/` 与 `vm-engine/` 自阶段二起搭建,下列命令中 vm-engine 与 docker compose 部分在对应阶段落地前执行会失败,属预期现象。
+> WP-0 已落地 TS 工程基线:pnpm workspaces + Turborepo,含 `packages/protocol`、`packages/challenge-schema`、`tooling/`(ESLint flat config 与 dependency-cruiser 配置)。WP-1 已冻结数据分类与秘密零驻留清单(`docs/数据分类与秘密零驻留清单.md`);WP-2 已冻结会话动作协议 v1(`packages/protocol`:Zod 契约 + JSON Schema 2020-12 落盘 + `docs/会话动作协议语义.md`);WP-3 已冻结投影与错误契约(`PublicStateProjection` 7 字段及子类型、`ProjectionDelta`/`DirtyRange` 增量、`PublicError` 16 值错误码 + 逐 code 能力矩阵、`ProjectionPolicy` server-only 专用面;语义见 `packages/protocol/docs/投影与错误契约语义.md`;`ProjectionPolicy` Schema 仅经 `@stackmaster/protocol/server-only` 子路径供后端包消费,浏览器可达包导入即 dependency-cruiser 违规)。WP-4 已冻结题目双包 Schema 与最小 DSL 范围(`packages/challenge-schema`:公开描述包 / 私有判题包 JSON Schema 2020-12、`schema/classification.json` 字段分类清单、严格 JSON 扫描器、Ajv 校验器与 `checkChallengePair` 字段分类检查器(规则 ID 对齐 WP-1 §12.6,逐规则红灯样例);私有面仅经 `@stackmaster/challenge-schema/server-only` 子路径供后端包消费,Schema 存在不等于可下发;DSL 范围见 `docs/最小DSL范围.md`,契约语义见 `packages/challenge-schema/docs/双包Schema语义.md`)。双包契约已按《Vm 模块设计冲突与整改方案》完成 G1/G3 重定基(2026-09-04):公开包 `vmProfile.archBits`(32/64)必填位宽声明、区域六类(新增作者自定义 `custom`,publicLabel 承载类型名)、区域大小与页大小收紧为 4KB 的倍数;新增检查器规则 `XS-ARCH-WIDTH`(跨包位宽域:私有初值、IR 立即数/位移、公开镜像值均落在 archBits 位宽域)与 `XS-MEM-PAGE-ALIGN`(VMA 页对齐,Schema multipleOf 之外的纵深防御)。`apps/` 与 `vm-engine/` 自阶段二起搭建,下列命令中 vm-engine 与 docker compose 部分在对应阶段落地前执行会失败,属预期现象。
 
 ```bash
 pnpm install                              # 安装 TS 依赖(workspaces)

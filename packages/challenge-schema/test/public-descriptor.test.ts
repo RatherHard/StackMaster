@@ -161,6 +161,103 @@ describe("公开描述包校验器", () => {
 
     expect(violations.some((v) => v.path.includes("/allowedActions"))).toBe(true);
   });
+
+  it("vmProfile.archBits 必填(G1:位宽声明缺失即拒绝)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        delete (clone.vmProfile as Record<string, unknown>).archBits;
+      })),
+    );
+
+    expect(
+      violations.some((v) => v.path === "/vmProfile" && v.message.includes("archBits")),
+    ).toBe(true);
+  });
+
+  it("vmProfile.archBits 只接受 32 / 64(G1/D1 冻结枚举)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        (clone.vmProfile as Record<string, unknown>)["archBits"] = 16;
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/vmProfile/archBits"))).toBe(true);
+  });
+
+  it("pageSizeBytes 非 4KB 倍数被拒绝(G3/D2:VMA 页对齐)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        (clone.vmProfile as Record<string, unknown>)["pageSizeBytes"] = 6144;
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/vmProfile/pageSizeBytes"))).toBe(true);
+  });
+
+  it("pageSizeBytes 低于 4KB 下限被拒绝(G3/D2)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        (clone.vmProfile as Record<string, unknown>)["pageSizeBytes"] = 256;
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/vmProfile/pageSizeBytes"))).toBe(true);
+  });
+
+  it("区域 byteLength 非 4KB 倍数被拒绝(G3/D2:区域边界按 VMA 页对齐)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        const layout = clone.memoryLayout as {
+          regions: Array<Record<string, unknown>>;
+        };
+        layout.regions[0]!["byteLength"] = 6144;
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/memoryLayout/regions/0/byteLength"))).toBe(
+      true,
+    );
+  });
+
+  it("custom 区域类型可入公开布局(G3:作者自定义类型,publicLabel 承载类型名)", () => {
+    const descriptor = assertOk(
+      validatePublicDescriptor(breakFixture((clone) => {
+        const layout = clone.memoryLayout as {
+          regions: Array<Record<string, unknown>>;
+        };
+        layout.regions.push({
+          regionId: "guard",
+          kind: "custom",
+          startAddressHex: "0x500000",
+          byteLength: 4096,
+          permissions: "rw",
+          publicLabel: "自定义守卫区",
+        });
+      })),
+    );
+
+    const guard = descriptor.memoryLayout.regions.at(-1);
+    expect(guard?.kind).toBe("custom");
+    expect(guard?.publicLabel).toBe("自定义守卫区");
+  });
+
+  it("custom 区域缺 publicLabel 被拒绝(类型名载体必填)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        const layout = clone.memoryLayout as {
+          regions: Array<Record<string, unknown>>;
+        };
+        layout.regions[0]!.kind = "custom";
+        delete layout.regions[0]!["publicLabel"];
+      })),
+    );
+
+    expect(
+      violations.some(
+        (v) => v.path === "/memoryLayout/regions/0" && v.message.includes("publicLabel"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("公开描述包文本解析", () => {

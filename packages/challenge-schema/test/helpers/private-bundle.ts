@@ -20,7 +20,8 @@ import type {
 const WIN_TARGET_ADDRESS_HEX = "0x400200";
 const CANARY_VALUE_HEX = "0a0b0c0d0e0f1011";
 const CANARY_VAULT_START_HEX = "0x90000000";
-const CANARY_VAULT_BYTE_LENGTH = 64;
+// G3/D2 后区域大小必须为 4KB 的倍数(VMA 页对齐),vault 同受约束。
+const CANARY_VAULT_BYTE_LENGTH = 4096;
 const FLAG_REGISTER_PLACEHOLDER_VALUE_HEX = "0x0";
 const SECRET_FLAG_PLACEHOLDER = "FLAG{placeholder_do_not_ship}";
 const SEED_HEX_FIXTURE = "00112233445566778899aabbccddeeff";

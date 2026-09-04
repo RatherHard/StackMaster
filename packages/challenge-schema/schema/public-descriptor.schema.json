@@ -90,7 +90,7 @@
     "vmProfile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["registers", "endianness", "pageSizeBytes", "canary"],
+      "required": ["registers", "endianness", "pageSizeBytes", "archBits", "canary"],
       "properties": {
         "registers": {
           "type": "array",
@@ -128,11 +128,16 @@
         "endianness": {
           "const": "little"
         },
+        "archBits": {
+          "enum": [32, 64],
+          "description": "架构位宽声明(G1/D1:《Vm 模块设计冲突与整改方案》)。双包全部架构值(私有初始寄存器值、IR 立即数与位移、公开镜像寄存器值)按此位宽校验域(XS-ARCH-WIDTH);值以 64 位容器承载、高位按位宽掩蔽(计划书 6.2)。私有包不复制本字段——位宽是公开常量,从公开包单点读取,防双真相源。"
+        },
         "pageSizeBytes": {
           "type": "integer",
-          "minimum": 256,
+          "minimum": 4096,
           "maximum": 65536,
-          "description": "描述性元数据(v1 无规则消费;权威分页语义归引擎)。"
+          "multipleOf": 4096,
+          "description": "VMA 页大小,4KB 的倍数、4096–65536(G3/D2);对齐由 XS-MEM-PAGE-ALIGN 复核,权威分页语义归引擎。"
         },
         "canary": {
           "type": "object",
@@ -197,7 +202,8 @@
                 "pattern": "^[a-z][a-z0-9-]{0,62}$"
               },
               "kind": {
-                "enum": ["code", "global", "stack", "heap", "key"]
+                "enum": ["code", "global", "stack", "heap", "key", "custom"],
+                "description": "六类区域(6.1;G3 整改增补 custom):custom = 作者自定义类型,publicLabel 必填承载类型名(同 SemanticHighlight.custom 先例)。"
               },
               "startAddressHex": {
                 "type": "string",
@@ -207,7 +213,8 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 16777216,
-                "description": "1 – 16 MiB(协议 MAX_REGION_BYTE_LENGTH)。"
+                "multipleOf": 4096,
+                "description": "1 – 16 MiB 且为 4096 的倍数(G3/D2:VMA 页对齐;对齐只约束 VMA 边界,区域内对象不受约束);XS-MEM-PAGE-ALIGN 复核。"
               },
               "permissions": {
                 "type": "string",
@@ -444,7 +451,7 @@
               "valueHex": {
                 "type": "string",
                 "pattern": "^0x[0-9A-F]{1,16}$",
-                "description": "大写十六进制(协议公开输出面)。"
+                "description": "大写十六进制(协议公开输出面);值须落在题目 vmProfile.archBits 位宽域内(XS-ARCH-WIDTH,G1)。"
               }
             }
           }

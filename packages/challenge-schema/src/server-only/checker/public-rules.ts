@@ -3,13 +3,16 @@
  *  - I2-PUB-PAIRWISE 公开内存区域两两不相交(BigInt 区间);
  *  - I2-HIGHLIGHT 语义高亮目标必须在可见区域且区间完全落在其中;
  *  - D2-CODE-PUBLIC 代码区域恒公开:kind=code 区域至多一个且必须出现在初始投影;
- *  - XS-ID-UNIQUE 公开面引用 ID 唯一(区域 / 寄存器 / FLAG / 提示阶 / 错误码)。
+ *  - XS-ID-UNIQUE 公开面引用 ID 唯一(区域 / 寄存器 / FLAG / 提示阶 / 错误码);
+ *  - XS-MEM-PAGE-ALIGN pageSizeBytes 与区域 byteLength 均为 4KB 的倍数
+ *    (G3/D2;Schema multipleOf 之外的纵深防御,见 arch-rules.ts)。
  *
  * 前置条件:输入已通过 public-descriptor.schema.json 校验;
  * 本模块是纵深防御与跨字段一致性检查,不重复 Schema 已冻结的单字段形态。
  */
 
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
+import { checkPublicPageAlignment } from "./arch-rules.js";
 import { toAddressRange, rangesOverlap, rangeContains } from "./address-ranges.js";
 import type { AddressRange } from "./address-ranges.js";
 import { pushDuplicateViolations } from "./duplicates.js";
@@ -190,5 +193,6 @@ export function checkPublicDescriptorRules(
     ...checkPublicHighlights(descriptor),
     ...checkPublicCodeRegionPolicy(descriptor),
     ...checkPublicReferenceUniqueness(descriptor),
+    ...checkPublicPageAlignment(descriptor),
   ];
 }

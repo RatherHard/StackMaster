@@ -9,7 +9,9 @@ import { z } from "zod";
 import { RegisterNameSchema } from "../common/register-name.js";
 
 /**
- * 64 位值的大写十六进制形态(WP-1 §4.2:0x 前缀,1–16 位大写数字)。
+ * 架构值的大写十六进制形态(WP-1 §4.2 v1.4:0x 前缀,1–16 位大写数字;
+ * 值 = archBits 位宽的架构值,以 64 位容器承载、高位按题目
+ * `vmProfile.archBits` 掩蔽——位宽域校验归服务端,协议层不做位宽判断)。
  * 与请求侧的宽松输入形态(common/hex.ts,大小写均可)不同,投影是服务端
  * 生成的规范化输出面——固定大写让 ZR-P3 / T-SC1 的规范化字节等价判定
  * 与 golden fixture 的跨语言往返具有稳定字典序。地址字段不在此约束内

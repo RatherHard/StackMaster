@@ -46,8 +46,12 @@ export const PUBLIC_ERROR_CODES = [
 ] as const;
 export type PublicErrorCode = (typeof PUBLIC_ERROR_CODES)[number];
 
-/** 内存区域五类(6.1 MVP 虚拟硬件;docs/最小DSL范围.md §二)。 */
-export const REGION_KINDS = ["code", "global", "stack", "heap", "key"] as const;
+/** 架构位宽声明冻结枚举(G1/D1:《Vm 模块设计冲突与整改方案》;公开包 vmProfile.archBits)。 */
+export const ARCH_BITS_VALUES = [32, 64] as const;
+export type ArchBits = (typeof ARCH_BITS_VALUES)[number];
+
+/** 内存区域六类(6.1 MVP 虚拟硬件;docs/最小DSL范围.md §二;custom 为作者自定义类型,publicLabel 承载类型名——G3 整改)。 */
+export const REGION_KINDS = ["code", "global", "stack", "heap", "key", "custom"] as const;
 export type RegionKind = (typeof REGION_KINDS)[number];
 
 /** 语义高亮五类(协议 PublicStateProjection.semanticHighlights 冻结枚举)。 */

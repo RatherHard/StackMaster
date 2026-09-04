@@ -10,6 +10,15 @@ export const MAX_MEMORY_REGIONS = 64;
 /** 单区域字节上限:16 MiB(协议 MAX_REGION_BYTE_LENGTH)。 */
 export const MAX_REGION_BYTE_LENGTH = 16_777_216;
 
+/** VMA 页对齐倍数(G3/D2:区域 byteLength 与 pageSizeBytes 均为其倍数;XS-MEM-PAGE-ALIGN)。 */
+export const PAGE_SIZE_MULTIPLE_BYTES = 4096;
+
+/** 页大小下限(4KB;G3/D2,Schema 与检查器共用)。 */
+export const MIN_PAGE_SIZE_BYTES = 4096;
+
+/** 页大小上限(64KB;G3/D2,Schema 与检查器共用)。 */
+export const MAX_PAGE_SIZE_BYTES = 65536;
+
 /** 全部区域字节总量上限(13.2:过大内存布局拒绝;XS-MEM-TOTAL)。 */
 export const MAX_MEMORY_TOTAL_BYTES = 64 * 1024 * 1024;
 

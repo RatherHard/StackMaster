@@ -245,4 +245,34 @@ describe("私有判题包校验器", () => {
       expect(result.violations[0]?.message).toContain("重复键");
     }
   });
+
+  it("私有区域 byteLength 非 4KB 倍数被拒绝(G3/D2:VMA 页对齐)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const violations = assertFail(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        const regions = (clone.initialState as {
+          memoryRegions: Array<Record<string, unknown>>;
+        }).memoryRegions;
+        regions[0]!["byteLength"] = 6144;
+      })),
+    );
+
+    expect(
+      violations.some((v) => v.path.includes("/initialState/memoryRegions/0/byteLength")),
+    ).toBe(true);
+  });
+
+  it("custom 区域类型可入私有初始状态(G3:与公开布局同枚举)", () => {
+    const publicDescriptor = loadPublicDescriptor();
+    const bundle = assertOk(
+      validatePrivateBundle(breakBundle(buildPrivateBundle(publicDescriptor), (clone) => {
+        const regions = (clone.initialState as {
+          memoryRegions: Array<Record<string, unknown>>;
+        }).memoryRegions;
+        regions[0]!["kind"] = "custom";
+      })),
+    );
+
+    expect(bundle.initialState.memoryRegions[0]?.kind).toBe("custom");
+  });
 });
