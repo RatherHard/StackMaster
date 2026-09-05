@@ -10,14 +10,16 @@
  *   语义见 docs/会话动作协议语义.md;
  * - WP-3 投影与错误契约:PublicStateProjection 及其子类型、ProjectionDelta /
  *   DirtyRange、PublicError(16 值错误码 + 逐 code 能力矩阵);
- *   语义见 docs/投影与错误契约语义.md。
+ *   语义见 docs/投影与错误契约语义.md;
+ * - WP-5 嵌入协议 v1:EmbedMessage(postMessage 消息信封,5 种消息类型,
+ *   握手与能力声明);embed token 绑定字段 EmbedTokenClaims 的**解析器**
+ *   不从本入口导出(浏览器对 token 不解析,见 docs/嵌入协议.md §2.2);
+ *   语义见 docs/嵌入协议.md。
  *
- * server-only 边界(WP-1 §五):ProjectionPolicy Schema 不从本入口导出,
- * 仅经子路径 @stackmaster/protocol/server-only 供后端包消费——浏览器可达包
- * 导入该子路径即违规(dependency-cruiser 强制);"Schema 存在不等于可下发"。
- *
- * 待后续 WP 填入:
- * - WP-5 嵌入协议消息信封。
+ * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
+ * 与 EmbedTokenClaims(凭证解析器)不从本入口导出,仅经子路径
+ * @stackmaster/protocol/server-only 供后端包消费——浏览器可达包导入该子路径
+ * 即违规(dependency-cruiser 强制);"Schema 存在不等于可下发"。
  *
  * 依赖纪律(5.5):本包是所有 TS 包唯一可依赖的跨域共享面,自身不得依赖任何
  * 工作区包或 vm-engine 产物(tooling/dependency-cruiser.cjs 强制)。
@@ -47,4 +49,5 @@ export * from "./projection/public-state-projection.js";
 export * from "./projection/projection-delta.js";
 export * from "./error/public-error-code.js";
 export * from "./error/public-error.js";
+export * from "./embed/embed-message.js";
 export * from "./schema/registry.js";

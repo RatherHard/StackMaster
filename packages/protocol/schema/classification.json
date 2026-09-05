@@ -1,11 +1,13 @@
 {
   "packageVersion": "0.1.0",
   "sessionActionProtocolVersion": 1,
+  "embedProtocolVersion": 1,
   "note": "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
   "schemas": {
     "action-request": {
       "file": "action-request.schema.json",
       "title": "ActionRequest",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "boundary",
       "fieldClasses": {
         "protocolVersion": "boundary",
@@ -19,6 +21,7 @@
     "action-response": {
       "file": "action-response.schema.json",
       "title": "ActionResponse",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "public",
       "fieldClasses": {
         "requestId": "public",
@@ -32,12 +35,14 @@
     "verdict-result": {
       "file": "verdict-result.schema.json",
       "title": "VerdictResult",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "public",
       "fieldClasses": {}
     },
     "public-state-projection": {
       "file": "public-state-projection.schema.json",
       "title": "PublicStateProjection",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "public",
       "fieldClasses": {
         "revision": "public",
@@ -52,6 +57,7 @@
     "projection-delta": {
       "file": "projection-delta.schema.json",
       "title": "ProjectionDelta",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "public",
       "fieldClasses": {
         "revision": "public",
@@ -66,6 +72,7 @@
     "public-error": {
       "file": "public-error.schema.json",
       "title": "PublicError",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "public",
       "fieldClasses": {
         "code": "public",
@@ -74,9 +81,24 @@
         "explanation": "public"
       }
     },
+    "embed-message": {
+      "file": "embed-message.schema.json",
+      "title": "EmbedMessage",
+      "baseId": "https://stackmaster.dev/schemas/embed/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "protocolVersion": "boundary",
+        "type": "boundary",
+        "sessionId": "boundary",
+        "seq": "boundary",
+        "requestId": "boundary",
+        "payload": "boundary"
+      }
+    },
     "projection-policy": {
       "file": "projection-policy.schema.json",
       "title": "ProjectionPolicy",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
       "rootClass": "server-only",
       "fieldClasses": {
         "visibleRegions": "server-only",
@@ -84,6 +106,21 @@
         "visibleRegisters": "server-only",
         "maxBytesPerRange": "server-only",
         "errorDetailLevel": "server-only"
+      }
+    },
+    "embed-token-claims": {
+      "file": "embed-token-claims.schema.json",
+      "title": "EmbedTokenClaims",
+      "baseId": "https://stackmaster.dev/schemas/embed/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "tenantId": "boundary",
+        "userId": "boundary",
+        "challengeId": "boundary",
+        "challengeVersion": "boundary",
+        "embedSessionId": "boundary",
+        "jti": "boundary",
+        "expiresAt": "boundary"
       }
     }
   }

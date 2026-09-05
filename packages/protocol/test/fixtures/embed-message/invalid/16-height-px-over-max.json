@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "height_changed",
+  "sessionId": "es-01J5QK7N2M4P6R8T0V2W4X6Y8Z",
+  "seq": 7,
+  "payload": {
+    "heightPx": 100001
+  }
+}

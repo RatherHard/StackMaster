@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "hello",
+  "seq": 1,
+  "payload": {
+    "supportedVersions": [1],
+    "capabilities": []
+  }
+}

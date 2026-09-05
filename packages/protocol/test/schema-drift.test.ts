@@ -12,7 +12,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { generateAll, SESSION_ACTION_SCHEMA_BASE_ID } from "../src/schema/generate.js";
+import { generateAll } from "../src/schema/generate.js";
 import { allSchemaEntries } from "../src/server-only/schema-registry.js";
 
 const OUTPUT_DIR = join(import.meta.dirname, "..", "schema");
@@ -35,7 +35,7 @@ describe("JSON Schema 生成产物(落盘纪律)", () => {
         readFileSync(join(OUTPUT_DIR, `${entry.name}.schema.json`), "utf8"),
       ) as Record<string, unknown>;
       expect(document["$schema"]).toBe(SCHEMA_DRAFT);
-      expect(document["$id"]).toBe(`${SESSION_ACTION_SCHEMA_BASE_ID}/${entry.name}.schema.json`);
+      expect(document["$id"]).toBe(`${entry.baseId}/${entry.name}.schema.json`);
       expect(document["x-sm-class"]).toEqual(expect.any(String));
       expect(JSON.stringify(document)).not.toContain("$ref");
     }
@@ -64,12 +64,20 @@ describe("JSON Schema 生成产物(落盘纪律)", () => {
     for (const entry of allSchemaEntries()) {
       const document = JSON.parse(
         readFileSync(join(OUTPUT_DIR, `${entry.name}.schema.json`), "utf8"),
-      ) as { properties?: Record<string, unknown> };
-      const propertyNames = Object.keys(document.properties ?? {}).sort();
+      ) as { properties?: Record<string, unknown>; oneOf?: Array<{ properties?: Record<string, unknown> }> };
       const classifiedNames = Object.keys(
         manifest.schemas[entry.name]?.fieldClasses ?? {},
       ).sort();
-      expect(classifiedNames).toEqual(propertyNames);
+      if (Array.isArray(document.oneOf)) {
+        // 判别联合根(如 embed-message):无顶层 properties,字段集合在每个分支
+        // 重复——每个分支的属性键集都必须与 fieldClasses 严格一致。
+        expect(document.oneOf.length).toBeGreaterThan(0);
+        for (const branch of document.oneOf) {
+          expect(Object.keys(branch.properties ?? {}).sort()).toEqual(classifiedNames);
+        }
+      } else {
+        expect(Object.keys(document.properties ?? {}).sort()).toEqual(classifiedNames);
+      }
     }
   });
 

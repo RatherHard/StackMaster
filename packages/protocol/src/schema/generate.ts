@@ -1,5 +1,5 @@
 /**
- * Zod → JSON Schema 2020-12 产出管线(WP-2 建线,WP-3 扩面;计划书 5.6 / ADR-5)。
+ * Zod → JSON Schema 2020-12 产出管线(WP-2 建线,WP-3 扩面,WP-5 增嵌入契约族;计划书 5.6 / ADR-5)。
  *
  * - JSON Schema 是 TS 与 Rust 的共同权威:本脚本产出的文件提交入库,
  *   供 Rust 侧 serde + schemars 消费(WP-6 完成 Rust 消费冒烟验证);
@@ -22,19 +22,16 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { z, type ZodType } from "zod";
-import { PROTOCOL_PACKAGE_VERSION, SESSION_ACTION_PROTOCOL_VERSION } from "../version.js";
+import { z } from "zod";
+import {
+  EMBED_PROTOCOL_VERSION,
+  PROTOCOL_PACKAGE_VERSION,
+  SESSION_ACTION_PROTOCOL_VERSION,
+} from "../version.js";
 import { allSchemaEntries, assertRegistriesMatchClassifications } from "../server-only/schema-registry.js";
-import { classificationOf, type SchemaName } from "./registry.js";
+import { classificationOf, type SchemaEntry, type SchemaName } from "./registry.js";
 
 const SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema";
-
-/**
- * 会话动作协议 JSON Schema 的 $id 命名空间(仅作标识符,不承诺可解析)。
- * 版本段从协议版本常量派生:破坏性变更递增版本时,$id 目录随之切换
- * (语义文档 §5.2 的 v2 落新目录纪律由此机检兜底)。
- */
-export const SESSION_ACTION_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/session-action/v${SESSION_ACTION_PROTOCOL_VERSION}`;
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUTPUT_DIR = join(PACKAGE_ROOT, "schema");
@@ -64,12 +61,8 @@ const ACTION_RESPONSE_REJECTED_COUPLING = {
 export type JsonSchemaDocument = Record<string, unknown>;
 
 /** 生成单个根 Schema 文档(自包含,携带 $schema / $id / title / x-sm-class)。 */
-export function generateSchemaDocument(
-  schema: ZodType,
-  entryName: SchemaName,
-  title: string,
-): JsonSchemaDocument {
-  const generated = z.toJSONSchema(schema, {
+export function generateSchemaDocument(entry: SchemaEntry): JsonSchemaDocument {
+  const generated = z.toJSONSchema(entry.schema, {
     target: "draft-2020-12",
     io: "input",
     unrepresentable: "throw",
@@ -79,12 +72,12 @@ export function generateSchemaDocument(
   return injectCrossFieldRules(
     {
       $schema: SCHEMA_DRAFT,
-      $id: `${SESSION_ACTION_SCHEMA_BASE_ID}/${entryName}.schema.json`,
-      title,
-      "x-sm-class": classificationOf(entryName).rootClass,
+      $id: `${entry.baseId}/${entry.name}.schema.json`,
+      title: entry.title,
+      "x-sm-class": classificationOf(entry.name).rootClass,
       ...generated,
     },
-    entryName,
+    entry.name,
   );
 }
 
@@ -110,6 +103,7 @@ export function generateManifestDocument(): JsonSchemaDocument {
     schemas[entry.name] = {
       file: `${entry.name}.schema.json`,
       title: entry.title,
+      baseId: entry.baseId,
       rootClass,
       fieldClasses,
     };
@@ -117,6 +111,7 @@ export function generateManifestDocument(): JsonSchemaDocument {
   return {
     packageVersion: PROTOCOL_PACKAGE_VERSION,
     sessionActionProtocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+    embedProtocolVersion: EMBED_PROTOCOL_VERSION,
     note:
       "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。" +
       "Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
@@ -129,7 +124,7 @@ export function generateAll(): Record<string, string> {
   assertRegistriesMatchClassifications();
   const files: Record<string, string> = {};
   for (const entry of allSchemaEntries()) {
-    const document = generateSchemaDocument(entry.schema, entry.name, entry.title);
+    const document = generateSchemaDocument(entry);
     files[`${entry.name}.schema.json`] = `${JSON.stringify(document, null, 2)}\n`;
   }
   files[MANIFEST_FILE_NAME] = `${JSON.stringify(generateManifestDocument(), null, 2)}\n`;

@@ -83,6 +83,29 @@ export const SCHEMA_CLASSIFICATIONS = {
       explanation: "public",
     },
   },
+  "embed-message": {
+    rootClass: "boundary",
+    fieldClasses: {
+      protocolVersion: "boundary",
+      type: "boundary",
+      sessionId: "boundary",
+      seq: "boundary",
+      requestId: "boundary",
+      payload: "boundary",
+    },
+  },
+  "embed-token-claims": {
+    rootClass: "boundary",
+    fieldClasses: {
+      tenantId: "boundary",
+      userId: "boundary",
+      challengeId: "boundary",
+      challengeVersion: "boundary",
+      embedSessionId: "boundary",
+      jti: "boundary",
+      expiresAt: "boundary",
+    },
+  },
   "projection-policy": {
     rootClass: "server-only",
     fieldClasses: {

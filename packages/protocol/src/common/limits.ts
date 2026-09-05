@@ -78,3 +78,39 @@ export const ERROR_HINT_MAX_LENGTH = 256;
 
 /** PublicError explanation.hints 条数上限(教学提示分层:一级原因 + 逐步排查)。 */
 export const MAX_ERROR_HINTS = 4;
+
+/* ------------------------------------------------------------------ */
+/* 嵌入协议护栏(WP-5;计划书 8.1 / 8.2)                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 单条嵌入消息的序列化字节上限(64 KiB)。嵌入协议只承载加载、主题、语言、
+ * 自适应高度与生命周期控制,不含投影与动作负载——投影走浏览器 ↔ 编排器的
+ * 认证通道(8.2),不经 postMessage。接收端在 JSON.parse 前按本值拒绝
+ * (校验规则 V-2,docs/嵌入协议.md §五)。
+ */
+export const MAX_EMBED_MESSAGE_BYTES = 65536;
+
+/** hello.supportedVersions 数组长度上限(版本协商候选集外圈护栏)。 */
+export const MAX_EMBED_SUPPORTED_VERSIONS = 8;
+
+/**
+ * 能力声明 / 授予数组长度上限(与冻结枚举 EmbedCapability 的基数一致:
+ * theme / language / auto_resize;扩展能力 = 协议版本演进,不靠枚举外预留)。
+ */
+export const MAX_EMBED_CAPABILITIES = 3;
+
+/** 语言标签最大长度(BCP-47 规范语法上限;模式约束见 embed-message.ts)。 */
+export const EMBED_LANGUAGE_MAX_LENGTH = 35;
+
+/**
+ * height_changed 携带的高度上限(像素;协议外圈护栏,防止伪造巨型高度值
+ * 冲击宿主布局;实际渲染上限由宿主按布局自行收紧)。
+ */
+export const MAX_EMBED_HEIGHT_PX = 100000;
+
+/**
+ * embed token 有效期上限(秒;7 天外圈护栏)。计划书 9.2 要求短期、单用途
+ * 或有限次数的 token;具体签发 TTL 属阶段五运维参数,必须 ≤ 本值。
+ */
+export const MAX_EMBED_TOKEN_TTL_SECONDS = 604800;

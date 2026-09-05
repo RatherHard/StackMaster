@@ -1,0 +1,10 @@
+{
+  "tenantId": "tenant-01J5QK7N2M",
+  "userId": "user-01J5QK8P3Q",
+  "challengeId": "ret2win-stackframe",
+  "challengeVersion": "1.2.0",
+  "embedSessionId": "es-01J5QK7N2M4P6R8T0V2W4X6Y8Z",
+  "jti": "tk-01J5QK9R7S3T5U7W9X1Y3Z5A",
+  "expiresAt": 1757980800,
+  "role": "admin"
+}

@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "type": "hello",
+  "sessionId": "es-01J5QK7N2M4P6R8T0V2W4X6Y8Z",
+  "seq": 1,
+  "payload": {
+    "supportedVersions": [1],
+    "capabilities": ["theme", "language", "auto_resize"]
+  }
+}

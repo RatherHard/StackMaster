@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "type": "hello",
+  "sessionId": "es:abc:def",
+  "seq": 1,
+  "payload": {
+    "supportedVersions": [1],
+    "capabilities": []
+  }
+}

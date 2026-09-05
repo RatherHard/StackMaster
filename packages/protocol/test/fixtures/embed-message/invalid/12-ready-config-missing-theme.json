@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "type": "ready",
+  "sessionId": "es-01J5QK7N2M4P6R8T0V2W4X6Y8Z",
+  "seq": 1,
+  "payload": {
+    "grantedCapabilities": [],
+    "config": {
+      "language": "en"
+    }
+  }
+}
