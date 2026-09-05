@@ -34,3 +34,6 @@ tmp/
 
 # 私有题目包(CLAUDE.md:private-bundles 类内容永不进入 git)
 private-bundles/
+
+# Rust 构建产物(vm-engine 与 tooling/*)
+target/

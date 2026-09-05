@@ -13,7 +13,9 @@
     "test": "turbo run test",
     "lint": "eslint --config tooling/eslint.config.mjs packages",
     "lint:deps": "dependency-cruiser --config tooling/dependency-cruiser.cjs packages",
-    "scan:public": "node tooling/scan-public-artifacts.mjs"
+    "scan:public": "node tooling/scan-public-artifacts.mjs",
+    "fixtures:manifest": "node tooling/generate-canonical-manifest.mjs",
+    "smoke:contract": "cargo run --manifest-path tooling/contract-smoke/Cargo.toml"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

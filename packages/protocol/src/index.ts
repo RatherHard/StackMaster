@@ -28,6 +28,7 @@
  */
 export * from "./version.js";
 export * from "./common/limits.js";
+export * from "./common/canonical-json.js";
 export * from "./common/hex.js";
 export * from "./common/identifiers.js";
 export * from "./common/classification.js";
