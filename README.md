@@ -106,9 +106,12 @@ pnpm test               # 测试(Vitest)
 pnpm lint               # ESLint
 pnpm typecheck          # tsc project references
 pnpm lint:deps          # 依赖边界检查(dependency-cruiser)
+pnpm fixtures:manifest  # golden fixture 规范化摘要清单(生成;--check 校验)
+pnpm smoke:contract     # Rust 侧契约冒烟(需 Rust 工具链;tooling/contract-smoke)
+pnpm scan:public        # 公开产物隔离扫描
 ```
 
-> 当前处于**阶段一(契约与信任模型冻结)**,`apps/` 与 `vm-engine/` 尚未落地。下列命令在对应阶段完成后可用:
+> 阶段一(契约与信任模型冻结)已于 2026-09-05 关闭(见 [`docs/阶段一验收评审.md`](docs/阶段一验收评审.md));下一步进入阶段二(后端 VM Core 与会话编排),`apps/` 与 `vm-engine/` 随阶段二落地。下列命令在对应阶段完成后可用:
 >
 > ```bash
 > cd vm-engine && cargo test                # 引擎测试 + proptest
@@ -127,11 +130,11 @@ pnpm lint:deps          # 依赖边界检查(dependency-cruiser)
 | WP-0 | 最小工程载体(pnpm workspaces + Turborepo + 工具链) | ✅ 完成 |
 | WP-1 | 数据分类与秘密零驻留清单 v1.1 | ✅ 冻结 |
 | WP-2 | 会话动作协议 v1(Zod 契约 + JSON Schema 落盘 + 语义文档) | ✅ 冻结 |
-| WP-3 | 投影与错误契约 | ⏳ 待开始 |
-| WP-4 | 题目双包 Schema 与最小 DSL 范围 | ⏳ 待开始 |
-| WP-5 | iframe handshake 与嵌入协议 | ⏳ 待开始 |
-| WP-6 | 版本策略、golden fixture 与阶段收尾 | ⏳ 贯穿收集 |
-| 阶段二+ | TS 服务层、Rust VM 引擎、UI、题目与集成测试 | ⏳ 待开始 |
+| WP-3 | 投影与错误契约 | ✅ 冻结 |
+| WP-4 | 题目双包 Schema 与最小 DSL 范围 | ✅ 冻结 |
+| WP-5 | iframe handshake 与嵌入协议 | ✅ 冻结 |
+| WP-6 | 版本策略、规范化序列化、golden fixture 跨语言冒烟、ADR-8 与阶段收尾 | ✅ 完成(阶段一关闭) |
+| 阶段二+ | TS 服务层、Rust VM 引擎(ADR-8 维持 Rust)、UI、题目与集成测试 | ⏳ 待开始 |
 
 技术路线纪律:当前处于 **T0 最小闭环**(单实例编排器、每会话独立 Worker 进程、Docker Compose)。K8s、消息中间件、微服务拆分、二进制投影编码、VM Core WASM 化均属 T2/T3 选项,进入条件(benchmark 或教学数据证据)满足前不引入。
 
@@ -142,6 +145,10 @@ pnpm lint:deps          # 依赖边界检查(dependency-cruiser)
 | [`docs/项目计划书.md`](docs/项目计划书.md) | **唯一权威来源**:产品定位、四信任域架构、VM 语义、题目 DSL、判题与威胁模型、测试验收 |
 | [`docs/数据分类与秘密零驻留清单.md`](docs/数据分类与秘密零驻留清单.md) | WP-1 交付:每个跨域字段的 PUBLIC / SERVER_ONLY / BOUNDARY 分类与"秘密不进浏览器"论证 |
 | [`docs/阶段一任务分解.md`](docs/阶段一任务分解.md) | 阶段一 WP-0 ~ WP-6 任务、依赖与退出条件 |
+| [`docs/阶段一验收评审.md`](docs/阶段一验收评审.md) | WP-6 交付:阶段一退出条件逐条评审与门禁证据 |
+| [`docs/版本策略.md`](docs/版本策略.md) | WP-6 交付:四类版本定义、判题 / 回放记录项、生产环境锁定 |
+| [`docs/规范化JSON序列化.md`](docs/规范化JSON序列化.md) | WP-6 交付:`stackmaster-canonical-json/1` 规范化规则(TS / Rust 双实现) |
+| [`docs/ADR-8-vm-core语言产能决策.md`](docs/ADR-8-vm-core语言产能决策.md) | WP-6 交付:vm-core 维持 Rust 的产能决策与回退 tripwire |
 | [`packages/protocol/docs/会话动作协议语义.md`](packages/protocol/docs/会话动作协议语义.md) | WP-2 交付:会话动作协议 v1 语义 |
 | [`docs/develop/Vm 模块设计.md`](docs/develop/Vm%20模块设计.md) | Vm 模块设计文档 |
 

@@ -29,7 +29,7 @@
 - **DSL → IR 编译器**与逐 opcode 操作数合法性、CFG 可达性校验归阶段二 `challenge-compiler`(§5.9 分工表);本 WP 的 Schema 对 IR 只做结构性约束;
 - 私有包的**运行时消费**(装载、seed 派生、谓词求值、投影策略组装)归阶段二/三;本 WP 冻结数据形态与静态不变量;
 - 公开包的 CDN 分发、签名与哈希(7.1 发布流程后半段)归阶段六;
-- 版本迁移工具与 fixture 跨语言往返(WP-6)。
+- fixture 跨语言往返已由 WP-6 交付(`tooling/contract-smoke` 规范化摘要往返 + Rust 冒烟,2026-09-05);版本迁移工具归阶段二。
 
 ## 二、公开描述包(Public Challenge Descriptor)
 
