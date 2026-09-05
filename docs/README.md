@@ -36,6 +36,7 @@
 |---|---|
 | [阶段一任务分解.md](phases/阶段一任务分解.md) | WP-0 ~ WP-6 任务、依赖与退出条件(已全部完成) |
 | [阶段一验收评审.md](phases/阶段一验收评审.md) | 阶段一退出条件逐条评审、门禁证据与阶段二移交项 |
+| [阶段二任务分解.md](phases/阶段二任务分解.md) | WP-0 ~ WP-9:vm-engine 工程载体、challenge-compiler、vm-core / vm-runtime / projection / vm-worker、会话编排核心、测试强化与收尾 |
 
 ## 相关文档(包内)
 
