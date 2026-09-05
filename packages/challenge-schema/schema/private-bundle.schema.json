@@ -3,7 +3,7 @@
   "$id": "https://stackmaster.dev/schemas/challenge/v1/private-bundle.schema.json",
   "title": "PrivateChallengeBundle",
   "x-sm-class": "server-only",
-  "description": "私有判题包(计划书 7.1):整体 SERVER_ONLY,只存在于 vm-worker 进程内;Schema 存在不等于可下发,仅经 @stackmaster/challenge-schema/server-only 子路径供后端包消费。字段级分类见 docs/数据分类与秘密零驻留清单.md 第十二章 §12.3;语义见 packages/challenge-schema/docs/双包Schema语义.md §三、§四。$defs 引用图无环(非递归),条件嵌套深度仍为静态属性(L1→L2→L3→谓词)。",
+  "description": "私有判题包(计划书 7.1):整体 SERVER_ONLY,只存在于 vm-worker 进程内;Schema 存在不等于可下发,仅经 @stackmaster/challenge-schema/server-only 子路径供后端包消费。字段级分类见 docs/contracts/数据分类与秘密零驻留清单.md 第十二章 §12.3;语义见 packages/challenge-schema/docs/双包Schema语义.md §三、§四。$defs 引用图无环(非递归),条件嵌套深度仍为静态属性(L1→L2→L3→谓词)。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -41,7 +41,7 @@
     },
     "dslSchemaVersion": {
       "const": 2,
-      "description": "DSL Schema Version(7.4 第 1 类);v2 = G4 重定基(docs/最小DSL范围.md v1.2):基线 21 → 20 opcode(移除 read/write、新增 leave)、syscall/call 作者接口派发、新增 customInstructions / interfaces 声明面;扩展封闭词汇时递增。"
+      "description": "DSL Schema Version(7.4 第 1 类);v2 = G4 重定基(docs/contracts/最小DSL范围.md v1.2):基线 21 → 20 opcode(移除 read/write、新增 leave)、syscall/call 作者接口派发、新增 customInstructions / interfaces 声明面;扩展封闭词汇时递增。"
     },
     "vmEngineVersion": {
       "$ref": "#/$defs/semver",
@@ -99,7 +99,7 @@
           "seedHex": false
         }
       },
-      "description": "随机化只用可复现服务端 seed;无 algorithmId——确定性由 vmEngineVersion 锁定(6.3)。策略与 seed 互斥(R5):fixed ⇒ seedHex 必填(then),server_random_per_session ⇒ seedHex 禁止(else)——同时出现即拒绝,消除策略歧义。seed 是秘密:禁入公开面;seed 的驻留与回放元数据边界见 XS-SEED-POLICY(检查器纵深防御)与 docs/数据分类与秘密零驻留清单.md。"
+      "description": "随机化只用可复现服务端 seed;无 algorithmId——确定性由 vmEngineVersion 锁定(6.3)。策略与 seed 互斥(R5):fixed ⇒ seedHex 必填(then),server_random_per_session ⇒ seedHex 禁止(else)——同时出现即拒绝,消除策略歧义。seed 是秘密:禁入公开面;seed 的驻留与回放元数据边界见 XS-SEED-POLICY(检查器纵深防御)与 docs/contracts/数据分类与秘密零驻留清单.md。"
     },
     "initialState": {
       "type": "object",
@@ -309,7 +309,7 @@
       "type": "array",
       "minItems": 0,
       "maxItems": 8,
-      "description": "多阶段状态机(7.2 六要素,docs/最小DSL范围.md §七);单阶段题目省略。阶段图可达性与预算由 XS-STAGE-REACH / XS-STAGE-BUDGET 检查;阶段不可声明子状态机(无递归表达位)。",
+      "description": "多阶段状态机(7.2 六要素,docs/contracts/最小DSL范围.md §七);单阶段题目省略。阶段图可达性与预算由 XS-STAGE-REACH / XS-STAGE-BUDGET 检查;阶段不可声明子状态机(无递归表达位)。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -426,7 +426,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 4096,
-          "description": "指令 = 20 基线 opcode 封闭枚举 ∪ 大写自定义助记符(docs/最小DSL范围.md §三 v1.2,G4;两形态按大小写结构性不相交,助记符须在 customInstructions[] 声明,XS-CUSTOM-REF)+ 类型化操作数槽;逐 opcode 合法性归 challenge-compiler(阶段二),基线枚举防绕过编译器的手写包。",
+          "description": "指令 = 20 基线 opcode 封闭枚举 ∪ 大写自定义助记符(docs/contracts/最小DSL范围.md §三 v1.2,G4;两形态按大小写结构性不相交,助记符须在 customInstructions[] 声明,XS-CUSTOM-REF)+ 类型化操作数槽;逐 opcode 合法性归 challenge-compiler(阶段二),基线枚举防绕过编译器的手写包。",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -508,7 +508,7 @@
       "type": "array",
       "minItems": 0,
       "maxItems": 16,
-      "description": "作者自定义指令声明面(G4/D4,docs/最小DSL范围.md §三.2 v1.2):声明式映射表(数据),由引擎按微算子封闭集解释执行——不存在宿主侧处理函数注册,不存在脚本形态(四底线 4 不变)。直线语义(封闭集无控制转移,CFG 静态分析保持);恒定步数(步数 = 序列长度,T-SC2 逐条可断言)。助记符唯一且不与基线 opcode 冲突(XS-CUSTOM-DEF);displayText 属 I-10 静态模板,经 E-4/E-6 扫描(XS-CUSTOM-DISPLAY)。",
+      "description": "作者自定义指令声明面(G4/D4,docs/contracts/最小DSL范围.md §三.2 v1.2):声明式映射表(数据),由引擎按微算子封闭集解释执行——不存在宿主侧处理函数注册,不存在脚本形态(四底线 4 不变)。直线语义(封闭集无控制转移,CFG 静态分析保持);恒定步数(步数 = 序列长度,T-SC2 逐条可断言)。助记符唯一且不与基线 opcode 冲突(XS-CUSTOM-DEF);displayText 属 I-10 静态模板,经 E-4/E-6 扫描(XS-CUSTOM-DISPLAY)。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -541,7 +541,7 @@
       "type": "array",
       "minItems": 0,
       "maxItems": 16,
-      "description": "作者接口声明面(G4/D4,docs/最小DSL范围.md §三.3 v1.2):syscall / call 的作者可调用封闭操作;效果原语封闭集,无宿主 IO 原语(F-4 保持)。interfaceId 整数带 [0x0100, 0xFFFF] 与保留系统号带 [0x0000, 0x00FF](内置 exit)结构性不相交;条目间唯一。效果存在性可见面遵守 I-2/I-3/I-9;每接口步数恒定(T-SC2 同断言)。",
+      "description": "作者接口声明面(G4/D4,docs/contracts/最小DSL范围.md §三.3 v1.2):syscall / call 的作者可调用封闭操作;效果原语封闭集,无宿主 IO 原语(F-4 保持)。interfaceId 整数带 [0x0100, 0xFFFF] 与保留系统号带 [0x0000, 0x00FF](内置 exit)结构性不相交;条目间唯一。效果存在性可见面遵守 I-2/I-3/I-9;每接口步数恒定(T-SC2 同断言)。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -853,7 +853,7 @@
           }
         }
       ],
-      "description": "微算子封闭集 v1(G4/D4,docs/最小DSL范围.md §三.2):定步数直线原语,无控制转移(结构性保证 CFG 静态分析保持);数据写目标限一般命名空间(dst 负向前瞻排除 FLAG),FLAG 写入唯一落位是 set_flag(经 I-3 污点检查);内存访问走统一权限与 I-9 统一拒绝路径。新增微算子 = 审计 + dslSchemaVersion 演进。"
+      "description": "微算子封闭集 v1(G4/D4,docs/contracts/最小DSL范围.md §三.2):定步数直线原语,无控制转移(结构性保证 CFG 静态分析保持);数据写目标限一般命名空间(dst 负向前瞻排除 FLAG),FLAG 写入唯一落位是 set_flag(经 I-3 污点检查);内存访问走统一权限与 I-9 统一拒绝路径。新增微算子 = 审计 + dslSchemaVersion 演进。"
     },
     "interfaceEffect": {
       "oneOf": [
@@ -920,7 +920,7 @@
           }
         }
       ],
-      "description": "接口效果原语封闭集 v1(G4/D4,docs/最小DSL范围.md §三.3):exit 为保留内置语义;grant_virtual_file / virtual_file_read 沿结构化 fileId 先例(前者衔接 stage 副作用语义,后者衔接谓词 virtual_file_read);set_flag 经 I-3 污点检查;无宿主 IO / 进程 / 网络原语(F-4 保持)。新增效果原语 = 审计 + dslSchemaVersion 演进。"
+      "description": "接口效果原语封闭集 v1(G4/D4,docs/contracts/最小DSL范围.md §三.3):exit 为保留内置语义;grant_virtual_file / virtual_file_read 沿结构化 fileId 先例(前者衔接 stage 副作用语义,后者衔接谓词 virtual_file_read);set_flag 经 I-3 污点检查;无宿主 IO / 进程 / 网络原语(F-4 保持)。新增效果原语 = 审计 + dslSchemaVersion 演进。"
     },
     "predicate": {
       "oneOf": [
@@ -1035,7 +1035,7 @@
           }
         }
       ],
-      "description": "七项内置谓词封闭集(docs/最小DSL范围.md §四);oneOf 以 type 判别;新增谓词 = 审计 + verdictRuleVersion / dslSchemaVersion 演进。"
+      "description": "七项内置谓词封闭集(docs/contracts/最小DSL范围.md §四);oneOf 以 type 判别;新增谓词 = 审计 + verdictRuleVersion / dslSchemaVersion 演进。"
     },
     "conditionL3": {
       "type": "object",

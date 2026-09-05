@@ -44,6 +44,6 @@ tripwire 触发 → 按计划书回退预案执行(TS vm-core),契约与 fixture
 ## 五、对既有交付物的影响
 
 - WP-1 的 `VmState` 归属悬置解除:阶段二按 Rust 实现 `VmState` 字段集合(WP-1 冻结的字段集合不变);
-- `docs/版本策略.md` §四:verifier 与交互执行同锁同一引擎构建,由本决策的"单实现"理由支撑;
+- `docs/contracts/版本策略.md` §四:verifier 与交互执行同锁同一引擎构建,由本决策的"单实现"理由支撑;
 - 阶段二开工前置:CI 接入 cargo clippy(-D warnings)/ fmt / miri / fuzz 门禁(CLAUDE.md §测试与质量门禁),`tooling/contract-smoke` 纳入流水线;
 - 本机工具链证据(§二)属环境事实,不写入仓库依赖;CI 环境的 Rust 工具链由阶段二工程化提供。

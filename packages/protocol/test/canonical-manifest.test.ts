@@ -1,5 +1,5 @@
 /**
- * 摘要清单防漂移测试(WP-6;docs/规范化JSON序列化.md §五)。
+ * 摘要清单防漂移测试(WP-6;docs/contracts/规范化JSON序列化.md §五)。
  *
  * 以 TS 侧 canonicalizer(src/,与生成脚本 dist 同源)对全部 fixture 复算
  * 规范化摘要 / 拒绝码,与 tooling/contract-smoke/canonical-digests.json

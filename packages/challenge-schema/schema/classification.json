@@ -1,7 +1,7 @@
 {
   "packageVersion": "0.1.0",
   "challengePackageSchemaVersion": 1,
-  "note": "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。R1/R2 裁决(公开 ISA 引用面):公开包 encodingTable[].op 的自定义助记符与 operands[].interfaceId 是公开 ISA 引用——仅揭示指令 / 接口的存在性与公开标识;customInstructions 的微算子语义与 displayText、interfaces 的效果序列等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝,隐藏声明不产生存在性信号。",
+  "note": "字段分类唯一依据 docs/contracts/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。R1/R2 裁决(公开 ISA 引用面):公开包 encodingTable[].op 的自定义助记符与 operands[].interfaceId 是公开 ISA 引用——仅揭示指令 / 接口的存在性与公开标识;customInstructions 的微算子语义与 displayText、interfaces 的效果序列等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝,隐藏声明不产生存在性信号。",
   "schemas": {
     "public-descriptor": {
       "file": "public-descriptor.schema.json",

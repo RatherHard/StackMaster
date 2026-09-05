@@ -5,7 +5,7 @@
 | 版本 | v1.0 |
 | 日期 | 2026-09-04 |
 | 适用范围 | VM 模块设计、双包 Schema、检查器、公开构建隔离及阶段一收尾评审 |
-| 上游依据 | `docs/develop/Vm 模块设计冲突与整改方案.md`、`docs/项目计划书.md`、`docs/数据分类与秘密零驻留清单.md`、`docs/最小DSL范围.md` |
+| 上游依据 | `docs/develop/Vm 模块设计冲突与整改方案.md`、`docs/项目计划书.md`、`docs/contracts/数据分类与秘密零驻留清单.md`、`docs/contracts/最小DSL范围.md` |
 | 文档性质 | 遗留审查事项与关闭条件清单，不替代计划书，不直接修改 Schema 规范 |
 | 当前结论 | D1–D6 已裁决；契约层与 P5 字节权威执行模式已有实现和测试基础，但下列事项仍需完成或形成关闭证据 |
 
@@ -586,7 +586,7 @@ P4 引擎实现进入阶段二时，至少应携带以下契约验收清单：
 | 实现位置 | `schema/public-descriptor.schema.json`(required 迁移 + 描述)、`src/common/public-types.ts`(镜像类型同步)、`src/server-only/checker/encoding-rules.ts`(checkShapeReferences 无条件宽度检查、checkEncodingTable 空表防线、checkProgramMode 语义注释)、`src/server-only/checker/private-rules.ts`(checkPrivateCodeRegionVisibility,记 D2-CODE-PUBLIC) |
 | 测试证据 | `test/checker.test.ts` R10–R13 describe(私有双代码区 / 隐藏代码区 / FLAG operand 绕过 / 双宽度绕过 / 三态判定)与 `test/public-descriptor.test.ts`(Schema 层 width / displacementWidth 缺失与非法值、FLAG operand、空表 minItems) |
 | 安全审查 | 全部为失败关闭方向的收紧;信封版本不递增(仓库尚无发布题目,整改清单裁决整体重定基,与 v1.1–v1.4 先例一致) |
-| 文档同步 | `双包Schema语义.md` v1.5(§2.2、§5 XS-ENC-TOKEN / D2-CODE-PUBLIC 行)、`docs/最小DSL范围.md` §三.4.1(内联操作数必填 / FLAG 不可编码 / 单代码区 / 空表)、WP-1 清单 v1.8、CLAUDE.md |
+| 文档同步 | `双包Schema语义.md` v1.5(§2.2、§5 XS-ENC-TOKEN / D2-CODE-PUBLIC 行)、`docs/contracts/最小DSL范围.md` §三.4.1(内联操作数必填 / FLAG 不可编码 / 单代码区 / 空表)、WP-1 清单 v1.8、CLAUDE.md |
 
 ### R14 — P5 专项测试矩阵(P1)
 

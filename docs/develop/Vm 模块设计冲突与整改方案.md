@@ -8,7 +8,7 @@
 | 修订记录 | v1.3:新增 P5 批次(G5 三层指令结构与字节权威执行模式)——公开包 `vmProfile.encodingTable`(token 字典,ISA 公开)+ 私有包 `entrypointAddressHex`、`compiledIr` 转条件字段(字节模式退位)、代码区 W^X、取指译码缓存执行模型;§六新增裁决 D6 与微决策 D4.4–D4.7;WP-1 v1.7 / 双包 Schema 语义 v1.4 / 最小DSL范围 v1.3 同步。v1.2:契约层整改收尾——P0–P3 批次全部完成,§二冲突总表 G1–G4 勾销,§五实施顺序标注落地状态,§六微决策 D3.1 / D4.1 / D4.2 / D4.3 定稿,§七补落地记录;`docs/develop/Vm 模块设计.md` 状态头改注"契约层整改已落地"。v1.1:记录 D1–D5 裁决结果(§六);G4 按规范语义澄清重写——作者可定义"语义-机器码"映射,opcode v2(移除 `read`/`write`、新增 `leave`),`syscall`/`call` 开放出题人声明接口面;新增 P0.5 计划书修订批次(D5);寄存器上限按 D3 放宽。v1.0:初版冲突核定与整改方案 |
 | 状态 | 六个决策点已裁决(D1–D6);**契约层整改(P0–P3)与 P5 字节权威模式批次已全部落地**(G1:WP-1 v1.4;G2:WP-1 v1.5;G4:WP-1 v1.6;G5/P5:WP-1 v1.7);P4 引擎实现归阶段二,按已定稿契约执行 |
 | 效力范围 | 本文件是规范与已完成工作之间冲突的整改执行计划;不直接修改任何 Schema;一切落地走 WP-1 §1.3 契约变更流程(先改文档与 fixture → 评审 → 再改实现) |
-| 上游依据 | `docs/项目计划书.md`(唯一权威来源,修订项见 P0.5)、`docs/数据分类与秘密零驻留清单.md`(WP-1 v1.3)、`docs/最小DSL范围.md`、`packages/protocol`、`packages/challenge-schema` |
+| 上游依据 | `docs/项目计划书.md`(唯一权威来源,修订项见 P0.5)、`docs/contracts/数据分类与秘密零驻留清单.md`(WP-1 v1.3)、`docs/contracts/最小DSL范围.md`、`packages/protocol`、`packages/challenge-schema` |
 
 ---
 
@@ -73,10 +73,10 @@
    - IR 立即数/位移落在 archBits 有符号范围内;
    - 作者自定义指令的微算子常量同规则(§3.4);
    - 公开包 `initialProjection` 镜像值同规则(作为 `XS-PROJ-VALUES` 的前置);
-4. 文档修订:WP-1 §3.2/§4.2 措辞由"64 位值"改为"archBits 宽架构值(64 位容器承载)";CLAUDE.md 同步措辞;`docs/最小DSL范围.md` 增补操作数宽度一节;
+4. 文档修订:WP-1 §3.2/§4.2 措辞由"64 位值"改为"archBits 宽架构值(64 位容器承载)";CLAUDE.md 同步措辞;`docs/contracts/最小DSL范围.md` 增补操作数宽度一节;
 5. 公开投影**不新增字段**:`valueHex` 保持变长 hex(现模式天然兼容 32 位短值)。硬门槛论证补入 WP-1:位宽是架构公开常量,值长度差由位宽决定,不含任何秘密派生信息,I-10 来源类不变。
 
-**波及面**:WP-1(v1.4)、`protocol`(`src/common/hex.ts` 语义与校验、golden fixture)、`challenge-schema`(双 Schema、`patterns.ts`、检查器新规则、红灯样例)、`docs/最小DSL范围.md`、CLAUDE.md。
+**波及面**:WP-1(v1.4)、`protocol`(`src/common/hex.ts` 语义与校验、golden fixture)、`challenge-schema`(双 Schema、`patterns.ts`、检查器新规则、红灯样例)、`docs/contracts/最小DSL范围.md`、CLAUDE.md。
 
 **验收**:64 位题目全量兼容回归;32 位题目初值/立即数越界被 `XS-ARCH-WIDTH` 拒绝(红灯样例必触发)。
 
@@ -132,7 +132,7 @@
 4. 权限面(`^r?w?x?$` 规范序)与资源护栏(`MAX_MEMORY_REGIONS = 64`、单区 16 MiB、总量 64 MiB)不变;
 5. WP-1 第十二章补两行论证:`custom` 类型与 4KB 对齐值均为作者声明的公开布局常量,值来源属 I-10"公开布局常量"类,与秘密无相关,硬门槛通过。
 
-**波及面**:`challenge-schema`(`vocabulary.ts`、双 Schema、检查器、fixtures)、WP-1 §12.2/§12.3、`docs/最小DSL范围.md`(引用区域类型处)。
+**波及面**:`challenge-schema`(`vocabulary.ts`、双 Schema、检查器、fixtures)、WP-1 §12.2/§12.3、`docs/contracts/最小DSL范围.md`(引用区域类型处)。
 
 **验收红灯样例**:区域 `byteLength` 非 4KB 倍数被拒;`pageSizeBytes = 256` 被拒;`custom` 区域缺 `label` 被拒;既有五类区域题目全量兼容回归。
 
@@ -187,7 +187,7 @@
 
 #### 3.4.4 波及面与验收
 
-**波及面**:`challenge-schema`(`vocabulary.ts`:DSL_OPCODES v2 + 新增微算子/效果原语/接口枚举;双 Schema:`compiledIr` 操作数第四 kind、`customInstructions`、`interfaces`;`limits.ts`:表容量上限;检查器:`XS-IR-LABEL` 扩展 + 新 `XS-SYSCALL-DECL` / `XS-IFACE-REF` / `XS-CUSTOM-*` 规则族)、`docs/最小DSL范围.md` §三重写 + §五/§六/§八相应更新、**计划书 6.1/7.2/7.3 修订(P0.5)**、WP-1 §12.3(`compiledIr` 字段面)与新声明面的硬门槛论证补章节、protocol(12 会话动作与投影契约**不变**,`PublicEvent.kind` 已含 `syscall`,无改动)、fixtures 全量重建。
+**波及面**:`challenge-schema`(`vocabulary.ts`:DSL_OPCODES v2 + 新增微算子/效果原语/接口枚举;双 Schema:`compiledIr` 操作数第四 kind、`customInstructions`、`interfaces`;`limits.ts`:表容量上限;检查器:`XS-IR-LABEL` 扩展 + 新 `XS-SYSCALL-DECL` / `XS-IFACE-REF` / `XS-CUSTOM-*` 规则族)、`docs/contracts/最小DSL范围.md` §三重写 + §五/§六/§八相应更新、**计划书 6.1/7.2/7.3 修订(P0.5)**、WP-1 §12.3(`compiledIr` 字段面)与新声明面的硬门槛论证补章节、protocol(12 会话动作与投影契约**不变**,`PublicEvent.kind` 已含 `syscall`,无改动)、fixtures 全量重建。
 
 **验收红灯样例**:IR 含 `read`/`write` 被拒(v2);`leave` 出现在无 `RBP` 的寄存器集被拒;`syscall` 引用未声明 ID 被拒;`call` 的 `interface` 操作数引用不存在条目被拒;自定义指令语义含控制转移微算子被拒;自定义指令/接口效果步数随操作数值变化(T-SC2 变体)被拒;`displayText` 含谓词信息或隐藏区域名被拒(E-4/E-6 扫描)。
 
@@ -242,7 +242,7 @@
 |---|---|---|---|
 | D3.1 | 寄存器上限数值 | 建议总 256 / 可见 64 | **总 256 / 可见 64**(P2 落地:`MAX_VM_REGISTERS` 64→256、`MAX_VISIBLE_REGISTERS` 32→64;上限是资源护栏) |
 | D4.1 | `syscall` 保留号与表容量 | `exit` 保留 ID;`interfaces`/`customInstructions` 上限 | **保留系统号带 [0x0, 0xFF](内置 exit)不开放声明;作者接口号域 [0x100, 0xFFFF];两表容量各 ≤ 16**(P3 落地) |
-| D4.2 | `call` 接口派发语义 | ① 引擎管理调用(不占玩家栈)/ ② 完整栈语义 | **① 引擎管理调用**(契约层不编码派发语义,阶段二引擎实现遵循;`docs/最小DSL范围.md` §三.3 记载) |
+| D4.2 | `call` 接口派发语义 | ① 引擎管理调用(不占玩家栈)/ ② 完整栈语义 | **① 引擎管理调用**(契约层不编码派发语义,阶段二引擎实现遵循;`docs/contracts/最小DSL范围.md` §三.3 记载) |
 | D4.3 | 自定义指令 v1 是否放开控制转移微算子 | 仅直线 / 允许有限跳转 | **仅直线**(微算子封闭集 v1 无控制转移,CFG 静态分析保持;Schema 层结构性不可表达;控制转移放开挂 T2/T3) |
 | D4.4 | 字节模式下代码空间与执行模型 | ① opcode 索引为基准 / ② 表层机器码为基准,取指时译码 | **② 表层机器码为基准**:字节模式代码区 `contentHex` 即可执行空间,地址 = 字节偏移(消除双表示偏移漂移);执行时按 `encodingTable` 取指译码为 opcode;译码是纯函数(表, 字节, 地址),取指译码**缓存**是性能优化非状态——COW 快照、回放、确定性全部保持;全量预译码不可行(代码区图灵歧义,线性扫描无法区分数据) |
 | D4.5 | 自修改代码(SMC) | 字节模式允许 'w' / 代码区 W^X 硬规则 | **W^X 硬规则**:字节模式代码区权限不得含 `w`(`XS-CODE-WRX`);SMC 挂 T2/T3(与 DEP/NX 教学叙事一致);IR 模式不受此约束(无表层机器码,无写码面) |

@@ -1,5 +1,5 @@
 /**
- * 规范化 JSON 序列化(WP-6;规范文本 docs/规范化JSON序列化.md)。
+ * 规范化 JSON 序列化(WP-6;规范文本 docs/contracts/规范化JSON序列化.md)。
  *
  * `stackmaster-canonical-json/1`:RFC 8785(JCS)的整数域子集。键按 UTF-16
  * 码元序排序、零空白、字符串最短转义、数值域收窄为安全整数(非整数拒绝,
@@ -8,7 +8,7 @@
  *
  * 值级规范化(十六进制标量的发射形态,hex.ts 交由 WP-6 冻结的部分)不在
  * 本模块:文法规范化是上下文无关的机械变换;十六进制值由生产者按
- * docs/规范化JSON序列化.md §四在构造载荷时完成,再进入本模块。
+ * docs/contracts/规范化JSON序列化.md §四在构造载荷时完成,再进入本模块。
  */
 
 /** 规范化失败的机器可读原因(规范 §五;Rust 侧拒绝集合与之对齐)。 */
@@ -32,7 +32,7 @@ export class CanonicalJsonError extends Error {
 }
 
 /**
- * 嵌套深度护栏(docs/规范化JSON序列化.md §3.3)。契约实例深度由消息字节
+ * 嵌套深度护栏(docs/contracts/规范化JSON序列化.md §3.3)。契约实例深度由消息字节
  * 上限约束,本值仅防御病态输入导致的栈溢出,正常负载远不可达。
  */
 export const MAX_CANONICAL_JSON_DEPTH = 512;

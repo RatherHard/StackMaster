@@ -22,7 +22,7 @@ import type {
   VisibilityLevel,
 } from "../common/vocabulary.js";
 
-/** 七项内置谓词封闭集(oneOf 以 type 判别;docs/最小DSL范围.md §四)。 */
+/** 七项内置谓词封闭集(oneOf 以 type 判别;docs/contracts/最小DSL范围.md §四)。 */
 export interface PredicateRegisterEquals {
   readonly type: Extract<PredicateType, "register_equals">;
   readonly register: string;
@@ -276,7 +276,7 @@ export interface StageResourceBudget {
   readonly maxActions?: number;
 }
 
-/** 多阶段状态机六要素(7.2;docs/最小DSL范围.md §七)。 */
+/** 多阶段状态机六要素(7.2;docs/contracts/最小DSL范围.md §七)。 */
 export interface Stage {
   readonly stageId: string;
   readonly allowedActions: readonly SessionActionType[];

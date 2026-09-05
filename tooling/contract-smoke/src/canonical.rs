@@ -1,4 +1,4 @@
-//! 规范化 JSON 序列化的 Rust 消费侧镜像(docs/规范化JSON序列化.md)。
+//! 规范化 JSON 序列化的 Rust 消费侧镜像(docs/contracts/规范化JSON序列化.md)。
 //!
 //! 标识 `stackmaster-canonical-json/1`:JCS 整数域子集。TS 参考实现在
 //! `packages/protocol/src/common/canonical-json.ts`;两侧由 golden fixture

@@ -2,7 +2,7 @@
 
 证明 `@stackmaster/protocol` 与 `@stackmaster/challenge-schema` 的 JSON Schema
 可被 Rust 侧消费(计划书 5.6 / ADR-5:serde + schemars),并锁定规范化 JSON
-序列化([docs/规范化JSON序列化.md](../../docs/规范化JSON序列化.md))的双语言一致。
+序列化([docs/contracts/规范化JSON序列化.md](../../docs/contracts/规范化JSON序列化.md))的双语言一致。
 阶段二起,vm-engine 各 crate 的契约解析与本 crate 保持同一纪律。
 
 ## 运行

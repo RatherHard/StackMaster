@@ -12,7 +12,7 @@
  *
  * sessionId 即嵌入会话标识,由宿主以 CSPRNG 生成、经 iframe URL fragment
  * 一次性下发,并兼任 opaque origin 场景的握手认证值(不可预测、一次性;
- * 设计与威胁模型见 docs/嵌入协议.md §四 / §六)。
+ * 设计与威胁模型见 docs/contracts/嵌入协议.md §四 / §六)。
  *
  * 消息类型为封闭枚举:拒绝未知类型(8.2);方向由类型唯一决定
  * (EMBED_PLUGIN_TO_HOST_TYPES / EMBED_HOST_TO_PLUGIN_TYPES),接收端必须
@@ -57,7 +57,7 @@ export const EMBED_MESSAGE_TYPES = [
 
 export type EmbedMessageType = (typeof EMBED_MESSAGE_TYPES)[number];
 
-/** 插件 → 宿主方向的消息类型(接收端方向检查;规则 V-6,docs/嵌入协议.md §五)。 */
+/** 插件 → 宿主方向的消息类型(接收端方向检查;规则 V-6,docs/contracts/嵌入协议.md §五)。 */
 export const EMBED_PLUGIN_TO_HOST_TYPES = ["hello", "height_changed"] as const;
 
 /** 宿主 → 插件方向的消息类型。 */

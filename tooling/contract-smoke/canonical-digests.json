@@ -1,7 +1,7 @@
 {
   "algorithm": "stackmaster-canonical-json/1 + sha256",
   "generator": "tooling/generate-canonical-manifest.mjs",
-  "spec": "docs/规范化JSON序列化.md",
+  "spec": "docs/contracts/规范化JSON序列化.md",
   "fixtures": {
     "packages/challenge-schema/test/fixtures/public-descriptor/basic.json": {
       "sha256": "02746245fb7a82d33c4a4dc714488cf890453d734f3b22af6dc6659305c6d6d1"

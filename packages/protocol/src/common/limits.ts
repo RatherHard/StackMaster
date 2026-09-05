@@ -5,7 +5,7 @@
  * 且必须 ≤ 协议上限;服务端在执行前按题目预算重新校验(6.2 第 6 条),
  * 超出协议上限的请求在契约校验层即被拒绝,不进入执行。
  *
- * 数值依据见 docs/数据分类与秘密零驻留清单.md 决策 D3/D4 与
+ * 数值依据见 docs/contracts/数据分类与秘密零驻留清单.md 决策 D3/D4 与
  * packages/protocol/docs/会话动作协议语义.md。
  */
 
@@ -87,7 +87,7 @@ export const MAX_ERROR_HINTS = 4;
  * 单条嵌入消息的序列化字节上限(64 KiB)。嵌入协议只承载加载、主题、语言、
  * 自适应高度与生命周期控制,不含投影与动作负载——投影走浏览器 ↔ 编排器的
  * 认证通道(8.2),不经 postMessage。接收端在 JSON.parse 前按本值拒绝
- * (校验规则 V-2,docs/嵌入协议.md §五)。
+ * (校验规则 V-2,docs/contracts/嵌入协议.md §五)。
  */
 export const MAX_EMBED_MESSAGE_BYTES = 65536;
 

@@ -51,7 +51,7 @@ stackmaster/
 │   ├── vm-runtime/           # COW 快照、规范化动作日志、回放、私有题目包加载
 │   └── projection/           # ProjectionPolicy 白名单与脱敏
 ├── tooling/                  # eslint、dependency-cruiser、clippy 配置、CI 脚本与隔离扫描
-└── docs/
+└── docs/                   # 文档(索引:docs/README.md;contracts 契约与规则 / adr 决策 / phases 阶段分解与验收 / develop 设计文档)
 ```
 
 依赖方向由 CI 强制(dependency-cruiser / cargo workspace 声明,5.5):

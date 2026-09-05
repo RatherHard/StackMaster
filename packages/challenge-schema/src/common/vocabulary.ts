@@ -1,7 +1,7 @@
 /**
  * 题目双包的封闭词汇表(冻结枚举)。
  *
- * 词汇唯一来源是 docs/最小DSL范围.md(指令面 / 谓词面 / 编排面)与
+ * 词汇唯一来源是 docs/contracts/最小DSL范围.md(指令面 / 谓词面 / 编排面)与
  * WP-1 清单第十二章(会话动作、公开错误码沿用 protocol 冻结面);
  * Schema 内的枚举与本常量严格一致,由 schema-strictness 测试与
  * 跨包一致性测试双向防漂移。变更必须先走契约变更流程(先改
@@ -50,7 +50,7 @@ export type PublicErrorCode = (typeof PUBLIC_ERROR_CODES)[number];
 export const ARCH_BITS_VALUES = [32, 64] as const;
 export type ArchBits = (typeof ARCH_BITS_VALUES)[number];
 
-/** 内存区域六类(6.1 MVP 虚拟硬件;docs/最小DSL范围.md §二;custom 为作者自定义类型,publicLabel 承载类型名——G3 整改)。 */
+/** 内存区域六类(6.1 MVP 虚拟硬件;docs/contracts/最小DSL范围.md §二;custom 为作者自定义类型,publicLabel 承载类型名——G3 整改)。 */
 export const REGION_KINDS = ["code", "global", "stack", "heap", "key", "custom"] as const;
 export type RegionKind = (typeof REGION_KINDS)[number];
 
@@ -64,7 +64,7 @@ export const SEMANTIC_HIGHLIGHT_KINDS = [
 ] as const;
 export type SemanticHighlightKind = (typeof SEMANTIC_HIGHLIGHT_KINDS)[number];
 
-/** 20 基线 opcode 封闭枚举(docs/最小DSL范围.md §三.1 v1.2;G4/D4 重定基:移除教学 IO read/write,新增栈帧 leave;与私有包 Schema 基线枚举一致)。 */
+/** 20 基线 opcode 封闭枚举(docs/contracts/最小DSL范围.md §三.1 v1.2;G4/D4 重定基:移除教学 IO read/write,新增栈帧 leave;与私有包 Schema 基线枚举一致)。 */
 export const DSL_OPCODES = [
   "mov",
   "push",
@@ -103,7 +103,7 @@ export const INTERFACE_ID_MIN = 0x100;
 export const INTERFACE_ID_MAX = 0xffff;
 
 /**
- * 微算子封闭集 v1(G4/D4 作者自定义指令,docs/最小DSL范围.md §三.2):
+ * 微算子封闭集 v1(G4/D4 作者自定义指令,docs/contracts/最小DSL范围.md §三.2):
  * 全部为定步数直线原语——集合内不存在控制转移,自定义指令的 CFG 静态分析
  * 完全保持;求值步数 = 序列长度,与操作数值无关(T-SC2 逐条可断言)。
  */
@@ -121,7 +121,7 @@ export type DslMicroOp = (typeof MICRO_OPS)[number];
 export const BIT_MASK_LOGIC_OPS = ["and", "or", "xor"] as const;
 export type BitMaskLogic = (typeof BIT_MASK_LOGIC_OPS)[number];
 
-/** 接口效果原语封闭集 v1(G4/D4 作者接口面,docs/最小DSL范围.md §三.3;无宿主 IO 原语,F-4 保持)。 */
+/** 接口效果原语封闭集 v1(G4/D4 作者接口面,docs/contracts/最小DSL范围.md §三.3;无宿主 IO 原语,F-4 保持)。 */
 export const EFFECT_PRIMITIVES = [
   "exit",
   "grant_virtual_file",
@@ -131,7 +131,7 @@ export const EFFECT_PRIMITIVES = [
 ] as const;
 export type EffectPrimitive = (typeof EFFECT_PRIMITIVES)[number];
 
-/** 七项内置谓词封闭集(docs/最小DSL范围.md §四)。 */
+/** 七项内置谓词封闭集(docs/contracts/最小DSL范围.md §四)。 */
 export const PREDICATE_TYPES = [
   "register_equals",
   "register_bits_set",
@@ -182,6 +182,6 @@ export type RevealPolicy = (typeof REVEAL_POLICIES)[number];
 export const SEED_STRATEGIES = ["fixed", "server_random_per_session"] as const;
 export type SeedStrategy = (typeof SEED_STRATEGIES)[number];
 
-/** 状态机副作用封闭集 v1(docs/最小DSL范围.md §七;拒绝动态拼接 capability)。 */
+/** 状态机副作用封闭集 v1(docs/contracts/最小DSL范围.md §七;拒绝动态拼接 capability)。 */
 export const STAGE_SIDE_EFFECT_TYPES = ["grant_virtual_file"] as const;
 export type StageSideEffectType = (typeof STAGE_SIDE_EFFECT_TYPES)[number];

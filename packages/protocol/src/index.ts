@@ -13,8 +13,8 @@
  *   语义见 docs/投影与错误契约语义.md;
  * - WP-5 嵌入协议 v1:EmbedMessage(postMessage 消息信封,5 种消息类型,
  *   握手与能力声明);embed token 绑定字段 EmbedTokenClaims 的**解析器**
- *   不从本入口导出(浏览器对 token 不解析,见 docs/嵌入协议.md §2.2);
- *   语义见 docs/嵌入协议.md。
+ *   不从本入口导出(浏览器对 token 不解析,见 docs/contracts/嵌入协议.md §2.2);
+ *   语义见 docs/contracts/嵌入协议.md。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
  * 与 EmbedTokenClaims(凭证解析器)不从本入口导出,仅经子路径

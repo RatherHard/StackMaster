@@ -113,7 +113,7 @@ export function generateManifestDocument(): JsonSchemaDocument {
     sessionActionProtocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
     embedProtocolVersion: EMBED_PROTOCOL_VERSION,
     note:
-      "字段分类唯一依据 docs/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。" +
+      "字段分类唯一依据 docs/contracts/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。" +
       "Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",
     schemas,
   };

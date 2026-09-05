@@ -1,5 +1,5 @@
 /**
- * golden fixture 规范化摘要清单生成器(WP-6;docs/规范化JSON序列化.md §五)。
+ * golden fixture 规范化摘要清单生成器(WP-6;docs/contracts/规范化JSON序列化.md §五)。
  *
  * 遍历 protocol 与 challenge-schema 两个包的 test/fixtures,对每个 fixture:
  *   - 可规范化 → 记录 canonicalSha256(规范化形态的 UTF-8 SHA-256,小写十六进制);
@@ -70,7 +70,7 @@ const manifest = JSON.stringify(
   {
     algorithm: "stackmaster-canonical-json/1 + sha256",
     generator: "tooling/generate-canonical-manifest.mjs",
-    spec: "docs/规范化JSON序列化.md",
+    spec: "docs/contracts/规范化JSON序列化.md",
     fixtures: Object.fromEntries(Object.entries(fixtures).sort(([a], [b]) => (a < b ? -1 : 1))),
   },
   null,

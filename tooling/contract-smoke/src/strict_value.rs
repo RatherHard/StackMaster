@@ -1,7 +1,7 @@
 //! 严格 JSON 值模型(重复键拒绝)。
 //!
 //! serde_json::Value 反序列化默认允许对象重复键(后值静默覆盖),与
-//! docs/规范化JSON序列化.md §二第 1 条不符;本模块自定义 `Deserialize`,
+//! docs/contracts/规范化JSON序列化.md §二第 1 条不符;本模块自定义 `Deserialize`,
 //! 在 visit_map 时以精确拼写检测重复键。孤立代理项在 serde_json 解析层
 //! 即报错(`lone leading surrogate…`),按错误分类映射为 TS 侧同名拒绝码。
 

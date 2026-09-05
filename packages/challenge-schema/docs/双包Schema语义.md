@@ -7,7 +7,7 @@
 | 修订 | v1.5(2026-09-04):R1/R2——**公开 ISA 引用面裁决**:公开 `encodingTable[].op` 自定义助记符与 `operands[].interfaceId` 定义为经裁决的公开 ISA 引用(仅揭示存在性与公开标识);微算子语义 / 效果序列 / displayText 等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝(隐藏声明不产生存在性信号),扫描测试 `test/isa-reference-face.test.ts` 证明公开包无法反推私有语义;R5——`seedPolicy` if/then/else 冻结策略互斥(`fixed` ⇒ `seedHex` 必填,`server_random_per_session` ⇒ `seedHex` 禁止),检查器新增 `XS-SEED-POLICY` 纵深防御;R6——Ajv 编译启用 `ownProperties: true`(继承属性不满足 required、不被视为包字段),入站原型污染形态拒绝测试补齐;R7——检查器错误两层模型固化(内部诊断 vs `internal_error` 公开兜底,见 §五前置说明),违规消息泄漏扫描测试与错误回显截断;R10——字节模式代码区模型冻结为恰一个公开 + 恰一个非隐藏私有代码区,D2-CODE-PUBLIC 增私有面(代码区不得隐藏);R11——FLAG 寄存器不可编码(Schema 负向前瞻结构化排除 + XS-ENC-TOKEN 复核);R12——`immediate.width` / `memory.displacementWidth` **必填**且恒为 `"arch"`(表层机器码长度与译码不依赖隐式推断;本批次内重定基,信封版本不递增);R13——空 `encodingTable` 失败关闭(存在即字节模式,不回退 IR);R3——`XS-ARCH-WIDTH` 递归覆盖 `customInstructions[].semantics`(load_imm / set_flag valueHex、bit_mask maskHex、load_mem / store_mem displacementHex)与 `interfaces[].effects`(set_flag valueHex);R4——地址区间统一半开区间与 2^64 上界(`ADDRESS_SPACE_END_EXCLUSIVE`),新增 `XS-ADDR-SPACE`(公开区域 / 私有区域 / 私有对象三面);R9——`PRIVATE_BUNDLE_FIELDS` 数量注释同步为 20 并数量锁定;R8——公开构建图与产物隔离扫描固化(`tooling/scan-public-artifacts.mjs`,`pnpm scan:public`)。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改清单裁决整体重定基;v1.4(2026-09-04):G5/P5/D6——公开包 `vmProfile.encodingTable`(≤ 64 条,`tokenHex` 定宽 1 字节 ↔ 具体指令字典,操作数形态声明;ISA 公开);私有包新增条件字段 `entrypointAddressHex`,`compiledIr` 转**条件字段**(字节模式省略)——双程序形态恰一由 `XS-PROG-MODE` 强制;代码区 W^X(`XS-CODE-WRX`);编码表自检(`XS-ENC-TOKEN`)与入口探测译码(`XS-ENC-PROBE`);微决策 D4.4–D4.7(token 定宽、操作数内联 archBits/8 小端、取指译码缓存、探测部分覆盖 + 运行时 `invalid_rip` 兜底);`dslSchemaVersion` / `irFormatVersion` 冻结常量维持 2(执行语义层零变化,新增面属声明性数据);v1.3(2026-09-04):G4/D4——基线 opcode 21→20(`read`/`write` 废止,教学 IO 收敛;新增 `leave` 栈帧伪指令);IR `op` 双形态 anyOf(基线小写枚举 ∪ 大写自定义助记符 `^[A-Z][A-Z0-9_]{0,15}$`,大小写结构性不相交);新增顶层声明面 `customInstructions`(≤ 16 条,`semantics` = 微算子封闭集 v1 直线序列 ≤ 16)与 `interfaces`(≤ 16 条,`interfaceId` ∈ [0x100, 0xFFFF],`effects` = 效果原语封闭集 v1 直线序列 ≤ 16);操作数槽新增 `interface` 形态(`call` 的结构化接口引用);`dslSchemaVersion` / `irFormatVersion` 冻结常量 1→2;syscall 定基为封闭单值伪操作(保留系统号带 [0x0, 0xFF] 内置 exit 不变);检查器新增 `XS-CUSTOM-DEF` / `XS-CUSTOM-REF` / `XS-SYSCALL-DECL` / `XS-IFACE-REF` / `XS-IR-LEAVE` / `XS-CUSTOM-DISPLAY`,`XS-ID-UNIQUE` 承接助记符与接口号唯一性;v1.2(2026-09-04):G2——寄存器命名放开为双命名空间保留模型:一般寄存器自由命名 `^[A-Z][A-Z0-9_]{0,15}$`(负向前瞻排除 FLAG 保留区),冻结 14 基集废止,新增必选核心寄存器 `RSP`/`RBP`/`RIP`;`vmProfile.registers` 语义改为"本题目寄存器集的定义性声明";数量护栏放宽(`registers` 1–64、私有初始寄存器 ≤ 256);检查器规则 `XS-REG-FROZEN` 废止,新增 `XS-REG-CORE` / `XS-REG-NAMESPACE`,`XS-REG-SUBSET` 重锚为声明集子集;v1.1(2026-09-04):G1——`vmProfile.archBits`(32/64)位宽声明入公开包,架构值 = archBits 位宽、64 位容器承载、高位掩蔽,新增检查器规则 XS-ARCH-WIDTH;G3——区域类型增补作者自定义 `custom` 类,区域大小与 `pageSizeBytes` 收紧为 4KB 的倍数,新增检查器规则 XS-MEM-PAGE-ALIGN。信封版本 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 不递增:仓库尚无发布题目,变更经整改方案裁决整体重定基(`dslSchemaVersion` 的递增随 G4/P3 批次落地);v1(2026-09-03):阶段一 WP-4 冻结初版 |
 | 日期 | 2026-09-04 |
 | 契约单一来源 | 本包 `schema/*.schema.json`(手写 JSON Schema 2020-12 + Ajv;计划书 5.4 技术选型原文);TS 类型为手工镜像,完整正反样例测试防漂移(§6) |
-| 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、13.2(题目包测试);WP-1 清单 **v1.7** 第十二章(双包字段级分类)、§3.2(寄存器命名与双命名空间保留模型)、§12.5(FLAG 保留区)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/最小DSL范围.md` v1.3(指令面 / 谓词面 / 编排面 / 表层机器码面词汇,G5/D6 重定基);`docs/develop/Vm 模块设计冲突与整改方案.md`(G1/G3/G2/G4、G5/D6 裁决) |
+| 上游依据 | 计划书 7.1–7.4(双包模型 / 扩展语义 / DSL 边界 / 版本管理)、6.1(MVP 虚拟硬件)、6.2(archBits 位宽掩蔽域)、13.2(题目包测试);WP-1 清单 **v1.7** 第十二章(双包字段级分类)、§3.2(寄存器命名与双命名空间保留模型)、§12.5(FLAG 保留区)、I-1–I-10、ZR-B8、10.5(T-SC4);`docs/contracts/最小DSL范围.md` v1.3(指令面 / 谓词面 / 编排面 / 表层机器码面词汇,G5/D6 重定基);`docs/develop/Vm 模块设计冲突与整改方案.md`(G1/G3/G2/G4、G5/D6 裁决) |
 | 效力范围 | 公开描述包与私有判题包的 JSON Schema、字段分类清单(`schema/classification.json`)、字段分类检查器(`./server-only` 子路径);阶段二 `challenge-compiler` / session-api / verifier 消费;与计划书、WP-1 清单冲突时依次以计划书、WP-1 清单为准 |
 
 **变更纪律**:与 protocol 语义文档相同——任何字段、枚举值或语义变更须先走 WP-1 §1.3 契约变更流程(先改 WP-1 第十二章分类论证 → 改本包 Schema 与正反 fixture → 评审 → 再改实现);破坏性变更递增 `CHALLENGE_PACKAGE_SCHEMA_VERSION` 并保留 N-1 兼容窗口(§7)。
@@ -22,7 +22,7 @@
 2. **私有判题包 Schema**(`schema/private-bundle.schema.json`,`x-sm-class: server-only`):7.1 私有七项清单落位(WP-1 §12.3);**Schema 存在不等于可下发**——仅经 `@stackmaster/challenge-schema/server-only` 子路径供后端包(challenge-compiler、session-api、verifier)消费,镜像 protocol `ProjectionPolicy` 先例;
 3. **字段分类清单**(`schema/classification.json`):与 `src/common/classification.ts` 常量严格一致(测试强制),供 CI 的 ZR-P1 / I-1 类机检直接引用;
 4. **字段分类检查器**(`src/server-only/checker/`):规则 ID 与依据对照见 WP-1 §12.6,逐规则语义见 §5;
-5. `docs/最小DSL范围.md`(仓库级文档):指令面 20 基线 opcode + 微算子封闭集 v1 + 效果原语封闭集 v1 / 谓词面封闭集 / 编排面状态机 / 表层机器码面(token 字典,§三.4)的词汇冻结(G5/D6 v1.3)。
+5. `docs/contracts/最小DSL范围.md`(仓库级文档):指令面 20 基线 opcode + 微算子封闭集 v1 + 效果原语封闭集 v1 / 谓词面封闭集 / 编排面状态机 / 表层机器码面(token 字典,§三.4)的词汇冻结(G5/D6 v1.3)。
 
 **不归本 WP 冻结**(边界声明):
 
@@ -112,11 +112,11 @@
 | `secrets` | 对象(必填) | `flag`(8–128 字符)、`virtualFiles[]`(0–8 × `{fileId, content(0–4096 字符)}`) |
 | `privateObjects[]` | 数组(0–64) | `{objectId, kind: buffer\|canary\|saved_rbp\|return_address\|file\|other, addressHex, byteLength, visibility: public\|hidden, containsSecret}`;I-2 / I-3 检查器输入 |
 | `judging` | 对象(必填) | 见 §4.2 |
-| `stages?[]` | 数组(0–8) | 状态机六要素(`docs/最小DSL范围.md` §七) |
+| `stages?[]` | 数组(0–8) | 状态机六要素(`docs/contracts/最小DSL范围.md` §七) |
 | `compiledIr` | 对象(**条件字段**,v1.4) | 公开包无 `encodingTable`(IR 模式)时必填;字节模式必须**省略**(双程序形态恰一,XS-PROG-MODE);见 §4.4 |
 | `entrypointAddressHex?`(v1.4) | 十六进制地址(`$defs/hexValue64` 形态) | **字节模式必填**(G5/P5/D6):执行入口字节地址(表层机器码空间为唯一权威,地址 = 代码区字节偏移,§三.4.2);必须落在某代码区内,允许不在区域首字节(入口即 gadget 场景,XS-ENC-PROBE);IR 模式入口由 `compiledIr.entrypointIndex` 承载,两入口形态永不同现 |
-| `customInstructions?[]`(v1.3) | 数组(0–16) | `{mnemonic, displayText(1–120), semantics[](1–16)}`;`mnemonic` = `^[A-Z][A-Z0-9_]{0,15}$`(大写形态与基线小写枚举结构性不相交,与基线冲突由 XS-CUSTOM-DEF 纵深防御、条目唯一性归 XS-ID-UNIQUE);`semantics` = **微算子封闭集 v1** 直线序列(`oneOf` 以 `op` 判别:`load_imm` / `mov_reg` / `load_mem` / `store_mem` / `set_flag` / `bit_mask`)——集合内无控制转移(CFG 静态分析保持),执行步数恒定 = 序列长度(T-SC2 结构前提);数据算子 `dst` 用一般命名模式(FLAG 结构性排除,`set_flag` 是唯一 FLAG 写入微算子,I-3),`src` 用 `vmRegisterName`(flags 可读);语义见 `docs/最小DSL范围.md` §三.2 |
-| `interfaces?[]`(v1.3) | 数组(0–16) | `{interfaceId, displayText(1–120), effects[](1–16)}`;`interfaceId` = 整数 0x100–0xFFFF(保留系统号带 [0x0, 0xFF] 内置 exit 不开放声明,XS-SYSCALL-DECL);`effects` = **效果原语封闭集 v1** 直线序列(`oneOf` 以 `effect` 判别:`exit` / `grant_virtual_file` / `virtual_file_read` / `set_flag` / `noop`)——无宿主 IO 原语(F-4 保持),执行步数恒定 = 序列长度;引用可解析由 XS-IFACE-REF 强制(fileId ∈ `secrets.virtualFiles`,FLAG 寄存器 ∈ 私有初始寄存器集);v1 Schema 不设接口存在性的公开声明位(阶段二按教学需要增补);语义见 `docs/最小DSL范围.md` §三.3 |
+| `customInstructions?[]`(v1.3) | 数组(0–16) | `{mnemonic, displayText(1–120), semantics[](1–16)}`;`mnemonic` = `^[A-Z][A-Z0-9_]{0,15}$`(大写形态与基线小写枚举结构性不相交,与基线冲突由 XS-CUSTOM-DEF 纵深防御、条目唯一性归 XS-ID-UNIQUE);`semantics` = **微算子封闭集 v1** 直线序列(`oneOf` 以 `op` 判别:`load_imm` / `mov_reg` / `load_mem` / `store_mem` / `set_flag` / `bit_mask`)——集合内无控制转移(CFG 静态分析保持),执行步数恒定 = 序列长度(T-SC2 结构前提);数据算子 `dst` 用一般命名模式(FLAG 结构性排除,`set_flag` 是唯一 FLAG 写入微算子,I-3),`src` 用 `vmRegisterName`(flags 可读);语义见 `docs/contracts/最小DSL范围.md` §三.2 |
+| `interfaces?[]`(v1.3) | 数组(0–16) | `{interfaceId, displayText(1–120), effects[](1–16)}`;`interfaceId` = 整数 0x100–0xFFFF(保留系统号带 [0x0, 0xFF] 内置 exit 不开放声明,XS-SYSCALL-DECL);`effects` = **效果原语封闭集 v1** 直线序列(`oneOf` 以 `effect` 判别:`exit` / `grant_virtual_file` / `virtual_file_read` / `set_flag` / `noop`)——无宿主 IO 原语(F-4 保持),执行步数恒定 = 序列长度;引用可解析由 XS-IFACE-REF 强制(fileId ∈ `secrets.virtualFiles`,FLAG 寄存器 ∈ 私有初始寄存器集);v1 Schema 不设接口存在性的公开声明位(阶段二按教学需要增补);语义见 `docs/contracts/最小DSL范围.md` §三.3 |
 | `judgingConfig` | 对象(必填) | `verdictRuleVersion`(必填,semver)、`maxPredicateEvalSteps`(必填,1–10 000 000;D1 约束 2 / I-6 / T-SC2 配置前提)、`timeoutMsPerAction?`(1–60 000)、`maxTotalActionBytes?`(1–1 048 576) |
 
 ### 3.2 `initialState`(VmState 初始形态)
@@ -134,7 +134,7 @@ L2: { all?: L3[] (0–4), any?: L3[] (0–4), not?: L3 }
 L3: { predicate: <内置谓词> }
 ```
 
-嵌套深度是**静态 Schema 属性**(三级结构在 Schema 中静态展开——`$defs: conditionL1 → conditionL2 → conditionL3 → predicate`,引用无环,Ajv 直接拒绝第四层,免**递归** `$ref`,XS-NESTING;检查器对实例深扫描复核深度 ≤ 3 作纵深防御);七项内置谓词(封闭枚举,`oneOf` 类型判别 + 各自 `additionalProperties: false`):`register_equals` / `register_bits_set` / `memory_equals` / `memory_contains` / `ret_target_equals` / `stack_canary_intact` / `virtual_file_read`(词汇依据:`docs/最小DSL范围.md` §四)。
+嵌套深度是**静态 Schema 属性**(三级结构在 Schema 中静态展开——`$defs: conditionL1 → conditionL2 → conditionL3 → predicate`,引用无环,Ajv 直接拒绝第四层,免**递归** `$ref`,XS-NESTING;检查器对实例深扫描复核深度 ≤ 3 作纵深防御);七项内置谓词(封闭枚举,`oneOf` 类型判别 + 各自 `additionalProperties: false`):`register_equals` / `register_bits_set` / `memory_equals` / `memory_contains` / `ret_target_equals` / `stack_canary_intact` / `virtual_file_read`(词汇依据:`docs/contracts/最小DSL范围.md` §四)。
 
 ### 4.2 `judging`
 
@@ -147,7 +147,7 @@ L3: { predicate: <内置谓词> }
 
 ### 4.4 `compiledIr`(IR 信封,条件字段)
 
-**条件性**(v1.4,G5/P5/D6):IR 模式(公开包无 `encodingTable`)下必填;字节模式必须省略——双程序形态恰一由 `XS-PROG-MODE` 强制,字节模式下可执行程序以表层机器码承载(公开包 `encodingTable` + 代码区 `contentHex`,入口 `entrypointAddressHex`;词汇语义见 `docs/最小DSL范围.md` §三.4)。
+**条件性**(v1.4,G5/P5/D6):IR 模式(公开包无 `encodingTable`)下必填;字节模式必须省略——双程序形态恰一由 `XS-PROG-MODE` 强制,字节模式下可执行程序以表层机器码承载(公开包 `encodingTable` + 代码区 `contentHex`,入口 `entrypointAddressHex`;词汇语义见 `docs/contracts/最小DSL范围.md` §三.4)。
 
 `{irFormatVersion: const 2(v1.3 G4/D4), entrypointIndex?, instructions[](1–4096), labels[](0–512 × {labelId, instructionIndex})}`;指令 = `{op, operands[] (≤ 4)}`;`op` 为**双形态 anyOf**:20 基线 opcode 小写枚举 ∪ 大写自定义助记符 `^[A-Z][A-Z0-9_]{0,15}$`(两形态按大小写结构性不相交;助记符必须已声明,XS-CUSTOM-REF);操作数槽 `oneOf`:`{kind: register, name}` / `{kind: immediate, valueHex}` / `{kind: memory, baseRegister?, displacementHex?}` / `{kind: interface, interfaceId(整数 0x100–0xFFFF)}`(结构安全;逐 opcode 合法性归 challenge-compiler)。WP-4 检查器只做:labelId 唯一且引用可解析、索引 < 数组长度(XS-IR-LABEL);助记符 / syscall 派发号 / `interface` 操作数引用可解析(XS-CUSTOM-REF / XS-SYSCALL-DECL / XS-IFACE-REF);`leave` ⇒ 私有初始寄存器集含 `RBP`(XS-IR-LEAVE)。字节模式下等值的引用类检查由 `XS-ENC-PROBE` 作用于**入口探测译码产物**(探测部分覆盖 + 运行时 `invalid_rip` 兜底,D4.6)。
 

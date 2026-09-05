@@ -3,7 +3,7 @@
   "$id": "https://stackmaster.dev/schemas/challenge/v1/public-descriptor.schema.json",
   "title": "PublicChallengeDescriptor",
   "x-sm-class": "public",
-  "description": "公开描述包(计划书 7.1):可被浏览器读取,只含公开面字段。字段级分类与硬门槛论证见 docs/数据分类与秘密零驻留清单.md 第十二章;语义见 packages/challenge-schema/docs/双包Schema语义.md §二。",
+  "description": "公开描述包(计划书 7.1):可被浏览器读取,只含公开面字段。字段级分类与硬门槛论证见 docs/contracts/数据分类与秘密零驻留清单.md 第十二章;语义见 packages/challenge-schema/docs/双包Schema语义.md §二。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -177,7 +177,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
-          "description": "表层机器码 token 字典(G5/D6,P5 批次;docs/最小DSL范围.md §三.4)。本字段存在即选择字节模式:表层机器码构成的代码空间为唯一权威,执行时取指译码,与私有包 compiledIr 恰一(XS-PROG-MODE)。ISA 公开立场:解题性要求 ISA 公开(谜题在 gadget 构造不在解码),私有包不复制本字段(单一来源,沿 archBits 先例)。token 字典是指向封闭 opcode 集的声明式数据,不引入任何代码形态(F-1/F-3 保持);自定义助记符语义仍在私有包 customInstructions。表自检(token 唯一、op 与烘焙引用可解析、syscall/自定义/leave 条目形态)归 XS-ENC-TOKEN;入口探测译码归 XS-ENC-PROBE。",
+          "description": "表层机器码 token 字典(G5/D6,P5 批次;docs/contracts/最小DSL范围.md §三.4)。本字段存在即选择字节模式:表层机器码构成的代码空间为唯一权威,执行时取指译码,与私有包 compiledIr 恰一(XS-PROG-MODE)。ISA 公开立场:解题性要求 ISA 公开(谜题在 gadget 构造不在解码),私有包不复制本字段(单一来源,沿 archBits 先例)。token 字典是指向封闭 opcode 集的声明式数据,不引入任何代码形态(F-1/F-3 保持);自定义助记符语义仍在私有包 customInstructions。表自检(token 唯一、op 与烘焙引用可解析、syscall/自定义/leave 条目形态)归 XS-ENC-TOKEN;入口探测译码归 XS-ENC-PROBE。",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -219,7 +219,7 @@
                     "pattern": "^[A-Z][A-Z0-9_]{0,15}$"
                   }
                 ],
-                "description": "双形态(与 IR op 同词汇,docs/最小DSL范围.md §三.1):基线 20 opcode 小写枚举 ∪ 大写自定义助记符;两形态按大小写结构性不相交,自定义助记符必须在私有包 customInstructions 声明(XS-ENC-TOKEN)。"
+                "description": "双形态(与 IR op 同词汇,docs/contracts/最小DSL范围.md §三.1):基线 20 opcode 小写枚举 ∪ 大写自定义助记符;两形态按大小写结构性不相交,自定义助记符必须在私有包 customInstructions 声明(XS-ENC-TOKEN)。"
               },
               "operands": {
                 "type": "array",
