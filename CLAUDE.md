@@ -134,27 +134,6 @@ stackmaster/
 
 新功能先写测试(TDD);测试用行为描述命名;错误反馈断言要覆盖"可解释性"而不只是状态码。
 
-## 常用命令
-
-> WP-0 已落地 TS 工程基线:pnpm workspaces + Turborepo,含 `packages/protocol`、`packages/challenge-schema`、`tooling/`(ESLint flat config 与 dependency-cruiser 配置)。WP-1 已冻结数据分类与秘密零驻留清单(`docs/数据分类与秘密零驻留清单.md`);WP-2 已冻结会话动作协议 v1(`packages/protocol`:Zod 契约 + JSON Schema 2020-12 落盘 + `docs/会话动作协议语义.md`);WP-3 已冻结投影与错误契约(`PublicStateProjection` 7 字段及子类型、`ProjectionDelta`/`DirtyRange` 增量、`PublicError` 16 值错误码 + 逐 code 能力矩阵、`ProjectionPolicy` server-only 专用面;语义见 `packages/protocol/docs/投影与错误契约语义.md`;`ProjectionPolicy` Schema 仅经 `@stackmaster/protocol/server-only` 子路径供后端包消费,浏览器可达包导入即 dependency-cruiser 违规)。WP-4 已冻结题目双包 Schema 与最小 DSL 范围(`packages/challenge-schema`:公开描述包 / 私有判题包 JSON Schema 2020-12、`schema/classification.json` 字段分类清单、严格 JSON 扫描器、Ajv 校验器与 `checkChallengePair` 字段分类检查器(规则 ID 对齐 WP-1 §12.6,逐规则红灯样例);私有面仅经 `@stackmaster/challenge-schema/server-only` 子路径供后端包消费,Schema 存在不等于可下发;DSL 范围见 `docs/最小DSL范围.md`,契约语义见 `packages/challenge-schema/docs/双包Schema语义.md`)。双包契约已按《Vm 模块设计冲突与整改方案》完成 G1–G4 重定基(2026-09-04,契约层整改全部落地):公开包 `vmProfile.archBits`(32/64)必填位宽声明、区域六类(新增作者自定义 `custom`,publicLabel 承载类型名)、区域大小与页大小收紧为 4KB 的倍数,检查器规则 `XS-ARCH-WIDTH`(跨包位宽域)与 `XS-MEM-PAGE-ALIGN`(VMA 页对齐,Schema multipleOf 之外的纵深防御);G2/D3 寄存器双命名空间保留模型(一般名自由命名 `^[A-Z][A-Z0-9_]{0,15}` + FLAG 保留区 `^FLAG[A-Z0-9_]*`)、必选核心寄存器 RSP/RBP/RIP、上限放宽(总 256 / 可见 64),检查器 `XS-REG-CORE`/`XS-REG-NAMESPACE` 接替已废止的 `XS-REG-FROZEN`;G4/D4 指令面自由设定——基线 opcode 20 个(`read`/`write` 废止、新增 `leave`)、IR op 双形态(基线小写枚举 ∪ 大写自定义助记符)、私有包 `customInstructions`(微算子封闭集 v1,直线序列)与 `interfaces`(效果原语封闭集 v1;`interfaceId` ∈ [0x100, 0xFFFF],保留带 [0x0, 0xFF] 为内置 exit 不开放声明)声明面、`syscall` 封闭单值伪操作、`dslSchemaVersion`/`irFormatVersion` = 2、字段分类清单 20 字段,检查器新增 `XS-CUSTOM-DEF`/`XS-CUSTOM-REF`/`XS-CUSTOM-DISPLAY`/`XS-SYSCALL-DECL`/`XS-IFACE-REF`/`XS-IR-LEAVE`;后续审查整改(R1–R15,2026-09-04)落地:R1/R2 公开 ISA 引用面裁决(公开编码表助记符 / interfaceId 仅是公开引用,私有语义不下发)、R5 seed 策略互斥(`server_random_per_session` 禁 `seedHex`)、R10–R13 冻结(字节模式单代码区 / FLAG 不可编码 / 编码操作数 width 必填 / 空表失败关闭)、R3–R4 位宽与地址上界递归覆盖(新增 `XS-SEED-POLICY`/`XS-ADDR-SPACE`)、R6 Ajv ownProperties、R7 错误两层(违规 = 内部诊断,玩家面一律 internal_error);作者自定义 = 私有包内声明式映射表(数据)+ 引擎封闭原语解释执行,无宿主侧注册、无脚本形态,「题目 DSL 不执行任意宿主代码」红线不变。`apps/` 与 `vm-engine/` 自阶段二起搭建,下列命令中 vm-engine 与 docker compose 部分在对应阶段落地前执行会失败,属预期现象。
-
-```bash
-pnpm install                              # 安装 TS 依赖(workspaces)
-pnpm build                                # Turborepo 全量构建(tsc -b 逐包)
-pnpm dev                                  # plugin-dev 开发壳(Vite;阶段二落地)
-pnpm test / pnpm lint / pnpm typecheck    # 测试 / ESLint / tsc project references
-pnpm lint:deps                            # 依赖边界检查(dependency-cruiser)
-
-cd vm-engine
-cargo test                                # 引擎测试 + proptest
-cargo clippy --all-targets -- -D warnings
-cargo fmt --check
-cargo +nightly miri test -p vm-core       # UB 检查
-RUSTFLAGS="-C overflow-checks=on" cargo build --release
-
-docker compose up -d                      # dev:PostgreSQL + Redis + MinIO + session-api + verifier + Vite
-```
-
 ## 开发工作流与提交规范
 
 - 复杂功能先出实现计划再写代码;涉及协议、投影、题目包 Schema 的改动,必须先更新 `protocol` / `challenge-schema` 契约与 golden fixture,再改实现;
