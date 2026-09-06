@@ -1,9 +1,11 @@
 //! 语义层不变式(契约 superRefine 的 Rust 承接,计划书 5.6)。
 //!
-//! 四条跨字段规则超出 JSON Schema 结构表达能力,TS 侧由 Zod superRefine
-//! 机检,JSON Schema 落盘产物不携带(各 Schema 源码与语义文档 §六明文);
-//! Rust 侧一致性由本模块承接 + golden fixture 反例锁定。规则识别按结构
-//! 签名(与 TS 侧 Schema 组合语义一致:规则作用于该形状出现的任何位置):
+//! WP-1 起自 `tooling/contract-smoke` 提升为引擎可复用模块,冒烟 crate
+//! 经路径依赖消费同一实现。四条跨字段规则超出 JSON Schema 结构表达能力,
+//! TS 侧由 Zod superRefine 机检,JSON Schema 落盘产物不携带(各 Schema 源码
+//! 与语义文档 §六明文);Rust 侧一致性由本模块承接 + golden fixture 反例锁定。
+//! 规则识别按结构签名(与 TS 侧 Schema 组合语义一致:规则作用于该形状出现
+//! 的任何位置):
 //!
 //! 1. **PublicError 能力矩阵**(public-error.ts):按 code 冻结 addressHex
 //!    形态与 explanation 字段白名单;
@@ -15,7 +17,7 @@
 //! 4. **ProjectionDelta 字节预算**(projection-delta.ts):dirtyRanges 携带
 //!    字节总数 ≤ 8192(MAX_PROJECTION_BYTES_PER_REVISION,WP-1 D3)。
 
-use crate::strict_value::StrictValue;
+use super::strict_value::StrictValue;
 
 const MAX_PROJECTION_BYTES_PER_REVISION: i64 = 8192;
 

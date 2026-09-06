@@ -45,8 +45,20 @@ const ENGINE_RUNTIME_DEP_ALLOWLIST = {
 };
 /** 引擎三 crate 测试期依赖允许清单(仅影响测试二进制,不影响生产确定性图)。 */
 const ENGINE_DEV_DEP_ALLOWLIST = [];
-/** vm-worker 运行时依赖允许清单(进程边界层;WP-1 接 serde 等契约消费面时在此登记)。 */
-const WORKER_RUNTIME_DEP_ALLOWLIST = ["vm-core", "vm-runtime", "projection"];
+/**
+ * vm-worker 运行时依赖允许清单(进程边界层)。WP-1 契约消费面登记:
+ * serde / serde_json(契约类型镜像与帧序列化)、jsonschema(冻结 JSON Schema
+ * 校验)、schemars(镜像漂移比对);路径依赖 vm-core / vm-runtime / projection。
+ */
+const WORKER_RUNTIME_DEP_ALLOWLIST = [
+  "vm-core",
+  "vm-runtime",
+  "projection",
+  "serde",
+  "serde_json",
+  "jsonschema",
+  "schemars",
+];
 /** 引擎三 crate 任何依赖位置(运行时 / 测试)都禁止的时间 / 随机源 crate(ENG-4)。 */
 const FORBIDDEN_ENGINE_CRATES = [
   "rand",

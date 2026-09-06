@@ -5,12 +5,13 @@ fn main() {
     match contract_smoke::smoke::run_all() {
         Ok(report) => {
             println!(
-                "契约冒烟通过:Schema 编译 {} 个,有效样例 {} 接受,非法样例 {} 拒绝,摘要比对 {} 条,serde/schemars 消费 {} 项",
+                "契约冒烟通过:Schema 编译 {} 个,有效样例 {} 接受,非法样例 {} 拒绝,摘要比对 {} 条,serde/schemars 消费 {} 项,private-bundle 消费 {} 项",
                 report.schemas_compiled,
                 report.valid_instances_checked,
                 report.invalid_instances_rejected,
                 report.manifest_entries_compared,
                 report.serde_mirrors_checked,
+                report.private_bundle_checks,
             );
         }
         Err(message) => {

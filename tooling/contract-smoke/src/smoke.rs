@@ -9,6 +9,7 @@
 //! 4. **serde + schemars 消费**:镜像类型反序列化有效样例,schemars 生成的
 //!    属性 / 必需键集合与 Zod 产出的 JSON Schema 相等。
 
+use crate::bundle_builder;
 use crate::canonical::{self};
 use crate::mirrors::{
     EmbedTokenClaimsMirror, VerdictResultMirror, schema_property_names, schema_required_names,
@@ -19,6 +20,7 @@ use sha2::Digest;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use vm_worker::contract::mirrors::PrivateBundleMirror;
 
 /// 契约目录 → Schema 文件的映射(fixture 目录名即契约名)。
 const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
@@ -38,7 +40,7 @@ const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
 const CHALLENGE_CONTRACTS: &[(&str, &str)] =
     &[("public-descriptor", "public-descriptor.schema.json")];
 
-/// 冒烟结果汇总(全部通过时返回)。
+/// 契约冒烟结果汇总(全部通过时返回)。
 #[derive(Debug)]
 pub struct SmokeReport {
     pub schemas_compiled: usize,
@@ -46,6 +48,8 @@ pub struct SmokeReport {
     pub invalid_instances_rejected: usize,
     pub manifest_entries_compared: usize,
     pub serde_mirrors_checked: usize,
+    /// private-bundle 消费检查(构造样例 + 反例 + 镜像比对;WP-1 §四冒烟扩展)。
+    pub private_bundle_checks: usize,
 }
 
 fn repo_root() -> PathBuf {
@@ -303,12 +307,55 @@ pub fn run_all() -> Result<SmokeReport, String> {
         return Err("schemars 必需键集合与 protocol Schema 不一致(embed-token-claims)".to_owned());
     }
 
+    // ── §5 private-bundle 消费冒烟(WP-1;阶段一验收评审 §三移交项 5)─────
+    // 私有样例由测试期 builder 现场生成,永不入 git;覆盖两种程序形态
+    // (IR / 字节)与定向破坏反例,证明引擎契约消费面贯通私有包 Schema。
+    let mut private_bundle_checks = 0usize;
+    let private_bundle_validator = jsonschema::validator_for(&read_json(
+        &challenge_schema_dir.join("private-bundle.schema.json"),
+    )?)
+    .map_err(|error| format!("Schema 编译失败 private-bundle: {error}"))?;
+    for (mode, bundle) in [
+        ("ir", bundle_builder::build_ir_mode_bundle()),
+        ("byte", bundle_builder::build_byte_mode_bundle()),
+    ] {
+        if !private_bundle_validator.is_valid(&bundle) {
+            return Err(format!("私有包 builder 样例被 Schema 拒绝(mode={mode})"));
+        }
+        serde_json::from_value::<PrivateBundleMirror>(bundle).map_err(|error| {
+            format!("PrivateBundle serde 镜像反序列化失败(mode={mode}):{error}")
+        })?;
+        private_bundle_checks += 1;
+    }
+    for (reason, bundle) in bundle_builder::schema_rejected_mutations() {
+        if private_bundle_validator.is_valid(&bundle) {
+            return Err(format!("私有包反例被 Schema 接受:{reason}"));
+        }
+        private_bundle_checks += 1;
+    }
+    let private_bundle_schema =
+        read_json(&challenge_schema_dir.join("private-bundle.schema.json"))?;
+    let generated = serde_json::to_value(schemars::schema_for!(PrivateBundleMirror))
+        .map_err(|error| format!("schemars 生成失败:{error}"))?;
+    if schema_property_names(&private_bundle_schema) != schema_property_names(&generated) {
+        return Err(
+            "schemars 属性集合与 challenge-schema 不一致(private-bundle)".to_owned(),
+        );
+    }
+    if schema_required_names(&private_bundle_schema) != schema_required_names(&generated) {
+        return Err(
+            "schemars 必需键集合与 challenge-schema 不一致(private-bundle)".to_owned(),
+        );
+    }
+    private_bundle_checks += 2;
+
     Ok(SmokeReport {
         schemas_compiled,
         valid_instances_checked,
         invalid_instances_rejected,
         manifest_entries_compared,
         serde_mirrors_checked,
+        private_bundle_checks,
     })
 }
 

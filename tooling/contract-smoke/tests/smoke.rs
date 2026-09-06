@@ -33,13 +33,15 @@ fn canonicalizer_agrees_with_reference_semantics() {
         CanonicalError::NonIntegerNumber
     );
 
-    // 重复键拒绝;JSON 文本中的 \ud800 转义是孤立代理项,serde_json 解析即拒绝。
+    // 重复键拒绝;JSON 文本中的 \ud800 转义是孤立代理项,拒绝码与 TS
+    // `lone_surrogate` 同串(WP-1 修正:原实现因 serde_json 将其归 Syntax
+    // 分类而落到 invalid_json,与 TS 拒绝码不对齐)。
     assert_eq!(
         canonicalize_json_text(r#"{"a":1,"a":2}"#).unwrap_err(),
         CanonicalError::DuplicateKey
     );
     assert_eq!(
         canonicalize_json_text(r#""\ud800""#).unwrap_err(),
-        CanonicalError::InvalidJson
+        CanonicalError::LoneSurrogate
     );
 }

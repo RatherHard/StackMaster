@@ -1,5 +1,7 @@
 //! 规范化 JSON 序列化的 Rust 消费侧镜像(docs/contracts/规范化JSON序列化.md)。
 //!
+//! WP-1 起自 `tooling/contract-smoke` 提升为引擎可复用模块
+//! (`vm_worker::contract::canonical`),冒烟 crate 经路径依赖消费同一实现;
 //! 标识 `stackmaster-canonical-json/1`:JCS 整数域子集。TS 参考实现在
 //! `packages/protocol/src/common/canonical-json.ts`;两侧由 golden fixture
 //! 摘要清单(tooling/contract-smoke/canonical-digests.json)锁定,任何一侧
@@ -13,7 +15,7 @@
 //! - 对象键按 **UTF-16 码元序**排序(TS 默认字符串比较的语义),
 //!   不是 UTF-8 字节序——两者在 U+E000..U+FFFF 与增补平面之间有差异。
 
-use crate::strict_value::StrictValue;
+use super::strict_value::StrictValue;
 use serde_json::Number;
 use std::fmt;
 use std::fmt::Write as _;

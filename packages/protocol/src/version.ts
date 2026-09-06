@@ -10,6 +10,18 @@
 /** 会话动作协议当前版本(ActionRequest.protocolVersion 的唯一合法值)。 */
 export const SESSION_ACTION_PROTOCOL_VERSION = 1;
 
+/**
+ * 引擎进程协议当前版本(5.6 第 4 类契约;阶段二 WP-1 登记,版本策略 §二)。
+ *
+ * 覆盖编排器 / verifier ↔ vm-worker 的进程帧格式与命令信封(语义权威:
+ * docs/develop/引擎进程协议.md);投影 / 错误 / 动作 Schema 面仍随
+ * SESSION_ACTION_PROTOCOL_VERSION 演进,两者不共用编号空间。worker 启动经
+ * ready 帧自报本版本,编排器比对不一致即拒绝建会话(fail-closed)。
+ * Rust 侧镜像常量:vm-engine/vm-worker(`protocol::version`),双侧一致性由
+ * contract-smoke 机检。
+ */
+export const ENGINE_PROCESS_PROTOCOL_VERSION = 1;
+
 /** 嵌入协议当前版本(EmbedMessage.protocolVersion 的唯一合法值;WP-5)。 */
 export const EMBED_PROTOCOL_VERSION = 1;
 

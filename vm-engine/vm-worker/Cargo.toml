@@ -4,7 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+# 进程边界层契约消费依赖(WP-1;ENG-4 允许清单已同步登记):
+# serde / serde_json 为契约类型镜像与帧序列化,jsonschema 接入阶段一冻结的
+# JSON Schema 校验,schemars 供镜像漂移冒烟比对。引擎三 crate 不受影响
+# (no_std + 空依赖允许清单维持不变)。
 [dependencies]
 vm-core = { path = "../vm-core" }
 vm-runtime = { path = "../vm-runtime" }
 projection = { path = "../projection" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+jsonschema = "0.53.0"
+schemars = "1.2.2"
+
+# 测试期依赖(摘要清单复算;不进生产图)。
+[dev-dependencies]
+sha2 = "0.11.0"

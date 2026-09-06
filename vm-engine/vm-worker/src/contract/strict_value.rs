@@ -4,7 +4,11 @@
 //! docs/contracts/规范化JSON序列化.md §二第 1 条不符;本模块自定义 `Deserialize`,
 //! 在 visit_map 时以精确拼写检测重复键。孤立代理项在 serde_json 解析层
 //! 即报错(`lone leading surrogate…`),按错误分类映射为 TS 侧同名拒绝码。
+//!
+//! WP-1 起自 `tooling/contract-smoke` 提升为引擎可复用模块,冒烟 crate
+//! 经路径依赖消费同一实现。
 
+use super::canonical::CanonicalError;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::Number;
 use std::fmt;
@@ -21,7 +25,7 @@ pub enum StrictValue {
 }
 
 impl StrictValue {
-    pub fn parse(text: &str) -> Result<StrictValue, crate::canonical::CanonicalError> {
+    pub fn parse(text: &str) -> Result<StrictValue, CanonicalError> {
         serde_json::from_str(text).map_err(map_parse_error)
     }
 
@@ -38,20 +42,35 @@ impl StrictValue {
             _ => None,
         }
     }
+
+    /// 取对象字段子树(信封 → 载荷的子树校验用)。
+    pub fn get(&self, key: &str) -> Option<&StrictValue> {
+        match self {
+            StrictValue::Object(entries) => entries
+                .iter()
+                .find(|(existing, _)| existing == key)
+                .map(|(_, value)| value),
+            _ => None,
+        }
+    }
 }
 
-fn map_parse_error(error: serde_json::Error) -> crate::canonical::CanonicalError {
-    use crate::canonical::CanonicalError;
+fn map_parse_error(error: serde_json::Error) -> CanonicalError {
+    // 孤立代理项在 serde_json 中归 Syntax 分类,但语义上是"字符串非法"而非
+    // 语法破损:按消息特征先行判定,拒绝码与 TS `lone_surrogate` 对齐(规范
+    // §二第 3 条)。两种形态:孤立低位代理项("lone leading surrogate in hex
+    // escape")与未配对高位代理项("unexpected end of hex escape")。
+    let message = error.to_string();
+    if message.contains("surrogate") || message.contains("unexpected end of hex escape") {
+        return CanonicalError::LoneSurrogate;
+    }
     match error.classify() {
         serde_json::error::Category::Syntax | serde_json::error::Category::Eof => {
             CanonicalError::InvalidJson
         }
         serde_json::error::Category::Data => {
-            let message = error.to_string();
             if message.contains("duplicate key") {
                 CanonicalError::DuplicateKey
-            } else if message.contains("surrogate") {
-                CanonicalError::LoneSurrogate
             } else {
                 CanonicalError::InvalidJson
             }
