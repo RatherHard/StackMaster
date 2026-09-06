@@ -54,7 +54,8 @@
 
 - [`packages/protocol/docs/会话动作协议语义.md`](../packages/protocol/docs/会话动作协议语义.md)(WP-2);
 - [`packages/protocol/docs/投影与错误契约语义.md`](../packages/protocol/docs/投影与错误契约语义.md)(WP-3);
-- [`packages/challenge-schema/docs/双包Schema语义.md`](../packages/challenge-schema/docs/双包Schema语义.md)(WP-4)。
+- [`packages/challenge-schema/docs/双包Schema语义.md`](../packages/challenge-schema/docs/双包Schema语义.md)(WP-4);
+- [`packages/challenge-compiler/docs/装载与编译期校验语义.md`](../packages/challenge-compiler/docs/装载与编译期校验语义.md)(阶段二 WP-2)。
 
 工具文档:[`tooling/contract-smoke/README.md`](../tooling/contract-smoke/README.md)(跨语言契约冒烟)。
 

@@ -27,6 +27,19 @@ importers:
         specifier: ^8.69.0
         version: 8.69.0(eslint@10.9.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)
 
+  packages/challenge-compiler:
+    dependencies:
+      '@stackmaster/challenge-schema':
+        specifier: workspace:*
+        version: link:../challenge-schema
+    devDependencies:
+      '@types/node':
+        specifier: ^26.4.0
+        version: 26.4.0
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.4.0)(vite@8.2.2(@types/node@26.4.0))
+
   packages/challenge-schema:
     dependencies:
       ajv:

@@ -53,6 +53,20 @@ module.exports = {
       to: { path: "^packages/challenge-schema/" },
     },
     {
+      name: "challenge-compiler-dependents-restricted",
+      severity: "error",
+      comment:
+        "challenge-compiler(WP-2)只能被后端 TS 包(session-api、verifier、会话编排核心 session-core)依赖;浏览器可达包导入即违规——装载产物含私有判题包完整状态与完整 IR,“Schema 存在不等于可下发”(WP-2;计划书 13.5 隔离扫描同约束)。排除包自身。",
+      from: {
+        path: "^(packages|apps)/",
+        pathNot: [
+          "^packages/(session-api|session-core|verifier)/",
+          "^packages/challenge-compiler/",
+        ],
+      },
+      to: { path: "^packages/challenge-compiler/" },
+    },
+    {
       name: "browser-packages-only-depend-on-protocol",
       severity: "error",
       comment:
