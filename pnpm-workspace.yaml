@@ -1,2 +1,4 @@
 packages:
   - "packages/*"
+  # vm-engine 是 cargo workspace;turbo 任务宿主(门禁接线),非 JS 发布包。
+  - "vm-engine"

@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 /**
- * R8 公开构建图与产物隔离扫描(整改清单 §十)。
+ * R8 公开构建图与产物隔离扫描(整改清单 §十;WP-0 扩展 ZR-B3 / ZR-B9 Rust 侧)。
  *
  * 对浏览器可达包(protocol、vm-ui、web-component、embed-runtime、
  * react-wrapper;尚未落地的包自动跳过)执行:
  *   1. 从 package.json exports 的**公开入口**(排除 server-only 子路径)
- *      做 dist 产物静态依赖图 BFS;
- *   2. 可达文件禁止引用:server-only 子树、Schema 生成器(node:fs)、
- *      node 内建模块、challenge-schema / vm-engine 产物;
- *   3. 可达文件剥离注释后扫描私有面标记(私有 Schema 名、私有顶层字段、
+ *      做 dist 产物静态依赖图 BFS,检查导入边界(node 内建、server-only、
+ *      challenge-schema 等);
+ *   2. dist 全部 JS 产物(含未被入口引用的 chunk,注释剥离后)禁止引用:
+ *      server-only 子树、Schema 生成器(node:fs)、私有面标记、以及
+ *      vm-engine 产物路径与引擎 crate 标识(ZR-B3 / ZR-B9,Rust 侧隔离);
+ *   3. dist 目录结构检查:浏览器可达包不得携带原生 / Rust 产物文件
+ *      (.rlib / .rmeta / .exe / .dll / .so / .dylib / .node 等;引擎命名
+ *      的 .wasm 同样拒绝)(ZR-B3);
+ *   4. 可达文件剥离注释后扫描私有面标记(私有 Schema 名、私有顶层字段、
  *      capability 前缀、CommonJS require)。
  *
  * 任何命中都以退出码 1 失败(CI 门禁,不是提示)。误报豁免:在
@@ -16,8 +21,8 @@
  * (EXPIRY)后自动失效即失败。
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,6 +57,12 @@ const FORBIDDEN_CONTENT_PATTERNS = [
   { pattern: /virtual_file:/, label: "capability 前缀" },
   { pattern: /\bchallenge-schema\b/, label: "server-only 姊妹包引用" },
   { pattern: /\bvm-engine\b|\bvm-worker\b|\bvm-core\b/, label: "VM 引擎产物引用" },
+  // WP-0 扩展(ZR-B3 / ZR-B9 Rust 侧隔离):引擎 crate 标识、Rust 产物路径与符号名。
+  { pattern: /\bvm-runtime\b/, label: "VM 引擎 crate 标识(ZR-B9)" },
+  { pattern: /\bchallenge-compiler\b/, label: "引擎 crate 标识(ZR-B9)" },
+  { pattern: /target[/\\](debug|release)[/\\]/, label: "Rust 构建产物路径(ZR-B3)" },
+  { pattern: /\.(rlib|rmeta)\b/, label: "Rust 中间产物(ZR-B3)" },
+  { pattern: /\blibvm_(core|runtime|worker|engine)\b/, label: "Rust 引擎符号名(ZR-B3)" },
   { pattern: /\brequire\s*\(/, label: "CommonJS require(ESM 产物不应出现)" },
 ];
 
@@ -197,6 +208,70 @@ function selfTest() {
       expect: 'from "./a.js"',
     },
   ];
+  // WP-0 扩展(ZR-B3 / ZR-B9):Rust 侧产物路径 / 符号模式反例 + 注释免疫对照。
+  // 断言的是"剥离注释后的产物文本"命中预期模式——与运行时扫描同一形态。
+  const patternCases = [
+    {
+      input: 'const p = "vm-engine/target/release/libvm_core.rlib";',
+      pattern: /target[/\\](debug|release)[/\\]/,
+      shouldMatch: true,
+      note: "Rust 构建产物路径",
+    },
+    {
+      input: 'const p = "vm-engine/target/release/libvm_core.rlib";',
+      pattern: /\.(rlib|rmeta)\b/,
+      shouldMatch: true,
+      note: "Rust 中间产物",
+    },
+    {
+      input: 'const s = "vm-runtime";',
+      pattern: /\bvm-runtime\b/,
+      shouldMatch: true,
+      note: "引擎 crate 标识",
+    },
+    {
+      input: 'const s = "libvm_worker";',
+      pattern: /\blibvm_(core|runtime|worker|engine)\b/,
+      shouldMatch: true,
+      note: "Rust 引擎符号名",
+    },
+    {
+      // 注释免疫对照:文档性提及在剥离后不得触发(与既有模式同一纪律)。
+      input: "// 本包不依赖 vm-engine 产物\nexport {};",
+      pattern: /\bvm-engine\b|\bvm-worker\b|\bvm-core\b/,
+      shouldMatch: false,
+      note: "注释剥离免疫",
+    },
+  ];
+  for (const item of patternCases) {
+    const stripped = stripComments(item.input);
+    const matched = item.pattern.test(stripped);
+    if (matched !== item.shouldMatch) {
+      console.error(
+        `扫描器自检失败(ZR-B3/B9 模式):${item.note}\n输入:${item.input}\n期望命中=${item.shouldMatch},实际=${matched}`,
+      );
+      process.exit(1);
+    }
+  }
+  // 产物文件分类器反例(必触发):扩展名黑名单与引擎 wasm 命名。
+  const artifactCases = [
+    { name: "vm_worker.exe", expect: true },
+    { name: "libvm_core.rlib", expect: true },
+    { name: "libvm_runtime.rmeta", expect: true },
+    { name: "engine-glue.wasm", expect: true },
+    { name: "vendor-util.wasm", expect: false },
+    { name: "index.js", expect: false },
+    { name: "index.d.ts", expect: false },
+  ];
+  for (const item of artifactCases) {
+    const hit = classifyArtifactViolation(item.name) !== null;
+    if (hit !== item.expect) {
+      console.error(
+        `扫描器自检失败(产物分类器):${item.name} 期望违规=${item.expect},实际=${hit}`,
+      );
+      process.exit(1);
+    }
+  }
   for (const item of cases) {
     const stripped = stripComments(item.input);
     if (!stripped.includes(item.expect)) {
@@ -293,6 +368,49 @@ function publicEntryFiles(packageDir, packageName) {
   return entries;
 }
 
+/** 浏览器可达包 dist 禁止携带的产物扩展名(ZR-B3:引擎与原生二进制面)。 */
+const NATIVE_ARTIFACT_EXTENSIONS = [
+  ".rlib",
+  ".rmeta",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".node",
+  ".lib",
+  ".pdb",
+  ".a",
+];
+
+/**
+ * 产物文件分类器(纯函数,self-test 直接覆盖):返回违规描述或 null。
+ * .wasm 仅在命名含 vm / worker / engine 时拒绝——引擎 wasm 面归 ZR-B3,
+ * 未来非引擎的 UI wasm 不在此列(引入前须另行评审)。
+ */
+function classifyArtifactViolation(fileName) {
+  const lower = fileName.toLowerCase();
+  if (NATIVE_ARTIFACT_EXTENSIONS.some((extension) => lower.endsWith(extension))) {
+    return "原生 / Rust 产物文件(ZR-B3)";
+  }
+  if (lower.endsWith(".wasm") && /(vm|worker|engine)/.test(lower)) {
+    return "引擎命名 wasm 产物(ZR-B3)";
+  }
+  return null;
+}
+
+function walkFiles(dir) {
+  const files = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkFiles(full));
+    } else {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
 function scanPackage(packageName, findings) {
   const packageDir = join(repoRoot, "packages", packageName);
   const distDir = join(packageDir, "dist");
@@ -316,7 +434,7 @@ function scanPackage(packageName, findings) {
       continue;
     }
 
-    // 1. 公开入口静态依赖图 BFS。
+    // 1. 公开入口静态依赖图 BFS(导入边界检查;内容标记扫描统一在 dist 全目录层做)。
     const reachable = new Set();
     const queue = [entry.file];
     while (queue.length > 0) {
@@ -346,24 +464,42 @@ function scanPackage(packageName, findings) {
         }
       }
     }
+  }
 
-    // 2. 可达文件内容标记扫描(注释已剥离,杜绝文档性误报)。
-    for (const file of reachable) {
-      const code = stripComments(readFileSync(file, "utf8"));
-      for (const rule of FORBIDDEN_CONTENT_PATTERNS) {
-        if (rule.pattern.test(code)) {
-          const relFile = relative(repoRoot, file);
-          const exempt = ALLOWLIST.some(
-            (item) => item.file === relFile && item.pattern === rule.pattern.source,
-          );
-          findings.push({
-            severity: exempt ? "allowlisted" : "error",
-            package: packageName,
-            file: relFile,
-            message: `公开产物命中私有面标记(${rule.label}):/${rule.pattern.source}/`,
-          });
-        }
+  // 2. dist 全部 JS 产物内容标记扫描(注释已剥离,杜绝文档性误报)。
+  //    范围是全目录而非仅入口可达集:未被入口引用的 chunk 同样不得携带
+  //    私有面标记与 vm-engine 产物引用(ZR-B3 / ZR-B9 的完整面)。
+  for (const file of walkFiles(distDir)) {
+    if (!/\.(js|mjs|cjs)$/.test(file)) {
+      continue;
+    }
+    const code = stripComments(readFileSync(file, "utf8"));
+    for (const rule of FORBIDDEN_CONTENT_PATTERNS) {
+      if (rule.pattern.test(code)) {
+        const relFile = relative(repoRoot, file);
+        const exempt = ALLOWLIST.some(
+          (item) => item.file === relFile && item.pattern === rule.pattern.source,
+        );
+        findings.push({
+          severity: exempt ? "allowlisted" : "error",
+          package: packageName,
+          file: relFile,
+          message: `公开产物命中私有面标记(${rule.label}):/${rule.pattern.source}/`,
+        });
       }
+    }
+  }
+
+  // 3. 原生 / Rust 产物文件结构检查:浏览器可达包的 dist 不得携带引擎二进制面(ZR-B3)。
+  for (const file of walkFiles(distDir)) {
+    const violation = classifyArtifactViolation(basename(file));
+    if (violation !== null) {
+      findings.push({
+        severity: "error",
+        package: packageName,
+        file: relative(repoRoot, file),
+        message: `浏览器可达包携带 ${violation}`,
+      });
     }
   }
 }

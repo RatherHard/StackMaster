@@ -1,0 +1,10 @@
+[package]
+name = "vm-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vm-core = { path = "../vm-core" }
+vm-runtime = { path = "../vm-runtime" }
+projection = { path = "../projection" }

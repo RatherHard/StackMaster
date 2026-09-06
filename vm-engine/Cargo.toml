@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["vm-core", "vm-runtime", "projection", "vm-worker"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+# 确定性纪律(ADR-8;阶段二任务分解 WP-0):release 构建开启溢出检查,
+# 溢出触发 panic 后由引擎按 engine_error 安全终止,不得静默回绕。
+# 双强制:本配置由 tooling/check-engine-discipline.mjs(ENG-3)在 CI 断言;
+# 运行时反例为 vm-core 的 release_overflow_checks_active 测试
+# (cargo test --release 下,若本项缺失则该测试红灯)。
+[profile.release]
+overflow-checks = true

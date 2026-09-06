@@ -1,0 +1,12 @@
+{
+  "name": "@stackmaster/vm-engine",
+  "version": "0.0.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "description": "Rust workspace(cargo)的 turbo 任务宿主;真实构建由 cargo 完成,见 vm-engine/README.md",
+  "scripts": {
+    "build": "cargo build --workspace",
+    "test": "cargo test --workspace && cargo test --release --workspace",
+    "lint:rust": "node ../tooling/check-engine-discipline.mjs"
+  }
+}

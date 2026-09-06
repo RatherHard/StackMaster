@@ -53,6 +53,8 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.4.0)(vite@8.2.2(@types/node@26.4.0))
 
+  vm-engine: {}
+
 packages:
 
   '@eslint-community/eslint-utils@4.10.1':

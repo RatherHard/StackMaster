@@ -11,6 +11,10 @@
     },
     "test": {
       "dependsOn": ["build"]
+    },
+    "lint:rust": {
+      "cache": false,
+      "inputs": ["$TURBO_DEFAULT$", "tooling/**"]
     }
   }
 }

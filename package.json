@@ -13,6 +13,9 @@
     "test": "turbo run test",
     "lint": "eslint --config tooling/eslint.config.mjs packages",
     "lint:deps": "dependency-cruiser --config tooling/dependency-cruiser.cjs packages",
+    "lint:rust": "turbo run lint:rust",
+    "test:rust": "cargo test --manifest-path vm-engine/Cargo.toml --workspace && cargo test --release --manifest-path vm-engine/Cargo.toml --workspace",
+    "cov:rust": "cargo llvm-cov --manifest-path vm-engine/Cargo.toml --workspace --exclude vm-worker --fail-under-lines 90",
     "scan:public": "node tooling/scan-public-artifacts.mjs",
     "fixtures:manifest": "node tooling/generate-canonical-manifest.mjs",
     "smoke:contract": "cargo run --manifest-path tooling/contract-smoke/Cargo.toml"

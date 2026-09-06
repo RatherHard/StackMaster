@@ -1,0 +1,74 @@
+name: CI
+
+# 阶段二 WP-0:TS 门禁 + vm-engine 确定性纪律门禁(阶段一移交项接线)。
+# 步骤名携带《数据分类与秘密零驻留清单》条目 ID(扫描器纪律,§九);
+# 条目 → CI 检查项映射:docs/develop/秘密零驻留CI检查项映射.md。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ts-gate:
+    name: TS 构建图与契约门禁(ZR-B3 / ZR-B9 隔离扫描)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖(frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: 构建 + 类型检查 + 测试(turbo)
+        run: |
+          pnpm build
+          pnpm typecheck
+          pnpm test
+      - name: ESLint + 依赖边界(dependency-cruiser)
+        run: |
+          pnpm lint
+          pnpm lint:deps
+      - name: ZR-B3 / ZR-B9 隔离扫描(TS 构建图与浏览器产物不含引擎代码与 Rust 产物)
+        run: pnpm scan:public
+      - name: golden fixture 摘要清单防漂移(stackmaster-canonical-json/1)
+        run: pnpm fixtures:manifest --check
+
+  rust-gate:
+    name: vm-engine 确定性纪律与测试(ENG-1 ~ ENG-7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            vm-engine
+            tooling/contract-smoke
+      - name: ENG-1 ~ ENG-6 纪律门禁 + fmt + clippy(-D warnings)+ 必触发反例自检
+        run: pnpm lint:rust
+      - name: ENG-3 运行时反例 + ENG-6 测试(dev + release;release 验证 overflow-checks)
+        run: pnpm test:rust
+      - name: ENG-7 覆盖率门槛(vm-core / vm-runtime / projection ≥ 90%)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: cargo llvm-cov --fail-under-lines 90(门槛对象为引擎三 crate,排除进程边界二进制)
+        run: cargo llvm-cov --workspace --exclude vm-worker --fail-under-lines 90
+        working-directory: vm-engine
+      - name: contract-smoke 测试与跨语言契约冒烟(阶段一移交项)
+        run: |
+          cargo test --manifest-path tooling/contract-smoke/Cargo.toml
+          pnpm smoke:contract
