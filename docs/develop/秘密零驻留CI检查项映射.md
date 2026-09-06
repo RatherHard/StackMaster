@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | v1.0(2026-09-06,WP-0 初版) |
+| 版本 | v1.1(2026-09-06,WP-0 初版;同日修订:rust-gate 的纪律门禁 CI 落点由 `pnpm lint:rust` 改为直调脚本——rust-gate 不安装 node 依赖,解除 CI 对 npm registry 的依赖,turbo 任务保留为本地 / turbo 图入口) |
 | 状态 | 实现期文档(随各 WP 接线持续更新;所映射的上游清单为冻结面) |
 | 上游依据 | `docs/contracts/数据分类与秘密零驻留清单.md` §二(驻留三原则)、§九(机检条目)、§13.5 构建面;`docs/项目计划书.md` 5.8(质量门禁)、13.5 |
 | 效力范围 | 阶段二起全部工作包;实现侧 CI 落点与上游条目 ID 的一一对照 |
@@ -21,7 +21,7 @@
 | `ts-gate` | eslint + dependency-cruiser 依赖边界 | ZR-B3 |
 | `ts-gate` | `pnpm scan:public` 隔离扫描(TS 构建图与浏览器产物) | ZR-B3、ZR-B8、ZR-B9(部分)、ZR-B4(部分) |
 | `ts-gate` | `pnpm fixtures:manifest --check` 摘要清单防漂移 | 规范化序列化契约(WP-6) |
-| `rust-gate` | `pnpm lint:rust`(check-engine-discipline 全量) | ENG-1 ~ ENG-6 |
+| `rust-gate` | `node tooling/check-engine-discipline.mjs`(check-engine-discipline 全量;与 turbo 任务 `lint:rust` 同一脚本,rust-gate 不装 node 依赖故直调) | ENG-1 ~ ENG-6 |
 | `rust-gate` | `pnpm test:rust`(cargo test dev + release) | ENG-3(运行时反例)、ENG-6 |
 | `rust-gate` | `cargo llvm-cov --fail-under-lines 90` | ENG-7 |
 | `rust-gate` | contract-smoke `cargo test` + `pnpm smoke:contract` | 规范化序列化跨语言冒烟(WP-6) |
@@ -41,7 +41,7 @@
 | ENG-3 | release 构建 `overflow-checks = true`,溢出不静默回绕 | workspace `[profile.release]` 配置断言(CI 构建脚本层)+ 运行时探针 | `vm-core::overflow_probe::release_overflow_checks_active`:`cargo test --release` 下,若配置缺失则静默回绕 → 测试红灯(已实测验证;black_box 阻断常量折叠) | WP-0 门禁原文(构建脚本 + 运行时双强制);WP-9 构建级验证的前置 |
 | ENG-4 | 引擎三 crate 运行时依赖 ⊆ 允许清单;rand / getrandom / chrono / time / tokio 等时间·随机源 crate 全禁 | 脚本解析 crate Cargo.toml([dependencies] / [dev-dependencies]) | 脚本自检:rand 依赖样例按预期触发 | 禁 rand / 直接时间源;依赖方向 5.5 |
 | ENG-5 | 引擎 clippy 禁用清单(第二层 lint:std::time / fs / net / process 类型与方法) | `CLIPPY_CONF_DIR=tooling/engine-lints` 对引擎三 crate 逐个 `cargo clippy -D warnings` | 反例 crate `ce-std-time`(Instant / Command):带配置红灯且信号命中 disallowed,无配置对照绿灯(红灯归因于清单);反例 crate `ce-no-std-clean`:无误报 | ADR-8;清单 §九"必触发反例"纪律 |
-| ENG-6 | `cargo fmt --check` + `cargo clippy --workspace --all-targets -D warnings` + cargo test(dev / release) | CI 步骤 `pnpm lint:rust`、`pnpm test:rust` | 常规 CI 语义:任一违规即红灯 | 质量门禁 1、3(计划书 5.8) |
+| ENG-6 | `cargo fmt --check` + `cargo clippy --workspace --all-targets -D warnings` + cargo test(dev / release) | CI 步骤 `node tooling/check-engine-discipline.mjs`(本地同 `pnpm lint:rust`)、`pnpm test:rust` | 常规 CI 语义:任一违规即红灯 | 质量门禁 1、3(计划书 5.8) |
 | ENG-7 | 覆盖率门槛:vm-core / vm-runtime / projection ≥ 90% | `cargo llvm-cov --workspace --exclude vm-worker --fail-under-lines 90`(vm-worker 为进程边界二进制,不在门槛内) | 覆盖率跌破 90% 即红灯(骨架期实测:含未覆盖二进制 crate 时 71.43% → 退出码 1);WP-0 骨架期即接线,避免"补门禁"窗口 | 质量门禁 3 |
 
 分层说明:ENG-2 的 `#![no_std]` 是**结构性主防线**(std 路径在引擎 crate 内不可解析,lint 不可绕过);ENG-5 的 clippy 清单是第二层,兜底"漏掉 no_std 的回归"。disallowed-* 不支持通配,清单为尽力枚举,以 no_std 为准。

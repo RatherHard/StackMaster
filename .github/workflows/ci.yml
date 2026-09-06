@@ -57,8 +57,10 @@ jobs:
           workspaces: |
             vm-engine
             tooling/contract-smoke
+      # 与 turbo 任务 lint:rust(pnpm lint:rust → turbo run lint:rust)是同一脚本;
+      # rust-gate 不安装 node 依赖,直调脚本以解除对 npm registry 的依赖。
       - name: ENG-1 ~ ENG-6 纪律门禁 + fmt + clippy(-D warnings)+ 必触发反例自检
-        run: pnpm lint:rust
+        run: node tooling/check-engine-discipline.mjs
       - name: ENG-3 运行时反例 + ENG-6 测试(dev + release;release 验证 overflow-checks)
         run: pnpm test:rust
       - name: ENG-7 覆盖率门槛(vm-core / vm-runtime / projection ≥ 90%)
