@@ -346,6 +346,20 @@ impl Engine {
         &self.interfaces
     }
 
+    /// Canary 完好性查询(WP-5 `stack_canary_intact` 谓词的求值面):全部槽位
+    /// 当前内容与装载期期望一致。只读、不产生事件、不改状态;槽位读取失败按
+    /// 已破坏计(静态权限下不可达的防御性兜底);无 Canary 槽位 ⇒ 恒真。
+    pub fn canary_intact(&self) -> bool {
+        let arch = self.state.memory.arch();
+        self.canary_slots.iter().all(|slot| {
+            let addr = ArchValue::new(slot.address, arch);
+            self.state
+                .memory
+                .read(addr, slot.byte_length)
+                .is_ok_and(|current| current == slot.expected)
+        })
+    }
+
     /// 单步:恰好执行一条指令(动作 `step` 的引擎落点)。
     pub fn step(&mut self) -> RunOutcome {
         self.step_once(None)
@@ -372,8 +386,13 @@ impl Engine {
     /// 重置:恢复装载时初始状态(`reset` 动作的引擎落点;revision 与投影
     /// 语义归 WP-6 / WP-8)。译码缓存保留——字节模式 W^X ⇒ 代码区内容
     /// 会话内不变,缓存跨 reset 恒有效(D4.4)。
+    ///
+    /// `predicate_evals` 是会话累计预算,**跨 reset 不重置**(冻结表
+    /// `constraints` 行 / D1 约束 5:防回退神谕)——恢复初始状态前先行保留。
     pub fn reset(&mut self) {
+        let cumulative = self.state.constraints.predicate_evals;
         self.state = self.initial_state.clone();
+        self.state.constraints.predicate_evals = cumulative;
         self.halted = false;
     }
 
@@ -2352,6 +2371,19 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(event_kinds(&e), events_first);
         assert_eq!(reg(&e, "RAX"), rax_first);
+    }
+
+    /// WP-5:`predicate_evals` 是会话累计预算,跨 reset 不重置(D1 约束 5 /
+    /// 冻结表 constraints 行);可回退预算(steps)仍随状态回滚。
+    #[test]
+    fn reset_preserves_cumulative_predicate_budget() {
+        let mut e = ir_engine(A32, vec![ins(BaselineOp::Ret, vec![])]);
+        e.state.constraints.predicate_evals = CumulativeBudget::new(37, 100);
+        e.state.constraints.steps.used = 55;
+        e.reset();
+        assert_eq!(e.state.constraints.predicate_evals.used, 37);
+        assert_eq!(e.state.constraints.predicate_evals.limit, 100);
+        assert_eq!(e.state.constraints.steps.used, 0);
     }
 
     // ─────────────────────────────────────────────────────────────────────

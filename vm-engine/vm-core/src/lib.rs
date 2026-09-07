@@ -38,6 +38,18 @@
 //!   Canary 检测、自定义指令微算子解释器、`syscall` / `call` 作者接口派发
 //!   (引擎管理调用不占玩家栈,D4.2 ①)、暂停事件与异常面、步数预算。
 //!
+//! # WP-5 判题语义(阶段二任务分解;规约权威:`docs/develop/判题语义规约.md`)
+//!
+//! - [`judge::predicate`]:7 内置谓词 + 三级布尔条件求值器(白名单结构性
+//!   不可越界;恒定成本——字节比较全量无提前退出、布尔组合不短路);
+//! - [`judge::spec`]:判题面装配输入与镜像复验(XS-PRED-REFS / XS-NESTING /
+//!   XS-STAGE-* 引擎镜像,fail-closed);
+//! - [`judge`]:判题驱动 `Judge`——动作闸门与动作后检查点,`status`
+//!   won / failed 的权威时点判定,多阶段状态机运行时(六要素强制);
+//! - [`judge::seed`]:seed 策略解析(XS-SEED-POLICY 镜像)+ 注入式随机源
+//!   trait 与确定性派生器(派生路径元数据不含 seed 值);
+//! - [`judge::hidden`]:隐藏测试执行驱动(7 值可达判定分类器,verifier 复用)。
+//!
 //! 上层 crate 依赖方向:vm-runtime / projection / vm-worker → vm-core(5.5)。
 #![no_std]
 #![forbid(unsafe_code)]
@@ -48,6 +60,7 @@ pub mod arch;
 pub mod decode;
 pub mod exec;
 pub mod instr;
+pub mod judge;
 pub mod memory;
 pub mod registers;
 pub mod state;
