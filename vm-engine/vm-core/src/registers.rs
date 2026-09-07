@@ -89,12 +89,30 @@ pub enum RegisterError {
     UnknownRegister(String),
 }
 
+/// 条件标志三件套(`zf` / `cf` / `sf`;最小DSL范围 §三.1 标志模型,v1 冻结词汇)。
+///
+/// 归属锚定:冻结表 `registers` 行的字段面是"寄存器全集到架构值的映射 **+ FLAG 位**"
+/// (数据分类清单 §3.2)——标志位是 `registers` 字段的一部分,不是 `VmState` 新字段,
+/// 随寄存器文件一同进入 COW 快照与回退(WP-6)。公开投影**永不**包含标志位
+/// (WP-7 白名单只覆盖命名寄存器;`vmProfile.registers` 声明面无标志形态)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Flags {
+    /// 零标志:最近一次置标志运算结果为零。
+    pub zf: bool,
+    /// 进位 / 借位标志:无符号域进位(`add`)或借位(`sub` / `cmp`)。
+    pub cf: bool,
+    /// 符号标志:结果符号位(第 archBits − 1 位)。
+    pub sf: bool,
+}
+
 /// 寄存器文件:名称 → 架构值(BTreeMap 按名称序,确定性遍历;
 /// 这是冻结表 `registers` 字段——"寄存器全集到架构值的映射 + FLAG 位"的承载)。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RegisterFile {
     values: BTreeMap<String, ArchValue>,
     flag_count: usize,
+    /// 条件标志(zf / cf / sf;`cmp` 置标志、条件跳转消费)。
+    pub flags: Flags,
 }
 
 impl RegisterFile {
@@ -150,7 +168,11 @@ impl RegisterFile {
                 return Err(RegisterError::MissingCoreRegister(String::from(core)));
             }
         }
-        Ok(Self { values, flag_count })
+        Ok(Self {
+            values,
+            flag_count,
+            flags: Flags::default(),
+        })
     }
 
     /// 读寄存器(FLAG 寄存器同接口;公开面投影由 WP-7 白名单决定)。
@@ -418,5 +440,24 @@ mod tests {
         ];
         let rf = RegisterFile::new(entries, &[]).unwrap();
         assert_eq!(rf.get("RSP").unwrap().get(), 0x40, "32 位域高位被掩蔽");
+    }
+
+    #[test]
+    fn condition_flags_live_in_register_file_and_default_clear() {
+        // 冻结表 "+ FLAG 位":标志随寄存器文件承载,装载即全清;可写可读。
+        let mut rf = RegisterFile::new(minimal_entries(), &[]).unwrap();
+        assert_eq!(rf.flags, Flags::default());
+        rf.flags = Flags {
+            zf: true,
+            cf: true,
+            sf: false,
+        };
+        // 克隆(快照语义)携带标志。
+        let snapshot = rf.clone();
+        assert!(snapshot.flags.zf);
+        assert!(snapshot.flags.cf);
+        assert!(!snapshot.flags.sf);
+        rf.flags = Flags::default();
+        assert!(snapshot.flags.zf, "快照不受后续写影响");
     }
 }

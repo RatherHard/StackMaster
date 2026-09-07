@@ -27,6 +27,17 @@
 //!   (`docs/contracts/数据分类与秘密零驻留清单.md` §3.2)一一对应,不增不删;
 //!   本类型无 serde 派生、无序列化路径——SERVER_ONLY 类型只有禁令,没有契约(§3.1 规则 1)。
 //!
+//! # WP-4 指令执行与调用语义(阶段二任务分解;规约权威:`docs/develop/指令规约.md`)
+//!
+//! - [`instr`]:统一层 1 指令表示(20 基线 opcode ∪ 大写自定义助记符、
+//!   四类操作数槽)、冻结操作数形态表、程序(IR / 字节恰一)与声明面装载校验
+//!   (上游检查器的引擎镜像复验,fail-closed);
+//! - [`decode`]:字节模式取指译码纯函数 `(表, 字节, 地址) → 指令`(D4.4;
+//!   token 定宽 1 字节、立即数 / 位移内联 `archBits/8` 小端,D4.7);
+//! - [`exec`]:执行引擎——两形态共享同一语义入口;栈帧创建 / 销毁 / `leave` /
+//!   Canary 检测、自定义指令微算子解释器、`syscall` / `call` 作者接口派发
+//!   (引擎管理调用不占玩家栈,D4.2 ①)、暂停事件与异常面、步数预算。
+//!
 //! 上层 crate 依赖方向:vm-runtime / projection / vm-worker → vm-core(5.5)。
 #![no_std]
 #![forbid(unsafe_code)]
@@ -34,6 +45,9 @@
 extern crate alloc;
 
 pub mod arch;
+pub mod decode;
+pub mod exec;
+pub mod instr;
 pub mod memory;
 pub mod registers;
 pub mod state;

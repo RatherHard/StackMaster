@@ -71,6 +71,9 @@ pub struct CallFrame {
 /// 私有事件类别(冻结表 `privateEventLog` 行:内部事件、隐藏判定事件、
 /// 公开事件的全集来源;公开面六类经 WP-7 白名单过滤后下发,序号 / 条目数
 /// 等聚合信息不直接暴露——D4)。
+///
+/// 事件结构是引擎内部形态,可随语义演进(冻结表 §3.2 前言);WP-4 增补的
+/// 文件类内部变体永不进入公开面(公开 `PublicEvent.kind` 冻结六类)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmEventKind {
     /// 读内存。
@@ -87,6 +90,11 @@ pub enum VmEventKind {
     Exception,
     /// 内部事件(隐藏判定 / 私有目标条件求值痕迹;永不进入公开面)。
     Internal,
+    /// 授予虚拟文件 capability(接口效果原语 `grant_virtual_file`;
+    /// WP-5 谓词与编排账本的私有记录,永不进入公开面)。
+    FileGranted,
+    /// 标记虚拟文件已读(接口效果原语 `virtual_file_read`;同上)。
+    FileRead,
 }
 
 /// 私有事件(append-only;结构为引擎内部形态,可随语义演进——冻结表 §3.2 前言)。
