@@ -396,6 +396,17 @@ impl Engine {
         self.halted = false;
     }
 
+    /// 会话内容恢复(undo / checkout_checkpoint / 快照替换恢复的引擎落点,
+    /// WP-6):以外部承载的 `VmState` 整体替换当前内容状态。累计预算保留
+    /// 规则与 [`Engine::reset`] 相同(D1 约束 5);译码缓存保留(同 reset,
+    /// D4.4)。`halted` 随快照回退——undo 可撤销一次已发生的 `exit`。
+    pub fn restore_session(&mut self, state: VmState, halted: bool) {
+        let cumulative = self.state.constraints.predicate_evals;
+        self.state = state;
+        self.state.constraints.predicate_evals = cumulative;
+        self.halted = halted;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // 会话动作原语(WP-8 接线;响应面语义归编排层)
     // ─────────────────────────────────────────────────────────────────────

@@ -344,6 +344,13 @@ impl Judge {
         }
     }
 
+    /// 阶段运行时状态回退(WP-6 快照承载;规约 §一"判题阶段状态的回退随
+    /// 快照内容承载"):undo / checkout_checkpoint 以快照携带的阶段状态整体
+    /// 替换当前值(规约 §4.4 ①"受理即计数"的计数随恢复一并回退)。
+    pub fn restore_stage(&mut self, stage: Option<StageState>) {
+        self.stage = stage;
+    }
+
     fn fire_side_effects(&self, engine: &mut Engine, stage_index: usize) {
         for effect in &self.spec.stages[stage_index].side_effects {
             let StageSideEffect::GrantVirtualFile { file_id } = effect;

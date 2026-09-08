@@ -21,8 +21,8 @@
 //! (契约面 `XS-CODE-WRX`;本模块在装载时复核,[`MemoryConfigError::CodeWritableInByteMode`]);
 //! IR 模式无表层机器码、无写码面,不受此约束。运行期写保护由权限检查统一承担。
 
-use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -372,10 +372,30 @@ pub enum MemoryFaultKind {
     AddressOverflow,
 }
 
+/// 页恢复原语错误(仅快照恢复路径;方向 = challenge_invalid,形态非法)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestorePageError {
+    /// 目标页未物化(快照与装载布局不一致)。
+    PageUnknown {
+        /// 页号。
+        page_no: u64,
+    },
+    /// 页字节长度与页大小不符。
+    LengthMismatch {
+        /// 页大小。
+        expected: u64,
+        /// 携带长度。
+        actual: usize,
+    },
+}
+
 /// 分页虚拟内存:VMA 权威 + 固定大小分页存储(6.1 / 6.3)。
 ///
-/// 页数据在装载期按区域内容一次物化(教学规模内存 ≤ 64 MiB;COW 快照在
-/// WP-6 于本结构之上实现,不改变本模块的权限语义)。
+/// 页数据在装载期按区域内容一次物化(教学规模内存 ≤ 64 MiB)。页以
+/// `Rc` 引用计数承载:**写入路径经 `Rc::make_mut` 写时复制**——`VmState`
+/// 的 `clone()` 由此成为 O(脏页) 的 COW 快照(`initial_state`、隐藏测试
+/// 基线克隆、上层快照同享页存储,首个写入者复制),权限语义不变(I-9
+/// 统一拒绝路径照旧)。COW 快照 / 恢复原语的消费面在 vm-runtime(WP-6)。
 #[derive(Debug, Clone)]
 pub struct VirtualMemory {
     arch: ArchBits,
@@ -385,8 +405,8 @@ pub struct VirtualMemory {
     regions: BTreeMap<u64, RegionSpec>,
     /// 区域 id → 起始地址(按 id 查找)。
     ids: BTreeMap<String, u64>,
-    /// 页表(键 = 页号;装载期物化)。
-    pages: BTreeMap<u64, Box<[u8]>>,
+    /// 页表(键 = 页号;装载期物化;`Rc` 承载 COW 共享)。
+    pages: BTreeMap<u64, Rc<[u8]>>,
 }
 
 impl VirtualMemory {
@@ -468,7 +488,7 @@ impl VirtualMemory {
         }
 
         // 页数据物化:区域按 start 升序填充;页按需创建,仅写本区域字节区间。
-        let mut pages: BTreeMap<u64, Box<[u8]>> = BTreeMap::new();
+        let mut pages: BTreeMap<u64, Rc<[u8]>> = BTreeMap::new();
         for region in sorted {
             let content = content_by_id
                 .get(region.region_id.as_str())
@@ -486,7 +506,7 @@ impl VirtualMemory {
             for page_no in first_page..=last_page {
                 let page = pages
                     .entry(page_no)
-                    .or_insert_with(|| vec![0u8; page_size as usize].into_boxed_slice());
+                    .or_insert_with(|| Rc::from(vec![0u8; page_size as usize].into_boxed_slice()));
                 let page_base = page_no * page_size;
                 // 页末字节饱和处理:最高页的页末可能超出 64 位容器,
                 // 饱和到 u64::MAX 后 min 仍取区域末字节,语义不变。
@@ -500,7 +520,8 @@ impl VirtualMemory {
                 if content_len > 0 && seg_lo - region.start < content_len {
                     let copy_hi = (seg_hi - region.start).min(content_len - 1);
                     let source = &content[(seg_lo - region.start) as usize..=copy_hi as usize];
-                    page[page_lo_off..page_lo_off + source.len()].copy_from_slice(source);
+                    Rc::make_mut(page)[page_lo_off..page_lo_off + source.len()]
+                        .copy_from_slice(source);
                 }
             }
         }
@@ -676,14 +697,65 @@ impl VirtualMemory {
         page[(addr % self.page_size) as usize]
     }
 
-    /// 写单字节(仅权限检查后使用)。
+    /// 写单字节(仅权限检查后使用;`Rc::make_mut` 即写时复制——共享页的首个
+    /// 写入者复制整页,其余快照持有原页不动)。
     fn set_page_byte(&mut self, addr: u64, byte: u8) {
         let page_size = self.page_size;
         let page = self
             .pages
             .get_mut(&(addr / page_size))
             .expect("locate 已验证地址映射;页必然物化");
-        page[(addr % page_size) as usize] = byte;
+        Rc::make_mut(page)[(addr % page_size) as usize] = byte;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // COW 快照支撑面(WP-6;只读观察 + 恢复原语,不改变权限语义)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// 已物化页号(升序确定性遍历;页集合装载期固定)。
+    pub fn page_ids(&self) -> impl Iterator<Item = u64> + '_ {
+        self.pages.keys().copied()
+    }
+
+    /// 页内容(未物化返回 `None`)。
+    pub fn page_bytes(&self, page_no: u64) -> Option<&[u8]> {
+        self.pages.get(&page_no).map(Rc::as_ref)
+    }
+
+    /// 页存储身份(`Rc` 指针地址):两份内存的同号页身份相等 ⇔ 共享同一页
+    /// 存储(内容必然一致);身份不同⇒各自独立,内容是否变化需逐字节比对。
+    /// 供快照差分(未共享页才需比对)与 COW 有界性统计(跨快照去重计数)。
+    pub fn page_identity(&self, page_no: u64) -> Option<usize> {
+        self.pages
+            .get(&page_no)
+            .map(|page| Rc::as_ptr(page) as *const u8 as usize)
+    }
+
+    /// 页存储共享度:强引用计数 > 1 的页数(正被快照 / 基线克隆共享的页;
+    /// 有界性测试的观察面)。
+    pub fn shared_page_count(&self) -> usize {
+        self.pages
+            .values()
+            .filter(|page| Rc::strong_count(page) > 1)
+            .count()
+    }
+
+    /// 页恢复原语(快照导入;**不走权限检查**——与装载期页物化同类,是
+    /// 存储面恢复而非内存访问):整页替换内容,长度必须恰为页大小且目标页
+    /// 已物化。替换(而非原地写)使恢复页脱离既有共享组。
+    pub fn restore_page(&mut self, page_no: u64, bytes: &[u8]) -> Result<(), RestorePageError> {
+        if !self.pages.contains_key(&page_no) {
+            return Err(RestorePageError::PageUnknown { page_no });
+        }
+        if bytes.len() != self.page_size as usize {
+            return Err(RestorePageError::LengthMismatch {
+                expected: self.page_size,
+                actual: bytes.len(),
+            });
+        }
+        self.pages
+            .insert(page_no, Rc::from(Vec::from(bytes).into_boxed_slice()));
+        Ok(())
     }
 }
 
@@ -1376,5 +1448,99 @@ mod tests {
         let err = m.check(addr(0x1000), 8, PermKind::Write).unwrap_err();
         assert_eq!(err.addr, 0x1000);
         assert_eq!(err.length, 8);
+    }
+
+    // ── COW 页存储(WP-6)────────────────────────────────────────────────
+
+    /// 克隆即 COW:克隆体与原体内存共享页存储;对原体写入只复制被写的页,
+    /// 克隆体内容保持冻结视图(快照隔离)。
+    #[test]
+    fn clone_shares_pages_and_write_copies_on_write() {
+        let mut m = mem(
+            vec![region("data", 0x1000, 8192, "rw")],
+            vec![contents("data", &[0x11, 0x22])],
+        );
+        let snapshot = m.clone();
+        // 共享:两份的同号页身份一致;页被两组引用共享。
+        assert_eq!(m.page_identity(1), snapshot.page_identity(1));
+        assert_eq!(m.shared_page_count(), 2);
+        // 写第 1 页一个字节:仅该页复制,身份分离、内容分叉。
+        m.write_slice(addr(0x1000), &[0xFF]).unwrap();
+        assert_ne!(m.page_identity(1), snapshot.page_identity(1));
+        assert_eq!(
+            m.page_bytes(1).unwrap()[..2],
+            [0xFF, 0x22],
+            "写时复制后原体可见新值"
+        );
+        assert_eq!(
+            snapshot.page_bytes(1).unwrap()[..2],
+            [0x11, 0x22],
+            "快照保持冻结视图"
+        );
+        // 第 2 页未写:仍共享。
+        assert_eq!(m.page_identity(2), snapshot.page_identity(2));
+        // 写第 2 页后共享页清零。
+        m.write_slice(addr(0x2000), &[0x01]).unwrap();
+        assert_eq!(m.shared_page_count(), 0);
+    }
+
+    /// 快照链:多个克隆体共享同一页;原体首个写入复制后,其余克隆体仍互享。
+    #[test]
+    fn multiple_snapshots_share_until_first_write() {
+        let mut m = mem(
+            vec![region("data", 0x1000, 4096, "rw")],
+            vec![contents("data", &[0x01])],
+        );
+        let snap_a = m.clone();
+        let snap_b = m.clone();
+        assert_eq!(m.page_identity(1), snap_a.page_identity(1));
+        assert_eq!(snap_a.page_identity(1), snap_b.page_identity(1));
+        assert_eq!(m.page_bytes(1).unwrap().len(), 4096);
+        m.write_slice(addr(0x1000), &[0x7F]).unwrap();
+        assert_ne!(m.page_identity(1), snap_a.page_identity(1));
+        assert_eq!(
+            snap_a.page_identity(1),
+            snap_b.page_identity(1),
+            "未触及的克隆体仍共享"
+        );
+    }
+
+    /// 页访问器与恢复原语:page_ids 升序、restore_page 恰页长替换、
+    /// 未知页 / 长度不符拒绝;恢复页脱离共享组。
+    #[test]
+    fn restore_page_replaces_wholesale_and_validates() {
+        let mut m = mem(
+            vec![region("data", 0x1000, 4096, "rw")],
+            vec![contents("data", &[0x00])],
+        );
+        assert_eq!(m.page_ids().collect::<Vec<_>>(), vec![1]);
+        let snapshot = m.clone();
+        // 恢复:恰页长替换成功,内容生效。
+        let mut page = vec![0u8; 4096];
+        page[0] = 0xAB;
+        m.restore_page(1, &page).unwrap();
+        assert_eq!(m.page_bytes(1).unwrap()[0], 0xAB);
+        assert_eq!(
+            snapshot.page_bytes(1).unwrap()[0],
+            0x00,
+            "恢复不影响快照视图"
+        );
+        assert_ne!(m.page_identity(1), snapshot.page_identity(1));
+        // 长度不符拒绝。
+        assert_eq!(
+            m.restore_page(1, &[0u8; 4095]),
+            Err(RestorePageError::LengthMismatch {
+                expected: 4096,
+                actual: 4095
+            })
+        );
+        // 未知页拒绝。
+        assert_eq!(
+            m.restore_page(99, &page),
+            Err(RestorePageError::PageUnknown { page_no: 99 })
+        );
+        // page_bytes / page_identity 对未物化页返回 None。
+        assert_eq!(m.page_bytes(99), None);
+        assert_eq!(m.page_identity(99), None);
     }
 }

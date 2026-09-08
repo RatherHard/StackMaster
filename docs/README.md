@@ -40,6 +40,8 @@
 | [引擎进程协议.md](develop/引擎进程协议.md) | 编排器 / verifier ↔ vm-worker 进程协议:版本登记、帧格式、命令面、职责切分与错误语义(WP-1,冻结) |
 | [秘密零驻留CI检查项映射.md](develop/秘密零驻留CI检查项映射.md) | 零驻留清单机检条目 → CI 检查项落点与反例位置(随 WP 接线更新) |
 | [指令规约.md](develop/指令规约.md) | vm-core 逐 opcode 执行语义权威规约:统一执行入口、位宽 / 栈 / 标志模型、异常与事件面、调用与 Canary、自定义指令与接口派发(WP-4) |
+| [判题语义规约.md](develop/判题语义规约.md) | vm-core 判题语义权威规约:谓词求值、权威成功 / 失败判定、多阶段状态机运行时、seed 策略与派生、隐藏测试执行(WP-5) |
+| [快照与回放语义规约.md](develop/快照与回放语义规约.md) | vm-runtime 权威规约:COW 分页快照与 checkpoint、规范化动作日志(6.3 清单)、revision / undo / checkout / reset 语义、回放一致性、版本锁定与资源计数(WP-6) |
 
 ### phases/
 
