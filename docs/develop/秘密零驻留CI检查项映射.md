@@ -63,7 +63,7 @@
 | ZR-B7 | 内部堆栈与文件路径 | 检查对象为浏览器可达响应(阶段四 / 五运行时);构建面模式随公开面扩展登记 | 🔜 | — |
 | ZR-B8 | 私有 capability 名称 | `scan:public` 模式 `virtual_file:` 前缀;动态拼接形态由 DSL 编译期规则兜底(WP-2) | ✅(前缀)/ 🔜(拼接) | 自检:既有模式反例 |
 | ZR-B9 | `SERVER_ONLY` 类型标识符(§3.3 清单) | `scan:public` 词边界模式:类型名(VmState / RuntimeConstraints / SeedState / VirtualMemory / VmEvent)+ 字段名(privateEventLog / seedState / instructionPointer)+ crate 名(ZR-B3 引用);共现形态规则(单 JSON 对象 ≥ 3 个 VmState 字段名键)随跨域载荷录制(阶段三)接入 | 🚧(标识符 ✅ / 共现 🔜) | 自检:既有模式反例 + 实地反例;扫描器自检纪律见脚本内 selfTest |
-| ZR-B10 | 完整事件日志(形态检测) | 随公开事件管线(WP-7)与 fixture 落地 | 🔜 | — |
+| ZR-B10 | 完整事件日志(形态检测) | 引擎生成面(WP-7):公开事件管线只产出冻结六类 + 冻结字段集(`projection::events`,Internal / FileGranted / FileRead 结构性无映射路径);跨域载荷形态检测随录制面(阶段三 / 四) | 🚧(生成面 ✅ / 录制面 🔜) | 差分套件事件面断言(`differential.rs`)|
 | ZR-B11 | 私有 capability 返回值(语料) | 随题目 fixture 到位 | 🔜 | — |
 
 语料法条目(ZR-B1 / B2 / B4 / B6 / B11)定位为兜底控制,主控制是结构性不变量(I-1 / I-2 / I-9 / I-10)——与清单 §九定位一致,随阶段二 WP-2 起的题目 fixture 逐条补齐。
@@ -75,8 +75,14 @@
 | 条目组 | CI 落点 | 归属 |
 |---|---|---|
 | ZR-R1 ~ R5(堆快照、全通道录制、存储、诊断 trace) | Playwright + CDP 基建 | 阶段四 / 五(规则已冻结) |
-| ZR-P1(字段白名单 Schema 驱动) | 响应生成侧按冻结 Schema 校验 | 阶段二 WP-7 / 阶段三 |
-| ZR-P2 ~ P8(差分、时序、步数、信息流) | proptest / fast-check + 差分测试套件 | 阶段二 WP-5 / WP-7、阶段三 |
+| ZR-P1(字段白名单 Schema 驱动) | 生成面按冻结 Schema 校验 + 未知字段拒绝:出站契约三重闭环(`vm_worker::contract::outbound`,投影语义规约 §六) | ✅(WP-7,2026-09-08)/ 通道录制面阶段三 |
+| ZR-P2(T-SC4 随机秘密差分) | 差分套件:异 seed 逐字节相等,差异字段注册表空集(`projection::differential::tsc1_tsc4_*`) | ✅(WP-7,2026-09-08)/ 题目发布管线逐题必跑 |
+| ZR-P3(T-SC1 确定性通道无相关性) | 差分套件:秘密长度变体 8/16/32/64 + 同长异值 + 探针变体(双布局 I-9),规范化后逐字节相等;差异注册表空集 | ✅(WP-7,2026-09-08)|
+| ZR-P4(T-SC3 时序) | 引擎 crate 无时钟;时序判定归编排器层统计面 | 阶段三(引擎面无时钟,结构前提 ZR-P7 已满足) |
+| ZR-P5(序号与计数) | 差分套件:15 步脚本 revision 增量 ∈ {0,+1} 逐响应断言(执行 +1 / 拒绝 +0) | ✅(WP-7,2026-09-08)/ 运行时断言归 WP-8 |
+| ZR-P6(错误粗化一致性) | 生成侧强制:coarse 零解释机检(`coarse_level_payloads_have_zero_explanation_fields`)+ 能力矩阵 fail-closed(`error.rs` 红灯矩阵)+ 同 (code, 级别) 字节稳定 | ✅(WP-7,2026-09-08)|
+| ZR-P7(T-SC2 恒定步数) | 引擎侧属性测试 | ✅(WP-5,2026-09-07)|
+| ZR-P8(公开字节信息流) | 结构性白名单(I-10 值来源 ⊆ 可见区域读回 / 玩家回显)+ 语料扫描兜底(泄漏策略红灯反例证明扫描器可检出)| 🚧(引擎生成面 ✅ / 污点插桩断言随实现面扩展)|
 | ZR-T1 ~ T4(篡改、幂等、伪造) | Compose 集成测试 | 阶段二 WP-8(最小闭环)/ 阶段三 |
 
 阶段二后续工作包交付时,本表同步回填 CI 落点与反例位置;新增检查项必须先在上游清单登记条目 ID,再在本文登记 CI 落点(顺序不可逆)。

@@ -9,10 +9,13 @@
 //! - [`schema`]:冻结 JSON Schema 的内嵌与校验器(拒绝未知字段由 Schema 的
 //!   `additionalProperties: false` 承担);
 //! - [`mirrors`]:serde 类型镜像(ActionRequest / PrivateChallengeBundle;
-//!   schemars 派生供镜像漂移冒烟比对)。
+//!   schemars 派生供镜像漂移冒烟比对);
+//! - [`outbound`]:出站契约面 JSON 转换(WP-7)——projection 生成类型为
+//!   字段集合单一来源,不另立镜像类型,漂移结构性不可能)。
 
 pub mod canonical;
 pub mod mirrors;
+pub mod outbound;
 pub mod schema;
 pub mod semantic;
 pub mod strict_value;

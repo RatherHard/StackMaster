@@ -26,6 +26,16 @@ pub const PUBLIC_STATE_PROJECTION_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../packages/protocol/schema/public-state-projection.schema.json"
 ));
+/// `ProjectionDelta`(apply_action 出站增量)。
+pub const PROJECTION_DELTA_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/protocol/schema/projection-delta.schema.json"
+));
+/// `PublicError`(apply_action 出站错误)。
+pub const PUBLIC_ERROR_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/protocol/schema/public-error.schema.json"
+));
 /// 私有判题包(challenge-schema;整体 SERVER_ONLY,只在 worker 进程内消费)。
 pub const PRIVATE_BUNDLE_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -73,6 +83,8 @@ pub struct ContractValidators {
     pub action_request: SchemaValidator,
     pub action_response: SchemaValidator,
     pub public_state_projection: SchemaValidator,
+    pub projection_delta: SchemaValidator,
+    pub public_error: SchemaValidator,
     pub private_bundle: SchemaValidator,
 }
 
@@ -82,6 +94,8 @@ impl ContractValidators {
             action_request: SchemaValidator::compile(ACTION_REQUEST_SCHEMA)?,
             action_response: SchemaValidator::compile(ACTION_RESPONSE_SCHEMA)?,
             public_state_projection: SchemaValidator::compile(PUBLIC_STATE_PROJECTION_SCHEMA)?,
+            projection_delta: SchemaValidator::compile(PROJECTION_DELTA_SCHEMA)?,
+            public_error: SchemaValidator::compile(PUBLIC_ERROR_SCHEMA)?,
             private_bundle: SchemaValidator::compile(PRIVATE_BUNDLE_SCHEMA)?,
         })
     }
