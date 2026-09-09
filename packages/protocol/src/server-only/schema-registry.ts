@@ -16,6 +16,7 @@
  */
 import { SCHEMA_CLASSIFICATIONS } from "../common/classification.js";
 import { EmbedTokenClaimsSchema } from "../embed/embed-token-claims.js";
+import { SessionCredentialClaimsSchema } from "../credential/session-credential-claims.js";
 import {
   SCHEMA_REGISTRY,
   type SchemaEntry,
@@ -37,6 +38,12 @@ export const SERVER_ONLY_SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "EmbedTokenClaims",
     baseId: EMBED_SCHEMA_BASE_ID,
     schema: EmbedTokenClaimsSchema,
+  },
+  {
+    name: "session-credential-claims",
+    title: "SessionCredentialClaims",
+    baseId: SESSION_ACTION_SCHEMA_BASE_ID,
+    schema: SessionCredentialClaimsSchema,
   },
 ];
 

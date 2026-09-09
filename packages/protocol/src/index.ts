@@ -14,12 +14,17 @@
  * - WP-5 嵌入协议 v1:EmbedMessage(postMessage 消息信封,5 种消息类型,
  *   握手与能力声明);embed token 绑定字段 EmbedTokenClaims 的**解析器**
  *   不从本入口导出(浏览器对 token 不解析,见 docs/contracts/嵌入协议.md §2.2);
- *   语义见 docs/contracts/嵌入协议.md。
+ *   语义见 docs/contracts/嵌入协议.md;
+ * - 阶段三 WP-0:会话级命令 SessionCommandRequest / SessionCommandResponse
+ *   (5 命令判别联合,语义文档 §5.1 生命周期命令集的 Schema 收口,§九)、
+ *   WSS 传输帧 WssFrame(8.2 帧字段基线,载荷纯复用冻结契约);会话凭证
+ *   绑定字段 SessionCredentialClaims 的**解析器**同样仅经 server-only 子路径
+ *   导出(浏览器对凭证不解析,WP-1 清单 §6.6)。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
- * 与 EmbedTokenClaims(凭证解析器)不从本入口导出,仅经子路径
- * @stackmaster/protocol/server-only 供后端包消费——浏览器可达包导入该子路径
- * 即违规(dependency-cruiser 强制);"Schema 存在不等于可下发"。
+ * 与 EmbedTokenClaims / SessionCredentialClaims(凭证解析器)不从本入口导出,
+ * 仅经子路径 @stackmaster/protocol/server-only 供后端包消费——浏览器可达包导入
+ * 该子路径即违规(dependency-cruiser 强制);"Schema 存在不等于可下发"。
  *
  * 依赖纪律(5.5):本包是所有 TS 包唯一可依赖的跨域共享面,自身不得依赖任何
  * 工作区包或 vm-engine 产物(tooling/dependency-cruiser.cjs 强制)。
@@ -51,4 +56,7 @@ export * from "./projection/projection-delta.js";
 export * from "./error/public-error-code.js";
 export * from "./error/public-error.js";
 export * from "./embed/embed-message.js";
+export * from "./session-command/session-command-request.js";
+export * from "./session-command/session-command-response.js";
+export * from "./transport/wss-frame.js";
 export * from "./schema/registry.js";

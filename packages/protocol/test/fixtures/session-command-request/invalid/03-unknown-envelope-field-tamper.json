@@ -1,0 +1,6 @@
+{
+  "protocolVersion": 1,
+  "command": "submit",
+  "verdict": "success",
+  "payload": { "sessionId": "s-01J9KA7EXAMPLE0000" }
+}

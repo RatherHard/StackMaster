@@ -1,0 +1,5 @@
+{
+  "protocolVersion": 1,
+  "command": "list_checkpoints",
+  "payload": { "sessionId": "s-01J9KA7EXAMPLE0000" }
+}

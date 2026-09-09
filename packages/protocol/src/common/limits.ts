@@ -114,3 +114,37 @@ export const MAX_EMBED_HEIGHT_PX = 100000;
  * 或有限次数的 token;具体签发 TTL 属阶段五运维参数,必须 ≤ 本值。
  */
 export const MAX_EMBED_TOKEN_TTL_SECONDS = 604800;
+
+/* ------------------------------------------------------------------ */
+/* 会话级命令与传输信封护栏(阶段三 WP-0;计划书 8.2 / 8.3 / 9.1)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * embed token 签名载体的序列化长度上限(字符)。载体格式(JWT / PASETO /
+ * 自有格式)是签发侧实现决策(D-API-3),本值仅为外圈护栏——七字段 claims
+ * 加签名的任何紧凑载体都远低于此;token 值禁入 URL query、日志与错误响应
+ * (嵌入协议 V-13 / WP-2 传输卫生同纪律)。
+ */
+export const EMBED_TOKEN_MAX_LENGTH = 4096;
+
+/**
+ * 会话凭证(session-api 签发的会话级凭证)有效期上限(秒;24 小时外圈护栏)。
+ * 实现推荐 ≤ 会话 wall-clock 预算(3600 s,引擎进程协议装配常量)+ 续期余量;
+ * 具体签发 TTL 属阶段三运维参数(D-API-4),必须 ≤ 本值。
+ */
+export const MAX_SESSION_CREDENTIAL_TTL_SECONDS = 86400;
+
+/**
+ * `list_checkpoints` 响应的 checkpoints 数组长度上限(协议外圈护栏)。
+ * 每会话 checkpoint 数量的权威预算归编排器配额面(WP-6,与公开
+ * `resourceLimits` 对齐),必须 ≤ 本值;超限在契约层即拒绝。
+ */
+export const MAX_CHECKPOINTS_PER_SESSION = 256;
+
+/**
+ * 单条 WSS 消息帧的序列化字节上限(1 MiB 外圈护栏;8.3 请求护栏纪律)。
+ * 载荷最坏形态(ActionResponse:8192 B 投影 + 256 条聚合事件)远低于此;
+ * 实现侧护栏(WP-5 消息频率与大小限制)必须 ≤ 本值。接收端在 JSON.parse
+ * 前按本值拒绝,超限走冻结 `PublicError` 错误帧,零校验器细节透出(基线 #8)。
+ */
+export const MAX_WSS_FRAME_BYTES = 1048576;

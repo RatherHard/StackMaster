@@ -21,9 +21,12 @@ import { EmbedMessageSchema } from "../embed/embed-message.js";
 import { PublicErrorSchema } from "../error/public-error.js";
 import { ProjectionDeltaSchema } from "../projection/projection-delta.js";
 import { PublicStateProjectionSchema } from "../projection/public-state-projection.js";
+import { SessionCommandRequestSchema } from "../session-command/session-command-request.js";
+import { SessionCommandResponseSchema } from "../session-command/session-command-response.js";
 import { ActionRequestSchema } from "../session-action/action-request.js";
 import { ActionResponseSchema } from "../session-action/action-response.js";
 import { VerdictResultSchema } from "../session-action/verdict-result.js";
+import { WssFrameSchema } from "../transport/wss-frame.js";
 import { EMBED_SCHEMA_BASE_ID, SESSION_ACTION_SCHEMA_BASE_ID } from "../version.js";
 
 /** 已登记字段分类的 Schema 名(与 SCHEMA_CLASSIFICATIONS 键严格对齐)。 */
@@ -82,6 +85,24 @@ export const SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "EmbedMessage",
     baseId: EMBED_SCHEMA_BASE_ID,
     schema: EmbedMessageSchema,
+  },
+  {
+    name: "session-command-request",
+    title: "SessionCommandRequest",
+    baseId: SESSION_ACTION_SCHEMA_BASE_ID,
+    schema: SessionCommandRequestSchema,
+  },
+  {
+    name: "session-command-response",
+    title: "SessionCommandResponse",
+    baseId: SESSION_ACTION_SCHEMA_BASE_ID,
+    schema: SessionCommandResponseSchema,
+  },
+  {
+    name: "wss-frame",
+    title: "WssFrame",
+    baseId: SESSION_ACTION_SCHEMA_BASE_ID,
+    schema: WssFrameSchema,
   },
 ];
 

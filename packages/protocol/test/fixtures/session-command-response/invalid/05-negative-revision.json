@@ -1,0 +1,4 @@
+{
+  "command": "close_session",
+  "payload": { "revision": -1 }
+}

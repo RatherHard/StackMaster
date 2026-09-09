@@ -106,6 +106,44 @@ export const SCHEMA_CLASSIFICATIONS = {
       expiresAt: "boundary",
     },
   },
+  "session-command-request": {
+    rootClass: "boundary",
+    fieldClasses: {
+      protocolVersion: "boundary",
+      command: "boundary",
+      payload: "boundary",
+    },
+  },
+  "session-command-response": {
+    rootClass: "public",
+    fieldClasses: {
+      command: "public",
+      payload: "public",
+    },
+  },
+  "session-credential-claims": {
+    rootClass: "boundary",
+    fieldClasses: {
+      sessionId: "boundary",
+      tenantId: "boundary",
+      userId: "boundary",
+      challengeId: "boundary",
+      challengeVersion: "boundary",
+      jti: "boundary",
+      expiresAt: "boundary",
+    },
+  },
+  "wss-frame": {
+    rootClass: "boundary",
+    fieldClasses: {
+      protocolVersion: "boundary",
+      type: "boundary",
+      sessionId: "boundary",
+      seq: "boundary",
+      requestId: "boundary",
+      payload: "boundary",
+    },
+  },
   "projection-policy": {
     rootClass: "server-only",
     fieldClasses: {

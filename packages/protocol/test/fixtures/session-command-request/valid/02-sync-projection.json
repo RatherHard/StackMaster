@@ -1,0 +1,5 @@
+{
+  "protocolVersion": 1,
+  "command": "sync_projection",
+  "payload": { "sessionId": "s-01J9KA7EXAMPLE0000" }
+}

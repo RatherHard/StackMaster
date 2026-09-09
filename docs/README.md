@@ -42,6 +42,7 @@
 | [指令规约.md](develop/指令规约.md) | vm-core 逐 opcode 执行语义权威规约:统一执行入口、位宽 / 栈 / 标志模型、异常与事件面、调用与 Canary、自定义指令与接口派发(WP-4) |
 | [判题语义规约.md](develop/判题语义规约.md) | vm-core 判题语义权威规约:谓词求值、权威成功 / 失败判定、多阶段状态机运行时、seed 策略与派生、隐藏测试执行(WP-5) |
 | [快照与回放语义规约.md](develop/快照与回放语义规约.md) | vm-runtime 权威规约:COW 分页快照与 checkpoint、规范化动作日志(6.3 清单)、revision / undo / checkout / reset 语义、回放一致性、版本锁定与资源计数(WP-6) |
+| [权威API语义规约.md](develop/权威API语义规约.md) | session-api(D-API-* )实现期决策单一登记处:路由与通道形态、凭证链路、版本窗口与幂等窗口运维参数、通道行为(阶段三 WP-0 首批,随 WP 增补) |
 
 ### phases/
 

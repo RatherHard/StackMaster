@@ -1,0 +1,4 @@
+{
+  "command": "restart_session",
+  "payload": { "revision": 43 }
+}

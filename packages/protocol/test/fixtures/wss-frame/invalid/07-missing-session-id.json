@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "error",
+  "seq": 1,
+  "payload": {
+    "code": "internal_error",
+    "message": "内部错误。"
+  }
+}

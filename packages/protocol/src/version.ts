@@ -11,6 +11,19 @@
 export const SESSION_ACTION_PROTOCOL_VERSION = 1;
 
 /**
+ * 当前受理的会话动作协议版本集合(N-1 兼容窗口的实现约定锚点,5.6 / 语义文档 §5.2)。
+ *
+ * 冻结期恒为 `[SESSION_ACTION_PROTOCOL_VERSION]`;破坏性变更递增版本后,窗口期
+ * 在此追加 N-1(如 `[2, 1]`),服务端按路由对各版本以其独立 Schema 双版本受理,
+ * 窗口期结束移除旧值。窗口时长为实现期运维参数(权威 API 语义规约 D-API-4),
+ * 不属契约面。WSS 传输帧与 REST 命令体共用本集合(传输帧随会话动作协议同一
+ * 版本编号演进,D-API-2)。
+ */
+export const SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS: readonly number[] = [
+  SESSION_ACTION_PROTOCOL_VERSION,
+];
+
+/**
  * 引擎进程协议当前版本(5.6 第 4 类契约;阶段二 WP-1 登记,版本策略 §二)。
  *
  * 覆盖编排器 / verifier ↔ vm-worker 的进程帧格式与命令信封(语义权威:

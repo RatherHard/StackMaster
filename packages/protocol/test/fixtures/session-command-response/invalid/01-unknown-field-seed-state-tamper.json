@@ -1,0 +1,20 @@
+{
+  "command": "create_session",
+  "payload": {
+    "sessionId": "s-01J9KCWEXAMPLE0001",
+    "revision": 0,
+    "seedState": { "strategyId": "fixed", "stateBytes": "00" },
+    "projection": {
+      "revision": 0,
+      "visibleRegions": [],
+      "visibleRegisters": [],
+      "callStackSummary": [],
+      "controlFlow": {
+        "currentInstruction": { "addressHex": "0x401000", "text": "push rbp" },
+        "pausedOn": null
+      },
+      "semanticHighlights": [],
+      "status": "running"
+    }
+  }
+}

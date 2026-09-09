@@ -1,0 +1,18 @@
+{
+  "command": "sync_projection",
+  "payload": {
+    "revision": 43,
+    "projection": {
+      "revision": 43,
+      "visibleRegions": [],
+      "visibleRegisters": [],
+      "callStackSummary": [],
+      "controlFlow": {
+        "currentInstruction": { "addressHex": "0x401000", "text": "push rbp" },
+        "pausedOn": null
+      },
+      "semanticHighlights": [],
+      "status": "running"
+    }
+  }
+}

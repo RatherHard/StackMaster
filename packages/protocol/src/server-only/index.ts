@@ -4,7 +4,8 @@
  * 本入口承载两类后端专用契约:
  * - "Schema 可存在、载荷禁下发"的 server-only 类型(ProjectionPolicy,WP-1 第五章);
  * - "载荷可穿越浏览器、解析器只给后端"的凭证类 Schema(EmbedTokenClaims,WP-5:
- *   浏览器对 embed token 不解析,claims 解析器仅供签发 / 校验消费)。
+ *   浏览器对 embed token 不解析,claims 解析器仅供签发 / 校验消费;
+ *   SessionCredentialClaims,阶段三 WP-0:浏览器对会话凭证同样不解析)。
  *
  * 仅后端包(challenge-compiler、session-api、verifier)可导入;浏览器可达包
  * 导入即违规,由 tooling/dependency-cruiser.cjs 的
@@ -19,3 +20,5 @@ export {
   EmbedTokenClaimsSchema,
 } from "../embed/embed-token-claims.js";
 export type { EmbedTokenClaims } from "../embed/embed-token-claims.js";
+export { SessionCredentialClaimsSchema } from "../credential/session-credential-claims.js";
+export type { SessionCredentialClaims } from "../credential/session-credential-claims.js";

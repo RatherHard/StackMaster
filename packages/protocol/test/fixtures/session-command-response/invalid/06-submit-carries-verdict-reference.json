@@ -1,0 +1,10 @@
+{
+  "command": "submit",
+  "payload": {
+    "submissionId": "sub-01J9KD5EXAMPLE003",
+    "revision": 43,
+    "actionLog": [
+      { "clientSeq": 1, "action": { "type": "step", "args": {} } }
+    ]
+  }
+}

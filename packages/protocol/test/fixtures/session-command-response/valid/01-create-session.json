@@ -1,0 +1,32 @@
+{
+  "command": "create_session",
+  "payload": {
+    "sessionId": "s-01J9KCWEXAMPLE0001",
+    "revision": 0,
+    "projection": {
+      "revision": 0,
+      "visibleRegions": [
+        {
+          "regionId": "stack-main",
+          "label": "主栈帧",
+          "startAddressHex": "0x7FFF0000",
+          "byteLength": 256,
+          "permissions": "rw",
+          "bytesHex": "55",
+          "truncated": false
+        }
+      ],
+      "visibleRegisters": [
+        { "name": "RSP", "valueHex": "0x7FFF0100" },
+        { "name": "RBP", "valueHex": "0x7FFF0100" }
+      ],
+      "callStackSummary": [],
+      "controlFlow": {
+        "currentInstruction": { "addressHex": "0x4011A0", "text": "push rbp" },
+        "pausedOn": null
+      },
+      "semanticHighlights": [],
+      "status": "paused"
+    }
+  }
+}

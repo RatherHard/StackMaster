@@ -1,0 +1,12 @@
+{
+  "command": "list_checkpoints",
+  "payload": {
+    "checkpoints": [
+      {
+        "checkpointId": "cp-01J9KD0EXAMPLE001",
+        "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 12
+      }
+    ]
+  }
+}

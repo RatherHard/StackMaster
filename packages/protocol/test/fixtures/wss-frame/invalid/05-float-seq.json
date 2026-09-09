@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "type": "action_response",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 1.5,
+  "payload": {
+    "requestId": "r-01J9KA7EXAMPLE0000",
+    "revision": 43,
+    "status": "running",
+    "projectionDelta": null,
+    "publicEvents": []
+  }
+}

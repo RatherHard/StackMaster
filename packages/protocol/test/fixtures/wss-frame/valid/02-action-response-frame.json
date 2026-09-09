@@ -1,0 +1,18 @@
+{
+  "protocolVersion": 1,
+  "type": "action_response",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 9,
+  "requestId": "f-01J9KD8EXAMPLE004",
+  "payload": {
+    "requestId": "r-01J9KA7EXAMPLE0000",
+    "revision": 43,
+    "status": "running",
+    "projectionDelta": {
+      "revision": 43,
+      "dirtyRanges": [],
+      "changedRegisters": []
+    },
+    "publicEvents": []
+  }
+}

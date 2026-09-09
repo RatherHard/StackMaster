@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "command": "create_session",
+  "payload": {
+    "challengeId": "stack-smash-101",
+    "challengeVersion": "1.0.0",
+    "embedSessionId": "3xK9mQ7pL2vN8wRtY5uB1a",
+    "embedToken": "eyJhbGciOiJFZERTQSJ9.eyJ0ZW5hbnRJZCI6InQxIn0.AbCdEf0123456789",
+    "tenantId": "tenant-A",
+    "userId": "user-B"
+  }
+}

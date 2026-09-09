@@ -95,6 +95,41 @@
         "payload": "boundary"
       }
     },
+    "session-command-request": {
+      "file": "session-command-request.schema.json",
+      "title": "SessionCommandRequest",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "protocolVersion": "boundary",
+        "command": "boundary",
+        "payload": "boundary"
+      }
+    },
+    "session-command-response": {
+      "file": "session-command-response.schema.json",
+      "title": "SessionCommandResponse",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
+      "rootClass": "public",
+      "fieldClasses": {
+        "command": "public",
+        "payload": "public"
+      }
+    },
+    "wss-frame": {
+      "file": "wss-frame.schema.json",
+      "title": "WssFrame",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "protocolVersion": "boundary",
+        "type": "boundary",
+        "sessionId": "boundary",
+        "seq": "boundary",
+        "requestId": "boundary",
+        "payload": "boundary"
+      }
+    },
     "projection-policy": {
       "file": "projection-policy.schema.json",
       "title": "ProjectionPolicy",
@@ -119,6 +154,21 @@
         "challengeId": "boundary",
         "challengeVersion": "boundary",
         "embedSessionId": "boundary",
+        "jti": "boundary",
+        "expiresAt": "boundary"
+      }
+    },
+    "session-credential-claims": {
+      "file": "session-credential-claims.schema.json",
+      "title": "SessionCredentialClaims",
+      "baseId": "https://stackmaster.dev/schemas/session-action/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "sessionId": "boundary",
+        "tenantId": "boundary",
+        "userId": "boundary",
+        "challengeId": "boundary",
+        "challengeVersion": "boundary",
         "jti": "boundary",
         "expiresAt": "boundary"
       }

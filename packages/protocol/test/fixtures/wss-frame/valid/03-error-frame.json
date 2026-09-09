@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "type": "error",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 10,
+  "requestId": "f-01J9KD8EXAMPLE004",
+  "payload": {
+    "code": "permission_denied",
+    "message": "目标地址位于只读区域,写入被拒绝。",
+    "addressHex": "0x00405000"
+  }
+}
