@@ -51,6 +51,7 @@
 | [阶段一验收评审.md](phases/阶段一验收评审.md) | 阶段一退出条件逐条评审、门禁证据与阶段二移交项 |
 | [阶段二任务分解.md](phases/阶段二任务分解.md) | WP-0 ~ WP-9:vm-engine 工程载体、challenge-compiler、vm-core / vm-runtime / projection / vm-worker、会话编排核心、测试强化与收尾 |
 | [阶段二验收评审.md](phases/阶段二验收评审.md) | 阶段二退出条件逐条评审(十条全过)、13.1 清单逐条核对、门禁证据与 ADR-8 tripwire 验收点结论(WP-9) |
+| [阶段三任务分解.md](phases/阶段三任务分解.md) | WP-0 ~ WP-8:会话级命令与传输信封契约冻结、session-api 工程载体、认证与凭证、持久化与快照加密静止、REST 生命周期、认证 WSS 与投影下发、限流配额、跨域载荷机检与 Compose 集成、可观测与收尾 |
 
 ## 相关文档(包内)
 
