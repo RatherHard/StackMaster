@@ -280,6 +280,25 @@ fn response_status_str(status: projection::types::ResponseStatus) -> &'static st
     }
 }
 
+/// 快照信封 → JSON(§4.7,D-F5 信封五字段;载荷 1:1 保形)。
+pub fn snapshot_envelope_to_json(envelope: &crate::protocol::message::SnapshotEnvelope) -> Value {
+    json!({
+        "snapshotFormatVersion": envelope.snapshot_format_version,
+        "vmEngineVersion": envelope.vm_engine_version,
+        "engineBuildId": envelope.engine_build_id,
+        "revision": envelope.revision,
+        "payload": envelope.payload,
+    })
+}
+
+/// create_checkpoint 回执信封 → JSON(§4.7,D-F7:checkpointId 在快照信封外)。
+pub fn checkpoint_export_to_json(export: &crate::protocol::message::CheckpointExport) -> Value {
+    json!({
+        "checkpointId": export.checkpoint_id,
+        "snapshot": snapshot_envelope_to_json(&export.snapshot),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::schema::SchemaValidator;

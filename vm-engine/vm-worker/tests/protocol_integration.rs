@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 struct WorkerProcess {
     child: Child,
@@ -154,11 +154,133 @@ fn load_then_apply_action_round_trip_through_process_boundary() {
     // rejected)→ shutdown。装载面与拒绝面走真实进程边界。
     let mut worker = WorkerProcess::spawn();
     let _ready = worker.read_frame();
-    worker.send_line(r#"{"type":"load","seq":1,"privateBundle":{"schemaVersion":1}}"#);
+    worker.send_line(
+        r#"{"type":"load","seq":1,"privateBundle":{"schemaVersion":1},"publicDescriptor":{"schemaVersion":1}}"#,
+    );
     let load_error = worker.read_frame();
     assert_eq!(load_error["type"], "command_error");
     assert_eq!(load_error["error"]["code"], "challenge_invalid");
     worker.send_line(r#"{"type":"shutdown","seq":2}"#);
     assert_eq!(worker.read_frame()["type"], "shutdown_ack");
     assert!(worker.close_stdin().success());
+}
+
+#[test]
+fn watchdog_kills_worker_on_action_deadline() {
+    // 进程层超时资源面(D-W8-4):timeoutMsPerAction = 50ms,动作是
+    // 永不命中的 run_to_event(死循环程序)→ 看门狗夺回控制权,进程以
+    // 专用退出码 3 终止、不产出响应帧;恢复由编排器走崩溃替换路径。
+    let code_content = "00".repeat(4096);
+    let bundle = json!({
+        "schemaVersion": 1,
+        "challengeId": "wp8-watchdog",
+        "challengeContentVersion": "1.0.0",
+        "vmProfileVersion": "1.0.0",
+        "dslSchemaVersion": 2,
+        "vmEngineVersion": env!("CARGO_PKG_VERSION"),
+        "declaredSeedPublicPaths": [],
+        "seedPolicy": { "strategy": "fixed", "seedHex": "00112233445566778899aabbccddeeff" },
+        "initialState": {
+            "registers": { "RSP": "0x7ffff008", "RBP": "0x7ffff008", "RIP": "0x0", "RAX": "0x0" },
+            "memoryRegions": [
+                { "regionId": "code", "kind": "code", "startAddressHex": "0x401000",
+                  "byteLength": 4096, "permissions": "rx", "contentHex": code_content, "isHidden": false }
+            ]
+        },
+        "secrets": { "flag": "FLAG{watchdog}", "virtualFiles": [] },
+        "privateObjects": [],
+        "judging": { "successCondition": { "all": [] } },
+        "compiledIr": {
+            "irFormatVersion": 2,
+            "entrypointIndex": 0,
+            "instructions": [
+                { "op": "mov", "operands": [ { "kind": "register", "name": "RAX" }, { "kind": "register", "name": "RAX" } ] },
+                { "op": "jmp", "operands": [ { "kind": "immediate", "valueHex": "0x0" } ] }
+            ],
+            "labels": []
+        },
+        "judgingConfig": { "verdictRuleVersion": "1.0.0", "maxPredicateEvalSteps": 10000, "timeoutMsPerAction": 50 }
+    });
+    let descriptor = json!({
+        "schemaVersion": 1,
+        "challengeId": "wp8-watchdog",
+        "challengeContentVersion": "1.0.0",
+        "vmProfileVersion": "1.0.0",
+        "locale": "zh-CN",
+        "briefing": { "title": "看门狗", "summary": "超时资源面验证。", "learningObjectives": ["超时"] },
+        "vmProfile": {
+            "registers": [ { "name": "RSP" }, { "name": "RBP" }, { "name": "RIP" }, { "name": "RAX" } ],
+            "flagRegisterNames": ["FLAG_SYS"],
+            "endianness": "little",
+            "archBits": 32,
+            "pageSizeBytes": 4096,
+            "canary": { "enabled": false }
+        },
+        "memoryLayout": {
+            "regions": [
+                { "regionId": "code", "kind": "code", "startAddressHex": "0x401000",
+                  "byteLength": 4096, "permissions": "rx", "publicLabel": "代码区" }
+            ]
+        },
+        "allowedActions": ["step", "run_to_event"],
+        "resourceLimits": {},
+        "hintLadder": [],
+        "publicErrorMapping": [],
+        "initialProjection": {
+            "visibleRegions": [
+                { "regionId": "code", "label": "代码区", "startAddressHex": "0x401000",
+                  "byteLength": 4096, "permissions": "rx", "bytesHex": "00".repeat(256), "truncated": true }
+            ],
+            "visibleRegisters": [
+                { "name": "RSP", "valueHex": "0x7FFFF008" },
+                { "name": "RBP", "valueHex": "0x7FFFF008" },
+                { "name": "RIP", "valueHex": "0x0" },
+                { "name": "RAX", "valueHex": "0x0" }
+            ]
+        }
+    });
+    let action_request = json!({
+        "protocolVersion": 1,
+        "sessionId": "s",
+        "clientSeq": 1,
+        "baseRevision": 0,
+        "idempotencyKey": "k1",
+        "action": { "type": "run_to_event", "args": { "pauseOn": "write" } }
+    });
+    let load = json!({
+        "type": "load",
+        "seq": 1,
+        "privateBundle": bundle,
+        "publicDescriptor": descriptor
+    });
+
+    let mut worker = WorkerProcess::spawn();
+    let _ready = worker.read_frame();
+    worker.send_line(&serde_json::to_string(&load).unwrap());
+    let loaded = worker.read_frame();
+    assert_eq!(loaded["type"], "loaded", "看门狗题目装载必须成功:{loaded}");
+
+    worker.send_line(
+        &serde_json::to_string(&json!({
+            "type": "apply_action",
+            "seq": 2,
+            "requestId": "req-1",
+            "actionRequest": action_request
+        }))
+        .unwrap(),
+    );
+    // 看门狗触发后进程退出且不再产出任何帧(EOF;不等待响应)。
+    use std::io::Read as _;
+    let mut stdout = Vec::new();
+    let mut guard = worker.stdout.lock().unwrap();
+    let _ = guard.read_to_end(&mut stdout);
+    drop(guard);
+    assert!(
+        stdout.is_empty(),
+        "超时路径不得写出响应帧:{:?}",
+        String::from_utf8_lossy(&stdout)
+    );
+    let status = worker.child.wait().expect("worker 进程必须可回收");
+    assert_eq!(status.code(), Some(3), "看门狗超时必须以专用退出码 3 终止");
+    let _ = worker.close_stdin();
 }

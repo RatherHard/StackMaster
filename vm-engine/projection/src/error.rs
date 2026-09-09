@@ -599,6 +599,16 @@ pub enum RejectionReason {
         /// 玩家自供目标地址(valueHex 回显)。
         address: u64,
     },
+    /// 写入字节超题目级预算(公开包 `resourceLimits.maxWriteBytesPerAction`,
+    /// ≤ 协议上限;会话动作协议 §3.1 服务端重新校验点,执行前拒绝)。
+    WriteExceedsChallengeBudget {
+        /// 起点所在可见区域。
+        region_id: String,
+        /// 题目预算(expectedBytesLength 来源)。
+        allowed: u64,
+        /// 请求写入字节(actualBytesLength 来源 = 玩家输入)。
+        requested: u64,
+    },
     /// 装配 / 版本锁定类拒绝(challenge_invalid 方向的公开兜底;零细节)。
     ChallengeRejected,
     /// 判题累计谓词预算耗尽(challenge_invalid 方向安全终止;零细节)。
@@ -668,6 +678,26 @@ pub fn rejection_error(
                 .explanation(move |explanation| {
                     explanation.value_hex = Some(value);
                     explanation.hints = Some(hints);
+                })
+                .finish(policy, memory)
+                .map_err(|_| crate::ProjectionError::EngineDefect("error_coarsen_defect"))
+        }
+        RejectionReason::WriteExceedsChallengeBudget {
+            region_id,
+            allowed,
+            requested,
+        } => {
+            let (region_id, allowed, requested) = (region_id.clone(), *allowed, *requested);
+            let hints: Vec<String> = static_hints(PublicErrorCode::InvalidPayloadLength)
+                .iter()
+                .map(|hint| String::from(*hint))
+                .collect();
+            ErrorDraft::new(PublicErrorCode::InvalidPayloadLength)
+                .explanation(move |explanation| {
+                    explanation.region_id = Some(region_id.clone());
+                    explanation.expected_bytes_length = Some(allowed);
+                    explanation.actual_bytes_length = Some(requested);
+                    explanation.hints = Some(hints.clone());
                 })
                 .finish(policy, memory)
                 .map_err(|_| crate::ProjectionError::EngineDefect("error_coarsen_defect"))

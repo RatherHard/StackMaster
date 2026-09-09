@@ -20,6 +20,10 @@ pub enum WorkerCommand {
     Load {
         seq: u64,
         private_bundle: serde_json::Value,
+        /// 公开描述包(D-F10):引擎装配必需公开面的单点来源(位宽 / 页大小 /
+        /// canary 规格 / 编码表 / 区域标签 / 题目预算);worker 按冻结 Schema
+        /// 复验。整体 `PUBLIC`,传输于本协议不引入秘密面。
+        public_descriptor: serde_json::Value,
         /// 仅 `server_random_per_session` 策略允许:编排器生成的会话种子
         /// (16–64 位十六进制字符);`fixed` 策略必须省略(seed 在包内)。
         session_seed_hex: Option<String>,
@@ -67,6 +71,15 @@ pub struct SnapshotEnvelope {
     pub engine_build_id: String,
     pub revision: u64,
     pub payload: serde_json::Value,
+}
+
+/// create_checkpoint 的回执信封(§4.7,D-F7):worker 签发的 `checkpointId`
+/// 在快照信封之外——信封字段集合冻结,不私加字段。
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct CheckpointExport {
+    pub checkpoint_id: String,
+    pub snapshot: SnapshotEnvelope,
 }
 
 /// 命令级错误码 = 冻结 `PublicError` 16 码(投影与错误契约语义 §4.2;

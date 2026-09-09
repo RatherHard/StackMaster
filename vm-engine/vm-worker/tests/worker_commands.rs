@@ -42,7 +42,7 @@ fn valid_bundle() -> Value {
         "declaredSeedPublicPaths": [],
         "seedPolicy": { "strategy": "fixed", "seedHex": "00112233445566778899aabbccddeeff" },
         "initialState": {
-            "registers": { "RSP": "0x7ffc00", "RBP": "0x7ffc00", "RIP": "0x401000" },
+            "registers": { "RSP": "0x7ffc00", "RBP": "0x7ffc00", "RIP": "0x0" },
             "memoryRegions": [
                 {
                     "regionId": "code",
@@ -69,11 +69,84 @@ fn valid_bundle() -> Value {
 }
 
 fn load_command(seq: u64, bundle: Value, session_seed_hex: Option<&str>) -> Value {
-    let mut command = json!({ "type": "load", "seq": seq, "privateBundle": bundle });
+    let mut command = json!({
+        "type": "load",
+        "seq": seq,
+        "privateBundle": bundle,
+        "publicDescriptor": valid_public_descriptor()
+    });
     if let Some(seed) = session_seed_hex {
         command["sessionSeedHex"] = json!(seed);
     }
     command
+}
+
+/// 最小合法公开描述包(与 valid_bundle() 同一题目;满足
+/// public-descriptor.schema.json;D-F10)。
+fn valid_public_descriptor() -> Value {
+    // initialProjection.bytesHex 是投影窗口镜像(≤ 512 hex 字符 = 256 字节,
+    // D3 默认窗口);截断由 truncated 承载。
+    let mut content_hex = "55".repeat(8);
+    content_hex.push_str(&"00".repeat(4096 - 8));
+    let window_hex: String = content_hex.chars().take(512).collect();
+    json!({
+        "schemaVersion": 1,
+        "challengeId": "stack-bof-101",
+        "challengeContentVersion": "1.0.0",
+        "vmProfileVersion": "1.0.0",
+        "locale": "zh-CN",
+        "briefing": {
+            "title": "教学栈溢出",
+            "summary": "向缓冲区写入 payload 覆盖返回地址。",
+            "learningObjectives": ["理解栈帧布局"]
+        },
+        "vmProfile": {
+            "registers": [
+                { "name": "RSP" },
+                { "name": "RBP" },
+                { "name": "RIP" }
+            ],
+            "flagRegisterNames": ["FLAG_SYS"],
+            "endianness": "little",
+            "archBits": 32,
+            "pageSizeBytes": 4096,
+            "canary": { "enabled": false }
+        },
+        "memoryLayout": {
+            "regions": [
+                {
+                    "regionId": "code",
+                    "kind": "code",
+                    "startAddressHex": "0x401000",
+                    "byteLength": 4096,
+                    "permissions": "rx",
+                    "publicLabel": "代码区"
+                }
+            ]
+        },
+        "allowedActions": ["write_bytes", "push", "pop", "call", "ret", "step", "run_to_event", "pause", "undo", "checkout_checkpoint", "reset", "create_checkpoint"],
+        "resourceLimits": {},
+        "hintLadder": [],
+        "publicErrorMapping": [],
+        "initialProjection": {
+            "visibleRegions": [
+                {
+                    "regionId": "code",
+                    "label": "代码区",
+                    "startAddressHex": "0x401000",
+                    "byteLength": 4096,
+                    "permissions": "rx",
+                    "bytesHex": window_hex,
+                    "truncated": true
+                }
+            ],
+            "visibleRegisters": [
+                { "name": "RSP", "valueHex": "0x7FFC00" },
+                { "name": "RBP", "valueHex": "0x7FFC00" },
+                { "name": "RIP", "valueHex": "0x0" }
+            ]
+        }
+    })
 }
 
 fn action_request(action: Value) -> Value {
@@ -369,9 +442,36 @@ fn unknown_envelope_field_inside_action_request_is_rejected() {
 }
 
 #[test]
-fn valid_action_reaches_placeholder_in_skeleton() {
+fn valid_action_executes_and_advances_revision() {
+    // WP-8 接线后:合法动作交会话托管执行;pop 空栈是已执行的教学性失败
+    //(栈地址不可见 → I-9 统一 inaccessible_address),revision 前进。
+    // 成功条件取非恒真谓词(RAX == 1),教学失败后状态保持 running。
+    let mut bundle = valid_bundle();
+    bundle["initialState"]["registers"]["RAX"] = json!("0x0");
+    bundle["judging"]["successCondition"] = json!({
+        "all": [ { "all": [ { "predicate": { "type": "register_equals", "register": "RAX", "valueHex": "0x1" } } ] } ]
+    });
+    let mut descriptor = valid_public_descriptor();
+    descriptor["vmProfile"]["registers"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "name": "RAX" }));
+    descriptor["initialProjection"]["visibleRegisters"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "name": "RAX", "valueHex": "0x0" }));
+    let mut command = json!({
+        "type": "load",
+        "seq": 1,
+        "privateBundle": bundle,
+        "publicDescriptor": descriptor
+    });
+    command["seq"] = json!(1);
     let mut worker = new_worker();
-    load_first(&mut worker);
+    let outbound = worker.handle_frame(&frame(&command)).unwrap();
+    if let WorkerOutbound::CommandError { error, .. } = &outbound {
+        panic!("变体装载失败:{error:?}");
+    }
     match worker
         .handle_frame(&frame(&apply_action_frame(
             2,
@@ -380,11 +480,24 @@ fn valid_action_reaches_placeholder_in_skeleton() {
         )))
         .unwrap()
     {
-        WorkerOutbound::CommandError { error, .. } => {
-            // WP-1 骨架占位:引擎面未接线;合法载荷通过全部契约校验后到达此处。
-            assert_eq!(error.code, WorkerErrorCode::InternalError);
+        WorkerOutbound::ActionResponse {
+            action_response,
+            checkpoint_export,
+            ..
+        } => {
+            assert_eq!(action_response["status"], "running", "教学性失败会话继续");
+            assert_eq!(action_response["revision"], 1, "已执行动作恒 +1");
+            assert!(
+                action_response["projectionDelta"].is_object(),
+                "已执行动作增量恒存在"
+            );
+            assert_eq!(
+                action_response["userVisibleError"]["code"],
+                "inaccessible_address"
+            );
+            assert!(checkpoint_export.is_none());
         }
-        other => panic!("骨架阶段合法动作应返回引擎未接线占位:{other:?}"),
+        other => panic!("合法动作必须产出 ActionResponse:{other:?}"),
     }
 }
 

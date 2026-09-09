@@ -41,6 +41,11 @@ pub const PRIVATE_BUNDLE_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../packages/challenge-schema/schema/private-bundle.schema.json"
 ));
+/// 公开描述包(challenge-schema;整体 PUBLIC,load 命令随帧传输,D-F10)。
+pub const PUBLIC_DESCRIPTOR_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/challenge-schema/schema/public-descriptor.schema.json"
+));
 
 /// 校验器编译失败(仅可能来自内嵌 Schema 损坏,属构建期错误)。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,6 +91,7 @@ pub struct ContractValidators {
     pub projection_delta: SchemaValidator,
     pub public_error: SchemaValidator,
     pub private_bundle: SchemaValidator,
+    pub public_descriptor: SchemaValidator,
 }
 
 impl ContractValidators {
@@ -97,6 +103,7 @@ impl ContractValidators {
             projection_delta: SchemaValidator::compile(PROJECTION_DELTA_SCHEMA)?,
             public_error: SchemaValidator::compile(PUBLIC_ERROR_SCHEMA)?,
             private_bundle: SchemaValidator::compile(PRIVATE_BUNDLE_SCHEMA)?,
+            public_descriptor: SchemaValidator::compile(PUBLIC_DESCRIPTOR_SCHEMA)?,
         })
     }
 }

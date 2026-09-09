@@ -524,3 +524,98 @@ pub struct PrivateBundleMirror {
     pub interfaces: Option<Vec<InterfaceMirror>>,
     pub judging_config: JudgingConfigMirror,
 }
+
+// ── 公开描述包(D-F10;整体 PUBLIC)──
+//
+// 字段集合的权威是 `public-descriptor.schema.json`(load 前已按冻结 Schema
+// 复验);下列抽取类型只承载**引擎装配消费面**的键(vmProfile 架构常量 /
+// canary 规格 / 编码表、memoryLayout 区域标签、resourceLimits 题目预算),
+// 容器层不重复声明全字段集——未消费字段由 Schema 的
+// `additionalProperties: false` 拒绝,抽取层以 serde 默认(忽略)跳过。
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicDescriptorExtract {
+    pub challenge_id: String,
+    pub challenge_content_version: String,
+    pub vm_profile_version: String,
+    pub vm_profile: VmProfileExtract,
+    pub memory_layout: MemoryLayoutExtract,
+    #[serde(default)]
+    pub resource_limits: Option<ResourceLimitsExtract>,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VmProfileExtract {
+    /// 寄存器声明面(`visibleRegisters` 组装来源;`name` 为声明键)。
+    pub registers: Vec<RegisterDeclarationExtract>,
+    pub arch_bits: u32,
+    pub page_size_bytes: u64,
+    #[serde(default)]
+    pub canary: Option<CanarySpecExtract>,
+    #[serde(default)]
+    pub encoding_table: Option<Vec<EncodingEntryExtract>>,
+}
+
+/// 公开寄存器声明条目(`{name, displayLabel?}`;label 为展示面,装配不消费)。
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterDeclarationExtract {
+    pub name: String,
+    #[serde(default)]
+    pub display_label: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CanarySpecExtract {
+    pub enabled: bool,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EncodingEntryExtract {
+    pub token_hex: String,
+    pub op: String,
+    #[serde(default)]
+    pub operands: Option<Vec<EncodingOperandExtract>>,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct EncodingOperandExtract {
+    pub kind: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub base_register: Option<String>,
+    #[serde(default)]
+    pub interface_id: Option<u64>,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryLayoutExtract {
+    pub regions: Vec<PublicRegionExtract>,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicRegionExtract {
+    pub region_id: String,
+    pub public_label: String,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceLimitsExtract {
+    #[serde(default)]
+    pub predicate_eval_budget_per_session: Option<u64>,
+    #[serde(default)]
+    pub rollback_budget_per_session: Option<u64>,
+    #[serde(default)]
+    pub max_write_bytes_per_action: Option<u64>,
+}

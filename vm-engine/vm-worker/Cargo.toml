@@ -20,3 +20,4 @@ schemars = "1.2.2"
 # 测试期依赖(摘要清单复算;不进生产图)。
 [dev-dependencies]
 sha2 = "0.11.0"
+jsonschema = "0.53.0"

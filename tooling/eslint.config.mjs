@@ -24,4 +24,14 @@ export default tseslint.config(
       "no-undef": "off",
     },
   },
+  {
+    // 测试期假 worker(独立 Node 脚本,spawn 直启,不经 TS 编译)。
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+      },
+    },
+  },
 );
