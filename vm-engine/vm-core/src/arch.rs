@@ -223,6 +223,7 @@ pub enum HexValueError {
 mod tests {
     use super::*;
     use crate::testing::Xorshift64Star;
+    use proptest::prelude::*;
 
     const A32: ArchBits = ArchBits::B32;
     const A64: ArchBits = ArchBits::B64;
@@ -494,5 +495,129 @@ mod tests {
         assert_eq!(A64.mask(), u64::MAX);
         // 位宽排序仅用于确定性遍历(32 < 64)。
         assert!(A32 < A64);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // WP-9 proptest 属性(掩蔽域算术;随机输入 + u128 oracle)。
+    // RNG 固定种子:失败可复现,无 OS 熵依赖(miri 下 getrandom 不可用,
+    // Fixed 种子同时是 miri 安全路径);miri 慢 10~100×,压缩用例数。
+    // ─────────────────────────────────────────────────────────────────────
+
+    fn arch_bits_strategy() -> impl proptest::strategy::Strategy<Value = ArchBits> {
+        proptest::prop_oneof![Just(A32), Just(A64)]
+    }
+
+    fn wp9_prop_config() -> proptest::test_runner::Config {
+        let mut config =
+            proptest::test_runner::Config::with_cases(if cfg!(miri) { 8 } else { 128 });
+        config.rng_seed = proptest::test_runner::RngSeed::Fixed(0x57AC_C0DE);
+        // 关闭失败持久化:不读 / 写回归文件(无文件 IO,miri 隔离模式纯净,
+        // 也不向源码树落盘);失败用例的种子由 proptest 输出直接打印。
+        config.failure_persistence = None;
+        config
+    }
+
+    proptest::proptest! {
+        #![proptest_config(wp9_prop_config())]
+
+        /// 加法 + 进位输出 = 模 2^arch 的 u128 oracle(任意原始位型输入)。
+        #[test]
+        fn prop_add_carry_matches_modular_oracle(
+            a_raw in any::<u64>(),
+            b_raw in any::<u64>(),
+            arch in arch_bits_strategy(),
+        ) {
+            let a = ArchValue::new(a_raw, arch);
+            let b = ArchValue::new(b_raw, arch);
+            let sum = a.get() as u128 + b.get() as u128;
+            let mask = arch.mask() as u128;
+            let (result, carry) = a.add_with_carry(b, arch);
+            assert_eq!(result.get(), (sum & mask) as u64, "模和");
+            assert_eq!(carry, sum > mask, "进位");
+        }
+
+        /// 减法 + 借位输出 = 模 2^arch 的 u128 oracle。
+        #[test]
+        fn prop_sub_borrow_matches_modular_oracle(
+            a_raw in any::<u64>(),
+            b_raw in any::<u64>(),
+            arch in arch_bits_strategy(),
+        ) {
+            let a = ArchValue::new(a_raw, arch);
+            let b = ArchValue::new(b_raw, arch);
+            let modulus = 1u128 << arch.bits();
+            let mask = arch.mask() as u128;
+            let (result, borrow) = a.sub_with_borrow(b, arch);
+            let expected = (a.get() as u128 + modulus - b.get() as u128) & mask;
+            assert_eq!(result.get(), expected as u64, "模差");
+            assert_eq!(borrow, b.get() > a.get(), "借位");
+        }
+
+        /// 移位语义:移位量 < 位宽时 = 掩蔽域内移位;≥ 位宽时 = 0。
+        /// 移位量策略偏向 0..72(覆盖 32 / 64 边界及其两侧),混入全域值。
+        #[test]
+        fn prop_shift_matches_oracle(
+            a_raw in any::<u64>(),
+            shift in proptest::prop_oneof![0u64..72, any::<u64>()],
+            arch in arch_bits_strategy(),
+        ) {
+            let a = ArchValue::new(a_raw, arch);
+            let mask = arch.mask();
+            let expected = if shift >= u64::from(arch.bits()) {
+                0
+            } else {
+                (a.get() << shift) & mask
+            };
+            assert_eq!(a.shl(shift, arch).get(), expected, "shl");
+            let expected_r = if shift >= u64::from(arch.bits()) {
+                0
+            } else {
+                a.get() >> shift
+            };
+            assert_eq!(a.shr(shift, arch).get(), expected_r, "shr");
+        }
+
+        /// 位运算 / 取反 / 有符号立即数:全部等于按位 oracle 再掩蔽。
+        #[test]
+        fn prop_bitwise_and_signed_match_oracle(
+            a_raw in any::<u64>(),
+            b_raw in any::<u64>(),
+            signed in any::<i64>(),
+            arch in arch_bits_strategy(),
+        ) {
+            let a = ArchValue::new(a_raw, arch);
+            let b = ArchValue::new(b_raw, arch);
+            let mask = arch.mask();
+            assert_eq!(a.and(b, arch).get(), a.get() & b.get(), "and");
+            assert_eq!(a.or(b, arch).get(), a.get() | b.get(), "or");
+            assert_eq!(a.xor(b, arch).get(), a.get() ^ b.get(), "xor");
+            assert_eq!(a.not(arch).get(), !a.get() & mask, "not");
+            assert_eq!(
+                ArchValue::from_signed(signed, arch).get(),
+                signed as u64 & mask,
+                "from_signed 补码"
+            );
+        }
+
+        /// hex 往返 + 越出位宽值拒绝:随机掩蔽值恒可往返;32 位域收
+        /// 33 位十六进制字面量恒 OutOfRange(XS-ARCH-WIDTH)。
+        #[test]
+        fn prop_hex_roundtrip_and_width_rejection(
+            raw in any::<u64>(),
+            overflow in (u64::from(u32::MAX) + 1)..=u64::MAX,
+        ) {
+            for arch in [A32, A64] {
+                let a = ArchValue::new(raw, arch);
+                let text = a.format_hex();
+                let back = ArchValue::parse_hex(&text, arch).expect("自产 hex 必须可解析");
+                assert_eq!(back, a, "roundtrip 失败:{text}");
+            }
+            // 32 位域:任意 > 2^32−1 的值拒绝(十六进制大写形态与
+            // format_hex 同风格,排除"仅小写被接受"的词法侥幸)。
+            assert_eq!(
+                ArchValue::parse_hex(&alloc::format!("0x{overflow:X}"), A32),
+                Err(HexValueError::OutOfRange { bits: 32 })
+            );
+        }
     }
 }

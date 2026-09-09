@@ -43,8 +43,12 @@ const ENGINE_RUNTIME_DEP_ALLOWLIST = {
   "vm-runtime": ["vm-core"],
   projection: ["vm-core"],
 };
-/** 引擎三 crate 测试期依赖允许清单(仅影响测试二进制,不影响生产确定性图)。 */
-const ENGINE_DEV_DEP_ALLOWLIST = [];
+/** 引擎三 crate 测试期依赖允许清单(仅影响测试二进制,不影响生产确定性图)。
+ *  WP-9 登记proptest(属性测试:掩蔽域算术 / COW 一致性 / 谓词求值器 / 译码
+ *  纯函数;CLAUDE.md 质量门禁 3"cargo test + proptest")。proptest 的输入
+ *  生成 RNG 只存在于测试进程,与引擎行为的确定性正交;属性测试侧固定
+ *  Deterministic RNG 算法,失败可复现、不引入 OS 熵依赖。 */
+const ENGINE_DEV_DEP_ALLOWLIST = ["proptest"];
 /**
  * vm-worker 运行时依赖允许清单(进程边界层)。WP-1 契约消费面登记:
  * serde / serde_json(契约类型镜像与帧序列化)、jsonschema(冻结 JSON Schema

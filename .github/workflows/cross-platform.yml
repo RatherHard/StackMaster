@@ -1,0 +1,46 @@
+name: 跨平台确定性
+
+# WP-9(13.1):同引擎跨平台(x86-64 / ARM64)与 debug / release 结果一致。
+#
+# 机检落点:vm-runtime 的确定性黄金向量测试(determinism_vectors.rs)把
+# 黄金脚本的状态哈希序列 / revision 序列 / checkpoint 确定性 ID / 动作日志
+# 摘要硬编码为仓库常量(向量在 x86-64 Windows stable 上双 profile 逐字节
+# 一致后固化)——任何平台差异(哈希 / 迭代序 / 端序 / usize 宽度)或
+# profile 差异都会红灯。release 侧同时复验 ENG-3(overflow-checks = true)
+# 在 ARM64 上同样生效。
+#
+# 主 CI(ci.yml)在 ubuntu-latest(x86-64)承载 dev + release 全量;
+# 本工作流补齐 ARM64 与平台 × profile 全组合。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  determinism:
+    name: 确定性黄金向量(${{ matrix.runner }} / ${{ matrix.profile || 'debug' }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        profile: ["", --release]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vm-engine
+      - name: cargo test ${{ matrix.profile }}(vm-core + vm-runtime;黄金向量跨平台断言)
+        run: |
+          cargo test ${{ matrix.profile }} -p vm-core
+          cargo test ${{ matrix.profile }} -p vm-runtime
+        working-directory: vm-engine

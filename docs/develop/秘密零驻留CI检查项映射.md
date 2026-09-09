@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | v1.1(2026-09-06,WP-0 初版;同日修订:rust-gate 的纪律门禁 CI 落点由 `pnpm lint:rust` 改为直调脚本——rust-gate 不安装 node 依赖,解除 CI 对 npm registry 的依赖,turbo 任务保留为本地 / turbo 图入口) |
+| 版本 | v1.2(2026-09-09,WP-9:新增 ENG-8 miri / ENG-9 fuzz / ENG-10 黄金向量与跨 profile·跨平台一致性门禁及对应 CI 落点;登记 ENG-4 测试期依赖允许清单首项 proptest。v1.1(2026-09-06,WP-0 初版;同日修订:rust-gate 的纪律门禁 CI 落点由 `pnpm lint:rust` 改为直调脚本——rust-gate 不安装 node 依赖,解除 CI 对 npm registry 的依赖,turbo 任务保留为本地 / turbo 图入口)) |
 | 状态 | 实现期文档(随各 WP 接线持续更新;所映射的上游清单为冻结面) |
 | 上游依据 | `docs/contracts/数据分类与秘密零驻留清单.md` §二(驻留三原则)、§九(机检条目)、§13.5 构建面;`docs/项目计划书.md` 5.8(质量门禁)、13.5 |
 | 效力范围 | 阶段二起全部工作包;实现侧 CI 落点与上游条目 ID 的一一对照 |
@@ -25,6 +25,14 @@
 | `rust-gate` | `pnpm test:rust`(cargo test dev + release) | ENG-3(运行时反例)、ENG-6 |
 | `rust-gate` | `cargo llvm-cov --fail-under-lines 90` | ENG-7 |
 | `rust-gate` | contract-smoke `cargo test` + `pnpm smoke:contract` | 规范化序列化跨语言冒烟(WP-6) |
+| `rust-miri` | `cargo +nightly miri test -p vm-core` | ENG-8(WP-9) |
+| `rust-fuzz` | `cargo fuzz run` × 3 目标(frame_command / challenge_bundle / byte_decode,每目标限时冒烟) | ENG-9(WP-9) |
+
+`.github/workflows/cross-platform.yml`(WP-9;x86-64 `ubuntu-latest` × ARM64 `ubuntu-24.04-arm` × debug/release 全组合):
+
+| job | 步骤 | 门禁 ID |
+|---|---|---|
+| `determinism` | `cargo test [-–release] -p vm-core -p vm-runtime`(确定性黄金向量测试为断言载体) | ENG-10(WP-9)、ENG-3(ARM 侧 release 复验) |
 
 根脚本入口:`pnpm lint:rust`(turbo 任务 `lint:rust`,vm-engine 包脚本承载)、`pnpm test:rust`、`pnpm cov:rust`;TS 门禁沿用 `pnpm build / typecheck / test / lint / lint:deps / scan:public / fixtures:manifest --check`。
 
@@ -43,6 +51,9 @@
 | ENG-5 | 引擎 clippy 禁用清单(第二层 lint:std::time / fs / net / process 类型与方法) | `CLIPPY_CONF_DIR=tooling/engine-lints` 对引擎三 crate 逐个 `cargo clippy -D warnings` | 反例 crate `ce-std-time`(Instant / Command):带配置红灯且信号命中 disallowed,无配置对照绿灯(红灯归因于清单);反例 crate `ce-no-std-clean`:无误报 | ADR-8;清单 §九"必触发反例"纪律 |
 | ENG-6 | `cargo fmt --check` + `cargo clippy --workspace --all-targets -D warnings` + cargo test(dev / release) | CI 步骤 `node tooling/check-engine-discipline.mjs`(本地同 `pnpm lint:rust`)、`pnpm test:rust` | 常规 CI 语义:任一违规即红灯 | 质量门禁 1、3(计划书 5.8) |
 | ENG-7 | 覆盖率门槛:vm-core / vm-runtime / projection ≥ 90% | `cargo llvm-cov --workspace --exclude vm-worker --fail-under-lines 90`(vm-worker 为进程边界二进制,不在门槛内) | 覆盖率跌破 90% 即红灯(骨架期实测:含未覆盖二进制 crate 时 71.43% → 退出码 1);WP-0 骨架期即接线,避免"补门禁"窗口 | 质量门禁 3 |
+| ENG-8 | `cargo miri`:vm-core 无未定义行为(13.1 引擎侧补充覆盖第 1 条) | CI job `rust-miri`:nightly + miri 组件,`cargo +nightly miri test -p vm-core`;属性测试以 `RngSeed::Fixed` + `failure_persistence = None` 保证 miri 隔离模式纯净(无 OS 熵 / 无文件 IO) | miri 检出未定义行为即红灯;本地复跑:`pnpm test:miri` | 13.1;质量门禁 4(WP-9) |
+| ENG-9 | cargo-fuzz:题目包与动作解析器 fuzz 无 panic(13.1 引擎侧补充覆盖第 2 条) | CI job `rust-fuzz`:三目标 `frame_command`(动作 / 命令解析器)/ `challenge_bundle`(双包管线含 IR 装配)/ `byte_decode`(字节模式取指译码),管线与 worker 处理路径同构;每目标 `-max_total_time=60` 冒烟;目标源 `vm-engine/fuzz/`(独立 workspace,不进引擎门禁图) | fuzz 目标内的不变量断言(如译码有界推进)或 panic 即红灯;语料纪律:不提交语料——私有题目包样本永不入 git | 13.1;质量门禁 4(WP-9) |
+| ENG-10 | 确定性黄金向量:跨 profile(debug / release)与跨平台(x86-64 / ARM64)逐字节一致(13.1 引擎侧补充覆盖第 3 条) | `vm-runtime/tests/determinism_vectors.rs`:黄金脚本 13 动作的状态哈希序列 / revision 序列 / checkpoint 确定性 ID / 动作日志摘要**硬编码为仓库常量**;CI job `determinism`(cross-platform.yml)在 x86-64 + ARM64 × debug + release 四组合上断言;本地:`pnpm cross:test` | 常量漂移即红灯(语义按版本策略冻结:常量变化 = vmEngineVersion 必须演进);向量生成环境与双 profile 一致性实测记录见测试文件头注 | 13.1;6.3 确定性(WP-9) |
 
 分层说明:ENG-2 的 `#![no_std]` 是**结构性主防线**(std 路径在引擎 crate 内不可解析,lint 不可绕过);ENG-5 的 clippy 清单是第二层,兜底"漏掉 no_std 的回归"。disallowed-* 不支持通配,清单为尽力枚举,以 no_std 为准。
 
@@ -94,4 +105,4 @@
 1. **ID 单一来源**:CI 步骤名、脚本输出(`[ENG-x]` / `(ZR-Bx)`)、反例命名必须携带上游清单条目 ID;上游清单 §九是唯一条目来源,本文不新增条目,只登记落点。
 2. **必触发反例**:每条已接线门禁必须有至少一个反例(脚本 self-test、反例 crate、实地反例或测试探针),且反例与门禁同仓同 CI 运行;反例失效(如样例被误改)按门禁失败处理。
 3. **豁免纪律**:浏览器产物扫描的误报豁免走 `scan-public-artifacts.mjs` 的 ALLOWLIST(带原因与到期日,过期自动失效);引擎纪律门禁无豁免机制——需要豁免即代表违反 ADR-8 纪律,须走契约变更评审。
-4. **依赖允许清单演进**:引擎 crate 新增依赖(如 WP-1 的 serde / schemars)须修改 `check-engine-discipline.mjs` 允许清单并在此登记理由;时间 / 随机源 crate 永不进入。
+4. **依赖允许清单演进**:引擎 crate 新增依赖(如 WP-1 的 serde / schemars)须修改 `check-engine-discipline.mjs` 允许清单并在此登记理由;时间 / 随机源 crate 永不进入。WP-9 登记 `ENGINE_DEV_DEP_ALLOWLIST` 首项 **proptest**(vm-core / vm-runtime 测试期依赖,属性测试:掩蔽域算术 / COW 一致性 / 谓词求值器 / 译码纯函数):其输入生成 RNG 只存在于测试进程,与引擎行为的确定性正交,且属性测试侧固定 `RngSeed::Fixed` 种子 + 关闭失败持久化——可复现、无 OS 熵、无文件 IO(miri 隔离模式纯净);生产依赖允许清单不变。

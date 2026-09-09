@@ -6,3 +6,8 @@ license.workspace = true
 
 [dependencies]
 vm-core = { path = "../vm-core" }
+
+# 测试期属性测试(WP-9:COW 一致性属性)。与 vm-core 同一登记依据:
+# 输入生成 RNG 仅存在于测试进程,固定 Deterministic 算法可复现。
+[dev-dependencies]
+proptest = "1.7"

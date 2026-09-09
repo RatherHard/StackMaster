@@ -1,0 +1,57 @@
+[package]
+name = "stackmaster-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+# 独立 workspace:不加入 vm-engine workspace 成员(clippy / fmt / llvm-cov /
+# test 门禁图不含 fuzz 目标;构建与运行仅由 rust-fuzz CI job 承载)。
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+# WP-9:fuzz 接入(13.1"题目包与动作解析器 fuzz 无 panic"、质量门禁 4)。
+# 本 crate 不在 vm-engine workspace 成员清单内(cargo-fuzz 惯例:独立
+# lockfile 与构建图);CI 落点:.github/workflows/ci.yml 的 rust-fuzz job
+# (cargo fuzz run,每目标限时冒烟)。本地无 cargo-fuzz 环境时,同等解析
+# 管线由 vm-worker 单元测试覆盖。
+#
+# 三个 fuzz 目标对应三类解析器:
+#   frame_command     —— 引擎进程协议帧载荷 → 严格 JSON → WorkerCommand
+#                        → apply_action 的动作请求契约校验管线;
+#   challenge_bundle  —— 私有题目包 + 公开描述包双包管线:严格解析 →
+#                        Schema + 语义承接 → serde 镜像 → 会话装配
+#                        (IR 形态校验 / 布局互证 / 谓词预算双真相源均在此路);
+#   byte_decode       —— 字节模式取指译码纯函数(任意编码表 × 任意字节
+#                        × 任意取指地址)。
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vm-core = { path = "../vm-core" }
+vm-runtime = { path = "../vm-runtime" }
+vm-worker = { path = "../vm-worker" }
+
+# 镜像反序列化用(worker 自带 serde_json;此处显式声明以直接构造 Value)。
+serde_json = "1"
+
+[[bin]]
+name = "frame_command"
+path = "fuzz_targets/frame_command.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "challenge_bundle"
+path = "fuzz_targets/challenge_bundle.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "byte_decode"
+path = "fuzz_targets/byte_decode.rs"
+test = false
+doc = false
+bench = false

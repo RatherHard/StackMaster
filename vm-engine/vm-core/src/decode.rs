@@ -181,6 +181,7 @@ mod tests {
     use crate::instr::{BaselineOp, EncodingOperandShape, EncodingTableEntry, Op};
     use alloc::string::String;
     use alloc::vec;
+    use proptest::prelude::*;
 
     const A32: ArchBits = ArchBits::B32;
     const A64: ArchBits = ArchBits::B64;
@@ -425,5 +426,87 @@ mod tests {
             EncodingIndex::new(&[]),
             "空表构建与默认同构"
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // WP-9 proptest 属性(译码纯函数):全定义性(任意输入不 panic,失败
+    // 只会是 UnknownToken / Truncated)、确定性(同输入两次译码逐项相等)、
+    // 有界推进(Ok 时 next 严格前进且不越界)、立即数落掩蔽域(D4.6)。
+    // RNG 固定种子,理由见 arch.rs 同名注释。
+    // ─────────────────────────────────────────────────────────────────────
+
+    fn wp9_prop_config() -> proptest::test_runner::Config {
+        let mut config =
+            proptest::test_runner::Config::with_cases(if cfg!(miri) { 8 } else { 128 });
+        config.rng_seed = proptest::test_runner::RngSeed::Fixed(0x0DEC_0DE5);
+        // 关闭失败持久化:不读 / 写回归文件(无文件 IO,miri 隔离模式纯净,
+        // 也不向源码树落盘);失败用例的种子由 proptest 输出直接打印。
+        config.failure_persistence = None;
+        config
+    }
+
+    fn wp9_arch_strategy() -> impl proptest::strategy::Strategy<Value = ArchBits> {
+        proptest::prop_oneof![Just(A32), Just(A64)]
+    }
+
+    /// 由随机种子确定性导出编码表条目(token 不去重:索引防御性保留末条,
+    /// 译码层行为不变)。
+    fn wp9_entries(seeds: &[u64]) -> Vec<EncodingTableEntry> {
+        const OPS: &[fn() -> Op] = &[
+            || Op::Baseline(BaselineOp::Mov),
+            || Op::Baseline(BaselineOp::Add),
+            || Op::Baseline(BaselineOp::Push),
+            || Op::Baseline(BaselineOp::Jmp),
+        ];
+        const SHAPES: &[fn() -> EncodingOperandShape] = &[
+            || EncodingOperandShape::Register(alloc::string::String::from("RAX")),
+            || EncodingOperandShape::ImmediateArch,
+            || EncodingOperandShape::Memory {
+                base: alloc::string::String::from("RSP"),
+            },
+            || EncodingOperandShape::Interface(0x20),
+        ];
+        seeds
+            .iter()
+            .map(|seed| EncodingTableEntry {
+                token: *seed as u8,
+                op: OPS[(seed >> 8) as usize % OPS.len()](),
+                operand_shapes: (0..((seed >> 16) as usize % 3))
+                    .map(|i| SHAPES[(seed >> (24 + 4 * i)) as usize % SHAPES.len()]())
+                    .collect(),
+            })
+            .collect()
+    }
+
+    proptest::proptest! {
+        #![proptest_config(wp9_prop_config())]
+
+        #[test]
+        fn prop_decode_slice_total_deterministic_bounded(
+            seeds in proptest::collection::vec(any::<u64>(), 0..6),
+            code in proptest::collection::vec(any::<u8>(), 0..48),
+            at in 0usize..64,
+            arch in wp9_arch_strategy(),
+        ) {
+            let entries = wp9_entries(&seeds);
+            let index = EncodingIndex::new(&entries);
+            // 纯函数:同一输入两次译码结果逐项相等。
+            let first = decode_slice(&index, arch, &code, at);
+            assert_eq!(decode_slice(&index, arch, &code, at), first);
+            match first {
+                Ok((instruction, next)) => {
+                    // 有界推进:next 严格前进且不越过可用字节。
+                    assert!(next > at, "译码必须推进:{at} → {next}");
+                    assert!(next <= code.len(), "next 越界:{next} > {}", code.len());
+                    // 任意位型立即数落掩蔽域(D4.6:译码层结构性不越界)。
+                    for operand in &instruction.operands {
+                        if let Operand::Immediate(value) = operand {
+                            assert!(value.get() <= arch.mask());
+                        }
+                    }
+                }
+                Err(DecodeError::UnknownToken { .. } | DecodeError::Truncated { .. }) => {}
+            }
+        }
     }
 }

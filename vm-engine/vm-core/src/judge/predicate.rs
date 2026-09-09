@@ -334,6 +334,7 @@ mod tests {
     use crate::instr::{Instruction, Op, Operand, Program};
     use crate::judge::spec::tests::engine_with_regions;
     use alloc::vec;
+    use proptest::prelude::*;
 
     const A32: ArchBits = ArchBits::B32;
 
@@ -759,5 +760,131 @@ mod tests {
             ],
         };
         assert_eq!(instr.operands.len(), 2);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // WP-9 proptest 属性(谓词求值器):恒定成本 + 确定性。随机内存 /
+    // 寄存器状态 × 随机条件树形态,断言(1)静态谓词计数只依赖树形态,
+    // 与内容无关(布尔不短路 ⇒ T-SC2 的属性化表达);(2)同一状态两次
+    // 求值结果一致;(3)已装配引用域内求值全定义(只 Ok,无 panic)。
+    // RNG 固定种子,理由见 arch.rs 同名注释。
+    // ─────────────────────────────────────────────────────────────────────
+
+    fn wp9_prop_config() -> proptest::test_runner::Config {
+        let mut config =
+            proptest::test_runner::Config::with_cases(if cfg!(miri) { 8 } else { 128 });
+        config.rng_seed = proptest::test_runner::RngSeed::Fixed(0x9BED_1CA7);
+        // 关闭失败持久化:不读 / 写回归文件(无文件 IO,miri 隔离模式纯净,
+        // 也不向源码树落盘);失败用例的种子由 proptest 输出直接打印。
+        config.failure_persistence = None;
+        config
+    }
+
+    /// 随机叶子:引用均落在已装配引用域(stack 区域 / RAX / FLAG_KEY),
+    /// MemoryEquals 的 offset + len ≤ 区域大小保证求值不产生引用错误。
+    fn wp9_leaf(rng: &mut crate::testing::Xorshift64Star) -> ConditionL3 {
+        let random_bytes = |rng: &mut crate::testing::Xorshift64Star, len: usize| -> Vec<u8> {
+            (0..len).map(|_| (rng.next_u64() & 0xFF) as u8).collect()
+        };
+        let predicate = match rng.next_u64() % 4 {
+            0 => {
+                let len = (rng.next_u64() as usize % 8) + 1;
+                Predicate::MemoryEquals {
+                    region_id: String::from("stack"),
+                    offset_bytes: rng.next_u64() % (0x1000 - len as u64),
+                    bytes: random_bytes(rng, len),
+                }
+            }
+            1 => {
+                let len = (rng.next_u64() as usize % 8) + 1;
+                Predicate::MemoryContains {
+                    region_id: String::from("stack"),
+                    bytes: random_bytes(rng, len),
+                }
+            }
+            2 => Predicate::RegisterEquals {
+                register: String::from("RAX"),
+                value: v(rng.next_u64()),
+            },
+            _ => Predicate::RegisterBitsSet {
+                register: String::from("FLAG_KEY"),
+                mask: v(rng.next_u64()),
+            },
+        };
+        ConditionL3 { predicate }
+    }
+
+    /// 随机 L2:all / any / not 三键随机取一,1–3 个随机子节点。
+    fn wp9_l2(rng: &mut crate::testing::Xorshift64Star) -> ConditionL2 {
+        let count = (rng.next_u64() as usize % 3) + 1;
+        match rng.next_u64() % 3 {
+            0 => ConditionL2 {
+                all: Some((0..count).map(|_| wp9_leaf(rng)).collect()),
+                any: None,
+                not: None,
+            },
+            1 => ConditionL2 {
+                all: None,
+                any: Some((0..count).map(|_| wp9_leaf(rng)).collect()),
+                not: None,
+            },
+            _ => ConditionL2 {
+                all: None,
+                any: None,
+                not: Some(Box::new(wp9_leaf(rng))),
+            },
+        }
+    }
+
+    /// 随机 L1 根:all / any / not 三键随机取一,1–3 个随机 L2。
+    fn wp9_tree(rng: &mut crate::testing::Xorshift64Star) -> ConditionL1 {
+        let count = (rng.next_u64() as usize % 3) + 1;
+        match rng.next_u64() % 3 {
+            0 => ConditionL1 {
+                all: Some((0..count).map(|_| wp9_l2(rng)).collect()),
+                any: None,
+                not: None,
+            },
+            1 => ConditionL1 {
+                all: None,
+                any: Some((0..count).map(|_| wp9_l2(rng)).collect()),
+                not: None,
+            },
+            _ => ConditionL1 {
+                all: None,
+                any: None,
+                not: Some(Box::new(wp9_l2(rng))),
+            },
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(wp9_prop_config())]
+
+        #[test]
+        fn prop_constant_cost_and_determinism_under_random_state(
+            seed in any::<u64>(),
+            write_count in 0usize..6,
+        ) {
+            let mut rng = crate::testing::Xorshift64Star::new(seed ^ 0x9E37_79B9_7F4A_7C15);
+            let mut engine = engine_with_regions();
+            for _ in 0..write_count {
+                let len = (rng.next_u64() as usize % 8) + 1;
+                let data: Vec<u8> = (0..len).map(|_| (rng.next_u64() & 0xFF) as u8).collect();
+                engine
+                    .action_write_bytes(v(0x7FFF_F000 + (rng.next_u64() & 0xFF)), &data)
+                    .unwrap();
+            }
+            let condition = wp9_tree(&mut rng);
+            let expected_count = predicate_count(&condition);
+            let first = evaluate_l1(&engine, &condition);
+            let second = evaluate_l1(&engine, &condition);
+            // 确定性:同一引擎状态两次求值逐项一致(Ok 恒成立——引用域
+            // 已被叶子构造保证)。
+            assert_eq!(first, second, "同状态两次求值必须一致");
+            assert!(first.is_ok(), "引用域内求值只 Ok");
+            // 恒定成本:计数是条件树的静态函数,与内存 / 寄存器内容无关。
+            assert_eq!(predicate_count(&condition), expected_count);
+        }
     }
 }

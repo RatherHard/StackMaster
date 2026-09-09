@@ -5,3 +5,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+
+# 测试期属性测试(WP-9;CLAUDE.md 质量门禁 3"cargo test + proptest")。
+# 仅影响测试二进制:引擎行为零随机——proptest 的输入生成 RNG 与被测引擎
+# 隔离,且属性测试固定 Deterministic 算法(失败可复现、无 OS 熵依赖)。
+# 依赖登记见 tooling/check-engine-discipline.mjs(ENG-4 dev 允许清单)。
+[dev-dependencies]
+proptest = "1.7"
