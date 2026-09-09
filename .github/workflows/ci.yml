@@ -104,12 +104,16 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
+      # 显式 gnu 目标:cargo-fuzz 0.13+ 在 linux 默认改用 x86_64-unknown-linux-musl,
+      # 而 musl std 未随 minimal 工具链安装,且 musl 默认 crt-static 与
+      # -Zsanitizer=address 不兼容(sanitizer 要求动态链接 libc)。gnu 是宿主
+      # 工具链自带的 std,ASAN 开箱可用,亦与各 fuzz 步骤名/文档锚点解耦。
       - name: fuzz frame_command(动作 / 命令解析器;13.1"fuzz 无 panic")
-        run: cargo fuzz run frame_command -- -max_total_time=60 -max_len=16384
+        run: cargo fuzz run frame_command --target x86_64-unknown-linux-gnu -- -max_total_time=60 -max_len=16384
         working-directory: vm-engine
       - name: fuzz challenge_bundle(题目包 + IR 装配解析器)
-        run: cargo fuzz run challenge_bundle -- -max_total_time=60 -max_len=16384
+        run: cargo fuzz run challenge_bundle --target x86_64-unknown-linux-gnu -- -max_total_time=60 -max_len=16384
         working-directory: vm-engine
       - name: fuzz byte_decode(字节模式取指译码器,gadget 路径)
-        run: cargo fuzz run byte_decode -- -max_total_time=60 -max_len=16384
+        run: cargo fuzz run byte_decode --target x86_64-unknown-linux-gnu -- -max_total_time=60 -max_len=16384
         working-directory: vm-engine

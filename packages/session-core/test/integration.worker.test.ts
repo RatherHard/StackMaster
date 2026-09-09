@@ -125,7 +125,8 @@ describe("SessionOrchestrator(真实 vm-worker 全链路)", () => {
       ...createOptions(),
       snapshot: receipt.snapshot,
     });
-    expect(recovered.revision).toBe(revisionAtCrash, "revision 自快照续算");
+    // revision 自快照续算(Vitest 的 toBe 不接受第二参数,说明移入注释)。
+    expect(recovered.revision).toBe(revisionAtCrash);
     expect(canonicalize(recovered.projection)).toBe(canonicalize(beforeKill));
 
     // 恢复后的会话可继续执行,旧 checkpoint 引用已退化(账本清空)。
