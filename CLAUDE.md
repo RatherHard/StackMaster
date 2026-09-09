@@ -125,7 +125,7 @@ stackmaster/
 1. TS:tsc(project references)+ ESLint;Rust:cargo clippy(`-D warnings`)+ cargo fmt 检查;
 2. dependency-cruiser 依赖边界 + 引擎确定性 lint + `#![forbid(unsafe_code)]` 检查;
 3. 单元与属性测试:Vitest + fast-check / cargo test + proptest;覆盖率整体 ≥ 80%,`vm-core`、`vm-runtime`、`projection`、`challenge-compiler` ≥ 90%;
-4. cargo miri(vm-core 无未定义行为)+ cargo-fuzz(题目包、动作与 IR 解析器);
+4. cargo miri(vm-core UB 敏感面:掩蔽算术 / 译码边界 / 页与 COW / 快照克隆 / 条件求值;本地全量入口 `pnpm test:miri`)+ cargo-fuzz(题目包、动作与 IR 解析器);
 5. golden fixture 跨语言往返一致;
 6. 浏览器产物隔离扫描(不得含引擎代码、私有题目包内容、vm-worker 二进制);
 7. Compose 集成测试:会话创建 → 动作 → 投影 → 断线重连 → 提交裁决全链路;

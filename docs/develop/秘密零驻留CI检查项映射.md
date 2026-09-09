@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | v1.2(2026-09-09,WP-9:新增 ENG-8 miri / ENG-9 fuzz / ENG-10 黄金向量与跨 profile·跨平台一致性门禁及对应 CI 落点;登记 ENG-4 测试期依赖允许清单首项 proptest。v1.1(2026-09-06,WP-0 初版;同日修订:rust-gate 的纪律门禁 CI 落点由 `pnpm lint:rust` 改为直调脚本——rust-gate 不安装 node 依赖,解除 CI 对 npm registry 的依赖,turbo 任务保留为本地 / turbo 图入口)) |
+| 版本 | v1.3(2026-09-09,rust-miri 的 miri 运行收敛为 UB 敏感面子集(arch / decode / memory / state / registers / judge::predicate 模块;唯一 skip 手写 256 轮 × 整引擎重建循环 constant_cost_predicate_count_under_mutation——其不变式由同模块 miri 缩减用例的 proptest 覆盖,原生 job 仍全量执行)。理由:Miri 解释执行慢 10~100 倍,nightly 每日轮换令 rust-cache 与 Miri sysroot(`~/.cache/miri`,不在 rust-cache 覆盖内)每日冷重建,全量 167 测试在 CI 逼近 60 分钟超时(暖缓存实测:全量 >40 分钟未完,过滤集 80 测试 6.3 分钟);本地全量入口保留 `pnpm test:miri`。v1.2(2026-09-09,WP-9:新增 ENG-8 miri / ENG-9 fuzz / ENG-10 黄金向量与跨 profile·跨平台一致性门禁及对应 CI 落点;登记 ENG-4 测试期依赖允许清单首项 proptest。v1.1(2026-09-06,WP-0 初版;同日修订:rust-gate 的纪律门禁 CI 落点由 `pnpm lint:rust` 改为直调脚本——rust-gate 不安装 node 依赖,解除 CI 对 npm registry 的依赖,turbo 任务保留为本地 / turbo 图入口))) |
 | 状态 | 实现期文档(随各 WP 接线持续更新;所映射的上游清单为冻结面) |
 | 上游依据 | `docs/contracts/数据分类与秘密零驻留清单.md` §二(驻留三原则)、§九(机检条目)、§13.5 构建面;`docs/项目计划书.md` 5.8(质量门禁)、13.5 |
 | 效力范围 | 阶段二起全部工作包;实现侧 CI 落点与上游条目 ID 的一一对照 |
@@ -25,7 +25,7 @@
 | `rust-gate` | `pnpm test:rust`(cargo test dev + release) | ENG-3(运行时反例)、ENG-6 |
 | `rust-gate` | `cargo llvm-cov --fail-under-lines 90` | ENG-7 |
 | `rust-gate` | contract-smoke `cargo test` + `pnpm smoke:contract` | 规范化序列化跨语言冒烟(WP-6) |
-| `rust-miri` | `cargo +nightly miri test -p vm-core` | ENG-8(WP-9) |
+| `rust-miri` | `cargo +nightly miri test -p vm-core --` + UB 敏感面过滤器(arch:: decode:: memory:: state:: registers:: judge::predicate::,skip constant_cost_predicate_count_under_mutation) | ENG-8(WP-9) |
 | `rust-fuzz` | `cargo fuzz run` × 3 目标(frame_command / challenge_bundle / byte_decode,每目标限时冒烟) | ENG-9(WP-9) |
 
 `.github/workflows/cross-platform.yml`(WP-9;x86-64 `ubuntu-latest` × ARM64 `ubuntu-24.04-arm` × debug/release 全组合):
@@ -51,7 +51,7 @@
 | ENG-5 | 引擎 clippy 禁用清单(第二层 lint:std::time / fs / net / process 类型与方法) | `CLIPPY_CONF_DIR=tooling/engine-lints` 对引擎三 crate 逐个 `cargo clippy -D warnings` | 反例 crate `ce-std-time`(Instant / Command):带配置红灯且信号命中 disallowed,无配置对照绿灯(红灯归因于清单);反例 crate `ce-no-std-clean`:无误报 | ADR-8;清单 §九"必触发反例"纪律 |
 | ENG-6 | `cargo fmt --check` + `cargo clippy --workspace --all-targets -D warnings` + cargo test(dev / release) | CI 步骤 `node tooling/check-engine-discipline.mjs`(本地同 `pnpm lint:rust`)、`pnpm test:rust` | 常规 CI 语义:任一违规即红灯 | 质量门禁 1、3(计划书 5.8) |
 | ENG-7 | 覆盖率门槛:vm-core / vm-runtime / projection ≥ 90% | `cargo llvm-cov --workspace --exclude vm-worker --fail-under-lines 90`(vm-worker 为进程边界二进制,不在门槛内) | 覆盖率跌破 90% 即红灯(骨架期实测:含未覆盖二进制 crate 时 71.43% → 退出码 1);WP-0 骨架期即接线,避免"补门禁"窗口 | 质量门禁 3 |
-| ENG-8 | `cargo miri`:vm-core 无未定义行为(13.1 引擎侧补充覆盖第 1 条) | CI job `rust-miri`:nightly + miri 组件,`cargo +nightly miri test -p vm-core`;属性测试以 `RngSeed::Fixed` + `failure_persistence = None` 保证 miri 隔离模式纯净(无 OS 熵 / 无文件 IO) | miri 检出未定义行为即红灯;本地复跑:`pnpm test:miri` | 13.1;质量门禁 4(WP-9) |
+| ENG-8 | `cargo miri`:vm-core UB 敏感面无未定义行为(13.1 引擎侧补充覆盖第 1 条;2026-09-09 范围收敛,理由见版本行 v1.3) | CI job `rust-miri`:nightly + miri 组件,`cargo +nightly miri test -p vm-core --` + UB 敏感面过滤器(arch 掩蔽算术 / decode 译码边界 / memory 页与 COW / state 快照克隆 / registers / judge::predicate 条件求值;skip 手写大循环 constant_cost_predicate_count_under_mutation,其不变式由同模块 miri 缩减用例的 proptest 覆盖);exec / instr / judge 行为面由原生测试 job(`pnpm test:rust`)全量覆盖;属性测试以 `RngSeed::Fixed` + `failure_persistence = None` 保证 miri 隔离模式纯净(无 OS 熵 / 无文件 IO) | miri 检出未定义行为即红灯;本地全量复跑:`pnpm test:miri` | 13.1;质量门禁 4(WP-9) |
 | ENG-9 | cargo-fuzz:题目包与动作解析器 fuzz 无 panic(13.1 引擎侧补充覆盖第 2 条) | CI job `rust-fuzz`:三目标 `frame_command`(动作 / 命令解析器)/ `challenge_bundle`(双包管线含 IR 装配)/ `byte_decode`(字节模式取指译码),管线与 worker 处理路径同构;每目标 `-max_total_time=60` 冒烟;目标源 `vm-engine/fuzz/`(独立 workspace,不进引擎门禁图) | fuzz 目标内的不变量断言(如译码有界推进)或 panic 即红灯;语料纪律:不提交语料——私有题目包样本永不入 git | 13.1;质量门禁 4(WP-9) |
 | ENG-10 | 确定性黄金向量:跨 profile(debug / release)与跨平台(x86-64 / ARM64)逐字节一致(13.1 引擎侧补充覆盖第 3 条) | `vm-runtime/tests/determinism_vectors.rs`:黄金脚本 13 动作的状态哈希序列 / revision 序列 / checkpoint 确定性 ID / 动作日志摘要**硬编码为仓库常量**;CI job `determinism`(cross-platform.yml)在 x86-64 + ARM64 × debug + release 四组合上断言;本地:`pnpm cross:test` | 常量漂移即红灯(语义按版本策略冻结:常量变化 = vmEngineVersion 必须演进);向量生成环境与双 profile 一致性实测记录见测试文件头注 | 13.1;6.3 确定性(WP-9) |
 

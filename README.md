@@ -121,23 +121,6 @@ pnpm scan:public        # 公开产物隔离扫描
 > docker compose up -d                      # PostgreSQL + Redis + MinIO + session-api + verifier
 > ```
 
-## 当前进展与路线图
-
-开发阶段与里程碑见计划书第十二章;阶段一任务分解见 [`docs/phases/阶段一任务分解.md`](docs/phases/阶段一任务分解.md)。
-
-| 工作包 | 内容 | 状态 |
-|---|---|---|
-| WP-0 | 最小工程载体(pnpm workspaces + Turborepo + 工具链) | ✅ 完成 |
-| WP-1 | 数据分类与秘密零驻留清单 v1.1 | ✅ 冻结 |
-| WP-2 | 会话动作协议 v1(Zod 契约 + JSON Schema 落盘 + 语义文档) | ✅ 冻结 |
-| WP-3 | 投影与错误契约 | ✅ 冻结 |
-| WP-4 | 题目双包 Schema 与最小 DSL 范围 | ✅ 冻结 |
-| WP-5 | iframe handshake 与嵌入协议 | ✅ 冻结 |
-| WP-6 | 版本策略、规范化序列化、golden fixture 跨语言冒烟、ADR-8 与阶段收尾 | ✅ 完成(阶段一关闭) |
-| 阶段二+ | TS 服务层、Rust VM 引擎(ADR-8 维持 Rust)、UI、题目与集成测试 | ⏳ 待开始 |
-
-技术路线纪律:当前处于 **T0 最小闭环**(单实例编排器、每会话独立 Worker 进程、Docker Compose)。K8s、消息中间件、微服务拆分、二进制投影编码、VM Core WASM 化均属 T2/T3 选项,进入条件(benchmark 或教学数据证据)满足前不引入。
-
 ## 文档
 
 | 文档 | 说明 |
