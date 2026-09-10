@@ -1,0 +1,77 @@
+# 阶段三 WP-7:全拓扑编排文件(质量门禁 7 阶段三子集;D-API-64)。
+#
+# 完整拓扑 = PostgreSQL + Redis + MinIO(deps.yaml 三服务)+ session-api
+# + vm-worker。vm-worker 不是常驻服务:由编排器按会话 spawn(ADR-3 单会话
+# 单进程),拓扑第五元素以"session-api 镜像内二进制 + 会话期子进程"形态
+# 交付;本文件的 vm-worker 服务是一次性冒烟(linux 二进制可执行 + stdio
+# EOF 优雅退出),供 test:compose 在 up --wait 之后以
+#   docker compose -f <files> run --rm -T vm-worker
+# 显式触发,不参与 up --wait 的常驻收敛。
+#
+# 用法(与 deps.yaml 合并为同一 compose 项目):
+#   docker compose -f compose/deps.yaml -f compose/app.yaml up -d --build --wait
+#   docker compose -f compose/deps.yaml -f compose/app.yaml run --rm -T vm-worker
+#   docker compose -f compose/deps.yaml -f compose/app.yaml down
+#
+# 本地 Windows 提示:镜像内 vm-worker 为 linux 二进制(Rust 阶段容器内构建);
+# 本机构建耗时过高时的降级形态(依赖服务拓扑 + session-api 宿主进程 +
+# Windows worker 二进制)由 `pnpm --filter @stackmaster/session-api test:compose`
+# 的 host 拓扑承载,CI compose-integration job 始终为完整 linux 拓扑。
+# 凭据与密钥均为本地开发 / CI 专用合成值,严禁用于任何真实环境。
+
+name: session-api-app
+
+services:
+  session-api:
+    build:
+      context: ../../..
+      dockerfile: apps/session-api/Dockerfile
+      args:
+        WORKER_CARGO_PROFILE: ${WORKER_CARGO_PROFILE:-debug}
+    image: stackmaster/session-api:dev
+    environment:
+      SESSION_API_HOST: 0.0.0.0
+      SESSION_API_PORT: "3000"
+      # ── 认证面(合成 dev 值;与 test/helpers/required-env.ts 同值域)──
+      SESSION_API_SIGNING_KEY: |
+        -----BEGIN PRIVATE KEY-----
+        MC4CAQAwBQYDK2VwBCIEILQpt0igNUt0TQ/yML8i6UDbzfjgz7gcKBjCJwDVXYki
+        -----END PRIVATE KEY-----
+      SESSION_API_HOST_BACKEND_TOKEN: "host-backend-shared-credential-0123456789"
+      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000"
+      # ── 持久化面(compose 网络内服务名;与 deps.yaml 凭据一致)──
+      SESSION_API_POSTGRES_URL: postgres://stackmaster:stackmaster-dev@postgres:5432/session_api
+      SESSION_API_REDIS_URL: redis://redis:6379/0
+      SESSION_API_MINIO_ENDPOINT: minio
+      SESSION_API_MINIO_PORT: "9000"
+      SESSION_API_MINIO_ACCESS_KEY: stackmaster-dev
+      SESSION_API_MINIO_SECRET_KEY: stackmaster-dev-secret
+      SESSION_API_SNAPSHOT_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+      # 演示 / 集成节奏:自动快照间隔取小值,便于拓扑级恢复复验。
+      SESSION_API_AUTO_SNAPSHOT_EVERY_REVISIONS: "5"
+    ports:
+      - "13000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+
+  vm-worker:
+    # 一次性冒烟服务(linux 二进制;stdio EOF 即优雅退出)。profiles 使其
+    # 不参与 up --wait 的收敛(exited 容器会被 --wait 判为失败);显式触发:
+    #   docker compose -f compose/deps.yaml -f compose/app.yaml run --rm -T vm-worker
+    image: stackmaster/session-api:dev
+    command: ["sh", "-c", "timeout 60 /app/bin/vm-worker </dev/null"]
+    profiles: ["smoke"]
+    depends_on:
+      - session-api
+    restart: "no"

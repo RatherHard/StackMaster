@@ -1,0 +1,15 @@
+# Docker 构建上下文裁剪(WP-7):session-api 镜像只需要 TS 工作区与
+# vm-engine 源码;本地构建产物 / 文档 / VCS 不进上下文(vm-engine/target
+# 可达数 GB,必须排除)。
+.git
+.github
+docs
+tooling
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+vm-engine/target
+vm-engine/fuzz
+apps/session-api/test
+apps/session-api/compose
