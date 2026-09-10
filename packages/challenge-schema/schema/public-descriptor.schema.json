@@ -332,7 +332,8 @@
               },
               "startAddressHex": {
                 "type": "string",
-                "pattern": "^0x[0-9a-fA-F]{1,16}$"
+                "pattern": "^0x[0-9a-fA-F]{1,16}$",
+                "description": "aslrEnabled = true 时为结构描述(镜像内相对布局,锚定最低区域为基准的相对偏移语义);缺省/关闭时为固定基址。真实基址会话期由种子派生,Schema 不区分两种形态(WP-43 语义修订,形状不变)。"
               },
               "byteLength": {
                 "type": "integer",
@@ -498,6 +499,14 @@
       "minLength": 1,
       "maxLength": 200,
       "description": "纯文案:仅声明存在随机化;禁策略、候选空间、熵上界(WP-1 §3.2 seedState 行)。"
+    },
+    "debugMode": {
+      "type": "boolean",
+      "description": "调试能力开关(WP-43 / ADR-DC1 决议 1):opt-out,缺省 = true(题目默认启用调试);非布尔即拒。仅声明能力,不携带任何派生值——某题是否启用调试是产品可见差异,非秘密。未启用的题目由前端隐藏工作区菜单的解题/调试模式切换项(ADR-DC1 决议 4)。"
+    },
+    "aslrEnabled": {
+      "type": "boolean",
+      "description": "ASLR 开关(WP-43 / ADR-DC1 决议 2):缺省 = false。开启时 memoryLayout.regions[].startAddressHex 为结构描述(镜像内相对布局),真实基址会话期由调试/真实种子各自派生(SeedDeriver 应用面,WP-42);公开投影仍携带会话真实地址。aslrEnabled = true 时必须携带 randomizationNotice(XS-ASLR-NOTICE)。与调试变体镜像契约 aslrEnabled 同名同语义。"
     },
     "initialProjection": {
       "type": "object",

@@ -4,7 +4,7 @@
   "spec": "docs/contracts/规范化JSON序列化.md",
   "fixtures": {
     "packages/challenge-schema/test/fixtures/public-descriptor/basic.json": {
-      "sha256": "02746245fb7a82d33c4a4dc714488cf890453d734f3b22af6dc6659305c6d6d1"
+      "sha256": "74081d069c7b0f05b55e1e733464206ffe6697fe8ce71c183d8e940272e365c0"
     },
     "packages/protocol/test/fixtures/action-request/invalid/01-unknown-action-type.json": {
       "sha256": "3bb2d50df7ab0965a62c65fc8c88700ca0f439a9bc16926d343346a150069c83"

@@ -1057,6 +1057,46 @@ describe("字段分类检查器:跨包一致性规则红灯样例", () => {
   });
 });
 
+describe("字段分类检查器:WP-43 调试能力声明规则(ADR-DC1 决议 1/2)", () => {
+  it("XS-ASLR-NOTICE:aslrEnabled = true 缺 randomizationNotice 被拒绝", () => {
+    const result = checkPairWith((pub) => {
+      pub.aslrEnabled = true;
+      delete pub.randomizationNotice;
+    });
+
+    const violation = expectRule(result, "XS-ASLR-NOTICE");
+    expect(violation.path).toBe("/randomizationNotice");
+    expect(violation.message).toContain("randomizationNotice");
+  });
+
+  it("XS-ASLR-NOTICE:aslrEnabled 缺省(false)时缺 randomizationNotice 保持绿灯(opt-in 联动,不误伤既有包)", () => {
+    const result = checkPairWith((pub) => {
+      delete pub.randomizationNotice;
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("WP-43 绿灯:aslrEnabled = true 携带 randomizationNotice 零违规(fixture 自带随机化文案)", () => {
+    const result = checkPairWith((pub) => {
+      pub.aslrEnabled = true;
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("WP-43 绿灯:debugMode 顶层可选布尔随包声明零违规(仅能力声明,无跨包耦合)", () => {
+    const result = checkPairWith((pub) => {
+      pub.debugMode = false;
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+});
+
 describe("字段分类检查器:Schema 文档元检查(XS-1 / D2-NO-HIDDEN-IN-PUBLIC)", () => {
   const schemaDir = join(import.meta.dirname, "..", "schema");
   const publicSchemaText = readFileSync(

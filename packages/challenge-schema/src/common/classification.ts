@@ -27,7 +27,7 @@ export interface ClassificationManifest {
   readonly schemas: Readonly<Record<string, SchemaClassificationEntry>>;
 }
 
-/** 公开描述包 14 个顶层字段(与 Schema properties 键严格一致)。 */
+/** 公开描述包 16 个顶层字段(与 Schema properties 键严格一致)。 */
 export const PUBLIC_DESCRIPTOR_FIELDS = [
   "schemaVersion",
   "challengeId",
@@ -42,6 +42,8 @@ export const PUBLIC_DESCRIPTOR_FIELDS = [
   "hintLadder",
   "publicErrorMapping",
   "randomizationNotice",
+  "debugMode",
+  "aslrEnabled",
   "initialProjection",
 ] as const;
 

@@ -149,5 +149,16 @@ export interface PublicChallengeDescriptor {
   readonly hintLadder: readonly PublicHint[];
   readonly publicErrorMapping: readonly PublicErrorMapping[];
   readonly randomizationNotice?: string;
+  /**
+   * 调试能力开关(WP-43 / ADR-DC1 决议 1):opt-out,缺省 = true(题目默认
+   * 启用调试);仅能力声明,零派生值。未启用题目由前端隐藏模式切换项(决议 4)。
+   */
+  readonly debugMode?: boolean;
+  /**
+   * ASLR 开关(WP-43 / ADR-DC1 决议 2):缺省 = false;true 时 memoryLayout
+   * 为结构描述(镜像内相对布局),真实基址会话期由调试/真实种子各自派生
+   * (SeedDeriver 应用面,WP-42),公开投影仍携带会话真实地址。
+   */
+  readonly aslrEnabled?: boolean;
   readonly initialProjection: InitialProjection;
 }

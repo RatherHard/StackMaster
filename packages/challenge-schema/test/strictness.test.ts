@@ -358,10 +358,12 @@ describe("分类清单与字段清单防漂移", () => {
     expect(manifest).toEqual(CHALLENGE_CLASSIFICATIONS);
   });
 
-  it("公开 Schema 顶层 properties ≡ PUBLIC_DESCRIPTOR_FIELDS(锁定 14 字段)", () => {
+  it("公开 Schema 顶层 properties ≡ PUBLIC_DESCRIPTOR_FIELDS(锁定 16 字段)", () => {
     const keys = Object.keys(resolveAt(publicSchema, "/properties") as Record<string, unknown>);
     expect([...keys].sort()).toEqual([...PUBLIC_DESCRIPTOR_FIELDS].sort());
-    expect(PUBLIC_DESCRIPTOR_FIELDS).toHaveLength(14);
+    // 字段数量锁定:数组、本测试与 classification.json / Schema properties
+    // 必须同步演进(WP-43:14 → 16,新增 debugMode / aslrEnabled 顶层可选布尔)。
+    expect(PUBLIC_DESCRIPTOR_FIELDS).toHaveLength(16);
   });
 
   it("私有 Schema 顶层 properties ≡ PRIVATE_BUNDLE_FIELDS(锁定 20 字段,R9 防漂移)", () => {

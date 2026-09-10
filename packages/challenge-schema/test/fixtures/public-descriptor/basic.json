@@ -4,6 +4,7 @@
   "challengeContentVersion": "1.0.0",
   "vmProfileVersion": "1.0.0",
   "locale": "zh-CN",
+  "debugMode": true,
   "briefing": {
     "title": "返回地址覆写入门",
     "summary": "通过覆写栈帧中的返回地址,观察控制流被劫持到 win 函数的完整因果链。",

@@ -7,10 +7,15 @@
  *  - XS-REG-CORE vmProfile.registers 声明集必含核心寄存器 RSP/RBP/RIP
  *    (G2/D3:会话动作 push/pop/call/ret 与栈语义建立在其上,WP-1 §12.5 v1.5);
  *  - XS-MEM-PAGE-ALIGN pageSizeBytes 与区域 byteLength 均为 4KB 的倍数
- *    (G3/D2;Schema multipleOf 之外的纵深防御,见 arch-rules.ts)。
+ *    (G3/D2;Schema multipleOf 之外的纵深防御,见 arch-rules.ts);
+ *  - XS-ASLR-NOTICE aslrEnabled = true ⇒ randomizationNotice 必须存在
+ *    (WP-43 / ADR-DC1 决议 2:随机化声明与 ASLR 开关联动的语义自洽)。
  *
  * 前置条件:输入已通过 public-descriptor.schema.json 校验;
  * 本模块是纵深防御与跨字段一致性检查,不重复 Schema 已冻结的单字段形态。
+ * debugMode / aslrEnabled(WP-43 新增顶层可选布尔)的**类型面**(非布尔即拒)
+ * 由 Schema `type: boolean` + `coerceTypes: false` 冻结,不设重复 checker 规则;
+ * 红灯样例见 test/public-descriptor.test.ts(Schema 结构面)。
  */
 
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
@@ -169,6 +174,29 @@ export function checkRegisterCoreSet(
   return violations;
 }
 
+/**
+ * XS-ASLR-NOTICE(WP-43 / ADR-DC1 决议 2):aslrEnabled = true ⇒ randomizationNotice
+ * 必须存在。开启基址随机化(布局转结构描述、真实基址由会话种子派生)却无
+ * 随机化存在性文案 = 矛盾陈述——randomizationNotice 是公开面声明随机化
+ * 存在性的唯一 sanctioned 位(WP-1 §3.2 seedState 行)。aslrEnabled 缺省 /
+ * false 时不要求本字段(opt-in 联动,不误伤既有包)。
+ */
+export function checkAslrRandomizationNotice(
+  descriptor: PublicChallengeDescriptor,
+): CheckerViolation[] {
+  if (descriptor.aslrEnabled === true && descriptor.randomizationNotice === undefined) {
+    return [
+      {
+        ruleId: "XS-ASLR-NOTICE",
+        message:
+          "aslrEnabled = true 时必须携带 randomizationNotice(基址随机化声明与 ASLR 开关联动;布局在此形态下为结构描述,真实基址由种子派生)",
+        path: "/randomizationNotice",
+      },
+    ];
+  }
+  return [];
+}
+
 function pushPublicDuplicates(
   violations: CheckerViolation[],
   values: readonly string[],
@@ -241,6 +269,7 @@ export function checkPublicDescriptorRules(
     ...checkPublicAddressSpaceBounds(descriptor),
     ...checkPublicReferenceUniqueness(descriptor),
     ...checkRegisterCoreSet(descriptor),
+    ...checkAslrRandomizationNotice(descriptor),
     ...checkPublicPageAlignment(descriptor),
   ];
 }

@@ -21,6 +21,8 @@
         "hintLadder": "public",
         "publicErrorMapping": "public",
         "randomizationNotice": "public",
+        "debugMode": "public",
+        "aslrEnabled": "public",
         "initialProjection": "public"
       }
     },

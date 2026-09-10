@@ -468,6 +468,45 @@ describe("公开描述包:R15 补充严格性场景", () => {
   });
 });
 
+describe("公开描述包:debugMode / aslrEnabled 能力声明(WP-43 / ADR-DC1 决议 1/2)", () => {
+  it("debugMode 非布尔取值被拒绝(opt-out 布尔定案,策略枚举形态否决;Schema type: boolean)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        clone.debugMode = "true";
+      })),
+    );
+
+    expect(violations.some((v) => v.path === "/debugMode")).toBe(true);
+  });
+
+  it("aslrEnabled 非布尔取值被拒绝(Schema type: boolean,coerceTypes 关闭)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakFixture((clone) => {
+        clone.aslrEnabled = 1;
+      })),
+    );
+
+    expect(violations.some((v) => v.path === "/aslrEnabled")).toBe(true);
+  });
+
+  it("debugMode = true 且 aslrEnabled 缺省通过(opt-out 形态:缺省即启用调试,ASLR 显式 opt-in)", () => {
+    const descriptor = assertOk(validatePublicDescriptor(parseFixture()));
+
+    expect(descriptor.debugMode).toBe(true);
+    expect(descriptor.aslrEnabled).toBeUndefined();
+  });
+
+  it("aslrEnabled = true 且携带 randomizationNotice 通过(绿灯,不误伤)", () => {
+    const descriptor = assertOk(
+      validatePublicDescriptor(breakFixture((clone) => {
+        clone.aslrEnabled = true;
+      })),
+    );
+
+    expect(descriptor.aslrEnabled).toBe(true);
+  });
+});
+
 describe("公开描述包文本解析", () => {
   it("从 JSON 文本解析出强类型", () => {
     const descriptor = assertOk(parsePublicDescriptorText(basicText));
