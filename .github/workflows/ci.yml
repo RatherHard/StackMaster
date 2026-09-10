@@ -58,7 +58,9 @@ jobs:
         run: pnpm --filter @stackmaster/session-api... run build
       # ZR-B9 / ZR-B10 / ZR-B5 / ZR-B4 / B1 / B6:跨域载荷机检扫描器的规则
       # 精度与必触发红灯反例(单测面;ts-gate 亦有,此处就近承载一份门禁锚)。
-      - name: ZR-B9 / ZR-B10 / ZR-B5 / ZR-B4 扫描器规则与红灯反例(单测面)
+      # ZR-B12 / ZR-B13(WP-44):调试通道帧语料包含性 + 变体派生复算单测面
+      # (同目录 test/scan,同一步骤承载;集成层走 SESSION_API_IT 门控,不在 CI)。
+      - name: ZR-B9 / ZR-B10 / ZR-B5 / ZR-B4 / ZR-B12 / ZR-B13 扫描器规则与红灯反例(单测面)
         run: pnpm --filter @stackmaster/session-api exec vitest run test/scan
       # 完整 linux 拓扑:PostgreSQL + Redis + MinIO + session-api + vm-worker
       # (worker 为 linux 二进制,Rust 阶段容器内构建;CI 取 release profile,
