@@ -34,6 +34,18 @@ src/
     ├── special-display.ts          特殊显示单元格(可见 ASCII / 占位 / 语义标注
     │                               纯函数 + Lit 渲染辅助)
     └── rows.ts                     8 字节行切分与偏移对齐纯函数
+
+src/views/byte/(WP-F3 字节视图核心,公开视图档)
+├── alignment.ts                    对齐偏移(0..7)行切分纯函数:整行网格 +
+│                                   窗口对齐外扩查询区间 + 重切(regroupRows);
+│                                   偏移语义 = FE-ST-03「对齐基址 + k×8 + offset」
+├── view-model.ts                   默认区域选取 / rsp·rbp 锚点解析(M13)/
+│                                   跳转输入解析(M3 窗口内导航)纯函数
+├── byte-view.ts                    <sm-byte-view> 字节视图本体(栈视图与自由
+│                                   视图共用;三段布局 + lit-virtualizer 虚拟
+│                                   列表 + 锚点 + 窗口内导航/检索)
+└── vma-list.ts                     <sm-vma-list> VMA 列表侧栏(FE-FV-06;
+                                    regions() 直读、按地址有序、vma-select 事件)
 ```
 
 ## 双档数据源纪律(评审解耦的关键约束)
@@ -193,3 +205,109 @@ mock 全链路测试覆盖同一代码路径。
   耦合、truncated 语义、sync 仅 REST、动作仅 WSS);
 - 动画只用 transform / opacity 等 compositor 友好属性;语义化 DOM +
   虚拟列表,控制流用 SVG;屏幕阅读器信息不得只存在于 Canvas。
+
+## WP-F3:字节视图核心(src/views/byte,2026-09-11)
+
+公开视图档(WP-F3)交付面:`<sm-byte-view>` 字节视图本体(栈视图与自由视图
+**共用默认形态**,FE-FV-01/02 不重复实现;`view-kind` 只决定标题)、
+`<sm-vma-list>` VMA 侧栏。全部只依赖 `MemoryDataSource` 接口;公开入口
+(index.ts)导出与工作区集成归 WP-F5 统一接线。
+
+### 定案规则(同时登记于源码注释)
+
+- **默认区域选取**:含 rsp 值的区域(按区域全长 `[起点, 起点+byteLength)`
+  判定),否则 `regions()` 第一项;无区域 → 空态。栈/自由视图共用此规则。
+- **行网格与窗口外 cell**:行 = 整行 8 字节,对齐偏移 `offset ∈ 0..7` 把网格
+  边界平移为「地址 ≡ offset (mod 8)」;窗口两端**对齐外扩**后交给
+  `bytesRows()` 查询,越出窗口的地址按数据源契约返回窗口外 cell——行边缘
+  十六进制段退化为 `??`(cell-outside)、特殊显示段 `renderSpecialDisplayCell`
+  占位,行数 ≤ 513(512 行 + 边界),虚拟化必须真实生效。
+- **rsp/rbp 锚点(FE-ST-04 公开档 + M13)**:进入视图 / 切区域时视口锚定
+  rsp(窗口外回退顶部);值落在当前区域**已下发窗口**(`windowByteLength`
+  前缀,D3)→ 锚点行高亮 + 「回锚」按钮;窗口外 → 明示
+  「<寄存器> 内容不在可见窗口」(不渲染空白、不报错);寄存器未公开 → 不呈现。
+- **窗口内导航(FE-ST-06 公开档 / M3)**:跳转输入 `0x` 十六进制 = 绝对地址、
+  纯十进制 = 窗口内偏移;窗口外输入给「在可见窗口之外」反馈,不报错不滚动;
+  检索调 `dataSource.search()`(语义 = 仅已下发窗口字节),命中列表点击滚动,
+  跨区域命中先切区域(派发 `region-change`)。
+
+### 组件公共 API(F5 接线)
+
+- `<sm-byte-view>` 属性:`dataSource: MemoryDataSource | null`(换绑即重建)、
+  `viewKind: "stack" | "free"`、`alignmentOffset: number(0..7)`、
+  `activeRegionId: string | null`;方法:`refresh()`(投影更新驱动,接线
+  `client.onProjectionChanged(() => view.refresh())`)、
+  `showRegion(regionId)`;事件:`region-change`(detail `{regionId}`,
+  bubbles + composed)。预留 F4 跳转链右段槽位:行右段(特殊显示列)为独立
+  `<span role="cell" class="row-special">`,`<sm-jump-chain>` 由 F5 在宿主层
+  按行挂接,本组件不直接依赖链组件。
+- `<sm-vma-list>` 属性:`dataSource`、`selectedRegionId`;事件:`vma-select`
+  (detail `{regionId}`)→ 宿主接 `byteView.showRegion(regionId)`;方法:
+  `refresh()`。
+- 动画纪律:组件样式零动画;如后续引入过渡只允许 transform / opacity。
+
+测试面:`test/views/byte/`(行切分纯函数偏移 0..7 × 窗口边界 × 奇数长度、
+窗口外 cell 语义、锚点命中/窗口外(M13)、VMA 渲染与选择事件、检索命中滚动、
+虚拟列表首屏有界、高地址在下顺序;夹具 = `fake-data-source.ts` 内存版
+`MemoryDataSource`,镜像公开档契约语义,组件测试不经任何 client/store)。
+
+## WP-F4:寄存器视图与跳转链(src/views/register、src/views/chain,2026-09-11)
+
+公开视图档(WP-F4)交付面:寄存器视图、寄存器 × 区域交叉标注原语、跳转链
+窗口内部分(首段 ≤3 段、循环回环、窗口外截断、链末可见字符延伸)。全部只依赖
+`MemoryDataSource` 接口;公开入口(index.ts)导出与跨视图集成归 WP-F5 统一接线。
+
+```
+src/views/
+├── register/
+│   ├── sm-register-view.ts   <sm-register-view>:FE-RG-01/02/03——纵向全量白名单
+│   │                         寄存器(M14:前端不留占位)、行三段布局(名 / 值 /
+│   │                         特殊显示列"→ regionId")、点击值复制剪贴板(Q8 降级)、
+│   │                         行聚焦 + Enter 复制基线
+│   └── cross-annotation.ts   FE-RG-04 纯函数:crossAnnotateRegisters(registers,
+│                             regions) → RegisterHit[](值命中已下发窗口的行集合)+
+│                             renderRegisterAnnotationCell(字节视图行左缘标注
+│                             单元格;点击展开归宿主接线,不直改 sm-byte-view)
+└── chain/
+    ├── resolve.ts            FE-ST-07/09 纯函数:resolveJumpChain(start, dataSource,
+    │                         {maxSegments}) → JumpChainSegment[]({addressHex,
+    │                         valueHex?, targetAddressHex?, loopBack?, outsideWindow?})+
+    │                         chainLimitReached;横向 3 段上限 / 展开 32 段上限常量
+    ├── visible-run.ts        FE-ST-10 纯函数:visibleRunOfRow(行内全可见字符)、
+    │                         visibleRunAt(链末可见字符延伸,≤32 字节)+
+    │                         renderVisibleRun(引号字符段)
+    └── sm-jump-chain.ts      <sm-jump-chain>:横向 ≤3 段地址芯片 + SVG 回环箭头 +
+                              尾随目标芯片 + "展开完整链"(竖向,可收起);
+                              点击地址发 viewport-jump 事件(组件只发事件)
+```
+
+### 端序与链解析定案(WP-F4 登记)
+
+- **端序 = 小端**:公开投影不携带端序字段,公开描述包 `vmProfile.endianness`
+  已冻结 "little",`MemoryDataSource` 无端序入参——`resolveJumpChain` 一律按
+  小端解释窗口字节(低地址字节为低位);协议未来携带端序时在 resolve.ts 接入。
+- **段语义**:段地址的 8 字节须全部落在某区域已下发窗口(`windowByteLength`
+  前缀)内才可解引用,否则该段 `outsideWindow`(截断不报错,D3);值落在某可见
+  区域**范围**(`byteLength`)→ 给出 `targetAddressHex` 继续解引用(超出已下发
+  前缀的落点由下一段 `outsideWindow` 表达"窗口外落点即截断");值未落任何区域
+  → 仅记 `valueHex` 终止;目标已在链中 → `loopBack` 回环终止。
+- **交叉标注口径**:FE-RG-04 按窗口内部分交付——值命中**已下发窗口**才产出
+  标注;窗口外 / 未映射缺席且不报错。跳转链同理(窗口内部分),全量归 WP-F8。
+- **Q8 剪贴板降级**:`navigator.clipboard` 不可用(非安全上下文)或写入被拒 →
+  选中文本节点 + 行内提示"已就绪手动复制"(自动消隐);成功反馈"已复制"。
+  剪贴板调用可注入(`<sm-register-view>.copyToClipboard`)。
+
+### F5 接线事件契约
+
+- `<sm-jump-chain>`:`viewport-jump` 事件(bubbles + composed),detail
+  `{ addressHex: string; withinWindow: boolean }`——落点窗口内由宿主处理滚动,
+  `withinWindow: false`(窗口外段)宿主给"窗口外"反馈;组件只发事件。
+- `<sm-register-view>` 属性:`dataSource: MemoryDataSource | null`、
+  `copyToClipboard: ClipboardWriter`;投影更新由宿主重设数据源(或替换装配面)驱动。
+
+测试面:`test/views/register/`(交叉标注 + 寄存器视图:复制成功 / 降级两路径、
+键盘 Enter、大写归一化)、`test/views/chain/`(首段解析 / 端序 / 回环 / 窗口外 /
+段数上限 / 展开 / 点击事件 / 可见字符延伸)。组件测试经 `test/tsconfig.json`
+(Lit legacy 装饰器);测试用公开档夹具 = `ProjectionStore + ProjectionDataSource`
+(与生产同一语义路径)。jsdom 的 Selection 不支持影子根内选区(rangeCount 恒 0,
+真实浏览器无此限制),降级路径测试以 `Selection.addRange` 侦察验证。
