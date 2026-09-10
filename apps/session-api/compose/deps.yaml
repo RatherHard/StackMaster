@@ -1,0 +1,66 @@
+# WP-3 依赖服务定义(PostgreSQL / Redis / MinIO;本地开发与容器门控集成测试)。
+#
+# 用法:
+#   pnpm --filter @stackmaster/session-api compose:deps:up     # up -d --wait(等 healthcheck)
+#   pnpm --filter @stackmaster/session-api compose:deps:down   # down(保留数据卷)
+#
+# 端口:固定本地非常用端口,避免与常用服务冲突——
+#   PostgreSQL 15432 / Redis 16379 / MinIO 19000(控制台 19001)。
+# 与 compose/.env.example、compose/integration.env 的 SESSION_API_* 值一一对应。
+# 凭据为本地开发专用值,严禁用于任何真实环境。
+
+name: session-api-deps
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: stackmaster
+      POSTGRES_PASSWORD: stackmaster-dev
+      POSTGRES_DB: session_api
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stackmaster -d session_api"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7
+    # Redis 只存可重建、带 TTL 状态,不作权威(ADR-4):关闭持久化以表达
+    # "可重建"语义——重建面是会话路由 / 限流 / 幂等窗口,不承载权威状态。
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: stackmaster-dev
+      MINIO_ROOT_PASSWORD: stackmaster-dev-secret
+      # 静态加密(计划书 5.7:private-bundles 静态加密、最小权限):生产部署
+      # 挂 KES / KMS(MINIO_KMS_KES_ENDPOINT 等)并启用自动加密;本地 dev 无
+      # KMS,SSE 头会被拒绝,故此处不启用。生产部署面归 WP-8。
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  pgdata:
+  miniodata:
