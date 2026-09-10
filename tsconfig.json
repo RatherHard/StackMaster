@@ -3,6 +3,9 @@
   "references": [
     { "path": "packages/protocol" },
     { "path": "packages/challenge-schema" },
-    { "path": "apps/session-api" }
+    { "path": "apps/session-api" },
+    { "path": "packages/vm-ui" },
+    { "path": "packages/web-component" },
+    { "path": "apps/plugin-dev" }
   ]
 }

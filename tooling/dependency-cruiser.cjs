@@ -84,9 +84,15 @@ module.exports = {
       name: "browser-packages-only-depend-on-protocol",
       severity: "error",
       comment:
-        "浏览器侧包(vm-ui、web-component、embed-runtime、react-wrapper)对工作区包只允许依赖 protocol。",
+        "浏览器侧包(vm-ui、web-component、embed-runtime、react-wrapper)对**其他工作区包**只允许依赖 protocol;浏览器包自身包内边(src/test/dist 的内部模块边)不属工作区包依赖,经 to 侧 pathNot 一并排除(WP-F1:规则原形会把任何多模块浏览器包连自身测试在内全部误伤,与本注释声明的意图相悖)。",
       from: { path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/" },
-      to: { path: "^packages/", pathNot: "^packages/protocol/" },
+      to: {
+        path: "^packages/",
+        pathNot: [
+          "^packages/protocol/",
+          "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+        ],
+      },
     },
     {
       name: "protocol-schema-generator-not-importable",

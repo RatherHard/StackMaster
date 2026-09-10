@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StackMaster plugin-dev</title>
+  </head>
+  <body>
+    <!-- 开发壳挂载点(语义化 DOM;正式 iframe 化归阶段五)。 -->
+    <div id="app"></div>
+    <!--
+      vm-ui 构建产物以 ES module URL 直接加载(dist 自包含:lit 已内联),
+      加载即注册 <sm-workspace>。加载模型与依赖边界说明见 README「加载模型」。
+    -->
+    <script type="module" src="/index.js"></script>
+    <script type="module">
+      import { mountWorkspaceShell } from "/src/main.ts";
+
+      const app = document.getElementById("app");
+      if (app !== null) {
+        mountWorkspaceShell(app);
+      }
+    </script>
+  </body>
+</html>

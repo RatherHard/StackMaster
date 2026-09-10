@@ -15,6 +15,10 @@
  *                                                  + no-backend-dependency-on-browser-packages
  *   反例 4  packages/session-core → 浏览器可达包    no-backend-dependency-on-browser-packages
  *                                                  (允许清单规则不得误伤 packages 侧)
+ *   正控 5  packages/vm-ui 包内边(index → 自包子模块)浏览器包规则不得触发
+ *                                                  (WP-F1:browser-packages-only-
+ *                                                  depend-on-protocol 只约束跨包边,
+ *                                                  包内边经 to 侧 pathNot 排除)
  *   对照组  apps/session-api → protocol / challenge-schema /
  *           challenge-compiler / session-core       零违规(允许清单全量,无误报)
  *
@@ -40,6 +44,9 @@ const FIXTURE_FILES = {
   "packages/embed-runtime/src/index.ts": "export const placeholder = true;\n",
   // 未登记进 session-api 允许清单、也不属浏览器面的假想工作区包。
   "packages/telemetry-extra/src/index.ts": "export const placeholder = true;\n",
+  // 浏览器包包内结构:positive control(包内边不得触发浏览器包规则)。
+  "packages/vm-ui/src/ui/inner.ts": "export const placeholder = true;\n",
+  "packages/vm-ui/src/index.ts": 'export * from "./ui/inner";\n',
   "vm-engine/dist/index.ts": "export const placeholder = true;\n",
 
   // 反例 1:apps → vm-engine 产物(TS 构建图红线,ADR-3 / ADR-8)。
@@ -67,7 +74,8 @@ const FIXTURE_FILES = {
 /** 入口文件(相对反例树根)。 */
 const ENTRY_FILES = Object.keys(FIXTURE_FILES).filter((file) =>
   file.startsWith("apps/session-api/src/") ||
-  file === "packages/session-core/src/ce-browser-package.ts",
+  file === "packages/session-core/src/ce-browser-package.ts" ||
+  file === "packages/vm-ui/src/index.ts",
 );
 
 /** 逐边期望:resolved 以 edgeSuffix 结尾的依赖边必须/不得触发的规则。
@@ -99,6 +107,12 @@ const EDGE_EXPECTATIONS = [
     edgeSuffix: "embed-runtime/src/index.ts",
     expect: ["no-backend-dependency-on-browser-packages"],
     reject: ["session-api-workspace-deps-allowlist"],
+  },
+  {
+    label: "正控5 vm-ui包内边不违规",
+    edgeSuffix: "vm-ui/src/ui/inner.ts",
+    expect: [],
+    reject: ["browser-packages-only-depend-on-protocol"],
   },
   {
     label: "对照组 apps→允许清单全量",
@@ -201,7 +215,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    console.log("[self-test] 依赖边界反例自检全绿:5 组边期望全部满足");
+    console.log("[self-test] 依赖边界反例自检全绿:6 组边期望全部满足");
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
   }

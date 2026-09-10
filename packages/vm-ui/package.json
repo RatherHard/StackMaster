@@ -1,0 +1,38 @@
+{
+  "name": "@stackmaster/vm-ui",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./sm-workspace": {
+      "types": "./dist/ui/sm-workspace.d.ts",
+      "default": "./dist/sm-workspace.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lit-labs/virtualizer": "^2.1.1",
+    "@stackmaster/protocol": "workspace:*",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "jsdom": "^30.0.1",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}

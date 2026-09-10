@@ -1,0 +1,14 @@
+{
+  /* test/ 目录级 tsconfig:vitest(vite/oxc)按最近 tsconfig 读取编译选项,
+     包级 tsconfig.json 的 include 仅含 src,测试文件读不到
+     experimentalDecorators,装饰器不被 lowering(SSR 产物非法)。 */
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false
+  },
+  "include": ["."]
+}

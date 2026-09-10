@@ -1,0 +1,14 @@
+{
+  /* test/ 目录级 tsconfig:vitest(vite/oxc)按最近 tsconfig 读取编译选项,
+     与 packages/vm-ui/test/tsconfig.json 同款机制(装饰器 lowering 与 DOM lib),
+     供后续 WP 在测试夹具中定义装饰器组件时直接可用。 */
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false
+  },
+  "include": ["."]
+}
