@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_attach",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 2,
+  "requestId": "d-01J9KC1EXAMPLE001",
+  "payload": {
+    "origin": { "kind": "checkpoint", "checkpointId": "cp-01J9KC9EXAMPLE0001" }
+  }
+}

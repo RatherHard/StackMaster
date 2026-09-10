@@ -58,6 +58,55 @@ const ACTION_RESPONSE_REJECTED_COUPLING = {
   },
 } as const;
 
+/**
+ * DebugVariantBundle 的 ASLR 跨字段耦合(阶段四 WP-40,WP-1 清单 §6.9):
+ * aslrEnabled = false ⇒ derivation.baseAddresses 必须缺席(基址与真实镜像
+ * 一致);aslrEnabled = true ⇒ derivation.draws ≥ 1(首个 draw 为基址派生)。
+ * TS 侧等价规则在 DebugVariantBundleSchema.superRefine;本常量是其 JSON Schema
+ * 形态——两侧必须同步修改(语义文档 §六)。
+ */
+const DEBUG_VARIANT_ASLR_COUPLINGS = [
+  {
+    if: {
+      properties: { aslrEnabled: { const: false } },
+      required: ["aslrEnabled"],
+    },
+    then: {
+      properties: {
+        derivation: { not: { required: ["baseAddresses"] } },
+      },
+    },
+  },
+  {
+    if: {
+      properties: { aslrEnabled: { const: true } },
+      required: ["aslrEnabled"],
+    },
+    then: {
+      properties: {
+        derivation: { properties: { draws: { minimum: 1 } } },
+      },
+    },
+  },
+] as const;
+
+/**
+ * DebugVariantBundle 的 canary 槽可见性耦合(I3-SINK-HIDDEN 同构):
+ * containsSecret = true ⇒ visibility = "hidden"。作用于 canarySlots 数组
+ * 每个条目(注入点为 items.allOf);TS 侧等价规则同在 superRefine。
+ */
+const DEBUG_VARIANT_CANARY_COUPLING = {
+  if: {
+    properties: { containsSecret: { const: true } },
+    required: ["containsSecret"],
+  },
+  then: {
+    properties: {
+      visibility: { const: "hidden" },
+    },
+  },
+} as const;
+
 export type JsonSchemaDocument = Record<string, unknown>;
 
 /** 生成单个根 Schema 文档(自包含,携带 $schema / $id / title / x-sm-class)。 */
@@ -81,18 +130,35 @@ export function generateSchemaDocument(entry: SchemaEntry): JsonSchemaDocument {
   );
 }
 
-/** 注入 TS 侧 superRefine 的 JSON Schema 等价形态(当前仅 action-response 一处)。 */
+/** 注入 TS 侧 superRefine 的 JSON Schema 等价形态(action-response 与 debug-variant-bundle)。 */
 function injectCrossFieldRules(
   document: JsonSchemaDocument,
   entryName: SchemaName,
 ): JsonSchemaDocument {
-  if (entryName !== "action-response") {
-    return document;
+  if (entryName === "action-response") {
+    const injected: JsonSchemaDocument = structuredClone(document);
+    const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
+    injected.allOf = [...existing, ACTION_RESPONSE_REJECTED_COUPLING];
+    return injected;
   }
-  const injected: JsonSchemaDocument = structuredClone(document);
-  const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
-  injected.allOf = [...existing, ACTION_RESPONSE_REJECTED_COUPLING];
-  return injected;
+  if (entryName === "debug-variant-bundle") {
+    const injected: JsonSchemaDocument = structuredClone(document);
+    const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
+    injected.allOf = [...existing, ...DEBUG_VARIANT_ASLR_COUPLINGS];
+    // canary 槽可见性耦合作用于 canarySlots 数组条目(注入点 items.allOf)。
+    const properties = injected.properties as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    const canaryItems = properties?.canarySlots?.items as
+      | Record<string, unknown>
+      | undefined;
+    if (canaryItems) {
+      const itemExisting = Array.isArray(canaryItems.allOf) ? canaryItems.allOf : [];
+      canaryItems.allOf = [...itemExisting, DEBUG_VARIANT_CANARY_COUPLING];
+    }
+    return injected;
+  }
+  return document;
 }
 
 /** 生成字段分类清单(WP-1 §4–§6 → 机检产物)。 */

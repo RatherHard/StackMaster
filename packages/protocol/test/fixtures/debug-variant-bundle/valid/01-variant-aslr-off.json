@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "engineProcessProtocolVersion": 1,
+  "challengeId": "ret2basic-example",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "aslrEnabled": false,
+  "derivation": {
+    "algorithmId": "splitmix64-stream-v1",
+    "draws": 4
+  },
+  "memoryRegions": [
+    {
+      "regionId": "code",
+      "kind": "code",
+      "startAddressHex": "0x00400000",
+      "byteLength": 4096,
+      "permissions": "rx",
+      "contentHex": "554889e54883ec20b800000000c9c3",
+      "isHidden": false
+    },
+    {
+      "regionId": "stack",
+      "kind": "stack",
+      "startAddressHex": "0x7FF3A000",
+      "byteLength": 4096,
+      "permissions": "rw",
+      "contentHex": "0000000000000000",
+      "isHidden": false
+    },
+    {
+      "regionId": "vault",
+      "kind": "key",
+      "startAddressHex": "0x00405000",
+      "byteLength": 4096,
+      "permissions": "rw",
+      "contentHex": "d3adb33fc0ffee010203040506070809",
+      "isHidden": true
+    }
+  ],
+  "registers": [
+    { "name": "RSP", "valueHex": "0x7FF3B000" },
+    { "name": "RBP", "valueHex": "0x7FF3B000" },
+    { "name": "RIP", "valueHex": "0x00400000" }
+  ],
+  "canarySlots": [
+    {
+      "objectId": "stack-canary",
+      "kind": "canary",
+      "addressHex": "0x7FF3A7F8",
+      "byteLength": 8,
+      "visibility": "hidden",
+      "containsSecret": true
+    }
+  ]
+}

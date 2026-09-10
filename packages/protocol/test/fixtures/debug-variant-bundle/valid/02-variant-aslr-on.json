@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "engineProcessProtocolVersion": 1,
+  "challengeId": "ret2basic-example",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "aslrEnabled": true,
+  "derivation": {
+    "algorithmId": "splitmix64-stream-v1",
+    "draws": 9,
+    "baseAddresses": [
+      { "regionId": "stack", "addressHex": "0x5D2E1000" },
+      { "regionId": "heap", "addressHex": "0x61A4C000" }
+    ]
+  },
+  "memoryRegions": [
+    {
+      "regionId": "code",
+      "kind": "code",
+      "startAddressHex": "0x00400000",
+      "byteLength": 4096,
+      "permissions": "rx",
+      "contentHex": "554889e54883ec20b800000000c9c3",
+      "isHidden": false
+    },
+    {
+      "regionId": "stack",
+      "kind": "stack",
+      "startAddressHex": "0x5D2E1000",
+      "byteLength": 4096,
+      "permissions": "rw",
+      "contentHex": "0000000000000000",
+      "isHidden": false
+    },
+    {
+      "regionId": "heap",
+      "kind": "heap",
+      "startAddressHex": "0x61A4C000",
+      "byteLength": 4096,
+      "permissions": "rw",
+      "contentHex": "00",
+      "isHidden": false
+    }
+  ],
+  "registers": [
+    { "name": "RSP", "valueHex": "0x5D2E2000" },
+    { "name": "RBP", "valueHex": "0x5D2E2000" },
+    { "name": "RIP", "valueHex": "0x00400000" }
+  ]
+}

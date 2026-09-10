@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_search",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 6,
+  "payload": {
+    "patternHex": "6a70674d617669636b",
+    "maxHits": 16
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_search_results",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 10,
+  "requestId": "d-01J9KC1EXAMPLE006",
+  "payload": {
+    "hits": [
+      { "addressHex": "0x7FF3A0C0", "bytesHex": "6a70674d617669636b" },
+      { "addressHex": "0x7FF3B120", "bytesHex": "6a70674d617669636b" }
+    ],
+    "truncated": true
+  }
+}

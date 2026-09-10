@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_paused",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 9,
+  "payload": {
+    "reason": "breakpoint",
+    "addressHex": "0x004010F0"
+  }
+}

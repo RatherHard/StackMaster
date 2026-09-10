@@ -165,6 +165,114 @@
     "packages/protocol/test/fixtures/action-response/valid/04-teaching-failure-paused.json": {
       "sha256": "e38937fe438898240a5f98fb5d3fbec718ddb5f2385c9512f4dbc06bb8d82f5f"
     },
+    "packages/protocol/test/fixtures/debug-frame/invalid/01-unknown-type.json": {
+      "sha256": "97de22592426cb74ba46f6683c231256b6010b9908011b8f1e6218dcdec297a3"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/02-wrong-protocol-version.json": {
+      "sha256": "b881a64b20556519faa8d4457e57a9d053941034c2ad3b509f3684dbc5ca4999"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/03-type-payload-mismatch.json": {
+      "sha256": "c451a99119c92770322d39dc0bee35a1454bd02ab1d80d8048568bea65a4da48"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/04-window-over-cap.json": {
+      "sha256": "98dc937c4ac711428f8f7912b76c416ced04a39aa9f46beecb6cba74527c7b99"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/05-attach-missing-origin.json": {
+      "sha256": "94b39ee620459cbdf593093a163ad1a3f3e18ae92f4b9319563482af8b10314c"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/06-unknown-envelope-field.json": {
+      "sha256": "7b7a289c157b30980d5b18e6509e5e075ad1907504d868096d443a43c3d57238"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/07-unknown-payload-field.json": {
+      "sha256": "8fc518b333b93fa57806fcfa2de5b3f75612d754a86268e5e4cc4c97bf636908"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/08-search-odd-pattern.json": {
+      "sha256": "9fe039daa8fb73667e0fe7617626bd9ad81b91b0c701b416455cfb0f9c5ddbc3"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/09-breakpoints-empty.json": {
+      "sha256": "73bb437e6e2e5399d8397836437e5fe6ebb32cacea003b31d6c750c5786574e4"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/10-window-bad-address.json": {
+      "sha256": "34f8674554175a4c85ac65ed9326ec2b8f0ae7cd679a7c8299bbe45f5726cb81"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/11-attach-origin-unknown-kind.json": {
+      "sha256": "32838e8c76979dd6599f26999db7c5ebf22a1fd253bd05675e055d7babf69d96"
+    },
+    "packages/protocol/test/fixtures/debug-frame/invalid/12-bad-seq.json": {
+      "sha256": "440ef1d53030a306aa74302a6a183f22fa8a347f45e65a7164bd05149b7bf3bb"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/01-attach-revision-origin.json": {
+      "sha256": "61f0bfb76bd571d0d43cdbf87d47eb364aa334422ca33b0c483cea45ee911038"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/02-attach-checkpoint-origin.json": {
+      "sha256": "b8e3b3d02f644b9100697cb15ccd22249bd42780e9b1a92e4945572c1ac068c7"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/03-window.json": {
+      "sha256": "72fd8dae928dcd61866bea0806964a940c2f5dccb846155de9457a09e2779efe"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/04-step.json": {
+      "sha256": "247545963c9919711972022d264859e0c8c2ef2219508716b05642bb7bbd2774"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/05-run-to-breakpoint.json": {
+      "sha256": "d0f9fe2f952aca19490d165004067bded7881a3452ca22e6e086484aeb946a0d"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/06-search.json": {
+      "sha256": "fe70b16e1d3a45c405c045deda0cb869ce204d04e22db6cc4b85a1adc8ed8f47"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/07-attached.json": {
+      "sha256": "2a6c58df104df97ee99e648da4914cddfd2cb1f6fae435bc7c0494f2db4ecbf7"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/08-window-data.json": {
+      "sha256": "bc38b57a0646eb70601520284c56c98f3982e26ff30d96397de3fe32c8035065"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/09-paused.json": {
+      "sha256": "3eaef56a19cbf93dd0e1bf04f74a7a00acd8d272b6a642bdc652770abd8cb5ad"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/10-search-results.json": {
+      "sha256": "9d365428a3125c094a1f3e3d9dfe24b0e9a0ea1ef3243cd23844558e89f0a1fe"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/11-instruction-stream.json": {
+      "sha256": "d09a7ae7626a1aa06d2953befa9089f1c5697734834ef2dfcc8151f91c3e8e6c"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/12-function-table.json": {
+      "sha256": "6954c46014c8ac5eab34f21cc8e3054476b7677cf072210ed20cecfe8aaac709"
+    },
+    "packages/protocol/test/fixtures/debug-frame/valid/13-error-frame.json": {
+      "sha256": "45b54c3f732d836caa5ed0406a957893f2796a692898c2043443ebe0042bc655"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/01-contains-judging-config.json": {
+      "sha256": "3b5708a310e912341498aa779288fe171f11565dfd9b4d9a93f919af9248c9b3"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/02-contains-seed-field.json": {
+      "sha256": "46975ffe6cddd7b53ddf4295623ccf76ff2b416bfb9b76fa3db78a409e0920a4"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/03-algorithm-id-mismatch.json": {
+      "sha256": "37fdff52a3caf2a090b25d12c870909e5e95eaff1e55a827f7bade88273b4c06"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/04-region-content-odd-hex.json": {
+      "sha256": "5ae476d611c3ed2efc7461a93061cd5ec5be6f0cb0ac02841b15f625603da6bc"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/05-aslr-off-with-base-addresses.json": {
+      "sha256": "134ac78ada03f23fed4725f22ce53f01f4a5458ccc8a05d49bb07e2548860b57"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/06-aslr-on-zero-draws.json": {
+      "sha256": "2748622faf83eed74d8a3c508dbb8d8ce336d14def03ff5eb92c1532cb944eb5"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/07-canary-secret-not-hidden.json": {
+      "sha256": "9ebc4cd026b7f121009fb2c19ab03ec12b8011455c9f6ee8b634a1f17df446b0"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/08-registers-empty.json": {
+      "sha256": "b04691b97d7a34d4762a170e576da9baacbeac78611b69e960d8e75f79c8ff7f"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/invalid/09-wrong-engine-protocol-version.json": {
+      "sha256": "a3347f50cb2c3d22b8f68633dd2861f26275af3cb5b92d7a970abd3edad43078"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/valid/01-variant-aslr-off.json": {
+      "sha256": "e3c997eeae5187fe7f2eeb52373c1231fd039dc73d2a0eefe974f95409a97845"
+    },
+    "packages/protocol/test/fixtures/debug-variant-bundle/valid/02-variant-aslr-on.json": {
+      "sha256": "2c3ef628e655eb16e5f8a4f5e9ec217db7e721986f0dda57fc6182d047602d70"
+    },
     "packages/protocol/test/fixtures/embed-message/invalid/01-unknown-message-type.json": {
       "sha256": "9d66a6f7f34da3e2bf5cc23c1f0fe6e7653207143b45b6308e61c037009d34ef"
     },

@@ -148,3 +148,46 @@ export const MAX_CHECKPOINTS_PER_SESSION = 256;
  * 前按本值拒绝,超限走冻结 `PublicError` 错误帧,零校验器细节透出(基线 #8)。
  */
 export const MAX_WSS_FRAME_BYTES = 1048576;
+
+/* ------------------------------------------------------------------ */
+/* 调试通道护栏(阶段四 WP-40;ADR-DC1,语义见调试通道协议语义文档)       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * debug_window 单窗口字节上限(4096 字节,与 D3 的 maxBytesPerRange 单策略
+ * 上限 MAX_BYTES_PER_RANGE_MAX 同值同量级)。任意地址窗口仅存在于调试通道
+ * (D3 对公开投影维持冻结,ADR-DC1 条款 8);上限是资源护栏,超限在契约层拒绝。
+ */
+export const DEBUG_WINDOW_MAX_BYTES = 4096;
+
+/** debug_search 检索模式字节上限(模式回显与命中上下文的展示粒度由服务端收紧)。 */
+export const DEBUG_SEARCH_PATTERN_MAX_BYTES = 256;
+
+/** debug_run_to_breakpoint.breakpoints 地址数组上限(资源护栏,非自由度限制)。 */
+export const DEBUG_MAX_BREAKPOINTS = 64;
+
+/**
+ * debug_search_results.hits 数组上限(256,与每动作公开事件上限同量级)。
+ * 超限由服务端按地址升序确定性承载至预算耗尽、以 presence-only `truncated`
+ * 标记表达(不含省略命中数,§4.3 DirtyRange 同款)。
+ */
+export const DEBUG_SEARCH_MAX_HITS = 256;
+
+/** debug_instruction_stream.instructions 批量上限(伪指令流按需分批拉取)。 */
+export const DEBUG_INSTRUCTION_STREAM_MAX_ITEMS = 256;
+
+/** debug_function_table.functions 条目上限(超限以 presence-only `truncated` 标记表达)。 */
+export const DEBUG_FUNCTION_TABLE_MAX_ENTRIES = 256;
+
+/* ------------------------------------------------------------------ */
+/* 调试变体镜像护栏(阶段四 WP-40;server-only 契约,ADR-DC1 条款 2/5)    */
+/* ------------------------------------------------------------------ */
+
+/** 调试变体镜像 memoryRegions 数组上限(外圈护栏;题目级内存预算归题目包校验)。 */
+export const DEBUG_VARIANT_MAX_REGIONS = 64;
+
+/** 调试变体镜像 registers 数组上限(与 challenge-schema 的 MAX_VM_REGISTERS 同值量级)。 */
+export const DEBUG_VARIANT_MAX_REGISTERS = 256;
+
+/** 调试变体镜像 canarySlots 数组上限(与区域数护栏同量级)。 */
+export const DEBUG_VARIANT_MAX_CANARY_SLOTS = 64;

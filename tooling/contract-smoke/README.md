@@ -25,8 +25,14 @@ cargo test --manifest-path tooling/contract-smoke/Cargo.toml   # 同一断言的
 | §1 Schema 编译 | 两包全部 `*.schema.json` 可被 jsonschema(2020-12)编译 | 5.6 跨语言可实现 |
 | §2 实例校验 | 有效 fixture 一律接受、非法一律拒绝;判定 = 结构(JSON Schema)**且**语义(superRefine 承接),与 TS 侧判定完全一致 | 5.6 同时接受或拒绝 |
 | §3 摘要比对 | 对 `canonical-digests.json` 全量逐条复算(摘要或拒绝码);同一实现的第二遍机检在 `vm-worker` 测试(`canonical_digest_manifest_is_reproduced_by_engine_module`) | 规范化序列化一致 |
-| §4 类型消费 | serde 反序列化镜像类型;schemars 生成面与 Zod Schema 的属性 / 必需键比对 | ADR-5 / ADR-8 |
+| §4 类型消费 | serde 反序列化镜像类型(EmbedTokenClaims / VerdictResult / DebugVariantBundle,阶段四 WP-40);schemars 生成面与 Zod Schema 的属性 / 必需键比对 | ADR-5 / ADR-8 |
 | §5 private-bundle 消费 | 双程序形态(IR / 字节)builder **现场生成**合法私有包(永不入 git)+ 定向破坏反例 + serde 镜像 + schemars 顶层比对 | 阶段一验收评审 §三移交项 5;WP-1 |
+
+**阶段四 WP-40 增补**:`PROTOCOL_CONTRACTS` 扩入 `debug-frame` / `debug-variant-bundle`
+(§1/§2/§3 全覆盖);调试通道的跨字段规则(ASLR ⇄ baseAddresses、draws 下限、
+canary 可见性)以生成管线注入的 JSON Schema if/then 承接(非引擎 semantic 模块),
+因此本 crate 无需新增语义承接即可与 TS 同判(语义文档:packages/protocol/docs/
+调试通道协议语义.md §六)。
 
 ## 语义层承接(vm_worker::contract::semantic)
 

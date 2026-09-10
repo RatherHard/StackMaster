@@ -40,6 +40,78 @@ pub enum VerdictResultMirror {
     Cancelled,
 }
 
+// ── DebugVariantBundle(阶段四 WP-40;schema/debug-variant-bundle.schema.json)──
+//
+// 调试变体镜像(编排器 ↔ 调试 worker 进程间契约,ADR-DC1 条款 2/5)的 Rust
+// 消费面最小镜像:跨字段规则(ASLR ⇄ baseAddresses / draws 下限 / canary
+// 可见性)由生成管线注入的 JSON Schema if/then 承接(冒烟 §2),字面校验
+// (pattern / const / multipleOf)归 jsonschema 契约层,镜像只声明结构。
+
+/// seed 派生元数据(无种子值字段——只登记算法标识与派生次数,WP-1 清单 §6.9)。
+#[derive(Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantDerivationMirror {
+    pub algorithm_id: String,
+    pub draws: u64,
+    pub base_addresses: Option<Vec<DebugVariantBaseAddressMirror>>,
+}
+
+#[derive(Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantBaseAddressMirror {
+    pub region_id: String,
+    pub address_hex: String,
+}
+
+/// 内存区域(与真实镜像逐字段同构;区域粒度 multipleOf 由 Schema 承载)。
+#[derive(Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantMemoryRegionMirror {
+    pub region_id: String,
+    pub kind: String,
+    pub start_address_hex: String,
+    pub byte_length: u64,
+    pub permissions: String,
+    pub content_hex: String,
+    pub is_hidden: bool,
+}
+
+#[derive(Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantRegisterMirror {
+    pub name: String,
+    pub value_hex: String,
+}
+
+/// canary 槽(照真实私有包 canary 对象结构,值已派生写入区域 contentHex)。
+#[derive(Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantCanarySlotMirror {
+    pub object_id: String,
+    pub kind: String,
+    pub address_hex: String,
+    pub byte_length: u64,
+    pub visibility: String,
+    pub contains_secret: bool,
+}
+
+/// 调试变体镜像根(整体 SERVER_ONLY):无 judgingConfig / 隐藏测试 / seed 值
+/// 字段(strictObject 结构性排除,冒烟 §2 红灯样例锁定)。
+#[derive(Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantBundleMirror {
+    pub schema_version: u32,
+    pub engine_process_protocol_version: u32,
+    pub challenge_id: String,
+    pub challenge_content_version: String,
+    pub vm_profile_version: String,
+    pub aslr_enabled: bool,
+    pub derivation: DebugVariantDerivationMirror,
+    pub memory_regions: Vec<DebugVariantMemoryRegionMirror>,
+    pub registers: Vec<DebugVariantRegisterMirror>,
+    pub canary_slots: Option<Vec<DebugVariantCanarySlotMirror>>,
+}
+
 /// 从 Zod 产出的 JSON Schema 提取顶层属性名集合。
 pub fn schema_property_names(schema: &serde_json::Value) -> BTreeSet<String> {
     schema

@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_window",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 3,
+  "requestId": "d-01J9KC1EXAMPLE002",
+  "payload": {
+    "addressHex": "0x7FF3A000",
+    "byteLength": 256
+  }
+}

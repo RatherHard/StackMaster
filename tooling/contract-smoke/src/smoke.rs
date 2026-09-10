@@ -12,7 +12,8 @@
 use crate::bundle_builder;
 use crate::canonical::{self};
 use crate::mirrors::{
-    EmbedTokenClaimsMirror, VerdictResultMirror, schema_property_names, schema_required_names,
+    DebugVariantBundleMirror, EmbedTokenClaimsMirror, VerdictResultMirror, schema_property_names,
+    schema_required_names,
 };
 use crate::semantic;
 use crate::strict_value::StrictValue;
@@ -26,6 +27,8 @@ use vm_worker::contract::mirrors::PrivateBundleMirror;
 const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
     ("action-request", "action-request.schema.json"),
     ("action-response", "action-response.schema.json"),
+    ("debug-frame", "debug-frame.schema.json"),
+    ("debug-variant-bundle", "debug-variant-bundle.schema.json"),
     ("embed-message", "embed-message.schema.json"),
     ("embed-token-claims", "embed-token-claims.schema.json"),
     ("projection-delta", "projection-delta.schema.json"),
@@ -305,6 +308,51 @@ pub fn run_all() -> Result<SmokeReport, String> {
     }
     if schema_required_names(&claims_schema) != schema_required_names(&generated) {
         return Err("schemars 必需键集合与 protocol Schema 不一致(embed-token-claims)".to_owned());
+    }
+
+    // ── §4.1 DebugVariantBundle serde 消费(阶段四 WP-40:调试变体镜像)────
+    // 跨帧族 DebugFrame 的 Rust 消费由 §2 实例校验承载(12 分支判别联合),
+    // 变体镜像另以类型化镜像证明 serde + schemars 消费面(WP-41/42 对接面)。
+    let variant_valid_dir =
+        root.join("packages/protocol/test/fixtures/debug-variant-bundle/valid");
+    for path in sorted_json_files(&variant_valid_dir) {
+        let text = fs::read_to_string(&path)
+            .map_err(|error| format!("fixture 读取失败 {}: {error}", path.display()))?;
+        serde_json::from_str::<DebugVariantBundleMirror>(&text).map_err(|error| {
+            format!(
+                "DebugVariantBundle serde 反序列化失败 {}: {error}",
+                path.display()
+            )
+        })?;
+        serde_mirrors_checked += 1;
+    }
+    let variant_invalid_dir =
+        root.join("packages/protocol/test/fixtures/debug-variant-bundle/invalid");
+    let variant_schema =
+        read_json(&protocol_schema_dir.join("debug-variant-bundle.schema.json"))?;
+    let variant_validator = jsonschema::validator_for(&variant_schema)
+        .map_err(|error| format!("Schema 编译失败 debug-variant-bundle: {error}"))?;
+    for path in sorted_json_files(&variant_invalid_dir) {
+        let text = fs::read_to_string(&path)
+            .map_err(|error| format!("fixture 读取失败 {}: {error}", path.display()))?;
+        if serde_json::from_str::<DebugVariantBundleMirror>(&text).is_ok() {
+            // serde 只声明结构:未知字段(deny_unknown_fields)在此拒;
+            // 字面校验类红灯(algorithmId / 奇数 hex / 跨字段耦合等)由
+            // 契约层 JSON Schema(含注入的 if/then)拒绝,双通道都必须拒绝。
+            let instance = read_json(&path)?;
+            if variant_validator.is_valid(&instance) {
+                return Err(format!("非法变体镜像样例被接受:{}", path.display()));
+            }
+        }
+        serde_mirrors_checked += 1;
+    }
+    let generated = serde_json::to_value(schemars::schema_for!(DebugVariantBundleMirror))
+        .map_err(|error| format!("schemars 生成失败:{error}"))?;
+    if schema_property_names(&variant_schema) != schema_property_names(&generated) {
+        return Err("schemars 属性集合与 protocol Schema 不一致(debug-variant-bundle)".to_owned());
+    }
+    if schema_required_names(&variant_schema) != schema_required_names(&generated) {
+        return Err("schemars 必需键集合与 protocol Schema 不一致(debug-variant-bundle)".to_owned());
     }
 
     // ── §5 private-bundle 消费冒烟(WP-1;阶段一验收评审 §三移交项 5)─────

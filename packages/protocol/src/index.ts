@@ -19,7 +19,13 @@
  *   (5 命令判别联合,语义文档 §5.1 生命周期命令集的 Schema 收口,§九)、
  *   WSS 传输帧 WssFrame(8.2 帧字段基线,载荷纯复用冻结契约);会话凭证
  *   绑定字段 SessionCredentialClaims 的**解析器**同样仅经 server-only 子路径
- *   导出(浏览器对凭证不解析,WP-1 清单 §6.6)。
+ *   导出(浏览器对凭证不解析,WP-1 清单 §6.6);
+ * - 阶段四 WP-40:调试通道协议 v1——DebugFrame(独立 WSS 端点独立帧族,
+ *   12 值封闭帧类型,连接级版本锚定自建同款;ADR-DC1 条款 1,分类论证
+ *   WP-1 清单 §6.8);语义见 docs/调试通道协议语义.md。调试变体镜像
+ *   DebugVariantBundle(编排器 ↔ 调试 worker 进程间契约)为 server-only
+ *   契约,仅经 server-only 子路径导出(WP-1 清单 §6.9)。既有 WSS 通道
+ *   与 D-API-2 零改动。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
  * 与 EmbedTokenClaims / SessionCredentialClaims(凭证解析器)不从本入口导出,
@@ -59,4 +65,5 @@ export * from "./embed/embed-message.js";
 export * from "./session-command/session-command-request.js";
 export * from "./session-command/session-command-response.js";
 export * from "./transport/wss-frame.js";
+export * from "./transport/debug-frame.js";
 export * from "./schema/registry.js";

@@ -2,9 +2,11 @@
  * server-only 根 Schema 注册表(WP-1 §五)。
  *
  * 与公开注册表(schema/registry.ts)分离的原因:注册表持有 Zod Schema 对象,
- * 若经包入口导出会进入浏览器模块图。两类 Schema 登记于此:
+ * 若经包入口导出会进入浏览器模块图。三类 Schema 登记于此:
  * - server-only 分类根 Schema(ProjectionPolicy):整体 SERVER_ONLY,永不进入
  *   跨域载荷,"Schema 存在不等于可下发";
+ * - 调试变体镜像(DebugVariantBundle,阶段四 WP-40):编排器 ↔ 调试 worker 的
+ *   进程间内部契约,整体 SERVER_ONLY,浏览器永不可见(WP-1 清单 §6.9);
  * - 凭证类 BOUNDARY Schema(EmbedTokenClaims):载荷可穿越浏览器,但浏览器对
  *   token 不解析——claims 解析器只供后端签发 / 校验消费,防"解析 token 做
  *   条件渲染"反模式。其落盘产物 x-sm-class 仍为 boundary(分类随
@@ -22,7 +24,12 @@ import {
   type SchemaEntry,
   type SchemaName,
 } from "../schema/registry.js";
-import { EMBED_SCHEMA_BASE_ID, SESSION_ACTION_SCHEMA_BASE_ID } from "../version.js";
+import {
+  DEBUG_SCHEMA_BASE_ID,
+  EMBED_SCHEMA_BASE_ID,
+  SESSION_ACTION_SCHEMA_BASE_ID,
+} from "../version.js";
+import { DebugVariantBundleSchema } from "../debug/debug-variant-bundle.js";
 import { ProjectionPolicySchema } from "./projection-policy.js";
 
 /** 不向浏览器可达代码暴露解析器的根 Schema(server-only 类型 + 凭证类)。 */
@@ -44,6 +51,14 @@ export const SERVER_ONLY_SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "SessionCredentialClaims",
     baseId: SESSION_ACTION_SCHEMA_BASE_ID,
     schema: SessionCredentialClaimsSchema,
+  },
+  {
+    // 调试变体镜像(编排器 ↔ 调试 worker 进程间契约,WP-1 清单 §6.9):
+    // 整体 SERVER_ONLY,浏览器永不可见;落盘 JSON Schema 供跨语言机检。
+    name: "debug-variant-bundle",
+    title: "DebugVariantBundle",
+    baseId: DEBUG_SCHEMA_BASE_ID,
+    schema: DebugVariantBundleSchema,
   },
 ];
 

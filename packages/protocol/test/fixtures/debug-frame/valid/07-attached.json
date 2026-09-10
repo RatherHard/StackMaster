@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_attached",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 7,
+  "payload": {
+    "revision": 42,
+    "status": "paused",
+    "paused": { "addressHex": "0x0040105A" }
+  }
+}

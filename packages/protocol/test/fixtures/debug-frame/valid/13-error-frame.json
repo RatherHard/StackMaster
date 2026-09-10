@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "type": "error",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 13,
+  "requestId": "d-01J9KC1EXAMPLE004",
+  "payload": {
+    "code": "budget_exhausted",
+    "message": "预算耗尽:调试步进已达当前预算上限。"
+  }
+}

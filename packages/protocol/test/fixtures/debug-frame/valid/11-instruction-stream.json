@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_instruction_stream",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 11,
+  "payload": {
+    "instructions": [
+      { "addressHex": "0x00401050", "bytesHex": "55", "text": "push rbp" },
+      { "addressHex": "0x00401051", "bytesHex": "4889e5", "text": "mov rbp, rsp" },
+      { "addressHex": "0x0040105A", "bytesHex": "e8b10f0000", "text": "call 0x00402010", "jumpTargetHex": "0x00402010" }
+    ]
+  }
+}

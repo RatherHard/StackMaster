@@ -5,8 +5,8 @@
  * WP-3 新增机检面:
  * - 注册表遍历覆盖公开 + server-only 两侧(allSchemaEntries);
  * - rejected 跨字段耦合的 if/then 注入形态冻结(superRefine 的 JSON Schema 等价物);
- * - server-only 专属标记:仅 projection-policy.schema.json 携带 x-sm-class:
- *   "server-only";
+ * - server-only 专属标记:仅 server-only 契约(projection-policy、debug-variant-bundle)
+ *   携带 x-sm-class: "server-only";
  * - provisional 临时标记彻底退场:任何产物不得再出现 x-sm-provisional(M-3 收口)。
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -102,17 +102,68 @@ describe("JSON Schema 生成产物(落盘纪律)", () => {
     ]);
   });
 
-  it("server-only 标记只打在 projection-policy 上(Schema 存在不等于可下发,WP-1 §五)", () => {
+  it("server-only 标记只打在 server-only 契约上(Schema 存在不等于可下发,WP-1 §五)", () => {
+    // server-only 根 Schema 清单:投影策略(WP-1 第五章)+ 调试变体镜像
+    // (阶段四 WP-40,编排器 ↔ 调试 worker 进程间契约,WP-1 清单 §6.9)。
+    const SERVER_ONLY_SCHEMA_NAMES = new Set(["projection-policy", "debug-variant-bundle"]);
     for (const entry of allSchemaEntries()) {
       const document = JSON.parse(
         readFileSync(join(OUTPUT_DIR, `${entry.name}.schema.json`), "utf8"),
       ) as { "x-sm-class": string };
-      if (entry.name === "projection-policy") {
+      if (SERVER_ONLY_SCHEMA_NAMES.has(entry.name)) {
         expect(document["x-sm-class"]).toBe("server-only");
       } else {
         expect(document["x-sm-class"]).not.toBe("server-only");
       }
     }
+  });
+
+  it("debug-variant-bundle 的跨字段耦合以 if/then 形态注入落盘产物(superRefine 等价物,阶段四 WP-40)", () => {
+    const document = JSON.parse(
+      readFileSync(join(OUTPUT_DIR, "debug-variant-bundle.schema.json"), "utf8"),
+    ) as {
+      allOf?: unknown[];
+      properties?: { canarySlots?: { items?: { allOf?: unknown[] } } };
+    };
+    // ASLR 耦合(根级):aslrEnabled=false ⇒ baseAddresses 缺席;true ⇒ draws ≥ 1。
+    expect(document.allOf).toEqual([
+      {
+        if: {
+          properties: { aslrEnabled: { const: false } },
+          required: ["aslrEnabled"],
+        },
+        then: {
+          properties: {
+            derivation: { not: { required: ["baseAddresses"] } },
+          },
+        },
+      },
+      {
+        if: {
+          properties: { aslrEnabled: { const: true } },
+          required: ["aslrEnabled"],
+        },
+        then: {
+          properties: {
+            derivation: { properties: { draws: { minimum: 1 } } },
+          },
+        },
+      },
+    ]);
+    // canary 槽耦合(条目级):containsSecret=true ⇒ visibility="hidden"。
+    expect(document.properties?.canarySlots?.items?.allOf).toEqual([
+      {
+        if: {
+          properties: { containsSecret: { const: true } },
+          required: ["containsSecret"],
+        },
+        then: {
+          properties: {
+            visibility: { const: "hidden" },
+          },
+        },
+      },
+    ]);
   });
 
   it("provisional 临时标记已彻底退场:任何落盘产物不得再出现 x-sm-provisional(M-3 收口)", () => {

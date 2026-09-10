@@ -47,5 +47,39 @@ export const SESSION_ACTION_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/se
 /** 嵌入协议 JSON Schema 的 $id 命名空间(独立于会话动作协议,5.6)。 */
 export const EMBED_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/embed/v${EMBED_PROTOCOL_VERSION}`;
 
+/* ------------------------------------------------------------------ */
+/* 调试通道协议(阶段四 WP-40;ADR-DC1 条款 1 / 决议 3 / §六 R3)          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 调试通道协议当前版本(DebugFrame.protocolVersion 的唯一合法值)。
+ *
+ * 调试通道是独立 WSS 端点上的独立协议(ADR-DC1 决议 3 / R3):独立协议版本、
+ * 独立帧族,**不随会话动作协议演进**——既有通道的连接级版本锚定(D-API-2,
+ * "传输帧随会话动作协议同一版本编号演进、不另设版本常量")只针对既有通道,
+ * 其冻结面零改动;调试协议快速迭代不应反复搅动已冻结面,故独立编号。
+ * 连接级锚定机制在调试通道内自建同款:首帧版本即本连接的解释版本,此后任何
+ * 帧携带其他版本一律拒绝(语义见 docs/调试通道协议语义.md)。
+ */
+export const DEBUG_CHANNEL_PROTOCOL_VERSION = 1;
+
+/**
+ * 当前受理的调试通道协议版本集合(N-1 兼容窗口的实现约定锚点)。
+ *
+ * 约定与 SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS 同款:冻结期恒为
+ * `[DEBUG_CHANNEL_PROTOCOL_VERSION]`;破坏性变更递增版本后,窗口期在此追加
+ * N-1(如 `[2, 1]`),窗口期结束移除旧值。
+ */
+export const SUPPORTED_DEBUG_CHANNEL_PROTOCOL_VERSIONS: readonly number[] = [
+  DEBUG_CHANNEL_PROTOCOL_VERSION,
+];
+
+/**
+ * 调试通道协议 JSON Schema 的 $id 命名空间(仅作标识符,不承诺可解析)。
+ * 版本段从调试通道协议版本常量派生;调试通道帧与调试变体镜像
+ * (server-only 注册,编排器 ↔ 调试 worker 进程间契约)同属本命名空间。
+ */
+export const DEBUG_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/debug/v${DEBUG_CHANNEL_PROTOCOL_VERSION}`;
+
 /** @stackmaster/protocol 包版本(与 package.json 同步;非协议版本)。 */
 export const PROTOCOL_PACKAGE_VERSION = "0.1.0";

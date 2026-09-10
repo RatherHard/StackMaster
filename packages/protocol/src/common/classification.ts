@@ -144,6 +144,32 @@ export const SCHEMA_CLASSIFICATIONS = {
       payload: "boundary",
     },
   },
+  "debug-frame": {
+    rootClass: "boundary",
+    fieldClasses: {
+      protocolVersion: "boundary",
+      type: "boundary",
+      sessionId: "boundary",
+      seq: "boundary",
+      requestId: "boundary",
+      payload: "boundary",
+    },
+  },
+  "debug-variant-bundle": {
+    rootClass: "server-only",
+    fieldClasses: {
+      schemaVersion: "server-only",
+      engineProcessProtocolVersion: "server-only",
+      challengeId: "server-only",
+      challengeContentVersion: "server-only",
+      vmProfileVersion: "server-only",
+      aslrEnabled: "server-only",
+      derivation: "server-only",
+      memoryRegions: "server-only",
+      registers: "server-only",
+      canarySlots: "server-only",
+    },
+  },
   "projection-policy": {
     rootClass: "server-only",
     fieldClasses: {

@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_run_to_breakpoint",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 1,
+  "payload": {
+    "breakpoints": []
+  }
+}

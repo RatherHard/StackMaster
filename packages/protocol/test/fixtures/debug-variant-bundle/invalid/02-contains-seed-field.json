@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "engineProcessProtocolVersion": 1,
+  "challengeId": "ret2basic-example",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "aslrEnabled": false,
+  "derivation": {
+    "algorithmId": "splitmix64-stream-v1",
+    "draws": 4
+  },
+  "memoryRegions": [
+    {
+      "regionId": "code",
+      "kind": "code",
+      "startAddressHex": "0x00400000",
+      "byteLength": 4096,
+      "permissions": "rx",
+      "contentHex": "554889e5c9c3",
+      "isHidden": false
+    }
+  ],
+  "registers": [
+    { "name": "RSP", "valueHex": "0x7FF3B000" },
+    { "name": "RBP", "valueHex": "0x7FF3B000" },
+    { "name": "RIP", "valueHex": "0x00400000" }
+  ],
+  "seed": "0123456789abcdef0123456789abcdef"
+}

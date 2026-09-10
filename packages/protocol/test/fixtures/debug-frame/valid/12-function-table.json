@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "type": "debug_function_table",
+  "sessionId": "s-01J9KA7EXAMPLE0000",
+  "seq": 12,
+  "payload": {
+    "functions": [
+      { "label": "main", "startAddressHex": "0x00401050", "byteLength": 96 },
+      { "label": "check_input", "startAddressHex": "0x00402010", "byteLength": 320 }
+    ]
+  }
+}

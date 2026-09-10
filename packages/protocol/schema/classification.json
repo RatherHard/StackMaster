@@ -130,6 +130,20 @@
         "payload": "boundary"
       }
     },
+    "debug-frame": {
+      "file": "debug-frame.schema.json",
+      "title": "DebugFrame",
+      "baseId": "https://stackmaster.dev/schemas/debug/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "protocolVersion": "boundary",
+        "type": "boundary",
+        "sessionId": "boundary",
+        "seq": "boundary",
+        "requestId": "boundary",
+        "payload": "boundary"
+      }
+    },
     "projection-policy": {
       "file": "projection-policy.schema.json",
       "title": "ProjectionPolicy",
@@ -171,6 +185,24 @@
         "challengeVersion": "boundary",
         "jti": "boundary",
         "expiresAt": "boundary"
+      }
+    },
+    "debug-variant-bundle": {
+      "file": "debug-variant-bundle.schema.json",
+      "title": "DebugVariantBundle",
+      "baseId": "https://stackmaster.dev/schemas/debug/v1",
+      "rootClass": "server-only",
+      "fieldClasses": {
+        "schemaVersion": "server-only",
+        "engineProcessProtocolVersion": "server-only",
+        "challengeId": "server-only",
+        "challengeContentVersion": "server-only",
+        "vmProfileVersion": "server-only",
+        "aslrEnabled": "server-only",
+        "derivation": "server-only",
+        "memoryRegions": "server-only",
+        "registers": "server-only",
+        "canarySlots": "server-only"
       }
     }
   }

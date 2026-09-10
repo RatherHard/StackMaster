@@ -26,8 +26,13 @@ import { SessionCommandResponseSchema } from "../session-command/session-command
 import { ActionRequestSchema } from "../session-action/action-request.js";
 import { ActionResponseSchema } from "../session-action/action-response.js";
 import { VerdictResultSchema } from "../session-action/verdict-result.js";
+import { DebugFrameSchema } from "../transport/debug-frame.js";
 import { WssFrameSchema } from "../transport/wss-frame.js";
-import { EMBED_SCHEMA_BASE_ID, SESSION_ACTION_SCHEMA_BASE_ID } from "../version.js";
+import {
+  DEBUG_SCHEMA_BASE_ID,
+  EMBED_SCHEMA_BASE_ID,
+  SESSION_ACTION_SCHEMA_BASE_ID,
+} from "../version.js";
 
 /** 已登记字段分类的 Schema 名(与 SCHEMA_CLASSIFICATIONS 键严格对齐)。 */
 export type SchemaName = keyof typeof SCHEMA_CLASSIFICATIONS;
@@ -103,6 +108,12 @@ export const SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "WssFrame",
     baseId: SESSION_ACTION_SCHEMA_BASE_ID,
     schema: WssFrameSchema,
+  },
+  {
+    name: "debug-frame",
+    title: "DebugFrame",
+    baseId: DEBUG_SCHEMA_BASE_ID,
+    schema: DebugFrameSchema,
   },
 ];
 

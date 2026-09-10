@@ -41,7 +41,30 @@ const PUBLIC_PACKAGES = [
  * 空表即当前无豁免;新增豁免必须带理由与复核期限。
  * @type {Array<{ file: string, pattern: string, reason: string, expiry: string }>}
  */
-const ALLOWLIST = [];
+const ALLOWLIST = [
+  // WP-40 调试变体镜像契约:字段与私有包 initialState 逐字段同构(isHidden /
+  // containsSecret 是布局字段名本身)。该文件只经 server-only 入口导出,公开入口
+  // BFS 不可达(导入边界规则已断),dist 内容标记属误报。复核点:WP-44 机检。
+  {
+    file: "packages/protocol/dist/debug/debug-variant-bundle.js",
+    pattern: "\\bcontainsSecret\\b",
+    reason: "调试变体镜像与私有包字段同构(server-only 面,公开入口不可达)",
+    expiry: "2026-12-31",
+  },
+  {
+    file: "packages/protocol/dist/debug/debug-variant-bundle.js",
+    pattern: "\\bisHidden\\b",
+    reason: "调试变体镜像与私有包字段同构(server-only 面,公开入口不可达)",
+    expiry: "2026-12-31",
+  },
+  // Schema 生成器引用耦合规则字段名以产出 if/then(构建期代码,公开入口不可达)。
+  {
+    file: "packages/protocol/dist/schema/generate.js",
+    pattern: "\\bcontainsSecret\\b",
+    reason: "生成器 if/then 注入需引用同构字段名(构建期代码,公开入口不可达)",
+    expiry: "2026-12-31",
+  },
+];
 
 const FORBIDDEN_CONTENT_PATTERNS = [
   { pattern: /\bprivate-bundle\b/, label: "私有判题包 Schema 名" },
@@ -476,7 +499,8 @@ function scanPackage(packageName, findings) {
     const code = stripComments(readFileSync(file, "utf8"));
     for (const rule of FORBIDDEN_CONTENT_PATTERNS) {
       if (rule.pattern.test(code)) {
-        const relFile = relative(repoRoot, file);
+        // 豁免表以正斜杠路径登记;Windows 下 relative() 产出反斜杠,先归一化再比对。
+        const relFile = relative(repoRoot, file).replaceAll("\\", "/");
         const exempt = ALLOWLIST.some(
           (item) => item.file === relFile && item.pattern === rule.pattern.source,
         );
