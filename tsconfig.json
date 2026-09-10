@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/protocol" },
-    { "path": "packages/challenge-schema" }
+    { "path": "packages/challenge-schema" },
+    { "path": "apps/session-api" }
   ]
 }

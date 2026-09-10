@@ -1,0 +1,53 @@
+{
+  "name": "@stackmaster/session-api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "start": "node dist/index.js",
+    "compose:deps:up": "docker compose -f compose/deps.yaml up -d --wait",
+    "compose:deps:down": "docker compose -f compose/deps.yaml down",
+    "compose:app:build": "docker compose -f compose/deps.yaml -f compose/app.yaml build",
+    "compose:app:up": "docker compose -f compose/deps.yaml -f compose/app.yaml up -d --build --wait",
+    "compose:app:down": "docker compose -f compose/deps.yaml -f compose/app.yaml down -v",
+    "test:integration": "node --env-file=compose/integration.env ./node_modules/vitest/vitest.mjs run test/persistence test/boot.integration.test.ts",
+    "test:compose": "node test/compose/run.mjs",
+    "k6:baseline": "node k6/run-baseline.mjs"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/websocket": "^11.3.0",
+    "@stackmaster/challenge-compiler": "workspace:*",
+    "@stackmaster/protocol": "workspace:*",
+    "@stackmaster/session-core": "workspace:*",
+    "fastify": "^5.12.3",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.12",
+    "minio": "^8.0.7",
+    "pg": "^8.23.0",
+    "pino": "^10.3.1",
+    "prom-client": "^15.1.3",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@types/pg": "^8.23.1",
+    "vitest": "^4.1.11"
+  }
+}

@@ -12,6 +12,18 @@
  *
  * apps/(session-api、verifier、admin、plugin-dev)自阶段二起搭建;
  * 规则中一并纳入,避免后续补规则时出现窗口期。
+ *
+ * 阶段三 WP-1(2026-09-09):apps/session-api 工程载体落地,规则从两个方向
+ * 接线 apps/——
+ *  - 三个"后端消费者白名单"规则的 pathNot 增补 ^apps/ 形态(此前只排除
+ *    ^packages/session-api 等,apps 同名包会被误伤);
+ *  - 新增 session-api 工作区依赖允许清单与"浏览器可达包禁反向依赖"两条规则;
+ *  - 必触发反例自检:tooling/dependency-boundary-self-test.mjs(pnpm
+ *    lint:deps:self-test),以本配置对临时反例树做程序化扫描,证明每条
+ *    apps/ 相关规则真实可红灯。
+ *
+ * 路径形态注记:pnpm workspace 依赖经 realpath 解析,规则按
+ * `^packages/<name>/` 形态匹配(node_modules/@stackmaster/* 链接形态不出现)。
  */
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
@@ -47,6 +59,7 @@ module.exports = {
         path: "^(packages|apps)/",
         pathNot: [
           "^packages/(challenge-compiler|session-api|verifier)/",
+          "^apps/(session-api|verifier)/",
           "^packages/challenge-schema/",
         ],
       },
@@ -61,6 +74,7 @@ module.exports = {
         path: "^(packages|apps)/",
         pathNot: [
           "^packages/(session-api|session-core|verifier)/",
+          "^apps/(session-api|verifier)/",
           "^packages/challenge-compiler/",
         ],
       },
@@ -91,11 +105,34 @@ module.exports = {
         path: "^(packages|apps)/",
         pathNot: [
           "^packages/(challenge-compiler|session-api|verifier)/",
+          "^apps/(session-api|verifier)/",
           // protocol 包自身装配该子树(生成管线与漂移测试),属可信内部边。
           "^packages/protocol/",
         ],
       },
       to: { path: "^packages/protocol/(dist|src)/server-only" },
+    },
+    {
+      name: "session-api-workspace-deps-allowlist",
+      severity: "error",
+      comment:
+        "session-api(信任域 2,WP-1)对工作区包只允许依赖 protocol / challenge-schema / challenge-compiler / session-core(5.5 依赖方向);其余工作区包一律禁止——新依赖进入允许清单须先过 WP-1 §1.3 契约变更评审。",
+      from: { path: "^apps/session-api/" },
+      to: {
+        path: "^packages/",
+        pathNot: "^packages/(protocol|challenge-schema|challenge-compiler|session-core)/",
+      },
+    },
+    {
+      name: "no-backend-dependency-on-browser-packages",
+      severity: "error",
+      comment:
+        "浏览器可达包(vm-ui / web-component / embed-runtime / react-wrapper)禁反向依赖(WP-1):服务端包与应用引入浏览器面即扩大公开构建图——浏览器面只被浏览器加载,投影 / 嵌入 SDK 的机制面不进服务端。浏览器包自身的依赖方向由 browser-packages-only-depend-on-protocol 单独强制。",
+      from: {
+        path: "^(packages|apps)/",
+        pathNot: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+      },
+      to: { path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/" },
     },
   ],
   options: {

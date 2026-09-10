@@ -1,4 +1,6 @@
 packages:
   - "packages/*"
+  # 阶段三 WP-1:session-api 工程载体落地(信任域 2;Fastify 会话编排器)。
+  - "apps/*"
   # vm-engine 是 cargo workspace;turbo 任务宿主(门禁接线),非 JS 发布包。
   - "vm-engine"
