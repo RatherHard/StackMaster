@@ -37,6 +37,7 @@
  * 每实例一条串行链(帧序 = 执行序);重放对齐期间实例不可服务其他帧。
  */
 import type { PublicError } from "@stackmaster/protocol";
+import { DEBUG_SEARCH_MAX_HITS } from "@stackmaster/protocol";
 import { DebugVariantBundleSchema } from "@stackmaster/protocol/server-only";
 import { ensureWorkerBinary, WorkerConnection, type WorkerCommandSpec, type WorkerFrame } from "@stackmaster/session-core";
 import type { Logger } from "pino";
@@ -353,7 +354,10 @@ export class DebugChannelOrchestrator {
       const frame = await instance.connection.request({
         type: "debug_search",
         patternHex,
-        ...(maxHits === undefined ? {} : { maxHits }),
+        // worker 侧命令镜像 max_hits 必填(WP-40 契约面 maxHits 可选,缺省 =
+        // 服务端上限):省略时以协议上限补齐,防帧形态不合法被 worker 判
+        // envelope_invalid 并终止进程(调试实例一旦误标 crashed 即不可恢复)。
+        maxHits: maxHits ?? DEBUG_SEARCH_MAX_HITS,
       });
       this.#expectNotCommandError(frame, "debug_search");
       if (frame.type !== "debug_search_results") {

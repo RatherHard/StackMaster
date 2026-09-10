@@ -313,17 +313,19 @@ export async function buildSessionApiRuntime(
   const metrics = new SessionMetrics();
   const metricsPlugin = buildMetricsPlugin(metrics);
 
-  // ── 6.1 调试实例编排器(阶段四 WP-41,ADR-DC1):生产变体供给为 WP-42
-  //    前的生产桩(attach 即 internal_error);空闲回收窗口复用断线保持窗口
-  //    预算(不设第二类配置键);close / 保持到期回收路径同步回收调试 worker。
-  //    manager 相互引用经惰性绑定解环(编排器只在调用期消费 manager)。
+  // ── 6.1 调试实例编排器(阶段四 WP-41,ADR-DC1):变体供给 = WP-42 生产
+  //    路径(双包 → challenge-compiler 装载管线 → buildDebugVariantBundle,
+  //    调试种子 attach 时现场随机生成、不落存储不入日志);空闲回收窗口复用
+  //    断线保持窗口预算(不设第二类配置键);close / 保持到期回收路径同步
+  //    回收调试 worker。manager 相互引用经惰性绑定解环(编排器只在调用期
+  //    消费 manager)。
   let managerRef: LiveSessionManager | null = null;
   const debugOrchestrator = new DebugChannelOrchestrator({
     manager: {
       getSessionSummary: (sessionId, tenantId) => managerRef?.getSessionSummary(sessionId, tenantId) ?? null,
       listCheckpoints: async (sessionId, tenantId) => (await managerRef?.listCheckpoints(sessionId, tenantId)) ?? [],
     },
-    variantProvider: productionDebugVariantProvider(),
+    variantProvider: productionDebugVariantProvider({ bundles: bundleStore, logger }),
     bundles: bundleStore,
     actionLog,
     logger,

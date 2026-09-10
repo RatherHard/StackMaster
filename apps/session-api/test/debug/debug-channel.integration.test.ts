@@ -122,9 +122,6 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       expect(variant).not.toHaveProperty(forbidden);
     }
     expect(variant).toHaveProperty("derivation");
-    const { writeFileSync } = await import("node:fs");
-    writeFileSync("probe_variant.json", JSON.stringify(variant));
-    writeFileSync("probe_public.json", Buffer.from(await rig.bundles.getPublic(TEST_CHALLENGE_ID, TEST_CHALLENGE_VERSION) ?? new Uint8Array()).toString("utf8"));
     const regions = variant.memoryRegions as { regionId: string }[];
     expect(regions.map((region) => region.regionId)).toContain("debug-vault");
 

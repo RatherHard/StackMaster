@@ -45,6 +45,7 @@ import {
   DebugChannelOrchestrator,
   buildDebugChannel,
   placeholderDebugVariantProvider,
+  type DebugVariantProvider,
 } from "../../../src/debug/index.js";
 import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../../src/auth/cookie.js";
 import { LiveSessionManager } from "../../../src/sessions/session-manager.js";
@@ -133,12 +134,16 @@ export interface SessionRigOptions {
    * 与 runtime.ts 同一装配拓扑)。选项:
    *  - `workerCommand`:调试 worker 进程描述(缺省 = fake-debug-worker);
    *  - `idleRecycleSeconds`:空闲回收窗口(缺省 = 保持窗口数值);
-   *  - `enabled`:false = 不装配调试通道(通道红灯基线)。
+   *  - `enabled`:false = 不装配调试通道(通道红灯基线);
+   *  - `variantProviderFactory`:变体供给端口工厂(WP-42:生产 Provider 路径
+   *    的集成测试经此注入 `productionDebugVariantProvider`,入参 = rig 的
+   *    内存双包存储,保证与 rig 消费同一对象;缺省仍为占位实现)。
    */
   readonly debug?: {
     readonly enabled?: boolean;
     readonly workerCommand?: { readonly command: string; readonly args?: readonly string[] };
     readonly idleRecycleSeconds?: number;
+    readonly variantProviderFactory?: (bundles: MemoryChallengeBundleStore) => DebugVariantProvider;
   };
   /**
    * WSS 通道数值面(测试注入亚秒值以加速心跳 / 空闲 / 保持窗口行为验证;
@@ -261,7 +266,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
       listCheckpoints: async (sessionId, tenantId) =>
         (await managerRef.current?.listCheckpoints(sessionId, tenantId)) ?? [],
     },
-    variantProvider: placeholderDebugVariantProvider({
+    variantProvider: options.debug?.variantProviderFactory?.(bundles) ?? placeholderDebugVariantProvider({
       getPublic: async (challengeId, version) => bundles.getPublic(challengeId, version),
     }),
     bundles,

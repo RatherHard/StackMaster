@@ -22,10 +22,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stackmaster/challenge-schema": "workspace:*"
+    "@stackmaster/challenge-schema": "workspace:*",
+    "@stackmaster/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
+    "fast-check": "^4.9.0",
     "vitest": "^4.1.11"
   }
 }

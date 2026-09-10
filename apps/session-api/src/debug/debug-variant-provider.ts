@@ -1,5 +1,5 @@
 /**
- * DebugVariantProvider —— 调试变体镜像供给端口(阶段四 WP-41;ADR-DC1
+ * DebugVariantProvider —— 调试变体镜像供给端口(阶段四 WP-41 / WP-42;ADR-DC1
  * 条款 2 / §六 R2、WP-40 契约 §七.3 对接注意事项)。
  *
  * 编排器在 debug_attach 时经本端口取得会话锁定的题目身份三元组对应的
@@ -10,19 +10,37 @@
  *  - 过冻结 Schema 复验(拒绝即 attach 失败,变体不出编排器进程之外);
  *  - 经 `load_variant` 命令送调试 worker(worker 侧二次校验,fail-closed)。
  *
- * 交付形态(本 WP):
+ * 交付形态:
+ *  - [`productionDebugVariantProvider`]:**生产实现(WP-42 接线)**——对象存储
+ *    取双包 → challenge-compiler `loadChallengePair` 装载管线(三层全绿才产
+ *    变体;装载产物含私有包完整状态,只在编排器进程内存活)→
+ *    `buildDebugVariantBundle`(布局同构、秘密槽值由调试种子经 SeedDeriver
+ *    `splitmix64-stream-v1` 派生)→ 出口即过 WP-40 冻结 Schema;ASLR 开关取
+ *    公开描述包 `aslrEnabled`(WP-43 声明面,缺省 false);
  *  - [`placeholderDebugVariantProvider`]:程序化测试实现——从公开描述包
- *    (整体 PUBLIC)按 challenge-schema 测试助手风格构造**占位语料变体**
- *    (隐藏区域内容为固定占位字节,非真实秘密);用于集成测试与本地联调;
- *  - [`productionDebugVariantProvider`]:生产实现桩——WP-42 落地
- *    challenge-compiler 变体产出后由后续波次接线,当前调用即抛错
- *    (attach 呈现 internal_error 错误帧,接口与挂接点已就位)。
+ *    (整体 PUBLIC)构造**占位语料变体**(隐藏区域内容为固定占位字节,非
+ *    真实秘密);用于无 challenge-compiler 装载依赖的轻量集成测试与本地联调。
  *
- * 变体镜像与调试种子是会话级瞬态值:**不落任何存储、不进日志**(秘密零
- * 驻留;`derivation` 只登记算法标识与派生次数,无种子值字段)。
+ * 调试种子来源纪律(秘密零驻留):每次供给(= 一次 attach 装载,attach 幂等
+ * 复用既有实例故不重复供给)以 `node:crypto` 随机生成 **16 字节**调试种子,
+ * 仅在调试编排器内存存活、不落任何存储、不进日志(受控日志只记 sessionId /
+ * revision 等标识面;审计 kind 七值集合不扩)。`derivation` 只登记算法标识与
+ * 派生次数,无种子值字段。
  */
-import { DEBUG_VARIANT_SEED_ALGORITHM_ID, DEBUG_VARIANT_BUNDLE_SCHEMA_VERSION, DebugVariantBundleSchema } from "@stackmaster/protocol/server-only";
+import { randomBytes } from "node:crypto";
+import type { Logger } from "pino";
+import {
+  buildDebugVariantBundle,
+  loadChallengePair,
+  type DebugVariantBuildOptions,
+} from "@stackmaster/challenge-compiler";
 import { ENGINE_PROCESS_PROTOCOL_VERSION } from "@stackmaster/protocol";
+import {
+  DEBUG_VARIANT_BUNDLE_SCHEMA_VERSION,
+  DEBUG_VARIANT_SEED_ALGORITHM_ID,
+  DebugVariantBundleSchema,
+} from "@stackmaster/protocol/server-only";
+import type { ChallengeBundleStore } from "../persistence/ports.js";
 
 /** 既有公私区域页对齐粒度(公开包区域长度同源;VMA 页对齐)。 */
 const REGION_BYTE_LENGTH = 4096;
@@ -43,16 +61,75 @@ export interface DebugVariantProvider {
   forSession(request: DebugVariantRequest): Promise<Record<string, unknown>>;
 }
 
+/** 生产实现依赖(双包对象存储读取 + 调试种子生成注入面)。 */
+export interface ProductionDebugVariantProviderDeps {
+  /** 题目双包对象存储(与 create-session 同一端口;私有包不离开编排器进程)。 */
+  readonly bundles: Pick<ChallengeBundleStore, "getPrivate" | "getPublic">;
+  /** 受控日志(只记身份面;双包内容与调试种子零入日志)。 */
+  readonly logger?: Logger;
+  /**
+   * 调试种子生成(注入面;缺省 = `node:crypto` 随机 16 字节 hex)。生产路径
+   * 不注入;集成测试注入固定种子做双实例重放一致性比对(种子值仍不落盘)。
+   */
+  readonly generateDebugSeedHex?: () => string;
+}
+
 /**
- * 生产实现桩(WP-42 接线前形态):调用即抛错——生产 attach 上的呈现由
- * 编排器映射为冻结 internal_error 错误帧,零内部细节透出。
+ * 生产实现(WP-42):双包 → 装载管线 → 变体产出 → 出口过冻结 Schema。
+ * 装载/产出失败(版本缺失、双包缺失、管线拒绝、变体拒绝)全部抛错——呈现面
+ * 由编排器映射为冻结 internal_error 错误帧,零内部细节透出。
  */
-export function productionDebugVariantProvider(): DebugVariantProvider {
+export function productionDebugVariantProvider(deps: ProductionDebugVariantProviderDeps): DebugVariantProvider {
+  const log = deps.logger?.child({ component: "debug-variant-provider" });
   return {
-    async forSession(): Promise<Record<string, unknown>> {
-      throw new Error("WP-42 接线:生产调试变体镜像产出(challenge-compiler)未接入");
+    async forSession(request): Promise<Record<string, unknown>> {
+      const privateRaw = await deps.bundles.getPrivate(request.challengeId, request.challengeContentVersion);
+      const publicRaw = await deps.bundles.getPublic(request.challengeId, request.challengeContentVersion);
+      if (privateRaw === null || publicRaw === null) {
+        throw new Error(
+          `debug variant: challenge bundle missing (${request.challengeId}@${request.challengeContentVersion})`,
+        );
+      }
+      let publicDescriptor: unknown;
+      let privateBundle: unknown;
+      try {
+        publicDescriptor = JSON.parse(Buffer.from(publicRaw).toString("utf8"));
+        privateBundle = JSON.parse(Buffer.from(privateRaw).toString("utf8"));
+      } catch (error) {
+        throw new Error(`debug variant: challenge bundle is not valid JSON (${request.challengeId})`, { cause: error });
+      }
+
+      // 装载管线(Schema → 检查器 → 编译期校验):拒绝即拒绝,不产部分变体。
+      const loaded = loadChallengePair({ publicDescriptor, privateBundle });
+      if (!loaded.ok) {
+        log?.warn(
+          {
+            challengeId: request.challengeId,
+            challengeVersion: request.challengeContentVersion,
+            violationRuleIds: loaded.violations.map((item) => item.ruleId),
+          },
+          "debug variant rejected by compiler load pipeline",
+        );
+        throw new Error(
+          `debug variant: challenge load rejected for ${request.challengeId} (${loaded.violations.length} violations)`,
+        );
+      }
+
+      // ASLR 开关(WP-43 公开描述包声明面镜像;缺省 false = 固定基址)。
+      const aslrEnabled = readAslrEnabled(publicDescriptor);
+      // 调试种子:每次供给现场生成(缺省随机 16 字节);不落存储不入日志。
+      const debugSeedHex = deps.generateDebugSeedHex?.() ?? randomBytes(16).toString("hex");
+      const options: DebugVariantBuildOptions = { debugSeedHex, aslrEnabled };
+      // 出口即过冻结 Schema(契约形态在装配点自证;拒绝 = 实现缺陷)。
+      return DebugVariantBundleSchema.parse(buildDebugVariantBundle(loaded.challenge, options));
     },
   };
+}
+
+/** 公开描述包 aslrEnabled 读取(最小豁免面;缺省 false,与 WP-43 缺省语义一致)。 */
+function readAslrEnabled(publicDescriptor: unknown): boolean {
+  const declared = (publicDescriptor as { aslrEnabled?: unknown } | undefined)?.aslrEnabled;
+  return declared === true;
 }
 
 /** 占位语料隐藏区域内容(固定字节,非真实秘密;零装载演示面)。 */

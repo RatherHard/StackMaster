@@ -1,0 +1,255 @@
+{
+  "algorithmId": "splitmix64-stream-v1",
+  "vectorSetVersion": 1,
+  "description": "SeedDeriver 跨语言黄金向量(WP-42;权威实现 vm-engine/vm-core/src/judge/seed.rs,TS 移植 packages/challenge-compiler/src/seed/seed-deriver.ts)。drawVectors:第 k 次(k 自 1 起)next_u64 的期望值,十进制与 hex 双写(十进制以字符串承载,防 JSON 消费方 >2^53 精度丢失)。baseAddressVectors:ASLR 基址映射样例(D-J10 定案)——首个 draw 值按 firstDrawU64Hex 登记,映射 = 掩蔽(2^archBits−1)→ 页整除(向下对齐)→ 对 windowPages=(2^archBits−span)divpageSize 取模 → ×pageSize。",
+  "drawVectors": [
+    {
+      "seedHex": "0000000000000000",
+      "draw": 1,
+      "expectedU64Decimal": "7855136608771631560",
+      "expectedU64Hex": "0x6d030d209bffe9c8"
+    },
+    {
+      "seedHex": "0000000000000000",
+      "draw": 2,
+      "expectedU64Decimal": "7084074658102827526",
+      "expectedU64Hex": "0x624fb05e5690da06"
+    },
+    {
+      "seedHex": "0000000000000000",
+      "draw": 3,
+      "expectedU64Decimal": "5138894303322967246",
+      "expectedU64Hex": "0x475105244fd80cce"
+    },
+    {
+      "seedHex": "ffffffffffffffff",
+      "draw": 1,
+      "expectedU64Decimal": "5674706169013440435",
+      "expectedU64Hex": "0x4ec09b31e0c38fb3"
+    },
+    {
+      "seedHex": "ffffffffffffffff",
+      "draw": 2,
+      "expectedU64Decimal": "14811630148920477846",
+      "expectedU64Hex": "0xcd8d7b2522df0896"
+    },
+    {
+      "seedHex": "ffffffffffffffff",
+      "draw": 3,
+      "expectedU64Decimal": "3018613225539371973",
+      "expectedU64Hex": "0x29e444bc3e9203c5"
+    },
+    {
+      "seedHex": "deadbeef01020304",
+      "draw": 1,
+      "expectedU64Decimal": "16788880117441272953",
+      "expectedU64Hex": "0xe8fe1583f8b49c79"
+    },
+    {
+      "seedHex": "deadbeef01020304",
+      "draw": 2,
+      "expectedU64Decimal": "12185461215758538759",
+      "expectedU64Hex": "0xa91b746a15965807"
+    },
+    {
+      "seedHex": "deadbeef01020304",
+      "draw": 3,
+      "expectedU64Decimal": "585035283449151154",
+      "expectedU64Hex": "0x81e767d9b0e7eb2"
+    },
+    {
+      "seedHex": "0123456789abcdef",
+      "draw": 1,
+      "expectedU64Decimal": "16667829263146513646",
+      "expectedU64Hex": "0xe7500667a6b574ee"
+    },
+    {
+      "seedHex": "0123456789abcdef",
+      "draw": 2,
+      "expectedU64Decimal": "7730296177878017850",
+      "expectedU64Hex": "0x6b47876abafaa73a"
+    },
+    {
+      "seedHex": "0123456789abcdef",
+      "draw": 3,
+      "expectedU64Decimal": "17838488126777741736",
+      "expectedU64Hex": "0xf78f0a705e9c51a8"
+    },
+    {
+      "seedHex": "aaaaaaaaaaaaaaaaaa",
+      "draw": 1,
+      "expectedU64Decimal": "4332360338600723112",
+      "expectedU64Hex": "0x3c1fa2c62d4982a8"
+    },
+    {
+      "seedHex": "aaaaaaaaaaaaaaaaaa",
+      "draw": 2,
+      "expectedU64Decimal": "17803690180438241013",
+      "expectedU64Hex": "0xf71369e42021aef5"
+    },
+    {
+      "seedHex": "aaaaaaaaaaaaaaaaaa",
+      "draw": 3,
+      "expectedU64Decimal": "11039973409418761622",
+      "expectedU64Hex": "0x9935dd52d629d596"
+    },
+    {
+      "seedHex": "00112233445566778899aabbccddeeff",
+      "draw": 1,
+      "expectedU64Decimal": "18373132155399693017",
+      "expectedU64Hex": "0xfefa7a59ade7e2d9"
+    },
+    {
+      "seedHex": "00112233445566778899aabbccddeeff",
+      "draw": 2,
+      "expectedU64Decimal": "9784478259393559262",
+      "expectedU64Hex": "0x87c97322f3af7ade"
+    },
+    {
+      "seedHex": "00112233445566778899aabbccddeeff",
+      "draw": 3,
+      "expectedU64Decimal": "15414040668746240023",
+      "expectedU64Hex": "0xd5e9ac52360b5017"
+    },
+    {
+      "seedHex": "000102030405060708090a0b0c0d0e0f",
+      "draw": 1,
+      "expectedU64Decimal": "989750666303279979",
+      "expectedU64Hex": "0xdbc4cfcb136936b"
+    },
+    {
+      "seedHex": "000102030405060708090a0b0c0d0e0f",
+      "draw": 2,
+      "expectedU64Decimal": "4295494065830284546",
+      "expectedU64Hex": "0x3b9ca918289ccd02"
+    },
+    {
+      "seedHex": "000102030405060708090a0b0c0d0e0f",
+      "draw": 3,
+      "expectedU64Decimal": "7332241534244650859",
+      "expectedU64Hex": "0x65c15ad3d8047f6b"
+    },
+    {
+      "seedHex": "c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7",
+      "draw": 1,
+      "expectedU64Decimal": "14381826283341745678",
+      "expectedU64Hex": "0xc79682ce77f60e0e"
+    },
+    {
+      "seedHex": "c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7",
+      "draw": 2,
+      "expectedU64Decimal": "14750142416285688461",
+      "expectedU64Hex": "0xccb30860c521628d"
+    },
+    {
+      "seedHex": "c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7",
+      "draw": 3,
+      "expectedU64Decimal": "4144032038512889522",
+      "expectedU64Hex": "0x39828f2ed9660eb2"
+    },
+    {
+      "seedHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "draw": 1,
+      "expectedU64Decimal": "6548145388585114841",
+      "expectedU64Hex": "0x5adfaf89903a5cd9"
+    },
+    {
+      "seedHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "draw": 2,
+      "expectedU64Decimal": "5114467616064416322",
+      "expectedU64Hex": "0x46fa3d32fec22a42"
+    },
+    {
+      "seedHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "draw": 3,
+      "expectedU64Decimal": "14242753985844628961",
+      "expectedU64Hex": "0xc5a86d49ed8c4de1"
+    },
+    {
+      "seedHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "draw": 1,
+      "expectedU64Decimal": "13995971071226000122",
+      "expectedU64Hex": "0xc23bad891311b2fa"
+    },
+    {
+      "seedHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "draw": 2,
+      "expectedU64Decimal": "8676960770661071846",
+      "expectedU64Hex": "0x786ac1d93140bbe6"
+    },
+    {
+      "seedHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "draw": 3,
+      "expectedU64Decimal": "14511332416221590876",
+      "expectedU64Hex": "0xc9629bf2be7fb55c"
+    },
+    {
+      "seedHex": "deadbeef01020304",
+      "draw": 1000,
+      "expectedU64Decimal": "16574824516850010706",
+      "expectedU64Hex": "0xe6059b14b547ca52"
+    },
+    {
+      "seedHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "draw": 1000,
+      "expectedU64Decimal": "14587099910171775749",
+      "expectedU64Hex": "0xca6fca1520ebd305"
+    }
+  ],
+  "baseAddressVectors": [
+    {
+      "name": "64-bit two-page span (default pair geometry)",
+      "seedHex": "deadbeef01020304",
+      "archBits": 64,
+      "pageSizeBytes": 4096,
+      "structuralSpanBytes": 8192,
+      "firstDrawU64Hex": "0xe8fe1583f8b49c79",
+      "expectedBaseAddressHex": "0xe8fe1583f8b49000"
+    },
+    {
+      "name": "64-bit three-page span",
+      "seedHex": "00112233445566778899aabbccddeeff",
+      "archBits": 64,
+      "pageSizeBytes": 4096,
+      "structuralSpanBytes": 12288,
+      "firstDrawU64Hex": "0xfefa7a59ade7e2d9",
+      "expectedBaseAddressHex": "0xfefa7a59ade7e000"
+    },
+    {
+      "name": "64-bit single page",
+      "seedHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "archBits": 64,
+      "pageSizeBytes": 4096,
+      "structuralSpanBytes": 4096,
+      "firstDrawU64Hex": "0x5adfaf89903a5cd9",
+      "expectedBaseAddressHex": "0x5adfaf89903a5000"
+    },
+    {
+      "name": "32-bit two-page span",
+      "seedHex": "ffffffffffffffff",
+      "archBits": 32,
+      "pageSizeBytes": 4096,
+      "structuralSpanBytes": 8192,
+      "firstDrawU64Hex": "0x4ec09b31e0c38fb3",
+      "expectedBaseAddressHex": "0xe0c38000"
+    },
+    {
+      "name": "32-bit single page zero seed",
+      "seedHex": "0000000000000000",
+      "archBits": 32,
+      "pageSizeBytes": 4096,
+      "structuralSpanBytes": 4096,
+      "firstDrawU64Hex": "0x6d030d209bffe9c8",
+      "expectedBaseAddressHex": "0x9bffe000"
+    },
+    {
+      "name": "64-bit default-fixture seed 16 pages span",
+      "seedHex": "00112233445566778899aabbccddeeff",
+      "archBits": 64,
+      "pageSizeBytes": 4096,
+      "structuralSpanBytes": 65536,
+      "firstDrawU64Hex": "0xfefa7a59ade7e2d9",
+      "expectedBaseAddressHex": "0xfefa7a59ade7e000"
+    }
+  ]
+}
