@@ -594,6 +594,11 @@ pub struct EncodingOperandExtract {
     pub base_register: Option<String>,
     #[serde(default)]
     pub interface_id: Option<u64>,
+    /// 内联立即数字宽(公开描述包 Schema 冻结 `width: const "arch"`,v1 唯一
+    /// 合法值;镜像在此与 Schema 对齐——缺失即先前形态拒绝字节模式立即数,
+    /// WP-41 调试变体路径依赖同面)。转换层按 archBits 承载,值不另行消费。
+    #[serde(default)]
+    pub width: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -618,4 +623,84 @@ pub struct ResourceLimitsExtract {
     pub rollback_budget_per_session: Option<u64>,
     #[serde(default)]
     pub max_write_bytes_per_action: Option<u64>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DebugVariantBundle(调试通道协议 v1;schema/debug-variant-bundle.schema.json,
+// WP-40 冻结;ADR-DC1 条款 2/5:无 judgingConfig / 隐藏测试 / seed 值字段,
+// strictObject 排除面由 Schema 承担)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// seed 派生算法标识(封闭字面量):与 `DEBUG_VARIANT_SEED_ALGORITHM_ID`
+/// (packages/protocol)同一冻结字面量的重复冻结;一致性由 contract-smoke
+/// 机检(本 crate 不依赖 TS 产物)。
+pub const DEBUG_VARIANT_SEED_ALGORITHM_ID: &str = "splitmix64-stream-v1";
+
+/// 调试变体镜像区域(与私有包 initialState.memoryRegions 逐字段同构;
+/// 秘密值已由编译器派生写入 contentHex)。
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantRegionMirror {
+    pub region_id: String,
+    pub kind: RegionKind,
+    pub start_address_hex: String,
+    pub byte_length: u64,
+    pub permissions: String,
+    pub content_hex: String,
+    pub is_hidden: bool,
+}
+
+/// 调试变体初始寄存器条目(RIP 抽出为初始指令指针,与真实装载同构)。
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantRegisterMirror {
+    pub name: String,
+    pub value_hex: String,
+}
+
+/// canary 槽位(值已派生写入所属区域 contentHex,槽对象不携带值)。
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantCanarySlotMirror {
+    pub object_id: String,
+    pub kind: String,
+    pub address_hex: String,
+    pub byte_length: u64,
+    pub visibility: ObjectVisibility,
+    pub contains_secret: bool,
+}
+
+/// ASLR 派生基址条目(regionId 引用 memoryRegions 数组成员)。
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantBaseAddressMirror {
+    pub region_id: String,
+    pub address_hex: String,
+}
+
+/// 派生元数据(无种子值字段:只登记算法标识与派生次数)。
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantDerivationMirror {
+    pub algorithm_id: String,
+    pub draws: u64,
+    #[serde(default)]
+    pub base_addresses: Option<Vec<DebugVariantBaseAddressMirror>>,
+}
+
+/// 调试变体镜像根(整体 SERVER_ONLY;编排器 ↔ 调试 worker 进程间契约)。
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DebugVariantBundleMirror {
+    pub schema_version: u32,
+    pub engine_process_protocol_version: u64,
+    pub challenge_id: String,
+    pub challenge_content_version: String,
+    pub vm_profile_version: String,
+    pub aslr_enabled: bool,
+    pub derivation: DebugVariantDerivationMirror,
+    pub memory_regions: Vec<DebugVariantRegionMirror>,
+    pub registers: Vec<DebugVariantRegisterMirror>,
+    #[serde(default)]
+    pub canary_slots: Option<Vec<DebugVariantCanarySlotMirror>>,
 }

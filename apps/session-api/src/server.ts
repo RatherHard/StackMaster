@@ -76,6 +76,8 @@ export interface SessionApiServerDeps {
   readonly sessionRoutes?: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5 装配,D-API-40)。 */
   readonly wssChannel?: FastifyPluginAsync;
+  /** 调试通道插件(GET /sessions/debug-channel;阶段四 WP-41,须在 wssChannel 之后注册)。 */
+  readonly debugChannel?: FastifyPluginAsync;
   /** 指标端点插件(GET /metrics;WP-8 装配,D-API-70;缺省不挂载)。 */
   readonly metricsPlugin?: FastifyPluginAsync;
   /** readiness 探针(缺省 = 依赖未接线,readyz 恒 503)。 */
@@ -149,6 +151,9 @@ export function buildServer(
   }
   if (deps.wssChannel !== undefined) {
     app.register(deps.wssChannel);
+  }
+  if (deps.debugChannel !== undefined) {
+    app.register(deps.debugChannel);
   }
   if (deps.metricsPlugin !== undefined) {
     app.register(deps.metricsPlugin);

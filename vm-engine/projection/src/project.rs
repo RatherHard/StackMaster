@@ -373,7 +373,7 @@ fn render_instruction_text(
         Program::Ir { instructions, .. } => {
             let index = usize::try_from(address).ok();
             match index.and_then(|index| instructions.get(index)) {
-                Some(instruction) => render_instruction(instruction, view, memory.arch()),
+                Some(instruction) => render_instruction(instruction, view.customs, memory.arch()),
                 None => String::from(UNDECODABLE_TEXT),
             }
         }
@@ -389,7 +389,7 @@ fn render_instruction_text(
                         .map_err(|_| ())
                 });
             match window {
-                Ok(instruction) => render_instruction(&instruction, view, memory.arch()),
+                Ok(instruction) => render_instruction(&instruction, view.customs, memory.arch()),
                 Err(()) => String::from(UNDECODABLE_TEXT),
             }
         }
@@ -397,10 +397,11 @@ fn render_instruction_text(
 }
 
 /// 层 1 指令 → 展示文本:`助记符 操作数, 操作数`;自定义指令使用
-/// displayText(静态模板类)。
-fn render_instruction(
+/// displayText(静态模板类)。`pub(crate)`:调试通道展示数据生成
+/// ([`crate::display`])复用同一译码语义(D5 单点)。
+pub(crate) fn render_instruction(
     instruction: &vm_core::instr::Instruction,
-    view: &GenerationView<'_>,
+    customs: &alloc::collections::BTreeMap<String, vm_core::instr::CustomInstructionDef>,
     arch: ArchBits,
 ) -> String {
     let mut text = String::new();
@@ -409,7 +410,7 @@ fn render_instruction(
         Op::Custom(name) => {
             // displayText 优先(层 3 展示面);未声明(理论不可达,装载镜像
             // 已拒)退回助记符本身。
-            match view.customs.get(name) {
+            match customs.get(name) {
                 Some(def) => text.push_str(&def.display_text),
                 None => text.push_str(name),
             }

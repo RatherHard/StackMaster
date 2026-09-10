@@ -140,6 +140,14 @@ export interface LiveSessionManagerDeps {
   readonly metrics?: SessionMetrics;
   /** 可注入 worker 进程描述(测试假 worker;缺省由 session-core 定位真实二进制)。 */
   readonly workerCommand?: WorkerCommandSpec;
+  /**
+   * 会话终态 / close 通知钩子(WP-41:调试实例同步回收的挂载点;close 与
+   * 断线保持到期回收两条终态路径都会触发;缺省 = 无挂载)。
+   */
+  readonly onSessionClosed?: (session: {
+    readonly sessionId: string;
+    readonly tenantId: string;
+  }) => void | Promise<void>;
   readonly now?: () => number;
 }
 
@@ -204,6 +212,26 @@ export class LiveSessionManager {
   /** 在途会话数(可观测 / 测试断言)。 */
   get liveCount(): number {
     return this.#live.size;
+  }
+
+  /**
+   * 会话摘要定位(WP-41 调试实例编排的会话锚定面):存在性 + 租户绑定 +
+   * 题目身份与权威 revision。不存在 / 已关闭 / 租户不匹配同形返回 null
+   * (防枚举,与 #lookup 同纪律)。
+   */
+  getSessionSummary(
+    sessionId: string,
+    tenantId: string,
+  ): { challengeId: string; challengeVersion: string; revision: number } | null {
+    const entry = this.#lookup(sessionId, tenantId);
+    if (entry === null) {
+      return null;
+    }
+    return {
+      challengeId: entry.challengeId,
+      challengeVersion: entry.challengeVersion,
+      revision: entry.session.revision,
+    };
   }
 
   /** 指定租户的在途会话数(并发预算快检源;不含入场预留,D-API-52)。 */
@@ -481,6 +509,9 @@ export class LiveSessionManager {
     await this.#deps.sessions.updateSessionPhase(sessionId, tenantId, "closed");
     this.#live.delete(sessionId);
     this.#syncSessionGauges();
+    // 会话终态通知(WP-41:调试实例同步回收挂载点;失败只进受控日志,
+    // 不改变 close 语义)。
+    await this.#notifySessionClosed(sessionId, tenantId);
     this.#log.info({ sessionId, tenantId }, "session closed");
     return { revision };
   }
@@ -609,6 +640,8 @@ export class LiveSessionManager {
     await this.#deps.sessions.updateSessionPhase(sessionId, tenantId, "closed");
     this.#live.delete(sessionId);
     this.#syncSessionGauges();
+    // 会话终态通知(WP-41:调试实例同步回收挂载点;失败只进受控日志)。
+    await this.#notifySessionClosed(sessionId, tenantId);
     await this.#deps.audit.append({
       kind: "session_force_closed",
       at: (this.#deps.now ?? Date.now)(),
@@ -753,6 +786,22 @@ export class LiveSessionManager {
       return null; // 租户不匹配与不存在同形态(防枚举)
     }
     return entry;
+  }
+
+  /** 会话终态通知(WP-41 挂载点;失败只进受控日志,不改变终态语义)。 */
+  async #notifySessionClosed(sessionId: string, tenantId: string): Promise<void> {
+    try {
+      await this.#deps.onSessionClosed?.({ sessionId, tenantId });
+    } catch (error) {
+      this.#log.warn(
+        {
+          sessionId,
+          tenantId,
+          reason: error instanceof Error ? error.message : "session-closed notify failed",
+        },
+        "onSessionClosed hook failed (session close semantics unchanged)",
+      );
+    }
   }
 
   /** 会话定位失败统一形态(不存在 / 已关闭回收 / 租户不匹配同形;路由层映射 404 防枚举)。 */

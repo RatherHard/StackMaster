@@ -1,12 +1,15 @@
 /**
  * 指标面最小集(阶段三 WP-8;计划书 5.8 可观测清单的 MVP 子集,D-API-70)。
  *
- * 五个指标族(Prometheus 文本格式,经 GET /metrics 暴露):
+ * 指标族(Prometheus 文本格式,经 GET /metrics 暴露;阶段四 WP-41 增调试面):
  *   - session_api_action_rtt_seconds        动作 RTT(histogram;p50/p95 由分位计算)
  *   - session_api_live_sessions             并发会话数(gauge)
  *   - session_api_action_queue_depth        编排器动作队列深度(gauge;manager 在途动作调用数)
  *   - session_api_worker_processes          Worker 池占用(gauge;T0 每会话单进程,D-API-72)
  *   - session_api_projection_delta_bytes    投影增量字节数(histogram;已接受动作)
+ *   - session_api_debug_worker_processes    调试 worker 占用(gauge;WP-41)
+ *   - session_api_debug_frames_total        调试通道帧计数(counter;WP-41)
+ *   - session_api_debug_budget_rejections_total  调试帧限额拒绝计数(counter;挤占观察)
  *
  * 标签纪律(D-API-71,机检可断言):
  *  - 指标名与标签名取白名单(METRIC_FAMILIES;`assertMetricsTextDiscipline`
@@ -51,7 +54,7 @@ export interface MetricFamilySpec {
   readonly name: string;
   readonly help: string;
   readonly labels: readonly string[];
-  readonly type: "histogram" | "gauge";
+  readonly type: "histogram" | "gauge" | "counter";
 }
 
 export const METRIC_FAMILIES: readonly MetricFamilySpec[] = [
@@ -85,6 +88,24 @@ export const METRIC_FAMILIES: readonly MetricFamilySpec[] = [
     labels: ["action"],
     type: "histogram",
   },
+  {
+    name: "session_api_debug_worker_processes",
+    help: "调试 worker 占用(本编排器进程持有的调试实例子进程数;按需 +1,WP-41)",
+    labels: [],
+    type: "gauge",
+  },
+  {
+    name: "session_api_debug_frames_total",
+    help: "调试通道帧计数(按帧类型与结果;类型取 5 值请求帧 + other 兜底,WP-41)",
+    labels: ["frame", "outcome"],
+    type: "counter",
+  },
+  {
+    name: "session_api_debug_budget_rejections_total",
+    help: "调试帧被每会话动作预算拒绝计数(与解题共用同一预算的挤占观察,ADR-DC1 条款 6)",
+    labels: [],
+    type: "counter",
+  },
 ];
 
 /** 动作 RTT 直方图分桶(秒):覆盖本地亚毫秒到看门狗超时上限的量级。 */
@@ -98,9 +119,23 @@ export const PROJECTION_BYTES_BUCKETS: readonly number[] = [
   524288, 1048576,
 ];
 
+/** 调试通道帧类型标签值(有界域:5 值请求帧 + `other` 兜底,基数防护)。 */
+export const KNOWN_DEBUG_FRAME_TYPES: ReadonlySet<string> = new Set([
+  "debug_attach",
+  "debug_window",
+  "debug_step",
+  "debug_run_to_breakpoint",
+  "debug_search",
+]);
+
 /** 动作标签值折叠:非冻结动作类型折叠为 `other`(基数防护兜底)。 */
 function actionLabel(actionType: string): string {
   return KNOWN_ACTION_TYPES.has(actionType) ? actionType : "other";
+}
+
+/** 调试帧类型标签值折叠:非 5 值请求帧折叠为 `other`(基数防护兜底)。 */
+function debugFrameLabel(frameType: string): string {
+  return KNOWN_DEBUG_FRAME_TYPES.has(frameType) ? frameType : "other";
 }
 
 /** 指标面(纯观测;任何方法不得抛错打断业务路径——prom-client 同步更新)。 */
@@ -111,6 +146,9 @@ export class SessionMetrics {
   readonly #queueDepth: client.Gauge;
   readonly #workerProcesses: client.Gauge;
   readonly #projectionBytes: client.Histogram<"action">;
+  readonly #debugWorkerProcesses: client.Gauge;
+  readonly #debugFrames: client.Counter<"frame" | "outcome">;
+  readonly #debugBudgetRejections: client.Counter;
 
   constructor(registry: client.Registry = new client.Registry()) {
     this.#registry = registry;
@@ -150,6 +188,22 @@ export class SessionMetrics {
       buckets: [...PROJECTION_BYTES_BUCKETS],
       registers: [registry],
     });
+    this.#debugWorkerProcesses = new client.Gauge({
+      name: "session_api_debug_worker_processes",
+      help: spec(5).help,
+      registers: [registry],
+    });
+    this.#debugFrames = new client.Counter({
+      name: "session_api_debug_frames_total",
+      help: spec(6).help,
+      labelNames: ["frame", "outcome"] as const,
+      registers: [registry],
+    });
+    this.#debugBudgetRejections = new client.Counter({
+      name: "session_api_debug_budget_rejections_total",
+      help: spec(7).help,
+      registers: [registry],
+    });
   }
 
   /** 动作 RTT 观测(秒)。 */
@@ -177,6 +231,21 @@ export class SessionMetrics {
   /** Worker 池占用置值(T0 每会话单进程)。 */
   setWorkerProcesses(count: number): void {
     this.#workerProcesses.set(count);
+  }
+
+  /** 调试 worker 占用置值(调试编排器是唯一真源;WP-41)。 */
+  setDebugWorkerProcesses(count: number): void {
+    this.#debugWorkerProcesses.set(count);
+  }
+
+  /** 调试通道帧计数(WP-41;outcome 有界三值,语义同 ActionOutcome)。 */
+  observeDebugFrame(frameType: string, outcome: ActionOutcome): void {
+    this.#debugFrames.inc({ frame: debugFrameLabel(frameType), outcome });
+  }
+
+  /** 调试帧被每会话动作预算拒绝计数(挤占观察,ADR-DC1 条款 6)。 */
+  observeDebugBudgetRejection(): void {
+    this.#debugBudgetRejections.inc();
   }
 
   /** 渲染 Prometheus 文本格式(经 /metrics 暴露;输出受白名单机检约束)。 */

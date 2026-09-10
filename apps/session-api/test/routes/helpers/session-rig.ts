@@ -15,7 +15,10 @@ import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
 import type { EmbedTokenClaims } from "@stackmaster/protocol/server-only";
 import type { WssFrame } from "@stackmaster/protocol";
-import { buildIrPair } from "../../../../../packages/challenge-compiler/test/helpers/private-bundle.js";
+import {
+  buildBytePair,
+  buildIrPair,
+} from "../../../../../packages/challenge-compiler/test/helpers/private-bundle.js";
 import {
   InMemoryAuditSink,
   InMemoryCredentialRevocationStore,
@@ -37,6 +40,12 @@ import {
   keepaliveExpiryReaper,
 } from "../../../src/limits/index.js";
 import { buildWssChannel, WSS_CHANNEL_ROUTE, type SessionConnectionRegistry } from "../../../src/wss/index.js";
+import {
+  DEBUG_CHANNEL_ROUTE,
+  DebugChannelOrchestrator,
+  buildDebugChannel,
+  placeholderDebugVariantProvider,
+} from "../../../src/debug/index.js";
 import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../../src/auth/cookie.js";
 import { LiveSessionManager } from "../../../src/sessions/session-manager.js";
 import {
@@ -92,6 +101,19 @@ export function fakeWorkerCommand(mode: FakeWorkerMode = "replay") {
   };
 }
 
+/** 调试面假 worker 路径(实现 load_variant + debug_* 命令最小子集;WP-41)。 */
+const FAKE_DEBUG_WORKER = fileURLToPath(
+  new URL("../../debug/helpers/fake-debug-worker.mjs", import.meta.url),
+);
+
+/** 调试面假 worker 进程描述(WP-41)。 */
+export function fakeDebugWorkerCommand() {
+  return {
+    command: process.execPath,
+    args: [FAKE_DEBUG_WORKER],
+  };
+}
+
 export function makeEmbedSessionId(): string {
   return randomBytes(16).toString("base64url");
 }
@@ -106,6 +128,18 @@ export interface SessionRigOptions {
    * 会话 gauges),供指标接线测试消费。
    */
   readonly metrics?: import("../../../src/metrics/metrics.js").SessionMetrics;
+  /**
+   * 调试通道装配面(阶段四 WP-41;缺省 = 占位变体供给 + 假调试 worker,
+   * 与 runtime.ts 同一装配拓扑)。选项:
+   *  - `workerCommand`:调试 worker 进程描述(缺省 = fake-debug-worker);
+   *  - `idleRecycleSeconds`:空闲回收窗口(缺省 = 保持窗口数值);
+   *  - `enabled`:false = 不装配调试通道(通道红灯基线)。
+   */
+  readonly debug?: {
+    readonly enabled?: boolean;
+    readonly workerCommand?: { readonly command: string; readonly args?: readonly string[] };
+    readonly idleRecycleSeconds?: number;
+  };
   /**
    * WSS 通道数值面(测试注入亚秒值以加速心跳 / 空闲 / 保持窗口行为验证;
    * 缺省取 config 默认值。与 runtime.ts 同一装配拓扑,仅数值面可覆写)。
@@ -137,6 +171,8 @@ export interface SessionTestRig {
   readonly issuanceStore: InMemoryTokenIssuanceStore;
   readonly revocationStore: InMemoryCredentialRevocationStore;
   readonly sessions: MemorySessionRepository;
+  /** 题目双包对象存储(内存实现;调试变体 provider 的公开描述包读取源)。 */
+  readonly bundles: MemoryChallengeBundleStore;
   readonly snapshots: MemorySnapshotStore;
   readonly submissions: SubmissionStore;
   /** 幂等窗口(WP-5 动作通道前置守卫的内存后端;与生产同接口)。 */
@@ -153,10 +189,21 @@ export interface SessionTestRig {
   readonly routeStore: MemoryRouteStore;
   /** WSS 连接注册表(多连接踢旧 / 断线保持计时器 / 停机关闭)。 */
   readonly wssRegistry: SessionConnectionRegistry;
+  /** 调试实例编排器(WP-41;回收断言 / dispose 面)。 */
+  readonly debugOrchestrator: DebugChannelOrchestrator;
+  /** 建立已认证的调试通道连接(injectWS;Cookie 呈递升级凭证)。 */
+  connectDebugChannel(cookie: string, headers?: Record<string, string>): Promise<RigWssClient>;
   /** rig 级出站帧录制器(WP-7 录制机检的捕获面;全部测试隐式可用)。 */
   readonly outboundRecorder: OutboundFrameRecorder;
   /** 建立已认证的 WSS 通道连接(injectWS;Cookie 呈递升级凭证,D-API-12)。 */
   connectChannel(cookie: string, headers?: Record<string, string>): Promise<RigWssClient>;
+  /** 登记测试题目双包(字节模式;调试变体路径的公开编码表面)。 */
+  registerByteChallenge(input?: {
+    readonly challengeId?: string;
+    readonly challengeVersion?: string;
+    readonly tenantId?: string;
+    readonly byteProgramHex?: string;
+  }): Promise<void>;
   /** 登记测试题目双包(IR 模式最小合法对;装载管线真实校验)。 */
   registerChallenge(input?: {
     readonly challengeId?: string;
@@ -207,6 +254,27 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
   const signer = await createTokenSigner(config.signingKey);
 
   // ── 会话管理器(假 worker 注入;WP-6 执行面与生产装配同源)──
+  // ── 调试实例编排器(阶段四 WP-41;占位变体供给 + 假调试 worker)──
+  const debugOrchestrator = new DebugChannelOrchestrator({
+    manager: {
+      getSessionSummary: (sessionId, tenantId) => managerRef.current?.getSessionSummary(sessionId, tenantId) ?? null,
+      listCheckpoints: async (sessionId, tenantId) =>
+        (await managerRef.current?.listCheckpoints(sessionId, tenantId)) ?? [],
+    },
+    variantProvider: placeholderDebugVariantProvider({
+      getPublic: async (challengeId, version) => bundles.getPublic(challengeId, version),
+    }),
+    bundles,
+    actionLog,
+    logger,
+    idleRecycleSeconds: options.debug?.idleRecycleSeconds ?? config.disconnectKeepaliveSeconds,
+    runToBreakpointMaxSteps: 10_000,
+    workerCommand: options.debug?.workerCommand ?? fakeDebugWorkerCommand(),
+    ...(now === undefined ? {} : { now }),
+  });
+  // manager 惰性绑定(编排器先于 manager 构造;闭包在请求期消费)。
+  const managerRef: { current: LiveSessionManager | null } = { current: null };
+
   const manager = new LiveSessionManager({
     registry,
     bundles,
@@ -225,9 +293,11 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     },
     maxConcurrentSessionsPerTenant: config.maxConcurrentSessionsPerTenant,
     ...(options.metrics === undefined ? {} : { metrics: options.metrics }),
+    onSessionClosed: ({ sessionId, tenantId }) => debugOrchestrator.recycleSession(sessionId, tenantId),
     ...(now === undefined ? {} : { now }),
     workerCommand: fakeWorkerCommand(options.workerMode ?? "replay"),
   });
+  managerRef.current = manager;
 
   // ── WP-6 限流面(与 runtime.ts 同一拓扑;内存计数器载体)──
   const requestRateGate = new FixedWindowRateGate({
@@ -301,6 +371,31 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     ...(now === undefined ? {} : { now }),
   });
 
+  // 调试通道(阶段四 WP-41;须在既有 WSS 通道之后注册——@fastify/websocket
+  // 装饰器由前者注册,后者复用同一装饰面)。
+  const debugChannelPlugin =
+    options.debug?.enabled === false
+      ? undefined
+      : buildDebugChannel({
+          orchestrator: debugOrchestrator,
+          signer,
+          revocationStore,
+          allowedOrigins: config.allowedOrigins,
+          logger,
+          heartbeatIntervalSeconds: options.wss?.heartbeatIntervalSeconds ?? config.wssHeartbeatIntervalSeconds,
+          idleTimeoutSeconds: options.wss?.idleTimeoutSeconds ?? config.wssIdleTimeoutSeconds,
+          messageRatePerSecond: wssMessageRatePerSecond,
+          sessionActionLimiter,
+          sendBufferLimit: options.wss?.sendBufferLimit ?? config.wssSendBufferLimit,
+          limits: {
+            maxJsonDepth: config.maxJsonDepth,
+            maxArrayLength: 256,
+            maxStringLength: 4096,
+          },
+          ...(options.metrics === undefined ? {} : { metrics: options.metrics }),
+          ...(now === undefined ? {} : { now }),
+        });
+
   const app = buildServer(config, logger, {
     authPlugin: buildAuthPlugin({ config, signer, issuanceStore, revocationStore, audit }),
     sessionRoutes: buildSessionRoutes({
@@ -325,6 +420,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
       ...(now === undefined ? {} : { now }),
     }),
     wssChannel: wssChannel.plugin,
+    ...(debugChannelPlugin === undefined ? {} : { debugChannel: debugChannelPlugin }),
   });
   await app.ready();
 
@@ -339,6 +435,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     issuanceStore,
     revocationStore,
     sessions,
+    bundles,
     snapshots,
     submissions,
     idempotencyWindow,
@@ -348,12 +445,79 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     sessionActionLimiter,
     routeStore,
     wssRegistry: wssChannel.registry,
+    debugOrchestrator,
     outboundRecorder,
+    async connectDebugChannel(cookie: string, headers: Record<string, string> = {}) {
+      return app.injectWS(DEBUG_CHANNEL_ROUTE, {
+        headers: { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}`, ...headers },
+      });
+    },
     async connectChannel(cookie: string, headers: Record<string, string> = {}) {
       return app.injectWS(WSS_CHANNEL_ROUTE, {
         headers: { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}`, ...headers },
       });
     },
+    async registerByteChallenge(input?: {
+      challengeId?: string;
+      challengeVersion?: string;
+      tenantId?: string;
+      byteProgramHex?: string;
+    }): Promise<void> {
+      const challengeId = input?.challengeId ?? TEST_CHALLENGE_ID;
+      const challengeVersion = input?.challengeVersion ?? TEST_CHALLENGE_VERSION;
+      const tenantId = input?.tenantId ?? TEST_TENANT_ID;
+      const pair = buildBytePair({
+        ...(input?.byteProgramHex === undefined ? {} : { byteProgramHex: input.byteProgramHex }),
+        mutate: (mutable) => {
+          const descriptor = mutable.publicDescriptor as unknown as {
+            challengeId: string;
+            challengeContentVersion: string;
+            initialProjection: { visibleRegisters: { name: string; valueHex: string }[] };
+          };
+          descriptor.challengeId = challengeId;
+          descriptor.challengeContentVersion = challengeVersion;
+          const bundle = mutable.privateBundle as {
+            challengeId: string;
+            challengeContentVersion: string;
+            initialState: { registers: Record<string, string> };
+            entrypointAddressHex: string;
+          };
+          bundle.challengeId = challengeId;
+          bundle.challengeContentVersion = challengeVersion;
+          // 初始 RIP 对齐字节程序入口(缺省镜像公开包的 0x400100 填充区;
+          // 调试变体与真实实例同源取值,重放对齐要求两者一致)。
+          const rip = descriptor.initialProjection.visibleRegisters.find((r) => r.name === "RIP");
+          if (rip !== undefined) {
+            rip.valueHex = bundle.entrypointAddressHex;
+          }
+          bundle.initialState.registers["RIP"] = bundle.entrypointAddressHex;
+        },
+      });
+      await registry.upsertChallenge({ challengeId, tenantId });
+      await registry.insertChallengeVersion({
+        challengeId,
+        contentVersion: challengeVersion,
+        tenantId,
+        vmProfileVersion: "1.0.0",
+        privateBundleSha256: "00",
+        publicDescriptorSha256: "00",
+        privateBundleObject: `${challengeId}/${challengeVersion}/bundle.json`,
+        publicDescriptorObject: `${challengeId}/${challengeVersion}/descriptor.json`,
+        signature: "test-signature",
+        signerKeyId: "test-key",
+      });
+      await bundles.putPrivate(
+        challengeId,
+        challengeVersion,
+        Buffer.from(JSON.stringify(pair.privateBundle), "utf8"),
+      );
+      await bundles.putPublic(
+        challengeId,
+        challengeVersion,
+        Buffer.from(JSON.stringify(pair.publicDescriptor), "utf8"),
+      );
+    },
+
     async registerChallenge(input = {}) {
       const challengeId = input.challengeId ?? TEST_CHALLENGE_ID;
       const challengeVersion = input.challengeVersion ?? TEST_CHALLENGE_VERSION;

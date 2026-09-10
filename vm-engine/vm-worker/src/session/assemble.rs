@@ -89,7 +89,8 @@ pub struct AssembleError {
 }
 
 impl AssembleError {
-    fn reject(reason: &'static str) -> Self {
+    /// 拒绝构造(`pub(crate)`:调试变体装配路径复用同一拒绝形态)。
+    pub(crate) fn reject(reason: &'static str) -> Self {
         Self { reason }
     }
 }
@@ -127,18 +128,18 @@ pub fn assemble(
         (None, Some(_)) => ProgramMode::Byte,
         _ => return Err(AssembleError::reject("program_mode_ambiguous")),
     };
-    let encoding_table = match (&public.vm_profile.encoding_table, program_mode) {
-        (None, ProgramMode::Ir) => None,
-        (Some(table), ProgramMode::Byte) => Some(convert_encoding_table(table)?),
-        (None, ProgramMode::Byte) => {
-            return Err(AssembleError::reject(
-                "byte_mode_requires_public_encoding_table",
-            ));
-        }
-        (Some(_), ProgramMode::Ir) => {
-            return Err(AssembleError::reject("ir_mode_forbids_encoding_table"));
-        }
-    };
+        let encoding_table = match (&public.vm_profile.encoding_table, program_mode) {
+            (None, ProgramMode::Ir) => None,
+            (Some(table), ProgramMode::Byte) => Some(encoding_table(table)?),
+            (None, ProgramMode::Byte) => {
+                return Err(AssembleError::reject(
+                    "byte_mode_requires_public_encoding_table",
+                ));
+            }
+            (Some(_), ProgramMode::Ir) => {
+                return Err(AssembleError::reject("ir_mode_forbids_encoding_table"));
+            }
+        };
 
     // ── seed 策略解析(XS-SEED-POLICY 引擎镜像;worker 只消费编排器会话种子)
     let package_seed = match &bundle.seed_policy.seed_hex {
@@ -444,7 +445,9 @@ fn convert_operand(
     })
 }
 
-fn convert_encoding_table(
+/// 公开编码表转换(`pub`:调试变体装配复用同一转换——编码表是公开面
+/// 单点来源,D-F10,调试实例与真实实例同表)。
+pub fn encoding_table(
     table: &[EncodingEntryExtract],
 ) -> Result<Vec<EncodingTableEntry>, AssembleError> {
     table

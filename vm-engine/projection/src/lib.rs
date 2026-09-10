@@ -17,6 +17,7 @@
 //! | [`events`] | 公开事件管线:私有日志 → 白名单过滤 → 可见性过滤 → 稠密编号 → 确定性聚合 |
 //! | [`error`] | 错误粗化:16 码能力矩阵生成侧强制 / coarse 零解释(ZR-P6)/ E-3 来源约束 |
 //! | [`project`] | 投影生成:完整投影 / 增量(脏范围合并 + 字节预算)/ 调用栈摘要 / 控制流渲染 |
+//! | [`display`] | 调试通道展示数据:伪指令流 / 函数表(ADR-DC1 条款 8;源 = 公开代码区字节,IR 不出进程) |
 //! | [`response`] | 响应面装配:已执行(含教学性失败)与执行前拒绝两形态(§4.4 耦合) |
 //! | [`canon`] | 生成面规范化 JSON 文本写入器(与 vm-runtime / worker 消费面同文法) |
 //!
@@ -34,6 +35,7 @@
 extern crate alloc;
 
 pub mod canon;
+pub mod display;
 pub mod error;
 pub mod events;
 pub mod policy;

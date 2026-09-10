@@ -46,6 +46,12 @@ pub const PUBLIC_DESCRIPTOR_SCHEMA: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../packages/challenge-schema/schema/public-descriptor.schema.json"
 ));
+/// 调试变体镜像(调试通道协议 v1;整体 SERVER_ONLY,WP-40 冻结,
+/// load_variant 命令随帧传输;编排器 ↔ 调试 worker 进程间契约)。
+pub const DEBUG_VARIANT_BUNDLE_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/protocol/schema/debug-variant-bundle.schema.json"
+));
 
 /// 校验器编译失败(仅可能来自内嵌 Schema 损坏,属构建期错误)。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +98,7 @@ pub struct ContractValidators {
     pub public_error: SchemaValidator,
     pub private_bundle: SchemaValidator,
     pub public_descriptor: SchemaValidator,
+    pub debug_variant_bundle: SchemaValidator,
 }
 
 impl ContractValidators {
@@ -104,6 +111,7 @@ impl ContractValidators {
             public_error: SchemaValidator::compile(PUBLIC_ERROR_SCHEMA)?,
             private_bundle: SchemaValidator::compile(PRIVATE_BUNDLE_SCHEMA)?,
             public_descriptor: SchemaValidator::compile(PUBLIC_DESCRIPTOR_SCHEMA)?,
+            debug_variant_bundle: SchemaValidator::compile(DEBUG_VARIANT_BUNDLE_SCHEMA)?,
         })
     }
 }

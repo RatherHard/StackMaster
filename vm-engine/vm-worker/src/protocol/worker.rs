@@ -17,18 +17,22 @@
 //! - 协议层违规:fail-closed(§3.5),引擎 panic(溢出安全终止)由二进制
 //!   入口 `catch_unwind` 归入同一路径。
 
-use crate::contract::mirrors::{ActionRequestMirror, PrivateBundleMirror, PublicDescriptorExtract};
+use crate::contract::mirrors::{
+    ActionRequestMirror, DebugVariantBundleMirror, PrivateBundleMirror, PublicDescriptorExtract,
+};
 use crate::contract::outbound;
 use crate::contract::schema::{ContractValidators, SchemaCompileError};
 use crate::contract::{self, semantic, strict_value::StrictValue};
 use crate::protocol::message::{
-    LoadedSummary, SnapshotEnvelope, WorkerCommand, WorkerError, WorkerErrorCode, WorkerOutbound,
+    DebugLoadedSummary, LoadedSummary, SnapshotEnvelope, WorkerCommand, WorkerError,
+    WorkerErrorCode, WorkerOutbound,
 };
 use crate::protocol::version::{
     ENGINE_BUILD_ID, ENGINE_PROCESS_PROTOCOL_VERSION, VM_ENGINE_VERSION,
 };
 use crate::session::assemble::{self, AssembleError};
 use crate::session::host::{ApplyResult, HostFault, SessionHost};
+use crate::session::variant::{DebugApplyOutcome, DebugHost, parse_address_hex};
 use crate::session::watchdog::Watchdog;
 use serde_json::Value;
 use vm_runtime::identity::EngineIdentity;
@@ -98,11 +102,13 @@ impl ProtocolViolation {
     }
 }
 
-/// 会话阶段:装载前 → 装载成功。
+/// 会话阶段:装载前 → 装载成功(真实会话)/ 调试变体装载成功(调试实例;
+/// 两态互斥——单进程一次服务一个实例,终止后不复用)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     AwaitingLoad,
     Ready,
+    DebugReady,
 }
 
 /// 单会话 Worker:命令状态机 + 契约校验器集合(启动时编译一次)+ 会话托管。
@@ -111,6 +117,7 @@ pub struct Worker {
     phase: Phase,
     last_seq: Option<u64>,
     session: Option<SessionHost>,
+    debug_session: Option<DebugHost>,
     watchdog: Option<Watchdog>,
     /// 安全终止标记(托管故障;进程在响应写出后以非零码退出,D-W8-5)。
     terminal: Option<&'static str>,
@@ -123,6 +130,7 @@ impl Worker {
             phase: Phase::AwaitingLoad,
             last_seq: None,
             session: None,
+            debug_session: None,
             watchdog: None,
             terminal: None,
         })
@@ -179,8 +187,15 @@ impl Worker {
                 action_request,
             } => self.handle_apply_action(seq, &request_id, action_request),
             WorkerCommand::QueryProjection { seq } => {
-                self.require_ready(seq)?;
-                self.handle_query_projection(seq)
+                // 两态均受理(分派目标不同):真实会话 / 调试实例各按自身
+                // 投影策略生成(调试 = 全可见,零装载)。
+                if !matches!(self.phase, Phase::Ready | Phase::DebugReady) {
+                    return Err(ProtocolViolation::StateViolation { seq });
+                }
+                match self.phase {
+                    Phase::DebugReady => self.handle_debug_projection(seq),
+                    _ => self.handle_query_projection(seq),
+                }
             }
             WorkerCommand::ExportSnapshot { seq } => {
                 self.require_ready(seq)?;
@@ -190,12 +205,55 @@ impl Worker {
                 self.require_ready(seq)?;
                 self.handle_import_snapshot(seq, snapshot)
             }
+            // ── 调试面命令(additive;仅调试实例阶段受理,状态机互斥)──
+            WorkerCommand::LoadVariant {
+                seq,
+                variant,
+                public_descriptor,
+            } => self.handle_load_variant(seq, variant, public_descriptor),
+            WorkerCommand::DebugQueryState { seq } => {
+                self.require_debug_ready(seq)?;
+                self.handle_debug_query_state(seq)
+            }
+            WorkerCommand::DebugReadWindow {
+                seq,
+                address_hex,
+                byte_length,
+            } => self.handle_debug_read_window(seq, &address_hex, byte_length),
+            WorkerCommand::DebugApplyRecorded { seq, action } => {
+                self.handle_debug_apply_recorded(seq, action)
+            }
+            WorkerCommand::DebugStep { seq } => self.handle_debug_step(seq),
+            WorkerCommand::DebugRunToBreakpoint {
+                seq,
+                breakpoints,
+                max_steps,
+            } => self.handle_debug_run_to_breakpoint(seq, breakpoints, max_steps),
+            WorkerCommand::DebugSearch {
+                seq,
+                pattern_hex,
+                max_hits,
+            } => self.handle_debug_search(seq, &pattern_hex, max_hits),
+            WorkerCommand::DebugInstructionStream {
+                seq,
+                address_hex,
+                max_items,
+            } => self.handle_debug_instruction_stream(seq, &address_hex, max_items),
+            WorkerCommand::DebugFunctionTable { seq } => self.handle_debug_function_table(seq),
             WorkerCommand::Shutdown { seq } => Ok(WorkerOutbound::ShutdownAck { seq }),
         }
     }
 
     fn require_ready(&self, seq: u64) -> Result<(), ProtocolViolation> {
         if matches!(self.phase, Phase::Ready) {
+            Ok(())
+        } else {
+            Err(ProtocolViolation::StateViolation { seq })
+        }
+    }
+
+    fn require_debug_ready(&self, seq: u64) -> Result<(), ProtocolViolation> {
+        if matches!(self.phase, Phase::DebugReady) {
             Ok(())
         } else {
             Err(ProtocolViolation::StateViolation { seq })
@@ -213,7 +271,8 @@ impl Worker {
         public_descriptor: Value,
         session_seed_hex: Option<String>,
     ) -> Result<WorkerOutbound, ProtocolViolation> {
-        if matches!(self.phase, Phase::Ready) {
+        // 装载仅允许在未装载阶段(真实装载与变体装载互斥,双态均占用进程)。
+        if !matches!(self.phase, Phase::AwaitingLoad) {
             return Err(ProtocolViolation::StateViolation { seq });
         }
         let reject = || {
@@ -317,6 +376,299 @@ impl Worker {
             },
         })
     }
+
+    /// load_variant(WP-41;ADR-DC1 条款 2/5):调试变体镜像 Schema + 公开
+    /// 描述包 Schema 复验、身份三元组互证、`assemble_variant` 零装载装配。
+    /// 失败 = `challenge_invalid` 方向命令级错误(宁可拒绝装载,不近似执行),
+    /// 进程存活、阶段不变。真实私有判题包与真实快照导入路径不可达——本命令
+    /// 不接受 privateBundle,调试实例内不存在判题面。
+    fn handle_load_variant(
+        &mut self,
+        seq: u64,
+        variant: Value,
+        public_descriptor: Value,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        if !matches!(self.phase, Phase::AwaitingLoad) {
+            return Err(ProtocolViolation::StateViolation { seq });
+        }
+        let reject = || {
+            Ok(WorkerOutbound::CommandError {
+                seq,
+                error: WorkerError::new(WorkerErrorCode::ChallengeInvalid),
+            })
+        };
+        if !self
+            .validators
+            .debug_variant_bundle
+            .is_valid(&variant)
+            || !self
+                .validators
+                .public_descriptor
+                .is_valid(&public_descriptor)
+        {
+            return reject();
+        }
+        let variant_mirror: DebugVariantBundleMirror = match serde_json::from_value(variant.clone())
+        {
+            Ok(mirror) => mirror,
+            Err(_) => return reject(),
+        };
+        let public: PublicDescriptorExtract = match serde_json::from_value(public_descriptor.clone())
+        {
+            Ok(public) => public,
+            Err(_) => return reject(),
+        };
+        // 装配(零装载:变体 contentHex 即权威初始字节;无判题面、无 seed)。
+        let components = match crate::session::variant::assemble_variant(&variant_mirror, &public)
+        {
+            Ok(components) => components,
+            Err(AssembleError { reason }) => {
+                log_assembly_reject(reason);
+                return reject();
+            }
+        };
+        let summary = DebugHost::summary_of(&components);
+        let initial_revision = summary.initial_revision;
+        self.phase = Phase::DebugReady;
+        self.debug_session = Some(DebugHost::new(components));
+        Ok(WorkerOutbound::VariantLoaded {
+            seq,
+            loaded: DebugLoadedSummary {
+                initial_revision,
+                ..summary
+            },
+        })
+    }
+
+    /// debug_query_state:调试实例状态摘要。
+    fn handle_debug_query_state(&mut self, seq: u64) -> Result<WorkerOutbound, ProtocolViolation> {
+        let state = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?
+            .state_summary();
+        Ok(WorkerOutbound::DebugState { seq, state })
+    }
+
+    /// debug_query_state 的投影形态(全可见策略;QueryProjection 在调试阶段
+    /// 的分派目标)。
+    fn handle_debug_projection(&mut self, seq: u64) -> Result<WorkerOutbound, ProtocolViolation> {
+        let host = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let projection = match host.projection() {
+            Ok(projection) => projection,
+            Err(_) => return self.fault_termination(seq, &HostFault::ContractInconsistency),
+        };
+        let value = outbound::projection_to_json(&projection);
+        if !self.validators.public_state_projection.is_valid(&value) {
+            return Err(ProtocolViolation::ContractInconsistency);
+        }
+        Ok(WorkerOutbound::Projection {
+            seq,
+            projection: value,
+        })
+    }
+
+    /// debug_read_window:任意地址原始窗口读取(零装载使隐藏区域公开;
+    /// 越上限 / 地址非法 = 载荷级 `invalid_input_format`;未映射 =
+    /// `inaccessible_address`,进程均存活)。
+    fn handle_debug_read_window(
+        &mut self,
+        seq: u64,
+        address_hex: &str,
+        byte_length: u64,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        let Some(address) = parse_address_hex(address_hex) else {
+            return Ok(command_invalid_input(seq));
+        };
+        if byte_length < 1
+            || byte_length
+                > crate::session::variant::DEBUG_WINDOW_MAX_BYTES as u64
+        {
+            return Ok(command_invalid_input(seq));
+        }
+        let host = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        match host.read_window(address, byte_length as usize) {
+            Some((bytes, truncated)) => Ok(WorkerOutbound::DebugWindowData {
+                seq,
+                address_hex: crate::session::variant::format_hex(address),
+                bytes_hex: crate::session::variant::hex_lower(&bytes),
+                truncated,
+            }),
+            None => Ok(WorkerOutbound::CommandError {
+                seq,
+                error: WorkerError::new(WorkerErrorCode::InaccessibleAddress),
+            }),
+        }
+    }
+
+    /// debug_apply_recorded:确定性重放一条已接受动作(ADR-DC1 条款 3)。
+    /// 载荷非法或与权威日志错位 = 命令级 `internal_error`(编排器据此中止
+    /// attach;进程存活,错位处置归编排器)。
+    fn handle_debug_apply_recorded(
+        &mut self,
+        seq: u64,
+        action: Value,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        let mirror: crate::contract::mirrors::ActionCallMirror = match serde_json::from_value(action)
+        {
+            Ok(mirror) => mirror,
+            Err(_) => return Ok(command_internal_error(seq)),
+        };
+        let arch = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?
+            .state()
+            .memory
+            .arch();
+        let recorded = match assemble::recorded_action(&mirror, arch) {
+            Ok(recorded) => recorded,
+            Err(_) => return Ok(command_internal_error(seq)),
+        };
+        let host = self
+            .debug_session
+            .as_mut()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        match host.apply_recorded(&recorded) {
+            DebugApplyOutcome::Applied => Ok(WorkerOutbound::DebugApplied {
+                seq,
+                revision: host.revision(),
+                status: String::from(host.status()),
+                rip_hex: host.rip_hex(),
+            }),
+            DebugApplyOutcome::Misaligned => Ok(command_internal_error(seq)),
+        }
+    }
+
+    /// debug_step:单步(恰一条指令;无判题闸门评估)。
+    fn handle_debug_step(&mut self, seq: u64) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        let host = self
+            .debug_session
+            .as_mut()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let (reason, address_hex) = host.debug_step();
+        Ok(WorkerOutbound::DebugHalted {
+            seq,
+            reason,
+            address_hex,
+            steps_executed: 1,
+        })
+    }
+
+    /// debug_run_to_breakpoint:循环步进至命中 / 程序止步 / 步数预算耗尽
+    /// (确定性暂停;断点数量与地址形态的载荷级复验在此收口)。
+    fn handle_debug_run_to_breakpoint(
+        &mut self,
+        seq: u64,
+        breakpoints: Vec<String>,
+        max_steps: u64,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        if breakpoints.is_empty() || breakpoints.len() > crate::session::variant::DEBUG_SEARCH_MAX_HITS
+        {
+            return Ok(command_invalid_input(seq));
+        }
+        let mut parsed = Vec::with_capacity(breakpoints.len());
+        for breakpoint in &breakpoints {
+            match parse_address_hex(breakpoint) {
+                Some(address) => parsed.push(address),
+                None => return Ok(command_invalid_input(seq)),
+            }
+        }
+        let host = self
+            .debug_session
+            .as_mut()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let (reason, address_hex, steps_executed) = host.run_to_breakpoint(&parsed, max_steps);
+        Ok(WorkerOutbound::DebugHalted {
+            seq,
+            reason,
+            address_hex,
+            steps_executed,
+        })
+    }
+
+    /// debug_search:全变体内存检索(模式非空偶长 hex / 命中上限的载荷级
+    /// 复验在此收口)。
+    fn handle_debug_search(
+        &mut self,
+        seq: u64,
+        pattern_hex: &str,
+        max_hits: u64,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        let Some(pattern) = assemble::decode_hex_bytes(pattern_hex) else {
+            return Ok(command_invalid_input(seq));
+        };
+        if pattern.is_empty() || !(1..=256).contains(&max_hits) {
+            return Ok(command_invalid_input(seq));
+        }
+        let host = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let (hits, truncated) = host.search(&pattern, max_hits as usize);
+        Ok(WorkerOutbound::DebugSearchResults {
+            seq,
+            hits,
+            truncated,
+        })
+    }
+
+    /// debug_instruction_stream:伪指令流展示数据(源 = 公开代码区字节;
+    /// IR 不出进程,D5)。
+    fn handle_debug_instruction_stream(
+        &mut self,
+        seq: u64,
+        address_hex: &str,
+        max_items: u64,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        let Some(address) = parse_address_hex(address_hex) else {
+            return Ok(command_invalid_input(seq));
+        };
+        if !(1..=256).contains(&max_items) {
+            return Ok(command_invalid_input(seq));
+        }
+        let host = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let (instructions, truncated) = host.instruction_stream(address, max_items as usize);
+        Ok(WorkerOutbound::DebugInstructionStreamData {
+            seq,
+            instructions,
+            truncated,
+        })
+    }
+
+    /// debug_function_table:函数表展示数据(源 = 已装载程序结构)。
+    fn handle_debug_function_table(
+        &mut self,
+        seq: u64,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        self.require_debug_ready(seq)?;
+        let host = self
+            .debug_session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let (functions, truncated) = host.function_table(256);
+        Ok(WorkerOutbound::DebugFunctionTableData {
+            seq,
+            functions,
+            truncated,
+        })
+    }
+
 
     /// apply_action(§四):载荷契约校验失败 → 确定性 `rejected` 响应
     /// (revision 不变、delta null、事件空,§4.5 协议级拒绝行);通过校验的
@@ -533,6 +885,23 @@ impl Worker {
 /// 装配拒绝的受控日志(仅事件 + 确定性原因标签;无载荷内容,§3.4)。
 fn log_assembly_reject(reason: &'static str) {
     eprintln!("[vm-worker] load_rejected reason={reason}");
+}
+
+/// 调试面载荷级拒绝(冻结 `invalid_input_format` 静态模板;进程存活)。
+fn command_invalid_input(seq: u64) -> WorkerOutbound {
+    WorkerOutbound::CommandError {
+        seq,
+        error: WorkerError::new(WorkerErrorCode::InvalidInputFormat),
+    }
+}
+
+/// 调试面重放错位 / 载荷镜像失败的命令级错误(冻结 `internal_error` 静态
+/// 模板;进程存活——错位处置归编排器中止 attach 并回收实例)。
+fn command_internal_error(seq: u64) -> WorkerOutbound {
+    WorkerOutbound::CommandError {
+        seq,
+        error: WorkerError::new(WorkerErrorCode::InternalError),
+    }
 }
 
 /// 服务端签发标识符字符集(`^[A-Za-z0-9_-]{1,128}$`,会话动作协议语义 §2.1)。

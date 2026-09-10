@@ -83,6 +83,12 @@ import {
 } from "../limits/index.js";
 import { buildWssChannel, type SessionConnectionRegistry } from "../wss/index.js";
 import {
+  DEBUG_RUN_TO_BREAKPOINT_MAX_STEPS,
+  DebugChannelOrchestrator,
+  buildDebugChannel,
+  productionDebugVariantProvider,
+} from "../debug/index.js";
+import {
   KeyValueCredentialRevocationStore,
   KeyValueTokenIssuanceStore,
 } from "./redis-token-stores.js";
@@ -201,6 +207,13 @@ export interface SessionApiRuntime {
   readonly sessionRoutes: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5,D-API-40)。 */
   readonly wssChannel: FastifyPluginAsync;
+  /**
+   * 调试通道插件(GET /sessions/debug-channel;阶段四 WP-41,ADR-DC1)。
+   * 生产装配的变体供给为 WP-42 前的生产桩(attach 呈现 internal_error)。
+   */
+  readonly debugChannel: FastifyPluginAsync;
+  /** 调试实例编排器(空闲回收 dispose 挂停机序列;WP-41)。 */
+  readonly debugOrchestrator: DebugChannelOrchestrator;
   /** 指标端点插件(GET /metrics;WP-8,D-API-70)。 */
   readonly metricsPlugin: FastifyPluginAsync;
   /** 连接注册表(多连接踢旧 / 断线保持计时器;停机步骤 close-wss-channels)。 */
@@ -299,6 +312,26 @@ export async function buildSessionApiRuntime(
   // 指标面(WP-8,D-API-70):五指标族 + /metrics 插件在此创建并注入 manager。
   const metrics = new SessionMetrics();
   const metricsPlugin = buildMetricsPlugin(metrics);
+
+  // ── 6.1 调试实例编排器(阶段四 WP-41,ADR-DC1):生产变体供给为 WP-42
+  //    前的生产桩(attach 即 internal_error);空闲回收窗口复用断线保持窗口
+  //    预算(不设第二类配置键);close / 保持到期回收路径同步回收调试 worker。
+  //    manager 相互引用经惰性绑定解环(编排器只在调用期消费 manager)。
+  let managerRef: LiveSessionManager | null = null;
+  const debugOrchestrator = new DebugChannelOrchestrator({
+    manager: {
+      getSessionSummary: (sessionId, tenantId) => managerRef?.getSessionSummary(sessionId, tenantId) ?? null,
+      listCheckpoints: async (sessionId, tenantId) => (await managerRef?.listCheckpoints(sessionId, tenantId)) ?? [],
+    },
+    variantProvider: productionDebugVariantProvider(),
+    bundles: bundleStore,
+    actionLog,
+    logger,
+    idleRecycleSeconds: config.disconnectKeepaliveSeconds,
+    runToBreakpointMaxSteps: DEBUG_RUN_TO_BREAKPOINT_MAX_STEPS,
+    ...(options.workerCommand === undefined ? {} : { workerCommand: options.workerCommand }),
+  });
+
   const manager = new LiveSessionManager({
     registry,
     bundles: bundleStore,
@@ -318,8 +351,10 @@ export async function buildSessionApiRuntime(
     },
     maxConcurrentSessionsPerTenant: config.maxConcurrentSessionsPerTenant,
     metrics,
+    onSessionClosed: ({ sessionId, tenantId }) => debugOrchestrator.recycleSession(sessionId, tenantId),
     ...(options.workerCommand === undefined ? {} : { workerCommand: options.workerCommand }),
   });
+  managerRef = manager;
 
   // ── 6.5 编排器重启恢复(WP-7,D-API-63):active 会话行 → 两步恢复 →
   //    纳入在途表(fail-open:不可恢复即 crashed,启动不受阻)。恢复在
@@ -401,6 +436,28 @@ export async function buildSessionApiRuntime(
     },
   });
 
+  // ── 9.5 调试通道(阶段四 WP-41,ADR-DC1):独立端点 + 独立协议版本,
+  //    升级认证 / 帧护栏 / 心跳空闲 / 背压与既有通道同构,限额与解题共用
+  //    同一每会话桶(条款 6),/metrics 挤占观察。
+  const debugChannelPlugin = buildDebugChannel({
+    orchestrator: debugOrchestrator,
+    signer,
+    revocationStore,
+    allowedOrigins: config.allowedOrigins,
+    logger,
+    heartbeatIntervalSeconds: config.wssHeartbeatIntervalSeconds,
+    idleTimeoutSeconds: config.wssIdleTimeoutSeconds,
+    messageRatePerSecond: config.wssMessageRatePerSecond,
+    sessionActionLimiter,
+    sendBufferLimit: config.wssSendBufferLimit,
+    limits: {
+      maxJsonDepth: config.maxJsonDepth,
+      maxArrayLength: 256,
+      maxStringLength: 4096,
+    },
+    metrics,
+  });
+
   // ── readiness 探针(任一失败 → 503;失败方只进受控日志,D-API-34)──
   const readinessProbes: readonly ReadinessProbe[] = [
     {
@@ -426,6 +483,12 @@ export async function buildSessionApiRuntime(
   ];
 
   const closeHandles: readonly RuntimeCloseHandle[] = [
+    {
+      name: "close-debug-instances",
+      run: async () => {
+        await debugOrchestrator.dispose();
+      },
+    },
     {
       name: "close-postgres",
       run: async () => {
@@ -462,6 +525,8 @@ export async function buildSessionApiRuntime(
     sessionRoutes,
     wssChannel: wssChannelAssembly.plugin,
     wssRegistry: wssChannelAssembly.registry,
+    debugChannel: debugChannelPlugin,
+    debugOrchestrator,
     metricsPlugin,
     readinessProbes,
     closeHandles,
