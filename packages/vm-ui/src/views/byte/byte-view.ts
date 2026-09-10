@@ -72,8 +72,27 @@ const ADDRESS_MIN_DIGITS = 8;
 /** 视图类型:stack = 栈视图(默认),free = 自由视图。 */
 export type ByteViewKind = "stack" | "free";
 
+/**
+ * 宿主层行装饰(WP-F5 集成挂点,最小 diff 登记):工作区按行追加渲染——
+ *  - `lead`:行左缘槽位(寄存器交叉标注,FE-RG-04);
+ *  - `specialSuffix`:行右段 `.row-special` 末尾槽位(按行挂 `<sm-jump-chain>`,
+ *    FE-ST-07/09 窗口内部分;虚拟列表只对可视行调用,天然限挂载量)。
+ * 返回 null / undefined = 本行无装饰。
+ */
+export interface ByteRowDecoration {
+  readonly lead?: unknown;
+  readonly specialSuffix?: unknown;
+}
+
 @customElement("sm-byte-view")
 export class SmByteView extends LitElement {
+  /**
+   * 宿主层行装饰回调(WP-F5;组件自身零依赖链组件/标注组件——宿主经此挂接,
+   * 本组件不 import 任何 F4 视图)。变更即重建行渲染器,虚拟列表以 renderItem
+   * 身份变化重渲染可视行。
+   */
+  @property({ attribute: false })
+  rowDecorator: ((row: Row, index: number) => ByteRowDecoration | null | undefined) | null = null;
   /** 数据源(视图唯一依赖面;快照引用变化即触发重建,或由宿主调 refresh())。 */
   @property({ type: Object, attribute: false })
   dataSource: MemoryDataSource | null = null;
@@ -117,6 +136,11 @@ export class SmByteView extends LitElement {
     if (changed.has("dataSource") || changed.has("alignmentOffset") || changed.has("activeRegionId")) {
       this.#rebuild();
     }
+    if (changed.has("rowDecorator")) {
+      // 装饰器换绑:重建行渲染器(lit-virtualizer 以 renderItem 身份变化
+      // 重渲染可视行;不触发数据重建——装饰纯呈现)。
+      this.#rowRenderer = this.#makeRowRenderer();
+    }
   }
 
   protected override updated(): void {
@@ -142,6 +166,21 @@ export class SmByteView extends LitElement {
    */
   showRegion(regionId: string): void {
     this.#setActiveRegion(regionId);
+  }
+
+  /**
+   * 宿主接线(WP-F5,最小 diff 登记):滚动到目标地址所在行(跳转链
+   * viewport-jump 的窗口内落点)。命中返回 true;地址不在当前区域窗口
+   * (含无数据)返回 false 且不滚动。
+   */
+  scrollToAddress(addressHex: string): boolean {
+    const index = rowIndexForAddress(this.#spans, addressHex);
+    if (index === null) {
+      return false;
+    }
+    this.#pendingScrollIndex = index;
+    this.requestUpdate();
+    return true;
   }
 
   // ── 重建(数据源快照 → 视图态;同步、纯读)──
@@ -332,7 +371,7 @@ export class SmByteView extends LitElement {
             class="byte-list"
             role="rowgroup"
             .items=${this.#rows}
-            .renderItem=${this.#renderRow}
+            .renderItem=${this.#rowRenderer}
           ></lit-virtualizer>
         </div>
         ${this.#rows.length === 0 ? html`<p class="empty" role="status">窗口内暂无字节</p>` : nothing}
@@ -474,21 +513,32 @@ export class SmByteView extends LitElement {
     return region === undefined ? regionId : `${region.label}(${regionId})`;
   }
 
-  #renderRow = (row: Row, index: number): TemplateResult => {
-    const markers = this.#anchorMarkers.get(index) ?? [];
-    const anchorClass = markers.length > 0 ? " anchor-row" : "";
-    return html`
-      <div class="byte-row${anchorClass}" role="row" data-row-address=${row.addressHex}>
-        <span class="row-address" role="cell">
-          ${formatAddressHex(row.addressHex, ADDRESS_MIN_DIGITS)}${markers.map(
-            (marker) => html`<em class="anchor-marker">${marker}</em>`,
-          )}
-        </span>
-        <span class="row-hex" role="cell">${this.#renderHexSegment(row)}</span>
-        <span class="row-special" role="cell">${row.cells.map((cell) => renderSpecialDisplayCell(cell.byte))}</span>
-      </div>
-    `;
-  };
+  /** 行渲染器(willUpdate 在 rowDecorator 换绑时重建,驱动可视行重渲染)。 */
+  #rowRenderer: (row: Row, index: number) => TemplateResult = this.#makeRowRenderer();
+
+  #makeRowRenderer(): (row: Row, index: number) => TemplateResult {
+    return (row: Row, index: number): TemplateResult => {
+      const markers = this.#anchorMarkers.get(index) ?? [];
+      const anchorClass = markers.length > 0 ? " anchor-row" : "";
+      // 宿主层行装饰(WP-F5):lead 渲染在行左缘(地址段之前),
+      // specialSuffix 追加在行右段(.row-special)末尾。
+      const decoration = this.rowDecorator?.(row, index) ?? null;
+      return html`
+        <div class="byte-row${anchorClass}" role="row" data-row-address=${row.addressHex}>
+          <span class="row-address" role="cell">
+            ${decoration?.lead ?? nothing}${formatAddressHex(row.addressHex, ADDRESS_MIN_DIGITS)}${markers.map(
+              (marker) => html`<em class="anchor-marker">${marker}</em>`,
+            )}
+          </span>
+          <span class="row-hex" role="cell">${this.#renderHexSegment(row)}</span>
+          <span class="row-special" role="cell"
+            >${row.cells.map((cell) => renderSpecialDisplayCell(cell.byte))}${decoration?.specialSuffix ??
+            nothing}</span
+          >
+        </div>
+      `;
+    };
+  }
 
   /** 十六进制段:整行窗口内 → 分组格式化;含窗口外 cell → 逐 cell 退化呈现。 */
   #renderHexSegment(row: Row): TemplateResult {

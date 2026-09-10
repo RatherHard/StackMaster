@@ -1,6 +1,6 @@
 /**
- * 公开入口装配测试(WP-F2):index.ts 导出面健全性——视图 / 宿主消费的
- * 公共 API 面冻结在此(防意外漏导出 / 改名)。
+ * 公开入口装配测试(WP-F2 起;WP-F5 扩充):index.ts 导出面健全性——视图 /
+ * 宿主消费的公共 API 面冻结在此(防意外漏导出 / 改名)。
  */
 import { describe, expect, it } from "vitest";
 import * as vmUi from "../src/index.js";
@@ -27,7 +27,31 @@ describe("公开入口导出面", () => {
     expect(vmUi.parseAddressHex).toBeTypeOf("function");
   });
 
-  it("视图组件导出保留(WP-F1 面)", () => {
+  it("WP-F3/F4 视图组件与原语全部导出(工作区集成消费面)", () => {
+    expect(vmUi.SmByteView).toBeTypeOf("function");
+    expect(vmUi.SmVmaList).toBeTypeOf("function");
+    expect(vmUi.SmRegisterView).toBeTypeOf("function");
+    expect(vmUi.SmJumpChain).toBeTypeOf("function");
+    expect(vmUi.crossAnnotateRegisters).toBeTypeOf("function");
+    expect(vmUi.renderRegisterAnnotationCell).toBeTypeOf("function");
+    expect(vmUi.resolveJumpChain).toBeTypeOf("function");
+    expect(vmUi.visibleRunAt).toBeTypeOf("function");
+    expect(vmUi.COPY_SUCCESS_TEXT).toBeTypeOf("string");
+    expect(vmUi.JUMP_CHAIN_HORIZONTAL_LIMIT).toBe(3);
+  });
+
+  it("WP-F5 工作区容器 / 菜单 / 注册表 / 模型 / 组合页全部导出", () => {
     expect(vmUi.SmWorkspace).toBeTypeOf("function");
+    expect(vmUi.SmWorkspaceMenu).toBeTypeOf("function");
+    expect(vmUi.SmByteTab).toBeTypeOf("function");
+    expect(vmUi.SmRegisterAnnotation).toBeTypeOf("function");
+    expect(vmUi.WorkspaceTabTypeRegistry).toBeTypeOf("function");
+    expect(vmUi.defaultTabTypeRegistry).toBeInstanceOf(vmUi.WorkspaceTabTypeRegistry);
+    expect(vmUi.WorkspaceLayoutModel).toBeTypeOf("function");
+    expect(vmUi.formatTabTitle).toBeTypeOf("function");
+    expect(vmUi.STACK_TAB_TYPE).toBe("stack");
+    expect(vmUi.FREE_TAB_TYPE).toBe("free");
+    expect(vmUi.REGISTERS_TAB_TYPE).toBe("registers");
+    expect(vmUi.DEBUG_TAB_TYPE).toBe("debug");
   });
 });

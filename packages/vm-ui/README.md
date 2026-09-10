@@ -1,8 +1,9 @@
 # @stackmaster/vm-ui
 
-投影渲染库(阶段四轨道 A:WP-F1 脚手架 + WP-F2 会话客户端与数据源抽象):
-公开投影的浏览器渲染层,Lit 3 + TypeScript,Vite library mode 多入口构建。
-依赖方向强制为只依赖 `@stackmaster/protocol` 的**公开入口**(dependency-cruiser
+投影渲染库(阶段四轨道 A:WP-F1 脚手架 + WP-F2 会话客户端与数据源抽象 +
+WP-F3/F4 视图 + WP-F5 工作区容器):公开投影的浏览器渲染层,Lit 3 +
+TypeScript,Vite library mode 多入口构建。依赖方向强制为只依赖
+`@stackmaster/protocol` 的**公开入口**(dependency-cruiser
 `browser-packages-only-depend-on-protocol`);禁止依赖
 `@stackmaster/protocol/server-only`、challenge-schema、session-core /
 session-api / vm-engine。
@@ -11,8 +12,29 @@ session-api / vm-engine。
 
 ```
 src/
-├── index.ts                        公开入口(导出视图 / 客户端 / 数据源 / 渲染原语)
-├── ui/                             视图组件(sm-workspace 空壳;WP-F3/F4/F5 填充)
+├── index.ts                        公开入口(导出工作区 / 视图 / 客户端 /
+│                                   数据源 / 渲染原语)
+├── workspace/                      WP-F5:工作区容器与菜单
+│   ├── sm-workspace.ts             <sm-workspace> 工作区本体——列式滚动平铺
+│   │                               (列间 Niri 式水平滚动 + 列内 Hyprland 式
+│   │                               二叉分割)、pointer 拖拽排布、标签页生命
+│   │                               周期、组合根装配(client → Projection-
+│   │                               DataSource → 各标签页)、跨视图集成接线
+│   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——打开分组
+│   │                               (注册表驱动)/ 指令步进 step / 重启 reset
+│   │                               (终态禁用+引导)/ 会话状态与断线横幅 /
+│   │                               拒绝错误呈现(含 explanation)
+│   ├── tab-registry.ts             标签页类型注册表(stack / free / registers
+│   │                               带工厂;debug 登记占位不实现;可扩展,
+│   │                               WP-F6 payload 经 register() 追加)
+│   ├── workspace-model.ts          布局模型纯状态机——列/标签页结构、焦点
+│   │                               管理、开关与拖拽移动、类型内序号
+│   ├── byte-tab.ts                 <sm-byte-tab> 字节页组合(字节视图 + VMA
+│   │                               侧栏;vma-select ↔ showRegion ↔
+│   │                               selectedRegionId 回路;rowDecorator 透传)
+│   └── sm-register-annotation.ts   <sm-register-annotation> 行左缘寄存器交叉
+│                                   标注(复用 F4 renderRegisterAnnotationCell;
+│                                   点击行内展开寄存器值)
 ├── client/                         WP-F2:会话客户端面
 │   ├── session-client.ts           SessionClient——REST 5 命令、认证 WSS、
 │   │                               动作账本(clientSeq/baseRevision/idempotencyKey)、
@@ -27,25 +49,34 @@ src/
 │   │                               VmaList / Instr
 │   ├── projection-data-source.ts   公开档 ProjectionDataSource(冻结公开投影)
 │   └── debug-data-source.ts        调试档占位骨架(WP-F8 填充;方法抛错)
-└── render/                         WP-F2:共享渲染原语(WP-F3/F4 并行消费,
-                                    避免两视图互相依赖)
-    ├── hex.ts                      bytesHex 小写 / valueHex 恒 0x+大写归一化、
-    │                               分组格式化、地址解析与展示
-    ├── special-display.ts          特殊显示单元格(可见 ASCII / 占位 / 语义标注
-    │                               纯函数 + Lit 渲染辅助)
-    └── rows.ts                     8 字节行切分与偏移对齐纯函数
-
-src/views/byte/(WP-F3 字节视图核心,公开视图档)
-├── alignment.ts                    对齐偏移(0..7)行切分纯函数:整行网格 +
-│                                   窗口对齐外扩查询区间 + 重切(regroupRows);
-│                                   偏移语义 = FE-ST-03「对齐基址 + k×8 + offset」
-├── view-model.ts                   默认区域选取 / rsp·rbp 锚点解析(M13)/
-│                                   跳转输入解析(M3 窗口内导航)纯函数
-├── byte-view.ts                    <sm-byte-view> 字节视图本体(栈视图与自由
-│                                   视图共用;三段布局 + lit-virtualizer 虚拟
-│                                   列表 + 锚点 + 窗口内导航/检索)
-└── vma-list.ts                     <sm-vma-list> VMA 列表侧栏(FE-FV-06;
-                                    regions() 直读、按地址有序、vma-select 事件)
+├── render/                         WP-F2:共享渲染原语(WP-F3/F4 并行消费,
+│                                   避免两视图互相依赖)
+│   ├── hex.ts                      bytesHex 小写 / valueHex 恒 0x+大写归一化、
+│   │                               分组格式化、地址解析与展示
+│   ├── special-display.ts          特殊显示单元格(可见 ASCII / 占位 / 语义标注
+│   │                               纯函数 + Lit 渲染辅助)
+│   └── rows.ts                     8 字节行切分与偏移对齐纯函数
+└── views/
+    ├── byte/(WP-F3 字节视图核心,公开视图档)
+    │   ├── alignment.ts            对齐偏移(0..7)行切分纯函数:整行网格 +
+    │   │                           窗口对齐外扩查询区间 + 重切(regroupRows);
+    │   │                           偏移语义 = FE-ST-03「对齐基址 + k×8 + offset」
+    │   ├── view-model.ts           默认区域选取 / rsp·rbp 锚点解析(M13)/
+    │   │                           跳转输入解析(M3 窗口内导航)纯函数
+    │   ├── byte-view.ts            <sm-byte-view> 字节视图本体(栈视图与自由
+    │   │                           视图共用;三段布局 + lit-virtualizer 虚拟
+    │   │                           列表 + 锚点 + 窗口内导航/检索;WP-F5 最小
+    │   │                           diff 增补 rowDecorator 挂点与 scrollToAddress)
+    │   └── vma-list.ts             <sm-vma-list> VMA 列表侧栏(FE-FV-06;
+    │                               regions() 直读、按地址有序、vma-select 事件)
+    ├── register/(WP-F4 寄存器视图)
+    │   ├── sm-register-view.ts     <sm-register-view>:FE-RG-01/02/03
+    │   └── cross-annotation.ts     FE-RG-04 交叉标注纯函数 + 渲染辅助
+    └── chain/(WP-F4 跳转链)
+        ├── resolve.ts              FE-ST-07/09 链解析纯函数(小端、回环、窗口外)
+        ├── visible-run.ts          FE-ST-10 可见字符延伸
+        └── sm-jump-chain.ts        <sm-jump-chain>:链芯片 + SVG 回环 + 展开;
+                                    viewport-jump 事件(组件只发事件)
 ```
 
 ## 双档数据源纪律(评审解耦的关键约束)
@@ -311,3 +342,81 @@ src/views/
 (Lit legacy 装饰器);测试用公开档夹具 = `ProjectionStore + ProjectionDataSource`
 (与生产同一语义路径)。jsdom 的 Selection 不支持影子根内选区(rangeCount 恒 0,
 真实浏览器无此限制),降级路径测试以 `Selection.addRange` 侦察验证。
+
+## WP-F5:工作区容器与菜单(src/workspace,2026-09-11)
+
+M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)、
+`<sm-workspace-menu>` 顶部菜单、标签页类型注册表、布局模型纯状态机、
+`<sm-byte-tab>` 字节页组合、`<sm-register-annotation>` 行左缘交叉标注。
+
+### 定案规则(主控已裁决,同时登记于源码注释)
+
+- **平铺(Q1 v1)**:工作区 = 列的有序序列,**列间水平滚动**(Niri 式,
+  `scrollToColumn` / 激活跟随滚动可达任意列);**列内二叉分割**(Hyprland 式:
+  新标签页落入焦点列、插入焦点页之后,同列均分列高);拖拽排布 = pointer
+  事件(标题栏按下 → 位移 >3px 进入拖拽 → 落点:目标页上/下半 = 前/后、
+  目标列 = 尾插、列区空白 = 开新列;拖拽反馈只用 opacity)。
+- **标签页类型注册表(Q2 四类独立可多开)**:`stack`(栈视图)/`free`
+  (自由视图)共用 `<sm-byte-tab>`(view-kind 只决定标题)/`registers`
+  (寄存器视图)带工厂;**`debug` 登记占位不实现**——注册存在但无工厂,
+  选中呈现「调试模式档由 WP-F8 提供」空态;注册表为可扩展结构(WP-F6
+  payload 经 `register()` 追加即进「打开」菜单);同类型可多开(FE-MV-01),
+  类型内序号只增不减(标题稳定)。
+- **菜单(FE-WS-03/04a/05)**:指令步进 = `step` 动作(恰执行一条指令后暂停);
+  重启测试环境 = `reset` 动作,**终态(won/failed)禁用**并呈现
+  「测试环境已结束,请新建会话」引导——引导动作 = `new-session-request` 事件,
+  宿主(plugin-dev 壳)执行 `close_session`(如未关)+ `create_session`
+  新流程(Q5/M11 口径);积木步进归 WP-F6(Q3)、运行到断点与解题/调试模式
+  切换 UI 归 WP-F8(菜单留注释挂点)。
+- **连接状态呈现**:connecting/connected/reconnecting/disconnected 全量呈现
+  (status + revision + 连接态);reconnecting 显示 attempt / retryDelayMs;
+  connection-replaced(close 1008 单连接策略)转为 alert + 手动重连;
+  断线横幅呈现「最近一次公开投影(revision N)+ 重连中」,**零本地 VM 降级**;
+  动作被拒(onActionRejected)呈现 userVisibleError——code + message +
+  explanation(hints 与事实字段),「知道了」消隐。
+- **组合根装配**:工作区持有 `client`,`client` 换绑即
+  `dataSource = new ProjectionDataSource(client.store)` 注入各标签页内容,
+  `client.onProjectionChanged(() => 各内容 refresh())` 驱动刷新;视图组件
+  本身仍只依赖 `MemoryDataSource` 接口(§四纪律不破)。
+
+### 跨视图集成接线(本 WP 落地点)
+
+- **VMA 回路**:`vma-select` → `byteView.showRegion(regionId)`;
+  `region-change` → 回写 `vmaList.selectedRegionId`(在 `<sm-byte-tab>` 内闭环)。
+- **寄存器交叉标注(FE-RG-04)**:投影变更后 `crossAnnotateRegisters` 缓存;
+  行装饰按行区间 `[rowBaseAddressHex, rowBase + cells.length)` 过滤命中,
+  行左缘渲染 `<sm-register-annotation>`(按钮面复用 F4
+  `renderRegisterAnnotationCell`,点击行内展开寄存器值列表)。
+- **跳转链(FE-ST-07/09)**:行右段(`.row-special` 槽位)按行挂
+  `<sm-jump-chain>`——仅当该行 8 字节小端解释**形似地址**(可解引用且落回
+  某可见区域范围,经 `resolveJumpChain(maxSegments:1)` 判定)才挂载;
+  虚拟列表只渲染可视行 → 挂载量天然有界。宿主监听 `viewport-jump`:
+  `withinWindow` → `byteView.scrollToAddress(addressHex)` 滚动到目标行 +
+  反馈;`withinWindow: false` → 「在可见窗口之外」反馈,不滚动不报错。
+
+### byte-view.ts 最小 diff 登记(WP-F5 唯一动 F3 交付文件处)
+
+行装饰与 viewport-jump 滚动必须落在字节视图行内/行几何上,宿主层无法在不
+复制渲染逻辑的前提下注入,故对 `src/views/byte/byte-view.ts` 做**最小 diff**
+(行为零回归,F3 测试全绿):
+
+1. 新增 `rowDecorator` 属性 + `ByteRowDecoration` 接口:`lead` 渲染在行左缘
+   (地址段之前)、`specialSuffix` 追加在 `.row-special` 末尾;装饰器换绑时
+   重建行渲染器(虚拟列表以 renderItem 身份变化重渲染可视行);
+2. 新增 `scrollToAddress(addressHex): boolean` 公共方法(复用内部
+   `rowIndexForAddress` + 滚动管线;窗口外返回 false)。
+
+其余集成全部为宿主层追加渲染 / 包装组件,未改 F3/F4 任何其他文件。
+
+### 测试面
+
+`test/workspace/`:布局模型(打开分割 / 关闭邻居焦点 / 拖拽换位含跨列与
+开新列 / 原地 no-op / 序号稳定)、注册表(默认四类 / debug 占位 / 可扩展 /
+覆盖更新)、`<sm-workspace-menu>`(打开分组 / step·reset 禁用矩阵 / 终态引导 /
+断线横幅 attempt·retryDelayMs / connection-replaced 手动重连 / 拒绝错误含
+explanation)、`<sm-byte-tab>`(vma 回路 / rowDecorator 透传 / refresh)、
+`<sm-register-annotation>`(按钮面 / 点击展开收起)、`<sm-workspace>` 集成
+(双标签页并排 / 列间滚动可达 / pointer 拖拽模拟 / 同类型多开 / 关闭生命周期
+与空态 / debug 占位 / **真实 SessionClient mock 全链路**:step·reset 帧形态、
+终态禁用引导、断线横幅、踢旧重连、rejected 呈现、投影回流刷新、交叉标注与
+跳转链挂载、viewport-jump 滚动/窗口外反馈)。

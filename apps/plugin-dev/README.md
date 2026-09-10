@@ -1,11 +1,11 @@
 # @stackmaster/plugin-dev
 
-插件 iframe 开发壳(阶段四 WP-F1):Vite 应用(vanilla TS,无框架),为前端
-各 WP 提供可运行的开发联调环境。**本阶段仅开发联调**;正式的 iframe 插件
-形态(独立来源、postMessage 宿主协议、自适应高度/主题/语言)归阶段五,落点
-为 `packages/web-component` + `@stackmaster/embed-runtime`。
+插件 iframe 开发壳(阶段四 WP-F1 建壳;WP-F5 完整工作区 demo):Vite 应用
+(vanilla TS,无框架),为前端各 WP 提供可运行的开发联调环境。**本阶段仅开发
+联调**;正式的 iframe 插件形态(独立来源、postMessage 宿主协议、自适应高度/
+主题/语言)归阶段五,落点为 `packages/web-component` + `@stackmaster/embed-runtime`。
 
-## 启动
+## 启动(WP-F5 完整工作区 demo)
 
 ```bash
 # 0) 后端拓扑(需要会话联调时):PostgreSQL + Redis + MinIO + session-api + vm-worker
@@ -18,7 +18,27 @@ pnpm build
 pnpm --filter @stackmaster/plugin-dev dev    # http://localhost:5173
 ```
 
-页面挂载 vm-ui 的 `<sm-workspace>`(空标签页区域占位,WP-F5 实现工作区容器)。
+页面挂载:
+
+- **创建会话表单**:`challengeId` / `challengeVersion` / `embedSessionId` /
+  `embedToken` 四输入(预填开发演示值;真实 embed token 由服务端间签发,
+  D-API-11/15,凭证走环境变量不入库)+「创建并连接」按钮——提交即执行
+  `create_session`(Cookie 交付)→ 认证 WSS `connect`;
+- **`<sm-workspace>` 工作区**:创建成功后组合根注入
+  (`workspace.client = client`),工作区内部完成
+  `new ProjectionDataSource(client.store)` 装配与事件接线;
+- **菜单动作联调路径**(真实会话端到端):
+  1. 菜单「打开」开 栈视图 / 自由视图 / 寄存器视图(可多开、拖拽排布);
+  2. 「指令步进」→ `step` 动作 → 投影增量回流刷新视图与 revision 显示;
+  3. 「重启测试环境」→ `reset` 动作(运行中可点);会话终态(won/failed)
+     时 reset 禁用并呈现「测试环境已结束,请新建会话」——点「新建会话」
+     (或壳内同名按钮)走 `close_session` + `create_session` 新流程;
+  4. 断线(停掉 session-api)→ 横幅呈现最近一次公开投影 + 重连中
+     (attempt / retryDelayMs);恢复后端后自动 `sync_projection` 对齐;
+  5. 菜单动作错误(限流 / 越权等)→ userVisibleError 呈现(含 explanation)。
+
+> 真实会话端到端的自动化验收归 WP-F7 Playwright 最小集;本 WP 以组件级 +
+> mock 全链路集成测试收口(见 `packages/vm-ui/test/workspace/`)。
 
 ## 加载模型(为什么开发壳不 import vm-ui)
 
@@ -32,11 +52,14 @@ bundle**(阶段五形态),而不是把组件包打进宿主构建图。
 
 - `vite.config.ts` 把 `packages/vm-ui/dist` 配为 `publicDir`(静态资源形态
   提供);`index.html` 用 `<script type="module" src="/index.js">` 直接加载
-  vm-ui 产物,加载即注册 `<sm-workspace>`;
+  vm-ui 产物,加载即注册 `<sm-workspace>` 等组件;
+- 壳逻辑(`src/main.ts`)经**运行时动态 import**(`import(/* @vite-ignore */
+  "/index.js")`)取命名导出(如 `SessionClient`)——URL 是运行时字符串,不进
+  构建图、不产生 dependency-cruiser 模块依赖边;
 - vm-ui 产物**自包含**(lit 内联,见 `packages/vm-ui/README.md`),不依赖
   打包器解析裸模块导入;
 - `@stackmaster/vm-ui` 以 devDependencies 声明(不 import):只为 turbo
-  `^build` 构建序与工作区链接,不产生 dependency-cruiser 模块依赖边。
+  `^build` 构建序与工作区链接。
 
 ## 会话 API 反代(开发联调)
 
@@ -61,6 +84,6 @@ bundle**(阶段五形态),而不是把组件包打进宿主构建图。
 - `pnpm build`:`vite build`(产物 dist/)+ `tsc -b --force`(emitDeclarationOnly,
   满足根 tsconfig project references;vite 先行构建并清空 dist,`--force`
   确保声明文件随后必然重新产出,不被 tsbuildinfo 判定跳过);
-- `pnpm test`:jsdom 挂载冒烟(壳结构、挂载点、幂等);`<sm-workspace>` 的
-  元素注册与渲染由 `packages/vm-ui` 自身测试覆盖——本包测试环境不加载
-  vm-ui 产物(见上)。
+- `pnpm test`:jsdom 冒烟(壳结构、表单接线、新建会话流程、终态引导事件,
+  客户端以替身注入);`<sm-workspace>` 的元素注册与渲染由 `packages/vm-ui`
+  自身测试覆盖——本包测试环境不加载 vm-ui 产物(见上)。
