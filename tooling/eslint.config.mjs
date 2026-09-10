@@ -34,4 +34,22 @@ export default tseslint.config(
       },
     },
   },
+  {
+    // k6 压测场景与运行器(阶段三 WP-8;k6 运行时全局 + Node 全局,
+    // 独立脚本不经 TS 编译;docs/develop/权威API语义规约.md D-API-73)。
+    files: ["apps/session-api/k6/**"],
+    languageOptions: {
+      globals: {
+        __ENV: "readonly",
+        __VU: "readonly",
+        __ITER: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+      },
+    },
+  },
 );

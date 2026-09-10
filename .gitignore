@@ -26,6 +26,8 @@ coverage/
 .env.*
 !.env.example
 *.log
+# k6 基线的 stderr 留档是验收证据(WP-8),不受 *.log 忽略约束
+!apps/session-api/k6/results/**/*.stderr.log
 .tmp/
 tmp/
 

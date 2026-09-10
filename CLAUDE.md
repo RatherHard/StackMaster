@@ -142,6 +142,14 @@ stackmaster/
 - Conventional commits:`feat|fix|refactor|docs|test|chore|perf|ci: <描述>`;对外发包(`web-component`、`react-wrapper`、`embed-runtime`)用 Changesets;
 - 不提交 `.env`、私有题目包样本、真实隐藏 flag;`private-bundles` 类内容永不进入 git。
 
+## 阶段三落地事实(2026-09-10,WP-8 收口;只登记事实,纪律仍以上文与计划书为准)
+
+- **Compose 一键拓扑**:`pnpm --filter @stackmaster/session-api compose:app:up / compose:app:down`(PostgreSQL + Redis + MinIO + session-api + vm-worker 冒烟;session-api 发布 13000,依赖 15432 / 16379 / 19000 / 19001);拓扑集成入口 `test:compose`(container / host 双形态,CI 为完整 linux 拓扑);开发上手文档 `apps/session-api/README.md`;
+- **可观测端点**:`GET /healthz`(liveness)、`GET /readyz`(readiness)、`GET /metrics`(Prometheus 文本;五指标族:动作 RTT / 并发会话 / 队列深度 / Worker 占用 / 投影增量字节;标签零秘密零标识符,机检 `assertMetricsTextDiscipline`);OpenTelemetry 为 T0 可选增量(仅登记 D-API-72);
+- **k6 基线**:`pnpm --filter @stackmaster/session-api k6:baseline`(docker grafana/k6,场景在 `apps/session-api/k6/`;不设通过阈值,结果归档 `apps/session-api/k6/results/`);
+- **覆盖率入口**:仓库根 `pnpm test:coverage`(vitest projects 聚合 apps + packages,整体门槛 ≥ 80%;完整门禁形态 `SESSION_API_IT=1 pnpm test:coverage`,纳入容器门控集成测试;配置文件为根 `vitest.coverage.config.ts`——不得改名 `vitest.config.ts`,包级 vitest 会误读);
+- **TS 测试规模**(阶段三末):session-api 345 passed / 30 skipped(容器门控);集成 75 passed(`test:integration` + compose 套件);Rust 基线 318 × debug / release 双 profile 全绿。
+
 ## 计划书章节速查
 
 | 主题 | 章节 |

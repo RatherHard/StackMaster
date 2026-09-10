@@ -56,8 +56,8 @@
 
 ```text
 stackmaster/
-├── apps/                     # TS 应用(阶段二起搭建)
-│   ├── session-api/          # 会话编排器(信任域 2)
+├── apps/                     # TS 应用(阶段三起落地)
+│   ├── session-api/          # 会话编排器(信任域 2;工程载体已落地,阶段三 WP-1)
 │   ├── verifier/             # 独立裁决服务(信任域 4)
 │   ├── admin/                # 管理后台
 │   └── plugin-dev/           # 插件 iframe 开发壳
@@ -106,12 +106,13 @@ pnpm test               # 测试(Vitest)
 pnpm lint               # ESLint
 pnpm typecheck          # tsc project references
 pnpm lint:deps          # 依赖边界检查(dependency-cruiser)
+pnpm lint:deps:self-test # 依赖边界门禁的必触发反例自检
 pnpm fixtures:manifest  # golden fixture 规范化摘要清单(生成;--check 校验)
 pnpm smoke:contract     # Rust 侧契约冒烟(需 Rust 工具链;tooling/contract-smoke)
 pnpm scan:public        # 公开产物隔离扫描
 ```
 
-> 阶段一(契约与信任模型冻结)已于 2026-09-05 关闭(见 [`docs/phases/阶段一验收评审.md`](docs/phases/阶段一验收评审.md));下一步进入阶段二(后端 VM Core 与会话编排),`apps/` 与 `vm-engine/` 随阶段二落地。下列命令在对应阶段完成后可用:
+> 阶段一(契约与信任模型冻结)已于 2026-09-05 关闭;阶段二(后端 VM Core 与会话编排)已于 2026-09-09 关闭(`vm-engine/` 与 `packages/session-core` 已落地);当前处于阶段三(权威 API:认证通道、持久化、Compose),`apps/session-api` 工程载体已随阶段三 WP-1 落地。下列命令在对应阶段完成后可用:
 >
 > ```bash
 > cd vm-engine && cargo test                # 引擎测试 + proptest

@@ -42,7 +42,7 @@
 | [指令规约.md](develop/指令规约.md) | vm-core 逐 opcode 执行语义权威规约:统一执行入口、位宽 / 栈 / 标志模型、异常与事件面、调用与 Canary、自定义指令与接口派发(WP-4) |
 | [判题语义规约.md](develop/判题语义规约.md) | vm-core 判题语义权威规约:谓词求值、权威成功 / 失败判定、多阶段状态机运行时、seed 策略与派生、隐藏测试执行(WP-5) |
 | [快照与回放语义规约.md](develop/快照与回放语义规约.md) | vm-runtime 权威规约:COW 分页快照与 checkpoint、规范化动作日志(6.3 清单)、revision / undo / checkout / reset 语义、回放一致性、版本锁定与资源计数(WP-6) |
-| [权威API语义规约.md](develop/权威API语义规约.md) | session-api(D-API-* )实现期决策单一登记处:路由与通道形态、凭证链路、版本窗口与幂等窗口运维参数、通道行为(阶段三 WP-0 首批,随 WP 增补) |
+| [权威API语义规约.md](develop/权威API语义规约.md) | session-api(D-API-* )实现期决策单一登记处:路由与通道形态、凭证链路、版本窗口与幂等窗口运维参数、通道行为、工程载体纪律(配置 fail-closed / 日志纪律 / 优雅停机)、限流与配额、跨域机检、指标面与 k6 基线(阶段三 WP-0 ~ WP-8 全量) |
 
 ### phases/
 
@@ -53,6 +53,7 @@
 | [阶段二任务分解.md](phases/阶段二任务分解.md) | WP-0 ~ WP-9:vm-engine 工程载体、challenge-compiler、vm-core / vm-runtime / projection / vm-worker、会话编排核心、测试强化与收尾 |
 | [阶段二验收评审.md](phases/阶段二验收评审.md) | 阶段二退出条件逐条评审(十条全过)、13.1 清单逐条核对、门禁证据与 ADR-8 tripwire 验收点结论(WP-9) |
 | [阶段三任务分解.md](phases/阶段三任务分解.md) | WP-0 ~ WP-8:会话级命令与传输信封契约冻结、session-api 工程载体、认证与凭证、持久化与快照加密静止、REST 生命周期、认证 WSS 与投影下发、限流配额、跨域载荷机检与 Compose 集成、可观测与收尾 |
+| [阶段三验收评审.md](phases/阶段三验收评审.md) | 阶段三退出条件逐条评审(§五退出条件 → 可复跑证据)、13.3 / 13.5 条目核对表、TS / Rust / 覆盖率 / fixture / ZR-ENG 映射门禁证据汇总与阶段四 / 五 / 六移交项(WP-8) |
 
 ## 相关文档(包内)
 
@@ -62,6 +63,8 @@
 - [`packages/protocol/docs/投影与错误契约语义.md`](../packages/protocol/docs/投影与错误契约语义.md)(WP-3);
 - [`packages/challenge-schema/docs/双包Schema语义.md`](../packages/challenge-schema/docs/双包Schema语义.md)(WP-4);
 - [`packages/challenge-compiler/docs/装载与编译期校验语义.md`](../packages/challenge-compiler/docs/装载与编译期校验语义.md)(阶段二 WP-2)。
+
+应用上手文档:[`apps/session-api/README.md`](../apps/session-api/README.md)(阶段三 WP-8:Compose 一键拓扑、环境变量与迁移、test:compose 双形态、Windows 降级路径、/metrics 指标面、k6 基线、常见问题)。
 
 工具文档:[`tooling/contract-smoke/README.md`](../tooling/contract-smoke/README.md)(跨语言契约冒烟)。
 

@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策 2026-09-09,WP-8 收口全量) |
-| 日期 | 2026-09-09 |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口) |
+| 日期 | 2026-09-10 |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -23,11 +23,14 @@ HTTP 路由表为**实现面文档登记**,不作 JSON Schema 契约(WP-0 冻结
 |---|---|---|---|
 | `POST /sessions` | `create_session` | `SessionCommandRequest`(`create_session` 分支) | `SessionCommandResponse`(`create_session` 分支) |
 | `POST /sessions/projection-sync` | `sync_projection` | `sync_projection` 分支 | `sync_projection` 分支 |
-| `GET /sessions/checkpoints` | `list_checkpoints` | `list_checkpoints` 分支 | `list_checkpoints` 分支 |
+| `POST /sessions/checkpoints`(WP-4 调整:GET → POST,见 D-API-30) | `list_checkpoints` | `list_checkpoints` 分支 | `list_checkpoints` 分支 |
 | `POST /sessions/submissions` | `submit` | `submit` 分支 | `submit` 分支 |
 | `POST /sessions/close` | `close_session` | `close_session` 分支 | `close_session` 分支 |
+| `GET /sessions/channel`(WebSocket 升级;WP-5 增补行,见 D-API-40) | 12 动作(`action` 帧) | `WssFrame`(`action` 分支) | `WssFrame`(`action_response` / `error` 分支,按帧下发) |
 
 登记要点:会话定位以**请求体 `payload.sessionId` 为权威锚**(与凭证绑定三方比对),路径不携带会话标识——避免"路径 ID 与体 ID 双真源"及 URL 中会话标识经代理 / 访问日志扩散的面;`embed token` 签发端点(宿主后端 → session-api)归 WP-2 登记与实现。非 2xx 响应体 = 冻结 `PublicError` Schema(既有契约,零新增),HTTP 状态 ↔ 结果类型映射归 WP-4。
+
+**WP-2 增补(2026-09-10)**:签发端点已实现并登记为 **`POST /auth/embed-tokens`**(服务端间行:宿主后端 bearer 认证,非浏览器面;请求 / 响应体形态与拒绝面见 D-API-11 / D-API-14 / D-API-15)。
 
 ### D-API-2 WSS 传输帧随会话动作协议版本编号;连接级版本锚定(阶段三 WP-0)
 
@@ -72,15 +75,450 @@ WP-0 新增四根 Schema(会话命令请求 / 响应、WSS 帧、会话凭证 cl
 
 计划书 9.1 与会话动作协议语义 §5.1 以连字符记法书写命令(create-session / sync-projection / list-checkpoints);wire 契约枚举取 snake_case(`create_session` / `sync_projection` / `list_checkpoints` / `submit` / `close_session`),与 12 动作 `type`(`write_bytes` / `run_to_event` / `checkout_checkpoint`)同记法。两套记法是同一命令集的排版变体,语义无差;文档与代码各自沿用其惯例,不作机器转换面的依据。
 
-## 四、登记中的决策(后续 WP 回填)
+## 三·二、工程载体纪律(阶段三 WP-1)
+
+### D-API-9 session-api 进程骨架:配置 fail-closed、日志纪律、优雅停机、错误响应面兜底(阶段三 WP-1)
+
+`apps/session-api` 工程载体(WP-1)固定四项进程纪律,后续 WP(WP-2 ~ WP-8)在此骨架上装配,不得绕开:
+
+**1. 配置加载与启动校验(fail-closed)**——启动校验三道闸,任一不过即非零退出,进程不监听:
+- 必备键缺失:`SESSION_API_` 前缀的必备键登记表(代码内 `REQUIRED_ENV_KEYS`)中的键未提供即拒绝。WP-1 骨架期表为空;WP-2 登记凭证签名密钥、WP-3 登记存储端点时逐项补入;
+- 未知保留键:`SESSION_API_` 是本应用保留命名空间,出现未登记键(拼写错误)即拒绝,不静默落默认值;
+- 取值非法:类型 / 范围 / 枚举校验,含 D-API-4 两键。校验失败消息只含字段名与原因,绝不含字段值(错误面不得成为密钥外泄通道)。
+
+配置键面:`SESSION_API_HOST`(默认 `127.0.0.1`,安全默认——不公开监听)、`SESSION_API_PORT`(默认 3000;`0` = 临时端口,仅 `NODE_ENV=test` 合法,供集成测试随机端口)、`SESSION_API_LOG_LEVEL`(默认 `info`)、`SESSION_API_LOG_ERROR_STACKS`(严格 `true`/`false`,默认 `false`)、`SESSION_API_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS`(默认 10 s,上限 300 s)、`SESSION_PROTOCOL_N1_WINDOW_DAYS` 与 `IDEMPOTENCY_WINDOW_TTL_SECONDS`(D-API-4,默认 90 天 / 300 s;`SESSION_PROTOCOL_N1_WINDOW_DAYS=0` = 立即下线旧版,为合法取值)。空字符串环境变量一律按"未提供"处理(容器编排占位形态)。
+
+**2. 日志纪律(Pino;计划书 5.8 / 9.1,ZR-B7 服务器侧)**——字段纪律:requestId(请求级,首等字段)、sessionId / tenantId / revision 经白名单化子 logger 绑定(`withSessionFields`),防字段命名漂移。redaction 三层:私有包内容、seed / flag 语料、凭证令牌绝对禁入日志(pino redact 路径表兜底浅层误放,主控制是"永不记录请求 / 响应体原文与头部"的调用纪律,req 序列化器白名单只放行 method / url);内部堆栈与文件路径不入日志(err 序列化器只保留 type + message;`SESSION_API_LOG_ERROR_STACKS` 为受控排障的显式演进开关,默认关闭——较计划书 429 行"内部堆栈只进受控日志"取更严形态,受控通道的按需开启即"受控"语义);错误细节不经 HTTP 响应外流。日志 `base` 覆盖默认 pid / hostname(基础设施指纹不入日志)。
+
+**3. 优雅停机(SIGTERM → 停止接单 → 在途会话状态落盘 → 退出)**——停机步骤按注册顺序执行:`stop-accepting-requests`(fastify close,在途请求完成)→ 在途会话状态落盘(WP-3 持久化面注册真实步骤)→ `flush-logs`;全部成功退出码 0,任一步骤失败或超过 `SESSION_API_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS` 强制退出码 1。重复信号不重入。**Windows 触发通道**:Windows 无 POSIX 信号投递(`process.kill` 等价 `TerminateProcess`,处理器不运行),故并行接受 IPC 通道的 `shutdown` 消息触发同一序列——供 Windows 本地与 CI 的进程级集成测试使用;生产面(容器 SIGTERM)不受影响。
+
+**4. 错误响应面兜底(基线 #8 的骨架锚点)**——未匹配路由(404)、框架级 4xx(如畸形 JSON)、未捕获错误(500)一律以冻结 `PublicError` 形态响应(粗化级:`invalid_input_format` / `internal_error` + 静态最小文案),零框架细节、零校验器细节透出,细节只进受控日志;错误载荷常量在装配期过冻结 Schema 自检,契约漂移即拒绝启动。HTTP 状态 ↔ 冻结结果类型的完整映射矩阵仍归 WP-4(D-API-1),本决策只固定兜底底线。请求 ID:接受客户端 `x-request-id` 但只接受冻结标识符字符集(语义文档 §2.1),非法或缺失即服务端生成;响应头回显同一值(与日志 `reqId` 单一真源),客户端输入永不原样进入日志字段。
+
+**5. 健康检查**——`GET /healthz` 为 liveness(骨架期无外部依赖,恒 200);readiness 随 WP-3 存储依赖落地时引入,不在本决策冻结。
+
+## 三·三、认证与凭证面(阶段三 WP-2;D-API-10 ~ D-API-19)
+
+### D-API-10 凭证签名载体:JWT + EdDSA(Ed25519);载荷 = 七字段 claims + exp(阶段三 WP-2)
+
+embed token 与会话凭证统一以 **JWT / EdDSA(Ed25519)** 签发与校验(jose 库,Node WebCrypto)。选型理由:PASETO 无同等维护度;JWT + EdDSA 经 jose 的算法锁定(`algorithms: ["EdDSA"]` + 显式公钥注入)结构性排除 alg 混淆与降级。契约边界不变:`SessionCredentialClaims` / `EmbedTokenClaims` 七字段冻结面是**签名前 claims 集合**,JWT 标准保留字段只引入 `exp`(与 claims.expiresAt 同值,epoch 秒;签发不写 iat / iss / aud / nbf),使载体载荷可按"`claims ∪ {exp}` 的 strictObject"逐字段严格校验——多余字段即形态非法(malformed)。密钥仅信任域 2:`SESSION_API_SIGNING_KEY`(Ed25519 PKCS#8 PEM)经配置三道闸启动校验(createPrivateKey 解析 + 密钥类型断言,fail-closed);装配期 `createTokenSigner` 同时导入私钥(签发)与公钥(校验),verify 路径无签名能力。verify 失败以确定性异常类型表达:kind 三值封闭 `expired` / `signature_invalid` / `malformed`——kind 只进受控日志与审计,不进响应面。载体长度外圈护栏复用 `EMBED_TOKEN_MAX_LENGTH`(4096,会话凭证同值);签发面后置断言超限即抛错,超限载体永不外发。
+
+### D-API-11 embed token 交付面:签发端点响应体 JSON(阶段三 WP-2)
+
+签发端点(宿主后端 → session-api)登记为 **`POST /auth/embed-tokens`**(D-API-1 路由表的服务端间补充行,不属浏览器面)。成功响应 `201`,体为 `{"embedToken": <JWT>, "expiresAt": <epoch 秒>}`——接收方是宿主后端服务器(非浏览器),响应体 JSON 即可;token 不进 URL query(POST 体交付)、不经 postMessage 下发(交付通道归阶段五)、不入日志(req 序列化器白名单)与错误响应。响应体零多余字段(不回显 jti / claims 复述)。
+
+### D-API-12 会话凭证交付面:Set-Cookie(HttpOnly + Secure + SameSite=Strict + Path=/sessions);WSS 沿用 Cookie(阶段三 WP-2;WP-5 落地)
+
+create-session 通过三方比对后,会话凭证经 **`Set-Cookie`** 交付(cookie 名 `sm_session_credential`):`HttpOnly`(浏览器脚本不可读,插件 iframe 在选手控制域内)+ `Secure`(仅 HTTPS 传输)+ `SameSite=Strict`(跨站请求不携带)+ 精确 `Path=/sessions`(仅覆盖五个会话命令路由族,签发端点与其他路径不可见——最小暴露面)。不采用 `__Host-` 前缀:该前缀被浏览器强制要求 `Path=/`,与精确 Path 的最小暴露面诉求冲突。**WSS 升级呈递落定 D-API-3 的 Cookie 候选**:浏览器 WebSocket 无法自定义请求头,WP-5 的升级握手从 Cookie 读凭证(经统一认证入口 `authenticateSessionCredential`);WSS 路由必须位于 Cookie Path 覆盖之下,否则需在装配时调宽 cookie path 参数。
+
+### D-API-13 Secure 属性的 NODE_ENV=test 豁免(阶段三 WP-2)
+
+`Secure` 属性在 `NODE_ENV=test` 下豁免(不写该属性),使 fastify inject 的 http 注入测试可覆盖 Cookie 呈递链路;`NODE_ENV` 为 `development` / `production` 时恒写 `Secure`(浏览器只经 HTTPS 回传)。豁免仅以进程环境变量为锚,不引入额外配置面。
+
+### D-API-14 token 消费顺序、单次消费语义与统一拒绝响应面(阶段三 WP-2)
+
+**消费顺序**(嵌入协议 §六的实现化):①签名验证(域 2 密钥 + exp)→ ②`jti` 单次原子消费(签发记录存在即删除并返回;删除即消费,与比对顺序解耦,保证并发下至多一方成功)→ ③签名 claims × 签发记录比对(tenantId / userId / challengeId / challengeVersion / embedSessionId / expiresAt 六元组全等——租户 / 用户以签发时宿主凭证担保的存储记录为锚,不采信请求体自报)→ ④请求上下文 × claims 比对(create-session 载荷的 challengeId / challengeVersion / embedSessionId)。记录不存在(未签发 / 已消费 / 已吊销 / 记录过期)在端口面同形(`consume` 返回 null),拒绝面因此天然不可区分。
+
+**统一失败响应面(防枚举)**:一切 token 消费失败与凭证校验失败(过期 / 已消费 / 绑定不符 / 伪造 / 吊销后使用 / CSRF 拒绝)恒为 **401 + 冻结 `PublicError` 单一错误码 + 静态文案**:`{"code": "invalid_input_format", "message": "authentication failed"}`——同状态、同码、同文案,响应体字节级一致。选码理由:16 个冻结码中 `permission_denied` 的能力矩阵强制 `addressHex = required-real`(教学解释锚点),认证场景无地址语境不可用;`invalid_input_format` 是唯一 coarse 级、`addressHex` 禁止、可无解释的协议级拒绝码,与 WP-1 骨架错误面(server.ts)同码。拒绝细节以封闭 reason 枚举(如 `expired` / `unknown_jti` / `record_mismatch` / `context_mismatch` / `revoked` / `session_binding` / `csrf_origin`)只进受控日志与审计 detail。
+
+### D-API-15 签发端点宿主认证:Bearer 共享凭证,常数时间比较,先认证后校验体(阶段三 WP-2)
+
+宿主后端以 `Authorization: Bearer <SESSION_API_HOST_BACKEND_TOKEN>` 认证(服务端间共享凭证,嵌入协议 §6.1)。比较取双侧 sha256 摘要后 `timingSafeEqual`——长度差异折叠进摘要比较,不透出长度侧信道。**无凭证 / 错凭证一律统一 401(D-API-14 形态),且先于请求体校验**——未认证方不得以 400 / 401 差异探测请求体字段有效性。已过认证后,请求体按 strictObject 契约(tenantId / userId / challengeId / challengeVersion / embedSessionId,五字段冻结形态)校验,失败 = 400 + 冻结 `{"code": "invalid_input_format", "message": "invalid request"}`,校验器细节(字段路径 / issue 计数之外的一切)只进受控日志。
+
+### D-API-16 CORS:@fastify/cors 精确来源白名单,空表 = 一律不放行(阶段三 WP-2)
+
+`SESSION_API_ALLOWED_ORIGINS`(逗号分隔精确来源,`scheme://host[:port]` 形态,禁通配 / 禁路径 / 禁尾斜杠)驱动 `@fastify/cors` 数组精确匹配:仅命中请求回显 `Access-Control-Allow-Origin`,并恒带 `Access-Control-Allow-Credentials: true`(Cookie 呈递所需)。**配置缺省(空表)= 不放行任何跨源**(fail-closed 默认;浏览器面全拦,非浏览器调用方——宿主后端——不受 CORS 影响)。跨源拒绝以"不回 ACAO 头"表达,不透出任何配置细节。
+
+### D-API-17 CSRF 防护:Cookie 呈递 + 变更方法 ⇒ Origin 必须命中精确白名单(阶段三 WP-2)
+
+SameSite=Strict 为第一层;第二层在凭证校验中间件:**Cookie 呈递 + 变更方法(POST / PUT / PATCH / DELETE)时,`Origin` 头必须精确命中 `SESSION_API_ALLOWED_ORIGINS`**(与 CORS 共用一表),缺失、为空或不符即统一 401(D-API-14 形态,reason = `csrf_origin`)。Bearer 呈递(服务端间 / 非浏览器)不受 CSRF 向量影响,不走本闸。GET / HEAD / OPTIONS 不适用。
+
+### D-API-18 认证端口形状与适配语义:原子单次消费 = GETDEL/Lua,审计 append-only(阶段三 WP-2;WP-4 接 Redis/PG)
+
+WP-2 交付三个端口 + 内存默认实现(`apps/session-api/src/auth/`):`TokenIssuanceStore`(`put` / `consume` / `revoke`;键域 `token:{jti}`,删除即吊销)、`CredentialRevocationStore`(`revoke(jti, ttl)` / `isRevoked`;会话凭证 jti 吊销键,TTL ≥ 凭证剩余有效期)、`AuditSink`(`append(event)`;kind 七值封闭:embed_token_issued / embed_token_consumed / embed_token_revoked / session_credential_issued / create_session / submit / session_force_closed;detail 仅非秘密标量,零凭证材料)。**WP-4 适配约束**:①`consume` 是**原子单次消费**——Redis 适配器须以 `GETDEL` 或 Lua 等价语义实现,不得退化为"读后删"两步(Redis 不可用时该端口 fail-closed,不降级);②AuditSink 的 PG 落库实现须保持 append-only 端口语义(无更新 / 删除路径,数据库层强制方式归 WP-3 的 D-API 决策);③内存实现仅供测试与未接线期(InMemoryAuditSink 以深冻结对象表达 append-only,无容量上限,不得用于生产常驻)。
+
+### D-API-19 认证面配置键登记:五键 + 必备两键(阶段三 WP-2)
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_SIGNING_KEY` | 是 | —— | Ed25519 私钥 PKCS#8 PEM;启动期 createPrivateKey 解析 + 密钥类型断言,失败拒绝启动(消息仅字段名与结构原因,绝不回显取值) |
+| `SESSION_API_HOST_BACKEND_TOKEN` | 是 | —— | 签发端点宿主共享凭证(bearer);最低长度 16 字符 |
+| `SESSION_API_ALLOWED_ORIGINS` | 否 | 缺省 | 逗号分隔精确来源(禁通配 / 路径 / 尾斜杠);缺省 = 不允许任何跨源(D-API-16) |
+| `SESSION_API_EMBED_TOKEN_TTL_SECONDS` | 否 | 3600 | 上限 `MAX_EMBED_TOKEN_TTL_SECONDS`(604800);即签发记录 TTL |
+| `SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS` | 否 | 3600 | 上限 `MAX_SESSION_CREDENTIAL_TTL_SECONDS`(86400);推荐 ≤ 会话 wall-clock 预算 + 续期余量 |
+
+五键均过配置三道闸(D-API-9);键名带 `SESSION_API_` 前缀,受未知保留键闸校验。
+
+## 三·四、持久化面(阶段三 WP-3;D-API-20 ~ D-API-26)
+
+### D-API-20 PostgreSQL 表域与查询层租户校验(阶段三 WP-3)
+
+表域按计划书 5.7 落地(`apps/session-api/migrations/` 顺序 SQL + 最小 runner `runMigrations`:记录表 `_session_api_migrations` + 会话级咨询锁 + 逐迁移事务,重复执行幂等):题目域 `challenges` / `challenge_versions`(版本链、双包 SHA-256 摘要与 Ed25519 登记签名、对象存储对象名;版本不可变,重复登记确定性拒绝)、会话域 `sessions`(sessionId / tenantId / userId / challengeId / challengeVersion / phase / seed 策略元数据 / 快照锚)与 `checkpoints`(COW 快照密文 blob,origin ∈ {explicit_checkpoint, auto_periodic, session_close})、动作域 `action_log`(append-only、PARTITION BY RANGE (created_at),DEFAULT 分区兜底,月度分区经 `createActionLogPartition` 预建)、裁决域 `submissions`(内部裁决引用)+ `verdicts` / `verifier_runs`(阶段六写入,本阶段零写入)。全部表带租户作用域列;**查询层租户校验强制**:一切按会话定位的查询 WHERE 强制 `tenant_id`(跨租户与"不存在"同形态返回空,防枚举),行级策略归阶段六完善。`checkpoints` 的 DELETE 仅由保留期清理(`purgeExpired`)sanction。
+
+### D-API-21 快照加密层级:应用层整包加密 AES-256-GCM(阶段三 WP-3;D-W8-11 收口)
+
+加密层级取**应用层整包加密**:快照信封(worker 所有 SERVER_ONLY blob,含 `seedState`)在编排器落库前整体序列化为字节并经 AES-256-GCM 加密,PostgreSQL 行内只存密文字节——不依赖存储级加密的部署正确性,备份 / 迁移即密文;密文不参与任何确定性断言(I-4 作用于响应面,nonce 现场随机)。密钥来源 = 环境变量 `SESSION_API_SNAPSHOT_ENCRYPTION_KEY`(base64 的 32 字节;启动校验长度,缺失 / 非法即拒绝启动 fail-closed;错误消息仅字段名与结构原因);密钥管理服务(KMS)与轮换归部署面演进(WP-8)。编排器对快照**只存取不解析**:SnapshotStore 端口进出皆密文,加解密在 SnapshotCipher,快照字段零语义读取(seedState 随信封整体移交 worker)。`challenge_versions` 摘要为 SHA-256(单向,不构成秘密面)。配置键:必备六键 `SESSION_API_POSTGRES_URL` / `SESSION_API_REDIS_URL` / `SESSION_API_MINIO_ENDPOINT` / `SESSION_API_MINIO_ACCESS_KEY` / `SESSION_API_MINIO_SECRET_KEY` / `SESSION_API_SNAPSHOT_ENCRYPTION_KEY`;可选 `SESSION_API_MINIO_PORT`(9000)/ `SESSION_API_MINIO_BUCKET_PRIVATE`(private-bundles)/ `SESSION_API_MINIO_BUCKET_PUBLIC`(public-descriptors)。
+
+### D-API-22 快照密文信封格式与 action_log append-only 强制层(阶段三 WP-3)
+
+**密文信封** `stackmaster-session-snapshot-encrypted/1`:`[4B 魔数 "SMEN"][1B 格式版本][12B GCM nonce][密文 …][16B authTag]`;魔数仅供机检区分密文 / 明文 blob(ZR-B5 存储面),不承载语义;认证失败(密钥不符或篡改)确定性拒绝且不区分原因(防篡改探测)。
+
+**append-only 强制层取数据库层触发器**:`action_log` 上 `BEFORE UPDATE / DELETE`(行级)+ `BEFORE TRUNCATE`(语句级)触发器一律 `RAISE EXCEPTION`——应用连接角色无论权限配置,变更一律在库内被拒(红灯反例:`migrations-appendonly.integration.test.ts` 三连);`REVOKE UPDATE/DELETE` 的应用角色治理归阶段六部署面作第二层。应用层同构:ActionLogStore 端口仅暴露 append 与查询,无变更路径。落库纪律:仅已接受动作(拒绝不入账,D-W8-9 编排器账本同源)、单语句批量插入、与 submit 引用同锚(`submission_ref` 列)。
+
+### D-API-23 seed 零驻留持久化边界与题目登记路径(阶段三 WP-3)
+
+**seed 边界**:`sessions` 行只存 seed 策略元数据(`seed_strategy`),任何存储不存 seed 值;seed 的唯一合法持久化落点是加密快照内的 `seedState`(密文静止)。`server_random_per_session` 会话的编排器重启恢复:load 步使用**现场再生成的一次性种子**(仅瞬时存在于 load 帧构造,不落任何存储),随后 `import_snapshot` 以快照 seedState **整体替换**全部内容状态(快照与回放语义规约 §三 replace_from_snapshot),原始会话种子不参与恢复;`fixed` 策略种子在包内,恢复 load 不携带种子。
+
+**题目登记路径最小实现**(批量制作归 MVP 期):双包 SHA-256 摘要 → 登记签名校验(Ed25519 over `stackmaster-challenge-registration/1` 确定性基线 = form / challengeId / contentVersion / vmProfileVersion / 双摘要,验签公钥经适配器构造注入,fail-closed:无公钥或验签失败一律拒绝)→ 双包入对象存储(私有判题包 → `private-bundles` 桶:服务端专用、桶策略拒绝匿名、静态加密由部署面启用 MinIO SSE-KMS;公开描述包 → `public-descriptors` 桶,CDN 发布与签名 URL 归阶段五)→ 版本行落 PG(版本不可变)。对象命名 `{challengeId}/{version}/{bundle|descriptor}.json`,challengeId 走冻结标识符字符集、version 走 semver 字符集(禁路径穿越)。
+
+### D-API-24 Redis 分级降级与幂等窗口后端切换(阶段三 WP-3)
+
+Redis 键域四键域全部带 TTL、可重建、不作权威(ADR-4)。**可用性分级**(策略表 `REDIS_DEGRADE_POLICY` 即裁决点):
+
+| 依赖 | 分级 | 理由 |
+|---|---|---|
+| 幂等窗口 `idem:{sessionId}:{key}` | **可降级进程内**(粘性;ResilientIdempotencyWindow) | 窗口是效率设施,正确性由 baseRevision 与单会话串行保证(协议 §4.3);降级只损失跨实例共享窗口 |
+| `token:{jti}`(WP-2 经 KeyValueStore 消费) | **fail-closed** | jti 单次消费是凭证重放防线(D-API-18 原子单次消费);降级即语义破坏 |
+| `route:{sessionId}` | **fail-closed** | 会话路由定位是投递一致性控制,降级造成双属主投递歧义 |
+| `rate:{tenant}:{user}` | **fail-closed** | 限流计数是资源保护控制;数值策略归 WP-6 |
+
+fail-closed 路径确定性:依赖故障翻译为稳定错误码 `store_unavailable` 立即上抛(ioredis `enableOfflineQueue: false` + ready 门),不静默放行;幂等窗口降级后同接口同语义(fresh / replay-identical / conflict / TTL 过期 → fresh)。**幂等缓存后端切换**:进程内(阶段二)→ Redis Lua 原子"比较并登记"(同键同规范化负载 → 字节相同重放裁决;同键异负载 → conflict);键命名 `idem:{sessionId}:{encodeURIComponent(key)}`(幂等键为客户端输入,编码保形防键分隔符注入);TTL = `IDEMPOTENCY_WINDOW_TTL_SECONDS`(D-API-4,默认 300 s),**固定窗口自首次登记起算、重放不续期**(无限重试不得到无限窗口);session-core 的进程内幂等缓存不动(编排核心零改动),Redis 窗口是编排器前置的应用层守卫,装配归 WP-4。
+
+### D-API-25 恢复点策略、自动快照与保留期(阶段三 WP-3)
+
+重启恢复粒度取**恢复到最近快照丢尾**(客户端 sync-projection 对齐;实现小、与崩溃替换恢复同构),动作日志重放追尾列为演进项。恢复点三触发点:①显式 checkpoint(create_checkpoint 回执即快照);②**周期性自动快照**——每 N revision 触发,`SESSION_API_AUTO_SNAPSHOT_EVERY_REVISIONS` 默认 50(AutoSnapshotPolicy 纯策略,装配归 WP-4);③会话关闭(close-session 前落终快照)。`checkpoints.origin` 列区分三触发点。**快照保留期**:`SESSION_API_SNAPSHOT_RETENTION_DAYS` 默认 30 天(计划书 5.7"默认较短"),由 `purgeExpired` 执行(运维定时调用)。恢复流程:.sessions 行(租户强制)→ 版本行 → 双包取回 → 最近密文快照解密 → 产出 session-core `RecoverOptions` 同构的两步恢复输入(load + import_snapshot),复用 `SessionOrchestrator.recover`(编排核心零改动);已关闭会话拒绝恢复、无快照恢复点拒绝(fail-closed,无 I-4 前提)。
+
+### D-API-26 秘密语料扫描的存储面测试锚点(阶段三 WP-3;ZR-B4 / B5 / B6)
+
+存储面机检锚点:①快照 blob 落库**密文断言**——明文语料(seed 十六进制 / FLAG 样式)扫描零命中,红灯反例(故意存明文)证明扫描器可检出;②动作日志为玩家提交可见面 BOUNDARY,本身不加密、但必须零秘密——语料扫描为**测试锚点而非运行时硬闸**:玩家 write_bytes 合法回显(含把 flag 写进可见缓冲区的成功路径)会使任何语料模式在运行期产生真阳性,"玩家回显"是 I-9 / ZR-P8 的 sanctioned 通道,运行期防线是"拒绝不入账 + 投影白名单",本扫描器服务静止存储面与机检(WP-7 录制扫描可复用 `scanSecretCorpus`)。
+
+## 三·五、REST 生命周期路由与请求护栏(阶段三 WP-4;D-API-30 ~ D-API-39)
+
+### D-API-30 生命周期路由落定:list_checkpoints 以 POST 承载;12 动作 WSS-only 维持确认(阶段三 WP-4)
+
+D-API-1 路由表按 WP-4 实现回填一处调整:**`list_checkpoints` 由 GET 改为 `POST /sessions/checkpoints`**。理由:冻结 `SessionCommandRequest` 的 `list_checkpoints` 分支以请求体承载 `{sessionId}`(会话定位权威锚,禁入 URL);而浏览器 `fetch` / XHR 对 GET 不支持携带请求体(部分代理亦会剥离 GET 体),GET 形态将迫使会话标识退化为 query / 头部第二通道,与"路径与 URL 不携带会话标识"的单一真源诉求冲突。调整后五命令统一 POST、统一请求体契约、统一凭证呈递,路由即命令判别(请求体 `command` 字段仅供契约校验,与路由不符按畸形请求同族确定性拒绝)。契约本体(WP-0 冻结 Schema)零改动——本调整只在实现面文档层。
+
+成功状态码:`create_session` = 201(资源创建,`Set-Cookie` 交付凭证,D-API-12),其余命令 = 200。响应面在发送前一律过冻结 `SessionCommandResponseSchema` 自检(漂移即 500 兜底,绝不下发非契约形态)。
+
+**12 动作不设 REST 镜像端点的决策确认维持**(WP-4 完成标准项):动作通道 WSS-only(D-API-1),未新增任何动作 REST 端点,无需修改 WP-0 契约。动作入口在编排侧以会话管理器 `applyAction` 承载(WP-5 WSS 通道复用同一入口);create_checkpoint 的快照落库钩子在该入口装配(见 D-API-37)。
+
+### D-API-31 请求护栏:数值默认值 + 配置天花板;校验失败零细节透出(阶段三 WP-4)
+
+8.3 请求护栏四个维度的数值护栏取**常量默认值 + 配置上限(天花板)**双闸形态,配置不得超过天花板(配置闸 Schema `max` = 天花板常量,超限拒绝启动):
+
+| 护栏 | 默认值 | 天花板 | 配置键 / 强制层 |
+|---|---|---|---|
+| 请求体字节 | 65536(64 KiB) | 1048576(与 `MAX_WSS_FRAME_BYTES` 同源) | `SESSION_API_MAX_REQUEST_BODY_BYTES`;fastify `bodyLimit` 解析层强制,超限 413 → 冻结 `invalid_input_format`/"request too large" |
+| JSON 嵌套深度 | 16 | 64 | `SESSION_API_MAX_JSON_DEPTH`;路由级结构巡检(确定性深度优先),超限 400 → "invalid request" |
+| 数组长度 | 256(常量,非配置) | —— | 路由级结构巡检;契约字段的逐字段上限由冻结 Schema 另行强制 |
+| 字符串长度 | 4096(常量,≥ `EMBED_TOKEN_MAX_LENGTH`,不与契约冲突) | —— | 路由级结构巡检,先于 Schema 校验触发 |
+| clientSeq 单会话预算 | 65536 | 10000000 | `SESSION_API_MAX_CLIENT_SEQ_PER_SESSION`;协议 §4.4,触顶确定性拒绝,恢复路径 = 重新 create_session(计量语义见 D-API-38) |
+
+结构护栏(深度 / 数组 / 字符串)的越界细节(维度、issue 计数、字段路径)只进受控日志;响应面恒为冻结 `PublicError`,零校验器细节(基线 #8;Zod issue 的 message 可能回显输入片段,故日志只记路径与 code,不记 message)。路由级版本受理 = `SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS` 集合路由(D-API-4),各版本以独立 Schema 注册表校验;装配期自检保证受理集合中每个版本都有已注册 Schema(缺实现即拒绝启动)。
+
+### D-API-32 HTTP 状态 ↔ 冻结结果类型映射矩阵(阶段三 WP-4)
+
+一切非 2xx 响应体 = 冻结 `PublicError`(code ∈ 16 冻结码,message 恒为静态模板);同一失败类别恒映射同一三元组(I-4),与隐藏状态无关。载荷常量在装配期过冻结 Schema 自检,漂移即拒绝启动。
+
+| 结果类别 | HTTP | PublicError code | 静态文案 | 判别来源 |
+|---|---|---|---|---|
+| invalid_action(契约 / 结构校验失败) | 400 | `invalid_input_format` | invalid request | 路由级 |
+| 版本不受支持 | 400 | `invalid_input_format` | unsupported protocol version | 受理集合路由 |
+| 请求体字节超限 | 413 | `invalid_input_format` | request too large | bodyLimit 413 映射 |
+| 认证失败(D-API-14 统一面) | 401 | `invalid_input_format` | authentication failed | 凭证中间件 / token 消费 |
+| 会话定位失败(不存在 / 已回收 / 租户不匹配同形) | 404 | `invalid_input_format` | resource not found | 会话注册表(防枚举) |
+| session_terminal / cancelled | 409 | `session_terminal` | session is terminal | 编排器域(cancelled 为 WP-6 强制终止预留类别,同形呈现) |
+| clientSeq 预算触顶 | 409 | `stale_client_seq` | client sequence budget exhausted | 会话管理器 |
+| challenge_invalid(版本未登记 / 双包缺失 / 装载管线拒绝,同形) | 422 | `internal_error` | challenge invalid | 装载管线(防题目枚举) |
+| engine_error(worker 崩溃 / 协议违规 / 未知编排失败) | 500 | `internal_error` | internal error | 会话管理器分类 |
+| 存储不可用(PersistenceError) | 503 | `internal_error` | storage unavailable | 持久化面 |
+| **timeout(worker 看门狗退出码 3 → `watchdog_timeout`)** | **504** | `budget_exhausted` | session timed out | 退出分类(D-F 看门狗;不透出退出码 / 进程细节) |
+
+worker 崩溃的编排侧判别:命令失败(OrchestratorError `worker_crashed` / `invalid_worker_output`)即收割退出(`kill` → `waitExit`),`watchdog_timeout` → timeout(504),其余 → engine_error(500);崩溃会话移出在途表并入 `session_force_closed` 审计。取消类别 `cancelled` 本阶段无产生路径,矩阵预留其呈现形态(WP-6 强制终止接线时启用)。
+
+### D-API-33 认证端口的 Redis 适配:GETDEL 仲裁的单次消费;AuditSink 维持内存实现(阶段三 WP-4)
+
+WP-2 三端口的存储适配以**薄适配器**把 WP-3 `KeyValueStore` 原语接到端口(不改 WP-2 / WP-3 端口形状):
+
+- `TokenIssuanceStore`:键域 `token:{jti}`(与 WP-2 端口语义同键名;jti 为服务端签发 UUID,仍经 `encodeURIComponent` 编码保形——与幂等键同一防键分隔符注入纪律,编码对 UUID 恒等)。`consume` 的**原子单次消费**由 `deleteIfPresent`(Redis `GETDEL`)仲裁:先 GET 取载荷、再以 GETDEL 结果为成功仲裁,并发下至多一方拿到记录,其余一律 null——语义与"GETDEL 单命令取删"等价,未签发 / 已消费 / 已吊销 / 记录过期四态同形(D-API-14 / D-API-18);载荷 JSON 形态在消费侧做最小形状校验,损坏按"无有效记录"处理(fail-closed);
+- `CredentialRevocationStore`:键域 `cred-revoked:{jti}`(存在即拒绝;TTL 由调用方按凭证剩余有效期给出);
+- `AuditSink`:**维持进程内内存实现**(append-only 深冻结)——`audit_log` 表域与归档归阶段六(D-API-20 预留面不含审计表),内存实现的"不得用于生产常驻"边界在此登记为已知留白,替换实现须保持 append-only 端口语义(D-API-18 ②)。
+
+### D-API-34 readiness 端点:GET /readyz,探针注入,失败面统一(阶段三 WP-4;D-API-9 预留的落地)
+
+`GET /readyz` 为 readiness:探针(生产装配 = PostgreSQL `SELECT 1` / Redis `PING` / MinIO 私有桶 `bucketExists`)全部通过才 200 `{status:"ok"}`;任一失败 = **503 + 冻结 PublicError 统一形态**(`{"code":"internal_error","message":"dependencies unavailable"}`),失败方不透出(仅在受控日志携带探针名)。探针未接线(骨架形态)同样 503——依赖未知不可谎报就绪。`/healthz` liveness 恒 200 语义不变。
+
+### D-API-35 create-session 重复创建与并发预算的接入点(阶段三 WP-4;执行面归 WP-6)
+
+create-session 路由在 embed token 三方比对通过之后、题目装载之前固定一个 **`CreateSessionGuard.beforeCreate(request, identity)` 钩子**(每租户 / 每用户重复创建检测与并发会话预算的挂载点):钩子抛错即拒绝创建(异常经 D-API-32 矩阵呈现,建议 WP-6 落 429 + 确定性冻结形态);缺省未注入 = 放行。本阶段只固定接入点,不实现限流本身(任务分解 WP-4 第 5 条;限流数值与执行面归 WP-6)。
+
+### D-API-36 在途会话注册表与会话定位(阶段三 WP-4 装配面)
+
+编排器域会话注册表(进程内,`LiveSessionManager`)持有在途 `SessionOrchestrator` 实例;一切命令以 **(sessionId, tenantId) 双条件**定位——租户不匹配与不存在同形态返回(防枚举;凭证绑定锚已在凭证中间件先行校验,注册表定位是第二道防线)。已关闭会话从注册表移除:后续命令一律 404(与不存在同形;重开 = 重新 create_session),worker 崩溃会话同刻回收(D-API-32 收割路径)。注册表为单实例进程内形态:多实例编排器的跨实例路由归 `route:{sessionId}` 键域(WP-3 已备 RouteStore 端口,装配归 WP-5 / T1 多实例演进)。
+
+### D-API-37 快照恢复点的编排侧装配:显式 checkpoint + 会话关闭 + 停机冲刷;周期策略过渡形态(阶段三 WP-4;D-API-25 的落地与留白)
+
+恢复点三触发点在本阶段的装配形态:
+
+- **显式 checkpoint**(①):`applyAction` 入口在 `create_checkpoint` 动作被接受后,将编排器账本最近 checkpoint 信封经 `SnapshotPersistence` 整包加密落库(origin = `explicit_checkpoint`,按 checkpointId 幂等去重),并推进 sessions 行快照锚;
+- **会话关闭**(③):close-session 在优雅关闭前落最近恢复点(origin = `session_close`),会话行置 closed;
+- **停机冲刷**:优雅停机序列注册 `flush-live-sessions` 步骤(在 stop-accepting-requests 之后、close-postgres / close-redis 之前)——对每个在途会话补落未落库恢复点并推进锚(任一失败 → 停机步骤失败 → 退出码 1,不静默丢状态);
+- **周期性自动快照**(②)取**过渡形态**:编排核心未暴露逐 revision 的 `export_snapshot` 通道(WP-4 不得改 packages/**),周期策略(`AutoSnapshotPolicy`,间隔 = `SESSION_API_AUTO_SNAPSHOT_EVERY_REVISIONS`)在动作入口判定触点,触发时复用最近 checkpoint 信封落库(origin = `auto_periodic`,信封自身 revision 如实落行;恢复语义本为"最近快照丢尾",D-API-25)。真正的逐 revision export 接线为遗留项,归 WP-5 动作通道(worker 通道暴露后)或编排核心演进。
+
+### D-API-38 clientSeq 预算的计量语义与 WP-5 动作入口(阶段三 WP-4;协议 §4.4)
+
+session-core 的 `clientSeq` 为编排器内部水位(不暴露读取口),预算在会话管理器动作入口**按进入动作路径的次数计量**:每次 `applyAction` 调用先做预算判定,`已计量次数 ≥ SESSION_API_MAX_CLIENT_SEQ_PER_SESSION` 即确定性拒绝(`ClientSeqBudgetExhausted` → 409 / `stale_client_seq`,D-API-32),触顶后继续拒绝直至会话回收;恢复路径 = 重新 create_session。计量为**保守方向**:幂等重放(编排核心命中缓存、不消耗内部水位)同样消耗预算份额——触顶可能早于精确水位,拒绝确定性不变。`manager.applyAction` 即 WP-5 WSS 动作通道的编排入口(串行队列 / 幂等 / baseRevision 预检在编排核心不变);WSS 侧触顶呈现为冻结错误帧,由 WP-5 复用同一映射。
+
+### D-API-39 WP-4 配置键登记:三键(阶段三 WP-4)
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_MAX_REQUEST_BODY_BYTES` | 否 | 65536 | 上限 1048576(fastify bodyLimit;D-API-31) |
+| `SESSION_API_MAX_JSON_DEPTH` | 否 | 16 | 上限 64(路由级结构护栏;D-API-31) |
+| `SESSION_API_MAX_CLIENT_SEQ_PER_SESSION` | 否 | 65536 | 上限 10000000(协议 §4.4 单会话预算;D-API-38) |
+
+三键均过配置三道闸(未知保留键 / 取值天花板,fail-closed);启动监听日志登记受理协议版本集合(`SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS`,N-1 窗口运维观测点,D-API-4)。
+
+## 三·六、认证 WSS 通道与投影下发(阶段三 WP-5;D-API-40 ~ D-API-49)
+
+### D-API-40 WSS 端点、升级认证与连接绑定:GET /sessions/channel;多连接踢旧(阶段三 WP-5)
+
+动作通道端点登记为 **`GET /sessions/channel`**(D-API-1 路由表增补行):位于会话凭证 Cookie `Path=/sessions` 前缀覆盖之下(D-API-12),零装配参数调宽。落定内容:
+
+- **升级即认证**:`authenticateSessionCredential`(REST / WSS 统一入口,Cookie 呈递)以凭证 preHandler 形态在 fastify 生命周期内先行执行——升级前未过认证即 **HTTP 401 + 冻结统一形态**(与 D-API-14 字节级一致,防枚举);GET 升级非变更方法,不走 CSRF 闸(D-API-17);
+- **凭证 session ↔ 连接绑定**:`claims.sessionId` 升级即锚定本连接;此后每帧双重校验(帧 `sessionId` 与载荷 `sessionId` 均须等于绑定会话),不符 = 错误帧(`session mismatch`)+ 连接保持(逐帧确定性拒绝,零细节差异防枚举);
+- **多连接策略 = 踢旧**(任务分解 WP-5 两候选的择一登记):同会话第二连接升级完成(已过认证)即激活为属主,旧连接收错误帧 `invalid_input_format` / "connection replaced" 后以 close 1008(policy violation)关闭——教学场景同账号重连体验优先;服务端串行不变性是底线:每会话至多一条活跃通道,叠加 manager 单会话串行队列,双层结构下无并发执行;
+- **升级后未认证防御面**(preHandler 保证不可达):无凭证锚即无错误帧锚(不伪造 sessionId),直接 close 1008;
+- 帧字节护栏在传输层落地:ws 服务端 `maxPayload = MAX_WSS_FRAME_BYTES`,超限帧由协议层 close 1009 强制断开(8.3)。
+
+### D-API-41 通道错误帧矩阵:一切通道级失败 = `WssFrame.error` + 冻结 `PublicError` 静态常量(阶段三 WP-5)
+
+封闭的(失败类别 → code / message / 连接处置)常量表,载荷常量在模块加载期过冻结 Schema 自检(漂移即拒绝启动);畸形帧细节(issue 路径 / 计数 / 越界维度)只进受控日志,且日志零 Zod message(可能回显输入片段):
+
+| 失败类别 | code | 静态文案 | 连接处置 |
+|---|---|---|---|
+| 畸形帧(JSON 不可解析 / 二进制帧 / 非对象 / 方向违规 / 契约校验失败) | `invalid_input_format` | malformed frame | 保持 |
+| 版本不受支持(不在受理集合)与连接锚定后版本漂移 | `invalid_input_format` | unsupported protocol version | 保持 |
+| 跨会话(帧或载荷 sessionId 与绑定会话不符) | `invalid_input_format` | session mismatch | 保持 |
+| 幂等键冲突(窗口前置守卫) | `idempotency_conflict` | idempotency key conflict | 保持 |
+| 消息频率超限 | `budget_exhausted` | message rate limit exceeded | 保持 |
+| 发送缓冲超限(背压) | `budget_exhausted` | send buffer limit exceeded | close 1013 |
+| 空闲超时 | `budget_exhausted` | connection idle timeout | close 1000 |
+| 同会话新连接踢旧 | `invalid_input_format` | connection replaced | close 1008 |
+| 编排器域失败(timeout / engine_error / session_terminal / 会话定位失败 / clientSeq 预算触顶 / 存储不可用) | 复用 D-API-32 映射矩阵的载荷面(同 code 同文案) | (同 D-API-32) | 保持(帧级拒绝) |
+
+选码纪律与 D-API-14 同族:`invalid_input_format` 是唯一 coarse 级、无地址、可无解释的协议级拒绝码;`budget_exhausted` 的能力矩阵为 addressHex forbidden + explanation forbidden,恰合资源预算类通道失败的零解释面。**出站帧自检**:一切出站帧(响应 / 错误)先过冻结 `WssFrameSchema`,漂移 = 实现事故——细节进受控日志 + close 1011,绝不下发非契约形态。
+
+### D-API-42 心跳与空闲的通道实现与数值(阶段三 WP-5;D-API-6 的实现落点)
+
+服务端每 `SESSION_API_WSS_HEARTBEAT_INTERVAL_SECONDS`(默认 30,天花板 3600)发送 RFC 6455 协议层 ping;**pong 与任何入站消息都刷新活跃时刻**;静默超过 `SESSION_API_WSS_IDLE_TIMEOUT_SECONDS`(默认 60,天花板 86400)即判空闲:尽力直发错误帧(绕过发送缓冲,空闲断开不受背压状态影响)→ close 1000 → 宽限后 terminate;断开走断线恢复路径(§4.2.3)。**组合约束**:空闲超时必须大于心跳间隔(启动校验独立裁决点,否则每节拍必判空闲)。零应用层心跳帧(帧类型集合封闭,扩展 = 协议版本演进)。
+
+### D-API-43 消息频率限制:每连接令牌桶,容量 = 速率;WP-6 同源钩子(阶段三 WP-5)
+
+`SESSION_API_WSS_MESSAGE_RATE_PER_SECOND`(默认 30,天花板 10000)驱动令牌桶:**容量 = 补充速率**(桶满允许等量突发,长期平均不超过速率)。频率闸同步于消息接收期(先于任何解析),触顶 = 错误帧逐帧确定性拒绝,连接保持、不消耗内部余量。**与 WP-6 每会话动作频率同源**:`MessageRateLimiter` 类时钟可注入、可直接按会话装配(WP-6 的"每会话动作频率"复用同类,计量键从"每连接"换"每会话");跨实例聚合仍归 `rate:{tenant}:{user}` Redis 固定窗口(WP-6)。
+
+### D-API-44 背压:帧数有界发送缓冲,超限断开走恢复路径(阶段三 WP-5)
+
+出站帧**单飞写**(同一时刻至多一帧在等写回调),未回调帧排 FIFO 队列——帧序 = 执行序的传输面前提;`SESSION_API_WSS_SEND_BUFFER_LIMIT`(默认 256,天花板 10000)封顶队列帧数,**不做服务端无界队列**。超限:错误帧绕过已溢出缓冲尽力直发 → close 1013(try again later)→ 断线恢复路径(§4.2.3)。溢出为一次性状态:此后入队一律拒绝,防溢出路径自身再制造无界写。
+
+### D-API-45 断线保持窗口:计时器启动 / 取消归 WP-5,回收执行面归 WP-6(阶段三 WP-5)
+
+`SESSION_API_DISCONNECT_KEEPALIVE_SECONDS`(默认 300,天花板 86400)。服务端侧义务边界(§4.2.3 的服务端前提):**会话不因连接断开而关闭**(manager 在途表不动)、**状态可对齐**(sync-projection 重发缓存投影)。机制:最后一个活跃连接移除时启动计时器,该会话任一新连接激活即取消;到期 = `route:{sessionId}` 释放 + `onKeepaliveExpiry(sessionId, tenantId)` 钩子——**回收执行面(worker 进程 / 会话行 / route 对齐的会话关闭)归 WP-6**,本 WP 只负责计时器启动 / 取消与挂载点。优雅停机时全部保持计时器取消(会话状态由 flush-live-sessions 步骤落盘,恢复归重启恢复路径)。
+
+### D-API-46 动作通道流水线与传输层纪律(阶段三 WP-5;D-API-2 / D-API-5 的落点)
+
+每帧流水线(收序即处理序):**频率闸**(同步,D-API-43)→ 文本 / JSON 形态检查 → **结构护栏**(与 REST 同值装配:深度 / 数组 / 字符串;字节维度由 maxPayload 在协议层强制)→ **版本受理 + 连接锚定**(D-API-2:受理集合 `SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS` 按版本路由至各自帧 Schema,注册表装配期自检;受理集合内的首帧即本连接解释版本,此后任何帧携带其他版本一律错误帧拒绝——"首帧即协商",无独立握手消息)→ **冻结 `WssFrameSchema` 重新校验**(strictObject,零校验器细节透出)→ **方向检查**(客户端 → 服务端只允许 `action`)→ **会话绑定** → **单连接串行链**:幂等窗口前置守卫(比较基准 = 规范化序列化后的完整 `ActionRequest`,传输层帧字段不在契约内,§4.3;fresh / replay-identical → 递入 `manager.applyAction`,同进程字节相同重放由编排核心账本返回缓存响应;conflict → 错误帧 `idempotency_conflict`)→ `manager.applyAction`(**单会话串行不变**,clientSeq 预算 / baseRevision 预检在编排核心)→ `action_response` 信封下发。
+
+传输层纪律(D-API-5 承接):入站 `seq` 不做拒绝依据、不设高水位拒绝(权威判定只在载荷层);出站 `seq` 服务端连接内严格递增(允许跳号);帧 `requestId` 为发送方关联值,响应帧原样回显(与载荷内服务端生成的 `ActionResponse.requestId` 语义独立);响应帧 `protocolVersion` = 连接锚定版本(不携带"新版本",信封按请求版本解释,D-API-2)。
+
+**WP-4 遗留项边界声明**(D-API-37 的过渡形态不变):编排核心未暴露逐 revision 的 `export_snapshot` 通道,也未暴露已接受动作的内部 `clientSeq`(编排器内部水位)——周期快照的逐 revision 触发与 `action_log` 落库(仅已接受动作、拒绝不入账)在本阶段**保持过渡形态未接线**,避免向 append-only 权威日志写入伪 `clientSeq`(载荷层 clientSeq 是客户端自报序号,与编排器账本不同源);二者的接线点在编排核心演进(暴露账本条目或 `applyAction` 回传内部 `clientSeq`),WSS 流水线已在 `manager.applyAction` 返回点预留挂载位。
+
+### D-API-47 投影下发纪律与同步通道边界(阶段三 WP-5;ADR-7)
+
+响应即完整下发:`ActionResponse`(含 `ProjectionDelta` / `publicEvents`)**原样转发执行域产物**——编排器与通道零投影合成、零增量合流、零本地推导;权威 revision 只来自 worker(编排核心账本,ZR-P5 断言增量 ∈ {0,+1})。`sync-projection` 只重发缓存投影且**只在 REST**(`POST /sessions/projection-sync`)——WSS 面不新增同步通道;断线对齐路径 = 重连(升级即凭证重验)→ REST sync-projection 对齐 revision → 以新 baseRevision / 新 clientSeq 区间继续(§4.2.3)。
+
+### D-API-48 连接关闭码登记与优雅停机步骤增补(阶段三 WP-5)
+
+服务端主动关闭的关闭码封闭登记(确定性处置,断开一律走断线恢复路径):
+
+| 处置 | close code | 触发 |
+|---|---|---|
+| 空闲超时 | 1000(normal closure) | 心跳静默判定(D-API-42) |
+| 踢旧 / 升级后未认证防御面 | 1008(policy violation) | 同会话新连接激活(D-API-40) |
+| 帧超限 | 1009(message too big) | ws maxPayload 协议层强制 |
+| 出站帧契约自检失败 | 1011(internal error) | 实现事故兜底(细节只进受控日志) |
+| 优雅停机 | 1001(going away) | close-wss-channels 步骤 |
+| 发送缓冲超限 | 1013(try again later) | 背压(D-API-44) |
+
+停机序列增补(承接 D-API-9):**close-wss-channels 先于 stop-accepting-requests**——逐连接冲刷发送缓冲(waitDrained 有界等待)→ close 1001 → 宽限 terminate;通道收尾不被 fastify close 的连接回收路径抢先。其后照旧:stop-accepting-requests → flush-live-sessions → close-postgres → close-redis → flush-logs。
+
+### D-API-49 RouteStore 消费的 T0 单实例形态(阶段三 WP-5;D-API-24 / D-API-36 的落点)
+
+`route:{sessionId}`(fail-closed 键域,D-API-24)在本阶段消费形态:连接激活时 **bind**(属主 = 编排器实例随机 UUID;TTL = 断线保持窗口 + 4×心跳间隔,与会话保活节奏一致)、心跳节拍**续期**、保持窗口到期 / 优雅停机时 **release**。绑定 / 续期失败只进受控日志、**不拒绝连接**:T0 中路由定位未被投递路径消费(单实例无跨实例投递歧义),fail-closed 的完整语义(路由不一致即拒绝投递)在 T1 多实例编排器接线时生效;键域"全部带 TTL、可重建、不作权威"的分级结论不变(D-API-24)。
+
+## 三·七、限流、配额与会话资源回收(阶段三 WP-6;D-API-50 ~ D-API-59)
+
+### D-API-50 限流执行点、数值与触顶呈现:REST 面 = `rate:{tenant}:{user}` 固定窗口 + 429 冻结形态(阶段三 WP-6)
+
+四个限流维度的执行点与数值(默认保守 + 配置化;任务分解 §六"限流默认值"决策点的回填):
+
+| 维度 | 计量域 / 键 | 载体 | 默认值 | 天花板 | 挂载点 |
+|---|---|---|---|---|---|
+| 每租户 / 每用户请求频率 | `rate:{tenant}:{user}`,固定窗口 60 s | WP-3 `RateLimitCounter`(Redis Lua 原子计数;内存实现同构) | 120 次/分 | 100000 | create-session 守卫(D-API-51)+ 四个凭证命令共闸 |
+| 每租户并发会话预算 | 在途会话数(进程内) | `LiveSessionManager` 在途表 + 入场预留 | 8 / 租户 | 10000 | 守卫早期快检 + manager 精确执行面(D-API-52) |
+| 提交频率 | `rate:{tenant}:{user}:submit`,固定窗口 60 s | 同上 | 30 次/分 | 100000 | submit 路由专属闸(先于编排入口) |
+| 每会话动作频率 | sessionId(进程内) | `MessageRateLimiter` 按会话键(与每连接令牌桶同源) | = `SESSION_API_WSS_MESSAGE_RATE_PER_SECOND`(30/s) | 同通道天花板 | WSS 帧流水线(D-API-53) |
+
+键域纪律:`rate:` 键域内的维度子键(提交频率的 `:submit` 后缀)沿用 WP-3 键域的 TTL 与 fail-closed 分级(D-API-24)——计数器故障以 `store_unavailable` 立即上抛(呈现 503),不降级、不静默放行。**WSS 帧不进 Redis 计数器**:通道帧的频率闸是进程内令牌桶(每连接 + 每会话,D-API-43 / D-API-53),跨实例聚合的 Redis 计数留给 T1 多实例时按租户 / 用户聚合再评估;逐帧 Redis 往返在教学规模下不成比例。
+
+**触顶呈现(确定性,I-4)**:REST 触顶 = **429 + 冻结 `PublicError`**(D-API-32 映射矩阵的 429 预留行落地)——频率类 `{code:"budget_exhausted", message:"rate limit exceeded"}`、并发预算类 `{code:"budget_exhausted", message:"concurrent session budget exceeded"}`,同类别恒同三元组、响应体逐字节一致,零限流器状态(计数、窗口锚、在途数)透出。选码纪律与 D-API-14 / D-API-41 同族:`budget_exhausted` 的能力矩阵 addressHex / explanation 双 forbidden,恰合资源预算类的零解释面。窗口语义:窗口锚定于窗口内首次计数(TTL 自首增起算,与 WP-3 计数器一致),触顶拒绝不回退计数。
+
+### D-API-51 CreateSessionGuard 的 WP-6 执行面:频率闸 + 并发预算早期快检(D-API-35 接入点的落地;阶段三 WP-6)
+
+D-API-35 固定的 `CreateSessionGuard.beforeCreate(request, identity)` 接入点(embed token 三方比对通过之后、题目装载之前)由 `RateLimitedCreateSessionGuard` 实现,按序承载两个维度:①每租户 / 每用户请求频率(`rate:{tenant}:{user}` 固定窗口,触顶抛 `RateLimitExceeded` → 429);②并发会话预算的**早期快检**(读 manager 在途表,触顶抛 `ConcurrentSessionBudgetExhausted` → 429)——快检是 fail-fast(在昂贵的题目装载之前拒绝),预算的**精确执行面**在 manager(D-API-52),双侧呈现同一冻结形态。缺省未注入 = 放行(D-API-35 缺省形态不变,测试可注入替身)。注意接入点位置意味着被守卫拒绝的请求其 embed token jti 已被消费(单次消费语义不变;宿主后端重试需重新签发 token——与"消费成功即令牌作废"的防重放语义一致)。
+
+### D-API-52 并发会话预算的计量语义:在途表 + 同步入场预留(阶段三 WP-6)
+
+预算计量真源 = `LiveSessionManager`:`createSession` 入口在**首个 await 之前**同步完成"检查 + 预留"(`liveCountByTenant + pending ≥ 预算` 即抛 `ConcurrentSessionBudgetExhausted`,否则 `pendingByTenant` 计数 +1)——JS 单线程下该同步段对并发创建原子,**并发创建窗口不超卖**(预算 N 时并发 M 个创建恰 M−N 个在预留检查处被拒);预留 在 finally 中如数释放,创建失败路径(题目装载拒绝等)不泄漏名额;创建成功后名额由在途表承接。close-session / 回收(D-API-55)/ 崩溃收割移出在途表即释放名额。该预算是进程内形态,跨实例聚合归 T1 多实例演进(与 D-API-36 注册表边界一致)。
+
+### D-API-53 每会话动作频率:与每连接令牌桶同源叠加;流水线序与回收联动(阶段三 WP-6)
+
+"每会话动作频率"复用 WP-5 的 `MessageRateLimiter`(同源实现:时钟可注入、判定纯函数、I-4),计量键从"每连接"换"每会话"(`SessionActionRateLimiter` 按 sessionId 建桶,容量同取 `SESSION_API_WSS_MESSAGE_RATE_PER_SECOND`——不新增配置键)。两道闸**叠加**:每连接桶随连接新建(重连即满),每会话桶**跨连接存活**(重连不重置预算,封堵"断线重连刷新令牌桶"的绕行向量)。帧流水线序:`WSS_RATE_LIMIT_ERROR`(连接闸,D-API-43)→ **会话闸** → 后续形态 / 版本 / 绑定检查;会话闸触顶 = 冻结错误帧 `{code:"budget_exhausted", message:"action rate limit exceeded"}`(`WSS_ACTION_RATE_LIMIT_ERROR`,D-API-41 错误帧矩阵增补行),逐帧确定性拒绝、连接保持、不消耗任何余量;两桶皆空时连接闸先行(确定性叠加次序)。桶生命周期:会话首帧惰性创建;断线保持到期回收的组合钩子先逐出桶再进入回收执行面(教学规模下桶数 ≤ 在途会话数,不设容量上限)。错误帧矩阵增补行:
+
+| 失败类别 | code | 静态文案 | 连接处置 |
+|---|---|---|---|
+| 每会话动作频率超限(会话闸触顶) | `budget_exhausted` | action rate limit exceeded | 保持 |
+
+### D-API-54 存储与快照配额:checkpoint 数量 / 快照字节预算 / 租户存储配额的预执行确定性拒绝(阶段三 WP-6)
+
+三个维度全部在 `create_checkpoint` 进入执行域**之前**判定(manager 动作入口的配额闸,先于 clientSeq 预算计量——配额拒绝不消耗预算份额、不触发 worker 往返):
+
+1. **每会话 checkpoint 数量上限**:默认 = 天花板 = 协议外圈护栏 `MAX_CHECKPOINTS_PER_SESSION`(256;权威 API 语义规约 §四登记表的契约前提——配额必须 ≤ 协议上限,配置超过 256 拒绝启动)。计量 = 编排器 checkpoint 账本长度(`listCheckpoints`),`≥` 上限即拒绝;
+2. **快照字节预算**:默认 1 MiB、天花板 64 MiB。计量口径 = 快照信封的规范化 JSON 字节长度(`envelopeByteLength`,确定性、不依赖密文开销);预执行以最近已知 checkpoint 信封为估计(同会话状态增长只会更大,保守方向);
+3. **每租户存储配额**:默认 256 MiB、天花板 1 TiB。计量 = 已持久化快照密文行字节合计(`TenantStorageQuotaMeter`:`listSessionsByTenant` × `listBySession` 组合查询——**T0 形态**,端口零新增,只在 create_checkpoint 判定时调用;阶段六全面租户隔离时复核为反规范化计数列)。`≥` 配额即拒绝该租户一切会话的后续 checkpoint。
+
+**超限呈现 = 编排器侧预检确定性拒绝**(与 session-core 预检同形:`status:"rejected"` 的 `ActionResponse` + `userVisibleError{code:"budget_exhausted"}`,静态文案三值:checkpoint quota exceeded / snapshot byte budget exceeded / tenant storage quota exceeded)。选码理由:16 冻结码中 `budget_exhausted` 是资源预算类的协议级拒绝码(能力矩阵 addressHex / explanation 双 forbidden)——零解释面恰好不透出配额内部计量;与 REST 429 / WSS 频率闸同族,通道语义一致。**requestId 为服务端每次签发(D-API-5 关联语义)**:配额拒绝不经编排核心幂等缓存,重放得到语义等价(status / code / message / revision 全同)而 requestId 新生的响应——确定性由语义面承载,与"同状态同请求字节相同"的响应面口径(无 requestId 的冻结 PublicError)不冲突。
+
+**粘性超限标记**:快照字节数只有在该 checkpoint 被引擎接受后才可精确计量;持久化边界复核实际信封字节数,超预算即**不落库**(恢复锚回退上一个预算内快照——"最近快照丢尾"语义容忍)+ 置粘性标记(只升不降),此后该会话一切 `create_checkpoint` 预执行确定性拒绝。同一动作序列恒同一判定序列(I-4)。超限事实只进受控日志(审计 kind 集合冻结见 D-API-59)。
+
+### D-API-55 会话资源回收与终态保留窗口:onKeepaliveExpiry 执行面 + 可调用清理入口(阶段三 WP-6)
+
+**断线保持到期回收**(D-API-45 挂载点的执行面):保持计时器到期时注册表先释放 `route:{sessionId}`(单次释放;回收路径不触碰 route 键,无双重释放),随后进入 `onKeepaliveExpiry(sessionId, tenantId)` 组合钩子(每会话频率桶逐出, D-API-53 → `keepaliveExpiryReaper` → `LiveSessionManager.reclaimDisconnected`):终态恢复点落库(尽力,失败不阻断回收)→ worker 优雅关闭(失败即 `kill` 收割——回收优先于状态细分)→ sessions 行 phase 对齐 `closed` → 移出在途表(释放并发名额,D-API-52)→ `session_force_closed` 审计(detail `{reason:"disconnect_keepalive_expiry"}`)。回收幂等:对已不在途的会话返回 `not_live`(no-op)。钩子异常只进受控日志,不向注册表到期路径传播。重连(任一新连接激活)取消计时器即取消回收——WP-5 已有语义,经组合钩子的装配面全链路测试覆盖。
+
+**终态会话保留窗口**:`SESSION_API_TERMINAL_SESSION_RETENTION_DAYS`(默认 30 天,天花板 3650)约束终态(`closed` / `crashed`)会话行的保留期。**T0 无 cron**:清理入口 = `TerminalSessionCleaner.purgeExpired({terminalRetentionDays, snapshotRetentionDays})`(可调用、幂等;运行时经 `runtime.terminalCleaner` 暴露,Compose 面的定时编排归 WP-7);执行序 = 快照按自身保留期(`purgeExpired`,D-API-25)先行清除 → 终态会话行按窗口清除(active 行不受影响),避免会话行清除后残留无主快照行。为此对 `SessionRepository` 端口做**最小扩展** `purgeTerminalSessionsBefore(cutoffIso): Promise<number>`(memory / PG 双实现同构;PG 为 `DELETE ... WHERE phase IN ('closed','crashed') AND updated_at <= $1`,故障翻译 `store_unavailable`)——持久化面原则不改之下的准许微调,理由:终态行清理是会话生命周期对齐(WP-6 第 3 条)的组成部分,且无既有端口面可组合(无跨租户全量列举)。
+
+### D-API-56 action_log 落库接线:submit 锚点 + 增量补账 + 落库失败语义(阶段三 WP-6;任务 B,D-API-46 遗留项收口)
+
+`LiveSessionManager.submit` 在裁决引用落库(`submissions.record`)之后,把 `SubmitReference.actionLog` 的**增量**落入 `ActionLogStore`(WP-3 端口,append-only):
+
+- **同锚**:增量条目以本次 submissions 行标识为 `submissionRef`——与"和 submit 引用同锚"(WP-3 任务 5)逐字一致;
+- **仅已接受动作天然成立**:`SubmitReference.actionLog` 是编排核心账本的权威投影,被拒绝动作本就不入账本(拒绝不入账,D-W8-9);条目 `clientSeq` 是**编排器内部水位**(与裁决引用同源)——D-API-46 的过渡形态(避免写伪 clientSeq)由此收口:落库数据源是 submit 引用(账本权威),不再是载荷层客户端自报值;
+- **增量语义**:会话态维护 `persistedActionCount`(已落库条数),每次 submit 只落 `actionLog.slice(persistedActionCount)`——append-only 不重复;重复 submit 零重复追加;无更新 / 删除面(端口形状即强制层,数据库层触发器为第二层,D-API-22);
+- **落库失败语义**:submit 响应**成功**、裁决引用**不回滚**——`submissions.reference` 内含完整动作日志,是 verifier 重放的权威锚(阶段六消费面);`persistedActionCount` 不推进,**下次 submit 增量补账**(重试语义);失败细节只进受控日志。审计承载:审计 kind 七值集合冻结(D-API-18),不因实现期接线扩张"落库失败"种类——扩展归阶段六审计面(完整审计覆盖与归档本就归阶段六,任务分解 §三);
+- **秘密语料扫描锚点**(WP-3 任务 5):落库动作日志的可见载荷(clientSeq / revisionAfter / action)经 `scanSecretCorpus` 扫描零命中——**测试锚点而非运行时硬闸**(玩家回显是 sanctioned 通道,D-API-26);扫描器红灯自证沿用 WP-3 反例。
+
+### D-API-57 ZR-P4 时序统计面:通道级帧分布统计断言(阶段三 WP-6;T-SC3 承接)
+
+统计口径(任务分解 WP-6 第 4 条,阶段二移交 §六.4 的编排器层承接):同题目同脚本在不同秘密变体下,通道上的响应帧序列与**帧长分布**无可区分差异。恒定成本的不变式由引擎 T-SC2(ZR-P7)在执行域内保证,本层是**通道级兜底统计**——捕获执行域产物之外的通道行为差异(投影形态、事件聚合、错误面、帧化节奏)。落点:`test/limits/zr-p4-frame-statistics.test.ts` + 比较器 `test/wss/helpers/frame-statistics.ts`(WP-7 录制机检可复用)。断言分层(抗-flaky 设计):①帧数一致(次数);②帧类型序列一致(有序性);③**帧长逐位置一致(主断言,逐字节)**;④归一化视图逐字节一致(剥离 sessionId 与服务端 requestId——D-API-5 关联值不承载确定性);⑤时序面只做录制序单调性断言,**不做响应时长分位数 / 绝对时长断言**(避免 CI 时钟抖动红灯)。红灯反例:变更脚本(首动作触发确定性拒绝)的帧分布在第 1 帧即可检出——证明统计面零命中非静默绿灯。真实秘密语料变体(异 seed / 秘密长度变体)随题目 fixture 逐题必跑(ZR-B1 🔜),本决策锁定 harness 与检出能力。
+
+### D-API-58 WP-6 配置键登记:七键(阶段三 WP-6)
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_RATE_LIMIT_REQUESTS_PER_MINUTE` | 否 | 120 | 上限 100000(每租户 / 每用户请求频率,窗口恒 60 s;D-API-50) |
+| `SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT` | 否 | 8 | 上限 10000(并发会话预算;D-API-52) |
+| `SESSION_API_SUBMISSIONS_PER_MINUTE` | 否 | 30 | 上限 100000(提交频率;D-API-50) |
+| `SESSION_API_MAX_CHECKPOINTS_PER_SESSION` | 否 | 256 | 上限 = 协议 `MAX_CHECKPOINTS_PER_SESSION`(256;配额必须 ≤ 协议上限;D-API-54) |
+| `SESSION_API_SNAPSHOT_BYTE_BUDGET` | 否 | 1048576 | 上限 67108864(单快照信封字节预算;D-API-54) |
+| `SESSION_API_TENANT_STORAGE_QUOTA_BYTES` | 否 | 268435456 | 上限 1099511627776(租户存储配额;D-API-54) |
+| `SESSION_API_TERMINAL_SESSION_RETENTION_DAYS` | 否 | 30 | 上限 3650(终态会话保留窗口;D-API-55) |
+
+七键均过配置三道闸(未知保留键 / 取值天花板,fail-closed;D-API-9)。
+
+### D-API-59 审计面边界:kind 集合不因 WP-6 接线扩张(阶段三 WP-6)
+
+审计 kind 七值封闭集合(D-API-18)在 WP-6 保持不变:①断线保持到期回收复用 `session_force_closed`(回收即服务端强制终止语义),detail 携带 `{reason:"disconnect_keepalive_expiry"}`;②快照字节预算超限、action_log 落库失败等"非终止性配额 / 持久化事件"只进受控日志,不新增审计种类——审计面是安全事件账(强制终止、凭证链路、提交),不是运维事件账;新增种类的需求归阶段六审计面(完整审计覆盖与归档)统一论证。理由:kind 集合是审计消费方的封闭契约,实现期逐次扩张会使集合退化为事件日志,丧失"审计事件 = 需要不可抵赖账目的安全事实"的边界。
+
+## 三·八、跨域载荷机检与 Compose 集成(阶段三 WP-7;D-API-60 ~ D-API-66)
+
+### D-API-60 跨域载荷机检扫描器:src 纯模块形态与规则落点(阶段三 WP-7;ZR-B9 / B10 / B5 / B4 / B1 / B6 通道录制面)
+
+任务分解"src 纯模块 + 测试消费 / tooling 脚本"二选一的择型:**`apps/session-api/src/scan/cross-domain-payload-scanner.ts` 纯模块(零依赖)**,不做 tooling 脚本。理由:同一套规则必须被三类消费者共享——rig 级审计测试(vitest 直接 import src)、Compose 拓扑集成套件(客户端侧捕获,与录制同进程消费)、红灯反例(规则精度锚);src 模块被 vitest 双形态(`test` / `test:compose`)天然双消费,CI(ts-gate 与 compose-integration)经 vitest 套件消费同一实现,零复制;tooling 脚本形态则需额外产物编译或规则复制品。机检规则与 `秘密零驻留CI检查项映射.md` §三逐字对应(只引用不改写):**ZR-B9 共现规则**(单 JSON 对象 ≥ 3 个 `VmState` 字段名键,字段表取 vm-core 冻结表序列化形态 registers / memory / callFrames / instructionPointer / privateEventLog / constraints / seedState / status)+ §三 ZR-B9 行的词边界模式(类型名 / 字段名 / crate 名)对键名与字符串值;**ZR-B10**(Internal / FileGranted / FileRead 私有事件 kind 值与 `privateEventLog` / `eventLog` 键的结构性缺席);**ZR-B5**(密文魔数 `SMEN` 与明文信封标记 `stackmaster-session-snapshot` 的通道缺席——密文与明文形态都不得上线);**ZR-B4**(私有题目包键名语料,与 `tooling/scan-public-artifacts.mjs` 同源);**ZR-B1 / B6 语料**复用 WP-3 `scanSecretCorpus`(D-API-26 预留复用点)。误报豁免面(登记,均非泄漏通道):服务端签发标识符键(sessionId / requestId / checkpointId / submissionId / embedSessionId / jti / idempotencyKey——冻结字符集随机串与 ZR-B6 语料同形)与公开十六进制载荷键(bytesHex / payloadHex / valueHex——I-10 值来源,零填充区域使 ≥32 hex 子串必然存在)。定位与 D-API-26 一致:**测试锚点而非运行时硬闸**(玩家回显是 I-9 / ZR-P8 sanctioned 通道)。
+
+### D-API-61 机检捕获面与红灯反例(阶段三 WP-7;ZR-B9 共现接线 / ZR-B10 录制面收口)
+
+捕获两层四源:①rig 级——服务端 `outboundFrameSink` 的 `OutboundFrameRecorder`(WSS 全量出站帧,先过冻结 `WssFrameSchema` 自检后录制)+ HTTP 响应体录制(签发端点 + 生命周期五命令全链路,`test/wp7/cross-domain-payload-audit.test.ts`);②Compose 级——客户端侧捕获(WSS 入站帧 + HTTP 响应体,`test/compose`),校验跨进程真实通道。机检对象 = **服务端发出的载荷面**;凭证交付头(Set-Cookie 的 JWT)是签名载体而非跨域载荷(卫生面归 D-API-12 / ZR-B7),客户端 → 服务端方向不设机检对象(浏览器不可信,注入面归 ZR-T 矩阵)。**红灯反例纪律**:每一违规类(VmState 共现 / 私有事件形态 / 快照魔数·信封标记 / 键名语料 / flag / seed)注入录制集必须检出,反例与零命中断言同套件运行——glob 写错或扫描器失效表现为红灯而非静默绿灯(映射文档 §五纪律)。
+
+### D-API-62 客户端 clientSeq / baseRevision 的服务端锚定语义(阶段三 WP-7;ZR-T 重放条目的实现面澄清)
+
+实现语义澄清(session-core 零改动):编排核心的 clientSeq / baseRevision 预检是**结构性预检**——`applyAction` 以内部水位与权威账本锚定构造请求(协议 §4.3 / D-W8-9"权威判定只在执行域"),载荷层携带的 clientSeq / baseRevision 是客户端声明值,不进入预检。后果:①旧 baseRevision 请求不产生 `stale_base_revision` 拒绝,而是被服务端以当前权威 revision 重新锚定后确定性执行(零状态腐化,同输入恒同响应 I-4);②重放防护由幂等承载:同键同负载 → 缓存同形响应(窗口内外同确定性);同键异负载 → `idempotency_conflict`;幂等窗口过期后重放仍确定性——窗口是效率设施,正确性由服务端锚定与串行保证(协议 §4.3)。`stale_base_revision` / `stale_client_seq` 冻结文案保留于预检模板(structural 防线 + clientSeq 预算路径,D-API-38)。篡改矩阵 `test/wp7/zr-tamper-matrix.test.ts`(ZR-T1 ~ T4 全绿)锁定该语义。
+
+### D-API-63 编排器重启恢复的启动期接线(阶段三 WP-7;计划书 5.3"编排器重启不破坏会话一致性"的启动期兑现)
+
+WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker restart → 会话恢复 → revision 自快照续算"的 Compose 级复验,做最小接线(任务书"outboundFrameSink 之外的最小接线"准许范围):①`SessionRepository` 端口最小扩展 `listActiveSessions()`(phase = 'active' 行;memory / PG 双实现同构)——**查询层租户过滤的唯一跨租户例外**,理由:这是服务进程生命周期操作(启动恢复)而非租户作用域数据访问,调用方仅限 runtime 装配与测试;②`LiveSessionManager.adoptRecovered`(恢复编排器纳入在途表;计量面按"进程内计数随旧进程消亡"重置:clientSeqUsed = 0,persistedActionCount = 0——恢复后账本自快照状态重启,动作日志增量自此起算,快照锚之前的条目已随重启前 submit 落库,append-only 不重复);③`runtime.recoverActiveSessions`:active 行 → `planRecovery` + `SessionOrchestrator.recover`(两步 load + import_snapshot,D-F8)→ `adoptRecovered`,在 HTTP 服务装配之前完成(接单即一致)。**fail-open 边界**:单会话恢复失败(版本行缺失 / 双包不可取回 / 无恢复点 / worker 装载拒绝)→ 会话行置 `crashed`(确定性终态,客户端恢复路径 = 重新 create_session)+ 受控日志,启动永不因单个不可恢复会话受阻;一致性由"不可恢复即终态"保证(不存在半恢复的在途会话)。不新增审计 kind(D-API-59 集合不变)。单测:`test/runtime/boot-recovery.test.ts`(内存同构栈);拓扑级:`test/compose` 重启用例。
+
+### D-API-64 Compose 全拓扑与 session-api 镜像(阶段三 WP-7;质量门禁 7 阶段三子集)
+
+新增 `apps/session-api/Dockerfile`(多阶段):Rust 阶段在容器内构建 **linux vm-worker**;Node 阶段构建 workspace TS 图(session-api 及其依赖);运行时镜像 = dist + migrations + `/app/bin/vm-worker`。**`WORKER_CARGO_PROFILE`:本地缺省 `debug`(控制本地 Rust 容器构建时长),CI 传 `release`**——以单一构建参数登记,不维护两份 Dockerfile。`vm-worker` 不是常驻服务(ADR-3 单会话单进程 spawn):拓扑第五元素 = **镜像内二进制 + 会话期子进程**;`compose/app.yaml` 的 `vm-worker` 服务为一次性冒烟(ready 帧写 stdout + stdio EOF 优雅退出,exit 0),由 `docker compose run --rm -T vm-worker` 显式触发,不参与 `up --wait` 的常驻收敛——把无状态 per-session 进程池映射为常驻容器反而违背进程模型。容器内 `ensureWorkerBinary` 解析:`STACKMASTER_WORKER_BIN=/app/bin/vm-worker`(解析序第一优先,不触发 cargo)。一键起停:`compose:app:up`(up -d --build --wait)/ `compose:app:down`(down -v)/ `test:compose`。
+
+### D-API-65 test:compose 双拓扑形态与 CI 编排(阶段三 WP-7)
+
+`test/compose/run.mjs` 按 `SESSION_API_TOPOLOGY` 选择形态:**container**(CI 形态,完整 linux 拓扑:build → `up -d --build --wait` → vm-worker linux 冒烟 → vitest `test/compose` → `down -v`)与 **host**(本机 Windows 降级形态:deps.yaml 依赖服务拓扑 + session-api 宿主进程 `node dist/index.js` + 本机 worker 二进制 `STACKMASTER_WORKER_BIN` 或 `vm-engine/target/{debug,release}` 产物;重启 = SIGTERM 优雅停机冲刷 → 重新拉起)。套件以 `SESSION_API_COMPOSE=1` 门控(`pnpm test` 恒跳过并输出原因)。CI `compose-integration` job:ubuntu-latest + `WORKER_CARGO_PROFILE=release`,**完整 linux 拓扑**跑机检 + 集成套件;与 ts-gate 并行(独立装依赖与构建,换取 job 独立性,不破坏既有 job)。本地 Windows 降级路径登记(任务分解 §六):vm-worker 需 linux 二进制(容器内构建);本机 Rust 容器构建过慢(> 20 分钟)时以 host 混合形态实跑并在验收记录中如实注明实跑形态,CI 始终为完整拓扑。
+
+### D-API-66 13.3 API 侧条目落点与排除说明(阶段三 WP-7)
+
+逐条落点:`test/wp7/api-acceptance-13-3.test.ts`——过期 revision(D-API-62 服务端锚定语义 + I-4 孪生对齐)、重复幂等键(缓存同形 + conflict)、跨租户 session(REST 凭证绑定 401 与 WSS 会话绑定错误帧双层)、断线重连与投影重同步(重连凭证重验 → sync-projection 对齐 → 新锚继续)、权限校验(过期 embed token / 已消费 jti 重放 / 绑定不符 / 未认证 / 过期会话凭证全部 401 统一形态)、限流(`rate:{tenant}:{user}` 触顶 429 冻结形态逐字节确定)、超时和资源限制(worker 看门狗 timeout 错误帧、请求体 413、clientSeq 预算触顶;帧超限 close 1009 由 `test/wss/channel.integration.test.ts` 承载)。**排除说明**:13.3 中 iframe 握手超时 / 自适应高度 / 主题与语言等嵌入面条目归阶段五(嵌入协议交付通道),不在本 API 侧清单。
+
+## 三·九、可观测基线与部署收尾(阶段三 WP-8;D-API-70 ~ D-API-73)
+
+### D-API-70 指标面最小集与 /metrics 端点形态(阶段三 WP-8;计划书 5.8 的 MVP 子集)
+
+五个指标族(Prometheus 文本格式,`GET /metrics` 暴露;prom-client 已是依赖,零新增依赖):
+
+| 指标 | 类型 | 标签 | 语义 |
+|---|---|---|---|
+| `session_api_action_rtt_seconds` | histogram | `action` / `outcome` | 动作 RTT(`manager.applyAction` 入口到响应 / 异常;p50 / p95 由分位数计算) |
+| `session_api_live_sessions` | gauge | —— | 并发会话数(在途会话管理器持有量) |
+| `session_api_action_queue_depth` | gauge | —— | 编排器动作队列深度(在途动作调用数) |
+| `session_api_worker_processes` | gauge | —— | Worker 池占用(本编排器进程持有的 vm-worker 子进程数) |
+| `session_api_projection_delta_bytes` | histogram | `action` | 投影增量字节数(已接受动作的 ProjectionDelta 序列化字节) |
+
+端点与装配形态:`/metrics` 为**未认证的同端口运维路由**(与 `/healthz` / `/readyz` 同族),经 fastify 插件注入(`deps.metricsPlugin`),不触碰既有路由与错误面(未挂载时 `/metrics` 走 404 冻结形态,与既有兜底一致);**不新增任何配置键**(暴露面收敛——内网段 / 反向代理准入 / 独立端口——是部署面配置事项,不是端点语义变更);挂载在 runtime 全量装配(生产)与测试 rig(内存同构栈)两条路径一致。**Registry 不采集默认进程指标**:`/metrics` 上出现的指标名全部落白名单内("不泄露内部细节"的机检前提)。观测是纯增量面:指标调用不得改变既有行为(异常传播 / 响应面 / 编排语义零变化)。
+
+### D-API-71 指标标签纪律:有界枚举域,标识符与秘密只进受控日志(阶段三 WP-8)
+
+任务分解 §六"指标标签基数"决策点的回填。**进标签的维度**(基数恒定、与流量规模无关的有界域):
+
+| 标签 | 值域 |
+|---|---|
+| `action` | 12 冻结动作类型(与会话动作协议判别字面量同源;未登记类型折叠为 `other`,基数防护兜底) |
+| `outcome` | `accepted` / `rejected` / `error` 三值(拒绝单独分道;编排器域异常归 `error`) |
+
+**不进标签、只进受控日志的维度**:sessionId(基数随会话数无界增长——基数爆炸防护,任务分解 WP-8 第 1 条)、tenantId / userId / challengeId / challengeVersion / checkpointId / requestId 等——这些维度的聚合观测走受控日志(Pino 白名单化字段,D-API-9)与审计,不进指标。**零秘密面**:指标载荷 = 聚合数值 + 有界枚举,零请求 / 响应体片段;`scanSecretCorpus`(ZR-B1 / B6 语料)对 `/metrics` 渲染输出零命中是测试锚点。**机检**:`assertMetricsTextDiscipline` 对渲染文本逐行扫描——指标名 ⊆ 白名单(`METRIC_FAMILIES`)、标签名 ⊆ 族级白名单(直方图 `le` 结构性放行)、秘密语料零命中、服务端签发标识符形态值零出现;四类违例各带红灯反例(映射文档 §五"必触发反例"纪律),与零命中断言同套件运行(`test/metrics/metrics.test.ts`)。端到端接线测试(`test/metrics/metrics-wiring.test.ts`)断言真实链路(创建 → 动作接受 / 拒绝 / 异常 → 关闭)产生的样本与真实会话 ID 零出现。
+
+### D-API-72 队列深度与 Worker 占用的 T0 语义;OpenTelemetry span = T0 可选增量(阶段三 WP-8)
+
+**Worker 池占用**(`session_api_worker_processes`):T0 每会话单进程模型(ADR-3)下,本编排器进程持有的 vm-worker 子进程数 = 在途会话数,与 `session_api_live_sessions` **同源同值**(创建 / 关闭 / 回收 / 收割 / 恢复纳管各同步点一致);这是构造性重合而非冗余——两个族对应 5.8 清单的两个观测意图,T1 容器化 Worker 池(进程池租约与会话解耦)引入后两者分道。**队列深度**(`session_api_action_queue_depth`)= manager 在途动作调用数(进入 / 离开执行段对称增减;单会话串行下逐会话在途 ≤ 1,总量 = 跨会话并发执行压力)。**OpenTelemetry 全链路 span**("动作请求 → 编排器 → Worker → 投影下发",5.8 追踪面)= **T0 可选增量,本阶段只登记决策、不实现、不设为退出条件**(阶段三任务分解 WP-8 第 1 条原文);触发判据:阶段四 / 五联调时跨服务排障需求实际出现,且指标面 + 受控日志不足以定位时,按本决策登记的观测缺口引入,接入点为 manager 动作入口与 WSS 通道流水线。
+
+### D-API-73 k6 基线首采:场景形态、无阈值与归档位置(阶段三 WP-8;质量门禁 9)
+
+场景三件(`apps/session-api/k6/scenarios/`,k6 WebSocket 模块承载 WSS):
+
+1. `action-rtt-wss.js`——签发 → create_session(Set-Cookie 会话凭证)→ `GET /sessions/channel` 升级(Cookie 呈递)→ stop-and-wait 发送 `write_bytes` 动作帧,逐帧测量 RTT(custom Trend `wss_action_rtt_ms`)→ REST close 收尾;
+2. `rest-lifecycle.js`——REST 五命令全生命周期(签发 → create → sync ×2 → list-checkpoints → close),周期时延按命令分道;
+3. `concurrent-sessions.js`——ramping-vus 阶梯并发,每 VU 持有会话(周期动作维持)→ REST close;服务端并发数经 `GET /metrics` 采样(`session_api_live_sessions`,指标面的端到端观察)。
+
+执行形态:**docker `grafana/k6` 官方镜像**(本机无 k6 二进制;`k6/run-baseline.mjs` 以 stdin 传脚本免卷挂载的 Windows 路径转换问题),对 **compose 全拓扑(容器形态)** 首采——`compose:app:up` 一键拓扑即被测系统,被测地址 `host.docker.internal:13000`(宿主侧探活 / 指标采样走 `127.0.0.1:13000`)。基线题目由 `k6/seed-challenge.mjs` 经持久化端口登记(与 compose 集成测试同一登记路径:双包 + Ed25519 登记签名,真实验签;版本不可变,重复运行复用既有版本)。**不设通过阈值**(10.3 / 13.6:性能数字经 benchmark 后再定,避免过早优化;本基线只作 T2 触发判据的数据源)——场景无 threshold 配置,采集数值不构成性能承诺。结果归档:`apps/session-api/k6/results/<UTC 时间戳>/`(逐场景原始 summary JSON + stderr 留档 + 采集前 / 后 `/metrics` 快照 + `summary.md` 人读摘要);首采记录 2026-09-10(容器拓扑;动作 RTT p50 6ms / p95 10ms,REST 生命周期整环 p50 61ms,服务端并发 gauge 峰值 6,与场景设计一致),位置 `k6/results/2026-09-09T223628898Z/`。基线负载数值纪律:限流与并发预算是生产行为(429 冻结形态),压测脚本以每迭代唯一用户规避 120 req/min 护栏的刻意削顶,**不得以调低护栏的方式做压测**;`SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT`(默认 8)是真实护栏,并发场景峰值压在预算内。
+
+## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:
 
 | 决策点 | 承接 WP | 契约前提(WP-0 已冻结) |
 |---|---|---|
-| token 消费失败响应面细节、CORS / Cookie 卫生 | WP-2 | D-API-3 统一失败形态;`SessionCredentialClaims` 七字段 |
-| 快照加密层级、Redis 分级降级、幂等缓存后端 | WP-3 | D-API-4 幂等 TTL 配置键;快照 SERVER_ONLY blob 只存取不解析(D-W8-11) |
-| HTTP 状态 ↔ 结果类型映射、请求护栏数值 | WP-4 | D-API-1 路由表;错误响应 = 冻结 `PublicError` |
-| 断线保持窗口、多连接策略、背压、WSS 频率限制 | WP-5 | D-API-2 连接级版本锚定;D-API-6 心跳;帧载荷纯复用 |
-| 限流默认值、checkpoint 配额数值 | WP-6 | 协议外圈护栏 `MAX_CHECKPOINTS_PER_SESSION`(配额必须 ≤ 协议上限) |
-| 指标标签纪律、k6 场景 | WP-8 | —— |
+| token 消费失败响应面细节、CORS / Cookie 卫生 | ~~WP-2~~ **已回填(2026-09-10):D-API-11~17 / D-API-19** | D-API-3 统一失败形态;`SessionCredentialClaims` 七字段 |
+| 快照加密层级、Redis 分级降级、幂等缓存后端 | ~~WP-3~~ **已回填(2026-09-10):D-API-20~26** | D-API-4 幂等 TTL 配置键;快照 SERVER_ONLY blob 只存取不解析(D-W8-11) |
+| HTTP 状态 ↔ 结果类型映射、请求护栏数值 | ~~WP-4~~ **已回填(2026-09-10):D-API-30~39** | D-API-1 路由表;错误响应 = 冻结 `PublicError` |
+| 断线保持窗口、多连接策略、背压、WSS 频率限制 | ~~WP-5~~ **已回填(2026-09-10):D-API-40~49** | D-API-2 连接级版本锚定;D-API-6 心跳;帧载荷纯复用 |
+| 限流默认值、checkpoint 配额数值 | ~~WP-6~~ **已回填(2026-09-10):D-API-50~59** | 协议外圈护栏 `MAX_CHECKPOINTS_PER_SESSION`(配额必须 ≤ 协议上限;默认 = 天花板 = 256,D-API-54) |
+| 跨域载荷机检、Compose 全拓扑、重启恢复接线、13.3 API 侧条目 | ~~WP-7~~ **已回填(2026-09-10):D-API-60~66** | 通道出站帧先过冻结 `WssFrameSchema` 自检(WP-5 录制面前提);快照 SERVER_ONLY blob 只存取不解析(D-W8-11);幂等窗口 = 效率设施(协议 §4.3) |
+| 指标标签纪律、k6 场景 | ~~WP-8~~ **已回填(2026-09-10):D-API-70~73**(指标面最小集与 /metrics 形态、标签纪律机检、队列深度 / Worker 占用 T0 语义与 OTel 可选增量登记、k6 三场景与归档) | 指标标签零秘密(ZR-B1 / B6 语料对 /metrics 输出零命中是测试锚点);k6 场景消费冻结契约(签发 / create_session / WSS 帧 / 五命令),零新增契约面 |

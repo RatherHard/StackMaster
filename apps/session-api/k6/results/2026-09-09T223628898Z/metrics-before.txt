@@ -1,0 +1,50 @@
+# HELP session_api_action_rtt_seconds 动作往返时长(manager.applyAction 入口到响应/异常;秒)
+# TYPE session_api_action_rtt_seconds histogram
+session_api_action_rtt_seconds_bucket{le="0.001",action="write_bytes",outcome="accepted"} 0
+session_api_action_rtt_seconds_bucket{le="0.0025",action="write_bytes",outcome="accepted"} 0
+session_api_action_rtt_seconds_bucket{le="0.005",action="write_bytes",outcome="accepted"} 104
+session_api_action_rtt_seconds_bucket{le="0.01",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="0.025",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="0.05",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="0.1",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="0.25",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="0.5",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="1",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="2.5",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="5",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="10",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_bucket{le="+Inf",action="write_bytes",outcome="accepted"} 106
+session_api_action_rtt_seconds_sum{action="write_bytes",outcome="accepted"} 0.46011198099976175
+session_api_action_rtt_seconds_count{action="write_bytes",outcome="accepted"} 106
+
+# HELP session_api_live_sessions 并发会话数(在途会话管理器持有量)
+# TYPE session_api_live_sessions gauge
+session_api_live_sessions 2
+
+# HELP session_api_action_queue_depth 编排器动作队列深度(manager 在途动作调用数;单会话串行上限为逐会话 1)
+# TYPE session_api_action_queue_depth gauge
+session_api_action_queue_depth 0
+
+# HELP session_api_worker_processes Worker 池占用(本编排器进程持有的 vm-worker 子进程数;T0 = 每在途会话 1)
+# TYPE session_api_worker_processes gauge
+session_api_worker_processes 2
+
+# HELP session_api_projection_delta_bytes 投影增量字节数(已接受动作的 ProjectionDelta 序列化字节)
+# TYPE session_api_projection_delta_bytes histogram
+session_api_projection_delta_bytes_bucket{le="128",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="256",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="512",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="1024",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="2048",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="4096",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="8192",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="16384",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="32768",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="65536",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="131072",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="262144",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="524288",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="1048576",action="write_bytes"} 106
+session_api_projection_delta_bytes_bucket{le="+Inf",action="write_bytes"} 106
+session_api_projection_delta_bytes_sum{action="write_bytes"} 12932
+session_api_projection_delta_bytes_count{action="write_bytes"} 106
