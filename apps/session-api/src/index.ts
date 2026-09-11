@@ -26,6 +26,7 @@ async function main(): Promise<void> {
   const server = buildServer(config, logger, {
     authPlugin: runtime.authPlugin,
     sessionRoutes: runtime.sessionRoutes,
+    descriptorRoutes: runtime.descriptorRoutes,
     wssChannel: runtime.wssChannel,
     metricsPlugin: runtime.metricsPlugin,
     readinessProbes: runtime.readinessProbes,

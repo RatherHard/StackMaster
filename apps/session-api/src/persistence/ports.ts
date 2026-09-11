@@ -234,6 +234,19 @@ export interface ChallengeRegistry {
   insertChallengeVersion(input: ChallengeVersionInput): Promise<void>;
   findChallengeVersion(challengeId: string, version: string, tenantId: string): Promise<ChallengeVersionRow | null>;
   listChallengeVersions(challengeId: string, tenantId: string): Promise<ChallengeVersionRow[]>;
+  /**
+   * 公开描述包下发路径的版本行读取(阶段五 WP-50,D-API-76):按
+   * (challengeId, contentVersion) 查登记行,不带租户过滤。
+   *
+   * 这是查询层租户过滤的第二处跨租户例外(先例:D-API-63
+   * listActiveSessions),理由:公开描述包是**公开内容**(设计上可 CDN
+   * 分发,8.3),其下发端点无凭证、无租户上下文;行内 (challenge_id,
+   * content_version) 为全局唯一主键(migrations/001),跨租户查询结果
+   * 唯一且行内容(双包摘要、对象名、登记签名)本身即公开元数据。私有面
+   * (租户作用域题目访问)仍走 findChallengeVersion 的租户强制过滤,本
+   * 方法不得用于私有判题包路径。调用方仅限公开描述包下发路由与测试。
+   */
+  findPublishedChallengeVersion(challengeId: string, version: string): Promise<ChallengeVersionRow | null>;
 }
 
 // ── 幂等窗口(D-W8-9;Redis 后端 + 进程内降级,同接口)───────────────────

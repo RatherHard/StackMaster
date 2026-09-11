@@ -132,6 +132,15 @@ export const DEFAULT_TERMINAL_SESSION_RETENTION_DAYS = 30;
 export const TERMINAL_SESSION_RETENTION_DAYS_CEILING = 3650;
 
 /**
+ * 阶段五 WP-50 公开描述包下发通道(8.3 / D-API-76):与 WP-4 ~ WP-6 同一
+ * 形态——常量默认值 + 配置天花板双闸(配置超过天花板拒绝启动)。
+ */
+/** 公开描述包响应体字节上限默认值(256 KiB;公开 Schema 最坏形态 ≈ 数十 KiB,充裕)。 */
+export const DEFAULT_MAX_DESCRIPTOR_BYTES = 262144;
+/** 公开描述包响应体字节天花板(4 MiB;护栏防桶内对象被替换为巨型载荷)。 */
+export const MAX_DESCRIPTOR_BYTES_CEILING = 4194304;
+
+/**
  * 必备环境变量登记表(缺失即拒绝启动)。
  *
  * WP-1 骨架期无必备密钥;WP-2 登记凭证签名密钥、WP-3 登记存储端点时逐项
@@ -197,6 +206,8 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_SNAPSHOT_BYTE_BUDGET",
   "SESSION_API_TENANT_STORAGE_QUOTA_BYTES",
   "SESSION_API_TERMINAL_SESSION_RETENTION_DAYS",
+  // ── 阶段五 WP-50 公开描述包下发通道(2026-09-11;D-API-76)──
+  "SESSION_API_MAX_DESCRIPTOR_BYTES",
 ];
 
 const envSchema = z.object({
@@ -389,6 +400,13 @@ const envSchema = z.object({
     .min(1)
     .max(TERMINAL_SESSION_RETENTION_DAYS_CEILING)
     .default(DEFAULT_TERMINAL_SESSION_RETENTION_DAYS),
+  // ── 阶段五 WP-50 公开描述包下发通道(D-API-76):默认值 + 天花板双闸 ──
+  SESSION_API_MAX_DESCRIPTOR_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_DESCRIPTOR_BYTES_CEILING)
+    .default(DEFAULT_MAX_DESCRIPTOR_BYTES),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -475,6 +493,9 @@ export interface SessionApiConfig {
   readonly tenantStorageQuotaBytes: number;
   /** 终态会话保留窗口(天;可调用清理入口驱动,T0 无 cron;D-API-55)。 */
   readonly terminalSessionRetentionDays: number;
+  // ── 阶段五 WP-50 公开描述包下发通道(D-API-76)──
+  /** 公开描述包响应体字节上限(桶内对象取回后、解析前强制);≤ MAX_DESCRIPTOR_BYTES_CEILING。 */
+  readonly maxDescriptorBytes: number;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -614,6 +635,7 @@ export function loadSessionApiConfig(
     snapshotByteBudget: raw.SESSION_API_SNAPSHOT_BYTE_BUDGET,
     tenantStorageQuotaBytes: raw.SESSION_API_TENANT_STORAGE_QUOTA_BYTES,
     terminalSessionRetentionDays: raw.SESSION_API_TERMINAL_SESSION_RETENTION_DAYS,
+    maxDescriptorBytes: raw.SESSION_API_MAX_DESCRIPTOR_BYTES,
   };
 }
 

@@ -77,6 +77,8 @@ describe("配置加载与启动校验(fail-closed)", () => {
       snapshotByteBudget: 1048576,
       tenantStorageQuotaBytes: 268435456,
       terminalSessionRetentionDays: 30,
+      // 阶段五 WP-50 公开描述包下发通道(D-API-76)默认值。
+      maxDescriptorBytes: 262144,
     });
   });
 

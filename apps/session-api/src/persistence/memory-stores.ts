@@ -421,6 +421,14 @@ export class MemoryChallengeRegistry implements ChallengeRegistry {
       .filter((row) => row.challengeId === challengeId && row.tenantId === tenantId)
       .sort((a, b) => (a.registeredAt < b.registeredAt ? -1 : 1));
   }
+
+  /**
+   * 公开面版本行读取(WP-50,D-API-76):无租户过滤(公开描述包是公开内容,
+   * 下发端点无租户上下文;ports.ts 的例外论证同源)。与 PG 实现同构。
+   */
+  async findPublishedChallengeVersion(challengeId: string, version: string): Promise<ChallengeVersionRow | null> {
+    return this.versions.get(`${challengeId}@${version}`) ?? null;
+  }
 }
 
 // ── 幂等窗口(进程内形态;Redis 不可用时的 sanctioned 降级载体)──────────

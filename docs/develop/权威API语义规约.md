@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;**阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补——既有 D-API-1~73 条目零改动**) |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四) |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;**阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补——既有 D-API-1~74 条目零改动**) |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -31,6 +31,12 @@ HTTP 路由表为**实现面文档登记**,不作 JSON Schema 契约(WP-0 冻结
 登记要点:会话定位以**请求体 `payload.sessionId` 为权威锚**(与凭证绑定三方比对),路径不携带会话标识——避免"路径 ID 与体 ID 双真源"及 URL 中会话标识经代理 / 访问日志扩散的面;`embed token` 签发端点(宿主后端 → session-api)归 WP-2 登记与实现。非 2xx 响应体 = 冻结 `PublicError` Schema(既有契约,零新增),HTTP 状态 ↔ 结果类型映射归 WP-4。
 
 **WP-2 增补(2026-09-10)**:签发端点已实现并登记为 **`POST /auth/embed-tokens`**(服务端间行:宿主后端 bearer 认证,非浏览器面;请求 / 响应体形态与拒绝面见 D-API-11 / D-API-14 / D-API-15)。
+
+**阶段五 WP-50 增补(2026-09-11)**:公开描述包下发端点登记为 **`GET /descriptors/:challengeId/:version`**(公开内容行:无凭证 GET、零会话标识、challengeId / version 均为公开内容定位符可入路径;服务序与拒绝面见 D-API-76):
+
+| 路由(阶段五 WP-50 增补行) | 命令 | 请求体契约 | 成功响应契约 |
+|---|---|---|---|
+| `GET /descriptors/:challengeId/:version` | ——(公开内容读取,非会话命令) | 无(路径参数:challengeId 冻结标识符字符集、version 语义化版本字符集,违规同形 404) | 描述包 JSON 原始字节(`application/json`;`ETag` = 登记摘要;体 = `public-descriptors` 桶对象,逐字节确定性) |
 
 ### D-API-2 WSS 传输帧随会话动作协议版本编号;连接级版本锚定(阶段三 WP-0)
 
@@ -525,6 +531,68 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 - **机检与跨语言消费**:调试帧与变体镜像契约进入 golden fixture 摘要清单与 contract-smoke(§1 Schema 编译 / §2 实例同判 / §3 摘要 / §4 serde + schemars 镜像);ZR-B12(帧语料 ⊆ 变体镜像包含性)/ ZR-B13(派生复算)机检见 `docs/develop/秘密零驻留CI检查项映射.md` v1.9;D-API-60 跨域载荷录制机检的既有 ZR 面零改动。
 
 
+
+## 三·十一、嵌入交付通道与描述包下发(阶段五 WP-50;D-API-75 ~ D-API-77)
+
+### D-API-75 embed token 浏览器交付通道:服务端注入引导配置为默认,MessageChannel port 下发为 opaque 备用(阶段五 WP-50;嵌入协议 §4.1 / §4.2 / §6.2 / V-13)
+
+任务分解 §六 Q1 的定案。**两形态并存,默认 + 备用**:
+
+- **默认通道 = 候选 (a):宿主服务端把 token 注入插件引导配置**(嵌入协议 §4.1 默认推荐)。token 永远走"服务端 → 服务端 → 引导配置"路径:宿主后端持 `SESSION_API_HOST_BACKEND_TOKEN` 调 `POST /auth/embed-tokens`(D-API-11,响应体 `{embedToken, expiresAt}`),把 token 组装进**插件引导配置**并经非 postMessage、非 URL 的通道交付给插件 Shell——具体载体为"插件以 iframe URL fragment 中的一次性 `embedSessionId` 经 **POST 请求体**向宿主后端的引导配置取回端点换取 `{embedToken, sessionApiOrigin, challengeId, challengeVersion, embedSessionId}`"(POST 体承载,禁入 URL query;esid 单次有效、重载即轮换,取回记录的 esid 一致性由宿主后端维护)。该取回端点属**宿主后端职责面**,不在 session-api 契约面内(session-api 只承诺签发端点 D-API-11 与消费端点 create-session);
+- **备用通道 = 候选 (b):握手完成后经已绑定端点的 MessageChannel port 下发**。仅用于 opaque 部署形态(sandbox 无 `allow-same-origin`);**port 转移是该路径的必需前置**(嵌入协议 §4.2:凡经 postMessage 交付凭证 / 绑定值,必须先完成 port 转移并经 port 下发),禁止经 `targetOrigin: "*"` 的裸 postMessage 承载(V-13);
+- **MVP 演示面走 (a)**。compose demo 拓扑下的可落地形态:宿主模拟页(归 WP-51,由 apps/plugin-dev 开发壳承载,`pnpm --filter @stackmaster/plugin-dev dev`,origin `http://localhost:5173` 已经 demo-override.yaml 登记进 `SESSION_API_ALLOWED_ORIGINS`)的"宿主后端"由 **vite dev server 的服务端代理层承担(开发态替身)**——代理持 `SESSION_API_HOST_BACKEND_TOKEN`(环境变量注入,不入库不入浏览器)向 session-api(`http://localhost:13000`)调 `POST /auth/embed-tokens`,页面以同源 fetch 取引导配置(含 token,仅存页面内存),插件 iframe(`src` 只带 `#esid=<embedSessionId>`,WP-52 产物)以 esid 经 POST 体取回引导配置完成 `create-session`。token 全程不进 URL query、不经 postMessage、不进日志、不超会话期留存(浏览器对 token 不透明:不解析、不校验;`EmbedTokenClaims` 解析器仅在 `@stackmaster/protocol/server-only`,既有导出纪律不变);
+- **V-13 红灯反例可测锚点(本 WP 交付的文档 / 测试面;postMessage 运行时红灯归 WP-51 / WP-55)**:①引导配置取回必须 POST 体承载——路径 / query 形态的取回请求无实现面(端点契约即排除);②demo / E2E 走查链路中 token 值只出现在"签发端点响应体 → 宿主后端内存 → 引导配置响应体"三处,`test/routes/descriptor-routes.test.ts` 同款的响应面机检与 `req` 序列化器白名单(D-API-9 日志纪律)覆盖其不外溢;③运行时断言(iframe 消息序列化体不含 token 形态载荷)在 WP-51 的 V-1~V-13 逐规则红灯矩阵中落锚(嵌入协议 §八"阶段五实现评审对照");
+- **TTL 运维参数定案:`SESSION_API_EMBED_TOKEN_TTL_SECONDS` 维持默认 3600 s、上限 `MAX_EMBED_TOKEN_TTL_SECONDS`(604800)不变**(D-API-19 登记表原样)。理由:嵌入协议 §6.3"建议分钟级"的意图是压缩**未消费 token 的滞留窗口**——本系统中 token 的防伪造 / 防重放锚点是 Ed25519 签名 + `jti` 单次原子消费 + `embedSessionId` 绑定(D-API-14),TTL 只影响"签发后未消费"的记录存活期,不放大越权面(jti 消费即作废,窃取窗口以一次为限);MVP 演示面(demo-override 人工走查、E2E)需要 token 在页面停留与走查讲解期间保持可用,分钟级会造成演示中断,3600 s = 一次走查会话的量级;生产部署可通过配置键下调(建议 300–900 s),外圈护栏 604800 仅覆盖未来"多日嵌入"场景,MVP 不配置到上限。`embedSessionId` 重载轮换使旧 token 自然失效(嵌入协议 §6.2),无需依赖短 TTL 补偿。
+
+### D-API-76 公开描述包发布清单:复用 challenge_versions 双包摘要 + 端点动态校验;端点 `GET /descriptors/:challengeId/:version`(阶段五 WP-50;§8.3 / D-API-23 / D-API-32 / D-API-66)
+
+任务分解 §六 Q2 的定案:**不立独立清单契约、不走 WP-1 §1.3 流程**,按任务分解倾向定案——发布清单(§8.3"发布清单应有内容哈希或签名")的语义由 **PG `challenge_versions` 行内双包 SHA-256 摘要 + 端点取回后动态复算比对**承载;摘要的真实性上游由登记签名担保(Ed25519 over `registrationSignatureBasis`,基线含双摘要,D-API-23),端点无需第二签名面。理由:MVP 契约面最小(零新 Schema、零 fixture 增量);摘要已受验签担保;独立清单契约引入"清单 ↔ 注册表行"的双真源同步问题,其收益(离线可验)在 MVP 拓扑无 CDN 的前提下不成立。
+
+**端点校验语义(实现:`apps/session-api/src/routes/descriptor-routes.ts`;测试:`test/routes/descriptor-routes.test.ts`)**——服务序,每步确定性拒绝、响应面恒为冻结 `PublicError`:
+
+1. **参数字符集校验**:challengeId 走冻结标识符字符集(`^[A-Za-z0-9_-]{1,128}$`)、version 走语义化版本字符集(与 embed token claims / 登记路径同一模式,显式禁路径穿越)→ 不合即 **404 + `invalid_input_format` / "resource not found"**(与未登记同形,防枚举)。配套:`routerOptions.maxParamLength` 放宽 100 → 256(≥ 参数上限 128),消除框架级 414 与同形纪律的冲突(超长参数改由字符集闸拒绝);
+2. **注册表查版本行**:`ChallengeRegistry` 端口最小扩展 `findPublishedChallengeVersion(challengeId, version)`(memory / PG 双实现同构;**查询层租户过滤的第二处跨租户例外**,先例 D-API-63 `listActiveSessions`——公开描述包是公开内容,下发端点无租户上下文;`(challenge_id, content_version)` 为全局唯一主键,行内容即公开元数据;私有面 `findChallengeVersion` 租户强制过滤不变,本方法禁用于私有判题包路径)→ 未登记 **404 同形**(SSRF 纪律:只接受已登记派生获取路径,拒任意 URL);
+3. **对象取回**:复用既有 `ChallengeBundleStore.getPublic`(`public-descriptors` 桶,零端口扩展)→ 行在而对象缺失 = 服务端一致性事故,**422 + `internal_error` / "challenge invalid"**(与 D-API-32 challenge_invalid 行"双包缺失"同形,防题目枚举);
+4. **响应护栏**(数值过天花板纪律):响应体字节上限 `SESSION_API_MAX_DESCRIPTOR_BYTES`(解析前强制)→ SHA-256 复算与登记摘要比对(不符 **422 challenge invalid 同形**;红灯语料:摘要篡改)→ JSON 解析 → 结构巡检(嵌套深度取 `SESSION_API_MAX_JSON_DEPTH` / 数组 256 / 字符串 4096,与 D-API-31 请求护栏同值装配)→ 越限 **422 同形**(红灯语料:超限载荷);
+5. **200 返回**:体 = 桶内原始字节(零重序列化,逐字节确定性,I-4);`Content-Type: application/json; charset=utf-8`;**`ETag` = 登记摘要**(实体标签形态,为 CDN 期条件请求与缓存复用铺路;本阶段不做 If-None-Match 协商);`Cache-Control: public, max-age=3600, immutable`(版本不可变语义)。
+
+**认证姿态(定案)**:公开描述包是公开内容(设计上可 CDN 分发),**无凭证 GET**——零租户、零会话、零凭证面,不设 CSRF 闸(无 Cookie 呈递语义)、不设租户限流(`rate:{tenant}:{user}` 无身份锚可计量;滥用防线 = CDN 期边缘限流 + 本端点响应护栏)。**CORS 放行面**:沿用全局 `@fastify/cors` 精确来源白名单(`SESSION_API_ALLOWED_ORIGINS`,D-API-16 既有装配;GET 在既有方法集内)——浏览器面插件 iframe 跨源获取需要 ACAO,白名单命中即回显 `Access-Control-Allow-Origin`;**白名单缺省(空表)= 跨源面全拦**(fail-closed 默认不变),同源调用与非浏览器调用方不受影响。**零秘密面自证**:响应体只含公开 Schema 字段(形态合法性由登记管线上游担保;本端点担保完整性[摘要]与尺寸护栏;客户端侧 WP-54 另有"哈希校验 + 尺寸护栏"双闸,§8.3 双闸纪律)——机检锚点:响应体经跨域载荷扫描(`scanCrossDomainPayload`,ZR-B9/B10/B5/B4 同源规则)零命中 + FLAG 语料零出现,红灯反例同套件证明可检出(`test/routes/descriptor-routes.test.ts`);bytesHex 等公开十六进制载荷为 I-10 值来源,seed 语料模式对公开描述包不适用(D-API-60 豁免面同源)。
+
+**签名 URL 路线的放弃理由**(§8.3"签名 URL 或端点二选一"):MVP 拓扑无 CDN,签名 URL 需要新增 MinIO presigned 生成面与公开桶匿名读策略,且响应纪律(冻结 `PublicError`、护栏、机检)无法施加于绕过编排器的直连取回;端点路线复用既有对象存储端口与响应纪律,契约面最小。CDN 期为部署面挂接:端点语义不变,ETag / Cache-Control 已铺路(边界裁决 4:CDN 不在本阶段)。
+
+**配置键登记(过 D-API-9 三道闸)**:
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_MAX_DESCRIPTOR_BYTES` | 否 | 262144 | 上限 4194304(公开描述包响应体字节上限;解析前强制,超限 422 challenge invalid 同形) |
+
+**红灯矩阵(完成标准逐项,全部冻结 `PublicError` 形态、响应体逐字节断言)**:
+
+| 红灯 | 呈现 | 语料 |
+|---|---|---|
+| 未登记题目 ID / 版本 | 404 `invalid_input_format` / "resource not found" | 未登记 challengeId、未登记 version(确定性逐字节) |
+| 参数字符集违规(含路径穿越) | 404 同形(防枚举) | `..`、`%2F`、非 semver、超长 ID(maxParamLength 放宽后仍同形) |
+| 摘要篡改 | 422 `internal_error` / "challenge invalid" | 桶内对象被替换为与登记摘要不符的字节 |
+| 响应体字节超限 | 422 同形 | 摘要相符但超 `SESSION_API_MAX_DESCRIPTOR_BYTES`(护栏独立可证) |
+| 结构越限(深度 / 数组 / 字符串) | 422 同形 | 32 层嵌套数组(深度护栏 16),摘要相符 |
+| 对象缺失(登记行在、桶内无对象) | 422 同形 | 手动登记版本行不放桶 |
+
+真实 MinIO / PG 路径的端口同构性由容器门控集成测试覆盖(`test/persistence/descriptor-publish.integration.test.ts`,SESSION_API_IT 门控,缺环境跳过并注明)。
+
+### D-API-77 嵌入面运维参数:T_handshake、消息字节 / 高度护栏与按类型频率上限(阶段五 WP-50;嵌入协议 V-2 / V-10 / §4.3 / §三)
+
+浏览器侧 embed-runtime(WP-51)/ web-component(WP-52)的**构造参数面**定案——非 `SESSION_API_` 环境键(不进配置三道闸),配置载体 = **embed-runtime 工厂函数构造选项**(框架无关 core 暴露;react-wrapper 薄封装透传;插件侧常量内置于 web-component)。协议冻结常量(`MAX_EMBED_MESSAGE_BYTES` / `MAX_EMBED_HEIGHT_PX`,packages/protocol/src/common/limits.ts)**引用不重造**:实现直接 import,构造选项不提供放宽入口。后续波次(WP-51 / WP-52 / WP-54 / WP-55)直接引用本表:
+
+| 参数 | 默认值 | 边界 | 配置载体 | 引用方 |
+|---|---|---|---|---|
+| `T_handshake`(握手超时) | 10000 ms | 允许范围 3000–30000 ms,越界取边界值(clamp) | 构造选项 `handshakeTimeoutMs` | WP-51 embed-runtime(宿主侧:iframe `load` 后未收 `hello` 即标记 embed 会话不可用,§4.5);WP-52 web-component(插件侧:`hello` 发出后未收 `ready` → 降级显示,§4.3) |
+| `MAX_EMBED_MESSAGE_BYTES` | 65536(protocol 冻结常量) | 不可调 | 恒定引用 `@stackmaster/protocol` | WP-51(V-2:序列化字节超限,JSON 解析前丢弃 + 计数);WP-52(发送侧自检) |
+| `MAX_EMBED_HEIGHT_PX` | 100000(protocol 冻结常量) | 宿主可收紧、不可放宽 | 构造选项 `maxHeightPx`(≤ 冻结常量,超上限拒绝装配) | WP-51 / WP-52(`height_changed` 载荷契约护栏 + 宿主布局收紧) |
+| `height_changed` 频率(V-10) | 动画帧级合流(每 rAF 至多一帧,尾沿携带最新值)+ 每秒硬上限 30 | 构造选项 `heightChangedMaxPerSecond`(1–120) | WP-51 宿主侧节流器;WP-52 插件侧发送协同(内容变化驱动 + 同款合流) | V-10 超限丢弃 + 本地计数,零反馈(V-12) |
+| `hello` 重试上限(§4.3) | 3 次(`T_handshake` 窗口内,`seq` 递增;耗尽即降级显示,不向宿主重试风暴) | 构造选项 `helloMaxRetries`(0–10) | WP-52 web-component;WP-51 宿主侧对重复 `hello`(握手完成后再收)按状态违规丢弃 + 计数 | 嵌入协议 §4.3 / §4.5 |
+| `theme_changed` / `language_changed` 频率(V-10) | 每秒上限 10(低频控制消息;宿主 → 插件方向,宿主自控) | 构造选项 `controlMessageMaxPerSecond`(1–120) | WP-51 embed-runtime | 未授予能力时恒不发送(§4.4 降级矩阵,V-8) |
+
+选值理由:`T_handshake` = 10 s 量级覆盖慢速网络下的 iframe 加载 + 握手往返,同时把不可用 embed 会话的僵尸窗口限制在用户可感知的秒级(§4.3 降级显示随即接管);`height_changed` 动画帧级合流使宿主布局更新频率 ≤ 渲染帧率(协议 §三"宿主可按实现期节流策略进一步收紧"的落地),每秒硬上限封堵非 rAF 环境的绕行;控制消息每秒 10 远高于人工切换主题 / 语言的合理速率,低于任何资源压力。全部超限处置统一"丢弃 + 本地计数,不回错误、不中断会话"(V-10 / V-12);计数面对 WP-51 的"超时降级路径事件计数面"条目可见。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 

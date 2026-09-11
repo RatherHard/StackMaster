@@ -74,6 +74,8 @@ export interface SessionApiServerDeps {
   readonly authPlugin?: FastifyPluginAsync;
   /** REST 生命周期路由插件(五个会话命令;WP-4 装配)。 */
   readonly sessionRoutes?: FastifyPluginAsync;
+  /** 公开描述包下发路由(GET /descriptors/:challengeId/:version;阶段五 WP-50,D-API-76)。 */
+  readonly descriptorRoutes?: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5 装配,D-API-40)。 */
   readonly wssChannel?: FastifyPluginAsync;
   /** 调试通道插件(GET /sessions/debug-channel;阶段四 WP-41,须在 wssChannel 之后注册)。 */
@@ -112,6 +114,12 @@ export function buildServer(
     // 请求护栏:请求体字节上限(8.3;config 数值护栏,D-API-31)。
     // 超限是框架级 413,错误兜底映射为冻结 PublicError。
     bodyLimit: config.maxRequestBodyBytes,
+    // 路径参数长度上限(阶段五 WP-50,D-API-76):find-my-way 默认 100 会在
+    // 超长路径参数上产生框架级 414(URI Too Long),与"参数字符集违规 →
+    // 404 同形(防枚举)"的下发纪律冲突;放宽至 256(≥ 冻结标识符 / 版本
+    // 参数上限 128),超长参数改由 descriptor 路由的字符集闸以 404 同形拒绝。
+    // 既有路由(会话标识在请求体,不在路径)不受影响。
+    routerOptions: { maxParamLength: 256 },
   });
 
   // 请求 ID 回显:跨服务关联面(宿主后端 → session-api)。genReqId 已把
@@ -148,6 +156,9 @@ export function buildServer(
   }
   if (deps.sessionRoutes !== undefined) {
     app.register(deps.sessionRoutes);
+  }
+  if (deps.descriptorRoutes !== undefined) {
+    app.register(deps.descriptorRoutes);
   }
   if (deps.wssChannel !== undefined) {
     app.register(deps.wssChannel);

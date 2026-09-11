@@ -106,4 +106,24 @@ export class PostgresChallengeRegistry implements ChallengeRegistry {
     );
     return result.rows.map(mapRow);
   }
+
+  /**
+   * 公开面版本行读取(阶段五 WP-50,D-API-76):无租户过滤(公开描述包是
+   * 公开内容,查询层租户过滤的第二处跨租户例外,先例 D-API-63;
+   * (challenge_id, content_version) 为主键,结果唯一)。故障翻译与既有
+   * 写路径同形(store_unavailable)。
+   */
+  async findPublishedChallengeVersion(challengeId: string, version: string): Promise<ChallengeVersionRow | null> {
+    try {
+      const result = await this.pool.query<VersionRowRaw>(
+        `SELECT * FROM challenge_versions
+         WHERE challenge_id = $1 AND content_version = $2`,
+        [challengeId, version],
+      );
+      const raw = result.rows[0];
+      return raw === undefined ? null : mapRow(raw);
+    } catch (error) {
+      throw new PersistenceError("store_unavailable", "题目版本读取失败", { cause: error });
+    }
+  }
 }

@@ -61,8 +61,10 @@ import {
   MemoryIdempotencyWindow,
   SnapshotCipher,
   SnapshotPersistence,
+  sha256Hex,
   type SubmissionStore,
 } from "../../../src/persistence/index.js";
+import { buildDescriptorRoutes } from "../../../src/routes/descriptor-routes.js";
 import type { Logger } from "pino";
 import { createLogCapture, type LogCapture } from "../../helpers/log-capture.js";
 import { OutboundFrameRecorder } from "../../wss/helpers/outbound-frame-recorder.js";
@@ -176,6 +178,8 @@ export interface SessionTestRig {
   readonly issuanceStore: InMemoryTokenIssuanceStore;
   readonly revocationStore: InMemoryCredentialRevocationStore;
   readonly sessions: MemorySessionRepository;
+  /** 题目注册表(内存实现;descriptor 下发红灯直接登记版本行 / 读登记摘要)。 */
+  readonly registry: MemoryChallengeRegistry;
   /** 题目双包对象存储(内存实现;调试变体 provider 的公开描述包读取源)。 */
   readonly bundles: MemoryChallengeBundleStore;
   readonly snapshots: MemorySnapshotStore;
@@ -403,8 +407,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
 
   const app = buildServer(config, logger, {
     authPlugin: buildAuthPlugin({ config, signer, issuanceStore, revocationStore, audit }),
-    sessionRoutes: buildSessionRoutes({
-      config,
+    sessionRoutes: buildSessionRoutes({      config,
       manager,
       logger,
       guards: {
@@ -424,6 +427,14 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         submitRateGate.acquireOrThrow(`rate:${tenantId}:${userId}:submit`, "submission_rate"),
       ...(now === undefined ? {} : { now }),
     }),
+    // 公开描述包下发路由(阶段五 WP-50,D-API-76):与 runtime.ts 同一
+    // 装配拓扑(registry / bundles 内存实现 + config 护栏数值)。
+    descriptorRoutes: buildDescriptorRoutes({
+      registry,
+      bundles,
+      maxDescriptorBytes: config.maxDescriptorBytes,
+      maxJsonDepth: config.maxJsonDepth,
+    }),
     wssChannel: wssChannel.plugin,
     ...(debugChannelPlugin === undefined ? {} : { debugChannel: debugChannelPlugin }),
   });
@@ -440,6 +451,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     issuanceStore,
     revocationStore,
     sessions,
+    registry,
     bundles,
     snapshots,
     submissions,
@@ -498,14 +510,17 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
           bundle.initialState.registers["RIP"] = bundle.entrypointAddressHex;
         },
       });
+      const publicDescriptorBytes = Buffer.from(JSON.stringify(pair.publicDescriptor), "utf8");
       await registry.upsertChallenge({ challengeId, tenantId });
       await registry.insertChallengeVersion({
         challengeId,
         contentVersion: challengeVersion,
         tenantId,
         vmProfileVersion: "1.0.0",
-        privateBundleSha256: "00",
-        publicDescriptorSha256: "00",
+        // 双包摘要 = 实际入桶字节的 SHA-256(WP-50 起 descriptor 下发端点按
+        // 登记摘要动态复算,D-API-76;rig 与登记路径 ChallengeRegistrar 同源)。
+        privateBundleSha256: sha256Hex(Buffer.from(JSON.stringify(pair.privateBundle), "utf8")),
+        publicDescriptorSha256: sha256Hex(publicDescriptorBytes),
         privateBundleObject: `${challengeId}/${challengeVersion}/bundle.json`,
         publicDescriptorObject: `${challengeId}/${challengeVersion}/descriptor.json`,
         signature: "test-signature",
@@ -516,11 +531,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         challengeVersion,
         Buffer.from(JSON.stringify(pair.privateBundle), "utf8"),
       );
-      await bundles.putPublic(
-        challengeId,
-        challengeVersion,
-        Buffer.from(JSON.stringify(pair.publicDescriptor), "utf8"),
-      );
+      await bundles.putPublic(challengeId, challengeVersion, publicDescriptorBytes);
     },
 
     async registerChallenge(input = {}) {
@@ -540,14 +551,16 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
           bundle.challengeContentVersion = challengeVersion;
         },
       });
+      const publicDescriptorBytes = Buffer.from(JSON.stringify(pair.publicDescriptor), "utf8");
       await registry.upsertChallenge({ challengeId, tenantId });
       await registry.insertChallengeVersion({
         challengeId,
         contentVersion: challengeVersion,
         tenantId,
         vmProfileVersion: "1.0.0",
-        privateBundleSha256: "00",
-        publicDescriptorSha256: "00",
+        // 双包摘要 = 实际入桶字节的 SHA-256(WP-50,D-API-76 同上)。
+        privateBundleSha256: sha256Hex(Buffer.from(JSON.stringify(pair.privateBundle), "utf8")),
+        publicDescriptorSha256: sha256Hex(publicDescriptorBytes),
         privateBundleObject: `${challengeId}/${challengeVersion}/bundle.json`,
         publicDescriptorObject: `${challengeId}/${challengeVersion}/descriptor.json`,
         signature: "test-signature",
@@ -558,11 +571,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         challengeVersion,
         Buffer.from(JSON.stringify(pair.privateBundle), "utf8"),
       );
-      await bundles.putPublic(
-        challengeId,
-        challengeVersion,
-        Buffer.from(JSON.stringify(pair.publicDescriptor), "utf8"),
-      );
+      await bundles.putPublic(challengeId, challengeVersion, publicDescriptorBytes);
     },
     async issueEmbedToken(overrides = {}) {
       const ttlSeconds = overrides.ttlSeconds ?? config.embedTokenTtlSeconds;

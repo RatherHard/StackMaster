@@ -71,6 +71,7 @@ import {
   type RedisLike,
 } from "../persistence/index.js";
 import { buildSessionRoutes } from "../routes/session-routes.js";
+import { buildDescriptorRoutes } from "../routes/descriptor-routes.js";
 import { createSessionAuthContext } from "../auth/auth-context.js";
 import { LiveSessionManager } from "../sessions/session-manager.js";
 import { SessionMetrics, buildMetricsPlugin } from "../metrics/index.js";
@@ -205,6 +206,8 @@ export interface SessionApiRuntime {
   readonly audit: InMemoryAuditSink;
   readonly authPlugin: FastifyPluginAsync;
   readonly sessionRoutes: FastifyPluginAsync;
+  /** 公开描述包下发路由(GET /descriptors/:challengeId/:version;阶段五 WP-50,D-API-76)。 */
+  readonly descriptorRoutes: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5,D-API-40)。 */
   readonly wssChannel: FastifyPluginAsync;
   /**
@@ -414,6 +417,17 @@ export async function buildSessionApiRuntime(
       submitRateGate.acquireOrThrow(`rate:${tenantId}:${userId}:submit`, "submission_rate"),
   });
 
+  // ── 8.5 公开描述包下发路由(阶段五 WP-50,D-API-76):无凭证 GET(公开
+  //    内容,可 CDN 分发);复用既有 registry / bundles 端口(公开面读取为
+  //    端口最小扩展 findPublishedChallengeVersion);响应护栏与请求护栏
+  //    同值装配(深度取 config,数组 / 字符串取同族常量)。
+  const descriptorRoutes = buildDescriptorRoutes({
+    registry,
+    bundles: bundleStore,
+    maxDescriptorBytes: config.maxDescriptorBytes,
+    maxJsonDepth: config.maxJsonDepth,
+  });
+
   // ── 9. WSS 动作通道(WP-5;WP-6 每会话闸与保持到期回收钩子在此挂载)──
   const wssChannelAssembly = buildWssChannel({
     manager,
@@ -525,6 +539,7 @@ export async function buildSessionApiRuntime(
     audit,
     authPlugin,
     sessionRoutes,
+    descriptorRoutes,
     wssChannel: wssChannelAssembly.plugin,
     wssRegistry: wssChannelAssembly.registry,
     debugChannel: debugChannelPlugin,
