@@ -21,12 +21,13 @@ src/
 │   │                               周期、组合根装配(client → Projection-
 │   │                               DataSource → 各标签页)、跨视图集成接线
 │   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——打开分组
-│   │                               (注册表驱动)/ 指令步进 step / 重启 reset
-│   │                               (终态禁用+引导)/ 会话状态与断线横幅 /
-│   │                               拒绝错误呈现(含 explanation)
-│   ├── tab-registry.ts             标签页类型注册表(stack / free / registers
-│   │                               带工厂;debug 登记占位不实现;可扩展,
-│   │                               WP-F6 payload 经 register() 追加)
+│   │                               (注册表驱动)/ 指令步进 step / 积木步进
+│   │                               payload-step(WP-F6,仅 payload 页激活时
+│   │                               可用)/ 重启 reset(终态禁用+引导)/
+│   │                               会话状态与断线横幅 / 拒绝错误呈现
+│   ├── tab-registry.ts             标签页类型注册表(stack / free / registers /
+│   │                               payload 带工厂;debug 登记占位不实现;
+│   │                               可扩展)
 │   ├── workspace-model.ts          布局模型纯状态机——列/标签页结构、焦点
 │   │                               管理、开关与拖拽移动、类型内序号
 │   ├── byte-tab.ts                 <sm-byte-tab> 字节页组合(字节视图 + VMA
@@ -35,6 +36,27 @@ src/
 │   └── sm-register-annotation.ts   <sm-register-annotation> 行左缘寄存器交叉
 │                                   标注(复用 F4 renderRegisterAnnotationCell;
 │                                   点击行内展开寄存器值)
+├── payload/                        WP-F6:Payload 搭建面
+│   ├── sm-payload-tab.ts           <sm-payload-tab> 三区布局(FE-PB-01:左 =
+│   │                               Blockly 画布 light DOM 挂载 / 右上 = 原子
+│   │                               步骤程序区(当前步高亮)/ 右下 = 执行输出
+│   │                               区);编译 + 运行/单步/暂停/复位;唯一起始
+│   │                               积木预置(FE-PB-03);refresh() 约定
+│   ├── executor.ts                 PayloadStepExecutor——原子动作粒度步进状态机
+│   │                               (idle/running/paused/done/error;断点暂停
+│   │                               M7 变通、rejected 停驻手动重试、动作提交面
+│   │                               PayloadActionSink 可注入、间隔等待可注入)
+│   └── compiler/                   积木 → 12 动作编译器(纯逻辑;无头 Blockly,
+│       │                           序列化 JSON 输入,零 DOM 渲染依赖)
+│       ├── blocks.ts               积木定义与中文工具箱(UI 与编译器唯一共享
+│       │                           源;FE-PB-02 八类 + 会话动作 + 中文 tooltip)
+│       ├── compile.ts              compilePayload:序列化 JSON → PayloadProgram
+│       │                           (循环/分支/函数内联展开 + PAYLOAD_MAX_
+│       │                           EXPANDED_ACTIONS 上限;allowedActions 编译
+│       │                           期裁剪;错误即值)
+│       ├── eval.ts                 客户端求值环境(公开投影只读快照:寄存器 +
+│       │                           窗口内字节;UTF-8 字符串定案;64 位回绕)
+│       └── types.ts                PayloadProgram / PayloadStep / 编译错误码
 ├── client/                         WP-F2:会话客户端面
 │   ├── session-client.ts           SessionClient——REST 5 命令、认证 WSS、
 │   │                               动作账本(clientSeq/baseRevision/idempotencyKey)、
@@ -420,3 +442,199 @@ explanation)、`<sm-byte-tab>`(vma 回路 / rowDecorator 透传 / refresh)、
 与空态 / debug 占位 / **真实 SessionClient mock 全链路**:step·reset 帧形态、
 终态禁用引导、断线横幅、踢旧重连、rejected 呈现、投影回流刷新、交叉标注与
 跳转链挂载、viewport-jump 滚动/窗口外反馈)。
+
+## WP-F9:教学组件面(src/views/ed + src/ed,2026-09-11)
+
+计划书阶段四范围的 FE-ED-01~08(《阶段四任务分解》§二轨道 C WP-F9;来源 =
+计划书 §十二阶段四原文)。独立组件面,**全部属性驱动、可独立实例化、
+standalone 测试**;不集成进工作区——工作区挂接 / 失败计数接线 / 错误呈现
+替换归 **WP-F8**。公开描述包类型(challenge-schema)前端**禁止 import**
+(dependency-cruiser),故 `PublicHint` / `PublicErrorMapping` 以本地最小
+结构类型登记于 `src/ed/ed-types.ts`(对齐锚 =
+`packages/challenge-schema/docs/双包Schema语义.md`;结构化类型系统下与
+challenge-schema 实例互认)。
+
+### 组件清单与属性/事件契约(F8 接线表)
+
+| 组件 | FE | 属性(全部 `attribute: false` 除注明) | 事件 | 数据来源(宿主注入) |
+|---|---|---|---|---|
+| `<sm-structure-view>` | FE-ED-01 | `highlights: SemanticHighlight[]`(协议投影 semanticHighlights) | `highlight-jump`,detail `{regionId, addressHex}`(bubbles+composed) | `client.store.snapshot.semanticHighlights` |
+| `<sm-call-stack>` | FE-ED-02 | `frames: PublicCallFrame[]` | — | `snapshot.callStackSummary`(delta 存在即整体替换,store 已处理) |
+| `<sm-memory-diff>` | FE-ED-03 | `beforeRegions?: VisibleMemoryRegion[]`(动作前快照)、`delta: ProjectionDelta \| null` | — | 宿主在 onActionResponse / onProjectionChanged 处保存前一投影 `visibleRegions` + 最新 `projectionDelta` |
+| `<sm-timeline>` | FE-ED-04 | `entries: TimelineEntry[]`、`currentRevision: number \| null` | — | 纯函数 `buildTimeline(actionRecords, checkpoints, submissions?)`(src/ed/timeline.ts)消费 `onActionResponse` 流 + `client.listCheckpoints()`(+ 可选 submit 记录);`currentRevision = client.store.revision` |
+| `<sm-checkpoints>` | FE-ED-05 | `checkpoints: CheckpointRef[]`、`sendAction: (action: ActionObject) => void \| null`、`sessionTerminal: boolean`(attr `session-terminal`)、`error: string`(attr) | — | `client.listCheckpoints()` 刷新 `checkpoints`;`sendAction = client.sendAction.bind(client)`;终态 = 投影 `status ∈ {won, failed}`;`error` 由 onActionRejected / SessionCommandError 文案驱动 |
+| `<sm-hint-ladder>` | FE-ED-06 | `hints: PublicHint[]`、`failures: number`(attr) | — | 公开描述包 `hintLadder`;`failures` = 宿主按 ActionResponse failed/wrong_answer 类反馈自账(组件本地执行 revealPolicy,零派发零网络) |
+| `<sm-error-explainer>` | FE-ED-07 | `error: PublicError \| null`、`mappings: PublicErrorMapping[]` | — | `userVisibleError`(onActionRejected);`publicErrorMapping`(公开描述包) |
+
+纯函数面(`src/ed/`):`computeByteDiff(beforeRegions, dirtyRanges)` →
+`ByteDiffUnit[]`(跨 dirtyRange 归并、前值仅在前快照已下发窗口内判定、写回
+原值剔除、地址升序、bytesHex 大小写归一小写);`buildTimeline` /
+`summarizeActionObject`(动作摘要 = type + 关键参数;create_checkpoint 响应
+与 checkpoint 列表同 revision 时去重只保留 checkpoint 条目);`validateCheckpointLabel`
+(≤128 + 禁 C0/C1,与 protocol CreateCheckpointArgsSchema 同则)。
+
+### 语义口径(与协议/规约逐条对齐)
+
+- **FE-ED-01**:kind 分组序 = 冻结枚举序(buffer_start → return_address_slot
+  → saved_rbp_slot → canary_slot → custom),空组不渲染;semanticHighlights
+  是静态声明面(增量恒缺席),只在初始投影 / sync 全量变化;
+- **FE-ED-02**:index 0 标注「最内帧(当前函数)」;截断标记(last frame
+  presence-only `truncated`)→ 明示「仅显示最内 64 帧」,**不用 +N 计数**
+  (D2),不渲染空白;空栈空态;
+- **FE-ED-03**:delta 整体替换语义——组件只整体重算最新 delta,不跨 delta
+  累积;前值不可知(窗口外 / 未知区域 / before 缺省)行内明示「前值不可知」,
+  不伪造;`truncated` range → 「变更承载被截断,已按协议以 sync-projection
+  重新对齐」;
+- **FE-ED-05**:checkout 两步确认(组件内确认态,非原生 confirm);校验失败
+  行内呈现不派发;列表刷新由宿主在响应回流后重拉 `list_checkpoints`;
+- **FE-ED-07**:能力矩阵缺席形态——`addressHex`(forbidden / null-only)、
+  `explanation`(forbidden 码)缺席就不渲染,**不以 null/空串区分**;
+  explanation 子字段逐键「存在才渲染」;teachingNote 按 errorCode 匹配,
+  无匹配给「该错误暂无教学注解」。
+
+### FE-ED-08 无障碍基线与 axe 豁免清单
+
+全部 7 组件:语义化 DOM(嵌套列表 / ol / table+caption+scope / dl / 原生
+button+input)、全键盘可达(Tab 序、Enter/Space 原生激活、`:focus-visible`
+可见焦点)、kind/状态/截断/当前/锁定等信息全部文本承载(不以视觉为唯一
+载体)、动画零(zero transform/opacity 之外的属性)。
+
+`test/ed/axe.test.ts`:每组件代表性满内容挂载后 `axe.run(document,
+{resultTypes:["violations"]})`,断言零 violations;套件含**红灯反例**
+(light DOM + shadow DOM 各一的无名称按钮必须被检出,证明机检真实生效、
+axe 穿透 open shadow DOM)。豁免清单(逐条理由登记在测试文件头,不得整体
+跳过):
+
+1. `color-contrast`(rules 配置禁用)——jsdom 无布局引擎与真实 CSS 级联,
+   对比度不可判定,任何结论都是环境伪影;对比度证据留给 WP-45 的真实浏览器
+   Playwright 报告归档(阶段退出条件 6);
+2. 页面级 harness 修正(非规则豁免)——测试文档注入 `lang="zh-CN"`、
+   `document.title`、唯一 `<main>` + `<h1>`:模拟宿主(工作区/插件壳)的
+   页面职责,不构成对组件面的让步。
+
+测试面:`test/ed/`(computeByteDiff 归并/窗口外/前值缺失边界、buildTimeline
+动作流/checkpoint 混合/终态/submit 合并、标签校验、axe 套件)、
+`test/views/ed/`(七组件渲染/交互/事件:分组与 highlight-jump、截断明示、
+diff 对照与整体替换、时间线当前 revision、create 校验/checkout 两步确认/
+终态禁用、revealPolicy 两分支与计数边界、能力矩阵缺席形态 × teachingNote
+匹配/缺省)。新代码行覆盖 100%(分支 95.3%,≥85% 门槛)。
+
+### WP-F8 对接注意事项
+
+- 组件尚未进入公开入口(`src/index.ts` 未导出,`vite.config.ts` 未加入口)
+  ——挂接工作区时由 F8 一并追加导出与(如需)独立 bundle 入口;
+- `<sm-memory-diff>` 需要「动作前快照」:宿主在投影变更处保留前一投影
+  `visibleRegions`(如 store 订阅里缓存 `snapshot.visibleRegions` 再应用
+  delta),组件只收 `(beforeRegions, delta)`;
+- `<sm-hint-ladder>.failures` 的计数口径 = ActionResponse 教学失败反馈
+  (failed / wrong_answer 类)由宿主自账;checkout/create 派发后刷新
+  `list_checkpoints` 的时点建议 = 对应动作响应到达且 `status ≠ rejected`;
+- `<sm-error-explainer>` 可整体替换 F5 菜单条(`sm-workspace-menu` 内联的
+  拒绝错误呈现)或并存:属性面已对齐(userVisibleError + 公开描述包
+  mappings)。
+
+
+## WP-F6:Payload 搭建框架(src/payload,2026-09-11)
+
+M3 交付面:`<sm-payload-tab>` 三区布局(FE-PB-01)、积木 → 12 动作编译器
+骨架(M9 变通口径)、原子动作粒度步进执行器(Q3 主控定案)、工作区「积木
+步进」菜单动作(FE-WS-04b)。
+
+### 定案规则(主控已裁决,同时登记于源码注释)
+
+- **Q3 原子动作粒度**:积木图编译为 12 动作**原子动作序列,每个原子动作 =
+  一步**;循环/分支的步进暂停只发生在原子动作边界;断点积木 = 步进暂停点
+  (M7 变通:纯客户端编排,服务端协议零改动);程序区按原子步骤逐行列出、
+  当前步高亮,输出区逐条记录动作摘要 + 响应状态 + 可解释错误——步进粒度
+  以此呈现,submit 裁决命令与积木步进无关(独立按钮/流程)。
+- **求值口径(M9 底线)**:变量/运算/字符串/列表在**客户端编译期求值**,
+  求值环境 = 公开投影只读快照(`createPublicEvalEnvironment(dataSource)`:
+  `registers()` → 寄存器名 → 值;`bytesRows()` → 窗口内字节;未知引用 /
+  窗口外地址**确定性报错**,零静默兜底)。数值 = 64 位无符号回绕(与协议
+  64 位容器同构);端序 = 小端(同 WP-F4 定案)。
+- **编码定案**:公开档无编码表下发,字符串一律按 **UTF-8** 字节写字入
+  `write_bytes`(公开描述包 `encodingTable` 仅属字节权威执行模式的接口
+  token 语义,与积木字符串无关)。
+- **展开上限**:`PAYLOAD_MAX_EXPANDED_ACTIONS = 256`(同时约束"展开语句访问
+  数"与"产出步骤数",取更严者)——循环/函数内联超限**确定性报错**;函数
+  内联深度上限 `PAYLOAD_MAX_CALL_DEPTH = 32`(防递归失控);表达式求值步数
+  上限 `PAYLOAD_MAX_EVAL_STEPS = 4096`。
+- **allowedActions 编译期裁剪**:积木映射的动作不在题目 `allowedActions`
+  白名单 → 编译错误(带 blockId,UI 以 Blockly 警示气泡标红),不产出对应
+  步骤;缺省白名单 = 12 动作裁去 `run_to_event`(教学范围定案:不暴露)。
+- **运行期限流(D-API-50~53)**:429 / `budget_exhausted` → 执行器转
+  `error` 态 + `onError` 分发可解释 `PublicError`,**光标不动**(被拒动作未
+  执行,revision 不前进),重试由用户手动步进(同一动作重新提交);实测
+  反馈只调 D-API-50~53 参数面,不改契约(执行器 `stepIntervalMs` +
+  可注入 `delay` 是联调 knob)。
+- **编辑即复位**:画布结构变更(Blockly 结构事件)→ 程序过期标记;运行/
+  单步前自动重编译并复位游标(确定性语义:编辑即复位步进)。
+- **shadow DOM 适配定案(实测)**:Blockly 官方对 shadow DOM 支持有限
+  (样式注入 document 头、几何依赖 light 树)——画布容器以 **light DOM**
+  挂载(组件内 `appendChild` 到自身轻 DOM + `<slot name="canvas">` 布局),
+  右栏留 shadow DOM。jsdom 实测:inject / 序列化 / 工具箱均可运行(零几何
+  退化,结构冒烟无碍);真实渲染验证归 WP-F7 Playwright。
+- **已知取舍(登记)**:会话动作通道无发起方关联——payload 执行期间,其他
+  来源动作(如工作区「指令步进」)的响应会被执行器当作自己的下一步推进;
+  教学 UI 约定 payload 运行/暂停期间不混用其他动作入口,幂等键级关联留
+  WP-F7/F8 演进。变量/列表/函数名 = 文本字段(不用 Blockly 变量模型 /
+  flyout 动态列表)——序列化形态稳定、无头编译零额外状态。
+
+### 积木 → 动作映射定案表(FE-PB-02 八类;唯一起始积木 FE-PB-03)
+
+| 拆解类别 | 积木 | 求值 / 映射 | 对应动作 |
+|---|---|---|---|
+| 会话动作(增设) | 写字节 / 压栈 / 出栈 / 调用 / 返回 / 单步 | 直接映射 | `write_bytes` / `push` / `pop` / `call` / `ret` / `step` |
+| 字符串 | 写字符串 / 连接 / UTF-8 字节数 | UTF-8 编码(定案) | 写字符串 → `write_bytes` |
+| 断点 | 断点积木 | 步进暂停点(M7 变通) | `breakpoint` 步骤标记(非动作) |
+| 变量 | 赋值 / 读取 / 增减 | 客户端编译期求值 | —(不产生动作) |
+| 列表 | 追加(自动建表)/ 取项 / 长度 | 客户端编译期求值 | — |
+| 分支 | 如果/否则 | 编译期求值,只展开被选中的支 | — |
+| 循环 | 重复 N 次 | 编译期逐次展开(≤ 上限) | — |
+| 函数(模块化) | 定义 / 语句调用 / 取返回值 | 编译期内联展开,可带返回值 | — |
+| 运算与赋值 | 数字 / 文本 / 算术 / 比较 | 客户端编译期求值(64 位回绕) | — |
+| 公开投影读取(增设) | 寄存器 / 读 8 字节(小端)/ 读单字节 | 求值环境直读 | — |
+
+偏差登记:拆解文档 FE-PB-02 八类没有给 12 动作映射留落点(变量/列表/分支
+等求值类积木不产生动作)——以"编译到 12 动作原子"为唯一准绳,增设「会话
+动作」分类承载映射定案(write bytes/push/pop/call/ret/step),并增设「公开
+投影读取」承载求值环境面;八类全部按拆解原文存在。
+
+### 工作区接线(F5 形态)
+
+- **标签页注册**:`tab-registry.ts` 增 `PAYLOAD_TAB_TYPE("payload")` 登记,
+  「打开」菜单出现「Payload 搭建」;内容元素实现 `refresh?()`(投影更新 →
+  重建求值环境并重编译)与可赋值 `dataSource` 属性(workspace 约定)。
+- **组合根注入**:`dataSource` 经工厂上下文;动作提交面 `actionSink`
+  (SessionClient 结构兼容 `PayloadActionSink`)由工作区按 duck-typing
+  约定注入(`"actionSink" in content` 即绑,与 dataSource 同法,client 换
+  绑经 `#rebindContents` 重绑)。
+- **菜单「积木步进」(FE-WS-04b)**:`payload-step` 菜单动作,**仅 payload
+  标签页激活(焦点)时可用**(工作区按焦点页类型计算 `payloadStepEnabled`
+  注入菜单);点击 → 焦点 payload 页 `stepOnce()` = 自动编译 + 推进一个原子
+  动作并暂停。
+- **FE-WS-07(payload 状态两模式共用)归 WP-F8**:本 WP 已保证 payload 元
+  素状态不被标签页切换销毁(照 workspace `#contents` 生命周期约定,关闭页
+  才弃置)。
+
+### 测试面
+
+`test/payload/`:积木定义(tooltip 齐备 / 分类齐备 / 无头可实例化)、编译器
+(顺序映射 / UTF-8 字符串 / 变量与运算 / 分支与循环展开 / 断点标记 /
+allowedActions 裁剪 / 展开与深度上限 / 未知引用 / 函数内联与递归 / 列表 /
+结构性错误 / 公开投影求值环境——全部以序列化 JSON 输入)、执行器(fake
+sink 记录调用序:逐步提交时序 / 断点暂停恢复 / 用户暂停 / rejected 手动
+重试 / 间隔等待注入 / load 复位)、`<sm-payload-tab>` 冒烟(三区结构 /
+轻 DOM 画布宿主 / 唯一起始积木不可删 / 程序区与输出区呈现 / 动作通道注入
+运行 / 注册表登记);`test/workspace/`(注册表五类 / 菜单积木步进禁用矩阵
+/ payload 页 actionSink 注入与菜单接线)。
+
+## 第三方依赖审计(WP-F6,2026-09-11;风险表「Blockly 体积与产物隔离扫描
+的交互」闭环)
+
+| 依赖 | 事实登记 |
+|---|---|
+| `blockly@13.2.1` | 用途:积木编辑器画布(FE-PB-05 采纳项,编译器仅消费其**无头 workspace 序列化**,不依赖 DOM 渲染)。License:**Apache-2.0**(与本包 GPL-3.0-or-later 共存无冲突)。**零运行时依赖**(dependencies 为空;仅一条 peerDependency `jsdom >=27.4.0 <30.0.0` 服务于其 Node 入口——本包经 pnpm devDep 供给 jsdom 30,浏览器入口不受影响)。**无 postinstall / preinstall 脚本**(scripts 为空),pnpm allow-scripts 零放行面。 |
+| core-js 说明 | 风险表假设"core-js 为其可选依赖"——实测 blockly 13.2.1 **不含 core-js**(依赖表为空),该假设不成立,无 build 脚本被 pnpm 忽略的副作用面;如未来版本引入再补审计。 |
+| 体积量级 | `blockly_compressed.js` 约 634 KB(原始);经 vite 库模式内联后 vm-ui 主 chunk 约 1.2 MB(gzip ≈ 294 KB),其中 Blockly 贡献约 0.9 MB 原始(gzip ≈ 250 KB)。积木编辑器是重型交互面,该量级在教学主功能可接受;如需瘦身可后续按入口拆分(Blockly 独立 chunk),本 WP 不做。 |
+| scan:public 交互 | dist 内 blockly 产物对私有面标记/引擎标识/节点内建**零命中**(dist 中两处 `jsdom` 字符串 = rolldown 路径注释 + Blockly 运行时告警文案,非导入;无 `require(...)`)。`pnpm scan:public` 实测通过:3 个公开包已扫描、0 违规(仅 protocol 既有 3 条 allowlist)。扫描基线在 F7 一次建立的口径不变。 |
