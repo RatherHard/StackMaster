@@ -25,10 +25,12 @@
  *    ②注入帧字节 = 变体外合成随机字节 → 必命中;③越界地址帧 → 必命中;
  *    ④展示文本走私超长十六进制串 → 必命中。
  *
- * 展示帧(伪指令流 / 函数表)录制说明:协议 v1 的 C→S 帧族尚无拉取请求帧
- * (WP-40 §三.1 五帧封闭),WSS 客户端触发面未接线——两帧以编排器回执构造
- * **同等 wire 形态**(worker 展示数据原样转发,零本地推导)进机检;帧形态
- * 合法性由冻结 DebugFrameSchema 现场解析自证。
+ * 展示帧(伪指令流 / 函数表)录制说明:协议 v1 的 C→S 帧族无拉取请求帧
+ * (WP-40 §三.1 五帧封闭),WSS 通道为**推送模型**(attach → function_table;
+ * paused → instruction_stream)——两帧经推送进录制集,另以编排器回执构造
+ * **同等 wire 形态**补录(指定起点 / 全量函数表;worker 展示数据原样转发,
+ * 零本地推导);帧形态合法性由冻结 DebugFrameSchema 现场解析自证(含推送帧
+ * 的 null bytesHex / jumpTargetHex → 缺席线形归一化,WP-44)。
  *
  * 执行面边界(上游 v1.13 论证第(6)点):引擎执行派生的运行时字节(step 的
  * push 写栈)是变体镜像 × 玩家输入 × 确定性引擎的派生物,不在子串语料内,
@@ -93,6 +95,22 @@ class DebugFrameCollector {
       },
       { timeout: timeoutMs, interval: 10 },
     );
+  }
+
+  /**
+   * 按 type 等待第 occurrence 次出现(推送模型下 attach/暂停伴随 function_table
+   * / instruction_stream 帧,索引计数不再稳定;类型计数对伴随帧不敏感)。
+   */
+  async waitForType(type: DebugFrame["type"], occurrence = 1, timeoutMs = 15000): Promise<DebugFrame> {
+    await this.waitFor(
+      (frames) => frames.filter((frame) => frame.type === type).length >= occurrence,
+      timeoutMs,
+    );
+    const match = this.frames.filter((frame) => frame.type === type)[occurrence - 1];
+    if (match === undefined) {
+      throw new Error(`帧 ${type} #${occurrence} 缺失`);
+    }
+    return match;
   }
 }
 
@@ -207,7 +225,8 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
     await collector.waitFor((frames) => frames.length >= 1);
     expect(collector.frames[0]?.type).toBe("debug_attached");
 
-    // ② 任意窗口:代码区初像(变体语料包含面)。
+    // ② 任意窗口:代码区初像(变体语料包含面;attach 的 function_table 伴随
+    // 推送帧不参与索引定位)。
     send({
       protocolVersion: 1,
       type: "debug_window",
@@ -216,9 +235,9 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
       requestId: "w-code",
       payload: { addressHex: "0x400000", byteLength: 16 },
     });
-    await collector.waitFor((frames) => frames.length >= 2);
-    if (collector.frames[1]?.type === "debug_window_data") {
-      expect(collector.frames[1].payload.bytesHex).toBe(CODE_WINDOW_16_HEX);
+    const codeWindow = await collector.waitForType("debug_window_data", 1);
+    if (codeWindow.type === "debug_window_data") {
+      expect(codeWindow.payload.bytesHex).toBe(CODE_WINDOW_16_HEX);
     }
 
     // ③ 任意窗口:玩家写入点(重放对齐可观察性;玩家输入回显语料)。
@@ -230,9 +249,9 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
       requestId: "w-stack",
       payload: { addressHex: "0x7ffff000", byteLength: 4 },
     });
-    await collector.waitFor((frames) => frames.length >= 3);
-    if (collector.frames[2]?.type === "debug_window_data") {
-      expect(collector.frames[2].payload.bytesHex).toBe("41414141");
+    const stackWindow = await collector.waitForType("debug_window_data", 2);
+    if (stackWindow.type === "debug_window_data") {
+      expect(stackWindow.payload.bytesHex).toBe("41414141");
     }
 
     // ④ 任意窗口:未触栈区(变体初像零填充;对齐窗口,不读执行突变槽)。
@@ -244,7 +263,7 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
       requestId: "w-zero",
       payload: { addressHex: "0x7ffff100", byteLength: 8 },
     });
-    await collector.waitFor((frames) => frames.length >= 4);
+    await collector.waitForType("debug_window_data", 3);
 
     // ⑤ 全内存检索(命中玩家写入字节)。
     send({
@@ -255,12 +274,13 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
       requestId: "s-1",
       payload: { patternHex: "41414141" },
     });
-    await collector.waitFor((frames) => frames.length >= 5);
-    if (collector.frames[4]?.type === "debug_search_results") {
-      expect(collector.frames[4].payload.hits.length).toBeGreaterThanOrEqual(1);
+    const searchResults = await collector.waitForType("debug_search_results");
+    if (searchResults.type === "debug_search_results") {
+      expect(searchResults.payload.hits.length).toBeGreaterThanOrEqual(1);
     }
 
-    // ⑥ 单步暂停(paused 帧 = reason + addressHex,无内存字节载荷)。
+    // ⑥ 单步暂停(paused 帧 = reason + addressHex,无内存字节载荷);推送
+    // 模型下 paused 之后服务端主动推 instruction_stream,同样进录制集。
     send({
       protocolVersion: 1,
       type: "debug_step",
@@ -269,11 +289,14 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
       requestId: "st-1",
       payload: {},
     });
-    await collector.waitFor((frames) => frames.length >= 6);
-    expect(collector.frames[5]?.type).toBe("debug_paused");
+    await collector.waitForType("debug_paused");
+    await collector.waitForType("debug_instruction_stream");
 
-    // ⑦⑧ 展示帧:协议 v1 无 C→S 拉取帧(WP-41 现状),以编排器回执构造
-    // 同等 wire 形态进机检(worker 展示数据原样转发,零本地推导)。
+    // ⑦⑧ 展示帧:推送模型已把两帧接入 WSS 通道(attach → function_table;
+    // paused → instruction_stream,⑥ 的推流已在录制集),此处再以编排器回执
+    // 构造**同等 wire 形态**补录全量函数表与指定起点指令流进机检(worker
+    // 展示数据原样转发,零本地推导;帧形态合法性由冻结 DebugFrameSchema
+    // 现场解析自证)。
     // 归一化说明:worker 对展示条目的缺席可选项序列化为 null(bytesHex /
     // jumpTargetHex),冻结 Schema 为 optional(缺席而非 null)——此处仅做
     // null → 缺席的线形归一化,零内容推导(worker 侧线形与契约的出入已

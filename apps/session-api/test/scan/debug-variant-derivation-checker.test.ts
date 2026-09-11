@@ -200,7 +200,11 @@ describe("ZR-B13 红灯反例(必触发;与零命中同套件)", () => {
       debugSeedHex: DEBUG_SEED_HEX,
       aslrEnabled: false,
     }) as unknown as { canarySlots: { objectId: string; addressHex: string; byteLength: number }[] };
-    variant.canarySlots[0].addressHex = "0x100000";
+    const canarySlot = variant.canarySlots[0];
+    if (canarySlot === undefined) {
+      throw new Error("fixture must carry a canary slot");
+    }
+    canarySlot.addressHex = "0x100000";
     const hits = checkWith(variant, DEBUG_SEED_HEX);
     expect(hits.map((hit) => hit.id)).toContain("ZR-B13-canary-unmapped");
     // 槽序记账确定性:越界槽仍消费 draws(声明 513 与复算一致,不级联 draws-mismatch)。

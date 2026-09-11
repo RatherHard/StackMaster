@@ -23,6 +23,14 @@ export const DEBUG_CHANNEL_ROUTE = "/sessions/debug-channel";
  */
 export const DEBUG_RUN_TO_BREAKPOINT_MAX_STEPS = 10_000;
 
+/**
+ * 每暂停推送的指令上下文条数(服务端常量):推送模型下每次 `debug_paused`
+ * 之后由服务端主动推 `debug_instruction_stream` 的 maxItems 取值,远低于
+ * 协议 caps `DEBUG_INSTRUCTION_STREAM_MAX_ITEMS` = 256(单帧批量上限);
+ * 协议 v1 无 C→S 拉取帧(WP-40 §三.1 五帧封闭),推送是唯一触发面。
+ */
+export const DEBUG_CONTEXT_INSTRUCTION_ITEMS = 16;
+
 // ── RFC 6455 关闭码(与既有通道同值;服务端主动关闭的确定性登记)────────
 
 /** 空闲超时断开(pong / 入站消息静默超时;走断线恢复路径)。 */

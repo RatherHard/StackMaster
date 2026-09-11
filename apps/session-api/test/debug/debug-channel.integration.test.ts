@@ -6,7 +6,10 @@
  * 全链路绿:字节模式题目 → create_session → 解题动作(真实 worker)→
  * submit 落权威日志 → 调试通道 attach(变体零装载 + 确定性重放对齐)→
  * 任意窗口读取(含隐藏区)→ run_to_breakpoint 断点暂停 → 全内存检索 →
- * 指令流 / 函数表展示数据。
+ * 指令流 / 函数表展示数据。**推送模型**:attach 后服务端主动推
+ * debug_function_table;每次 debug_paused 后紧跟当前地址的
+ * debug_instruction_stream(阶段四退出条件 3 的端到端证据;帧收集器对每帧
+ * 过冻结 DebugFrameSchema,推送帧契约合法性与线形归一化由解析自证)。
  *
  * 零装载断言(完成标准):
  *  ①调试 worker 收到的装载是**变体**(占位语料;无 judgingConfig /
@@ -52,6 +55,28 @@ class DebugFrameCollector {
       },
       { timeout: timeoutMs, interval: 10 },
     );
+  }
+
+  /**
+   * 按 type 等待第 occurrence 次出现(推送模型下 attach/暂停伴随 function_table
+   * / instruction_stream 帧,索引计数不再稳定;类型计数对伴随帧不敏感)。
+   */
+  async waitForType(type: DebugFrame["type"], occurrence = 1, timeoutMs = 15000): Promise<DebugFrame> {
+    await this.waitFor(
+      (frames) => frames.filter((frame) => frame.type === type).length >= occurrence,
+      timeoutMs,
+    );
+    const match = this.frames.filter((frame) => frame.type === type)[occurrence - 1];
+    if (match === undefined) {
+      throw new Error(`帧 ${type} #${occurrence} 缺失`);
+    }
+    return match;
+  }
+
+  /** 某帧在线上序中的下一条帧(断言 paused → instruction_stream 相邻性)。 */
+  nextAfter(frame: DebugFrame): DebugFrame | undefined {
+    const index = this.frames.indexOf(frame);
+    return index === -1 ? undefined : this.frames[index + 1];
   }
 }
 
@@ -139,13 +164,16 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "attach-1",
       payload: { origin: { kind: "revision", revision: 2 } },
     });
-    await collector.waitFor((frames) => frames.length === 1);
-    const attached = collector.frames[0];
-    expect(attached?.type).toBe("debug_attached");
-    if (attached?.type === "debug_attached") {
+    // 推送模型:attached 之后服务端主动推 function_table(恰一次)。
+    const attached = await collector.waitForType("debug_attached");
+    if (attached.type === "debug_attached") {
       // 重放对齐:调试实例 revision = 权威日志对齐点;真实 step 已推进 RIP。
       expect(attached.payload.revision).toBe(2);
       expect(["running", "paused"]).toContain(attached.payload.status);
+    }
+    const pushedTable = await collector.waitForType("debug_function_table");
+    if (pushedTable.type === "debug_function_table") {
+      expect(pushedTable.payload.functions.length).toBeGreaterThanOrEqual(1);
     }
 
     // 零装载断言 ②:窗口读回隐藏区占位字节(真实私有包无该区域;若装载了
@@ -158,11 +186,10 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "w-1",
       payload: { addressHex: "0x80000000", byteLength: 8 },
     });
-    await collector.waitFor((frames) => frames.length === 2);
-    expect(collector.frames[1]?.type).toBe("debug_window_data");
-    if (collector.frames[1]?.type === "debug_window_data") {
-      expect(collector.frames[1].payload.bytesHex).toBe("d3adb33fc0ffee01");
-      expect(collector.frames[1].payload.addressHex).toBe("0x80000000");
+    const hiddenWindow = await collector.waitForType("debug_window_data", 1);
+    if (hiddenWindow.type === "debug_window_data") {
+      expect(hiddenWindow.payload.bytesHex).toBe("d3adb33fc0ffee01");
+      expect(hiddenWindow.payload.addressHex).toBe("0x80000000");
     }
 
     // 任意窗口 = 重放写入可见(确定性重放对齐的可观察性):栈区写入的字节。
@@ -174,12 +201,13 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "w-2",
       payload: { addressHex: "0x7ffff000", byteLength: 4 },
     });
-    await collector.waitFor((frames) => frames.length === 3);
-    if (collector.frames[2]?.type === "debug_window_data") {
-      expect(collector.frames[2].payload.bytesHex).toBe("41414141");
+    const stackWindow = await collector.waitForType("debug_window_data", 2);
+    if (stackWindow.type === "debug_window_data") {
+      expect(stackWindow.payload.bytesHex).toBe("41414141");
     }
 
-    // run_to_breakpoint:断点 = syscall 指令地址(重放后 RIP 已 +1)。
+    // run_to_breakpoint:断点 = syscall 指令地址(重放后 RIP 已 +1);推送模型
+    // 下 paused 帧后紧跟当前地址的 instruction_stream(阶段四退出条件 3 端到端)。
     send({
       protocolVersion: 1,
       type: "debug_run_to_breakpoint",
@@ -188,14 +216,15 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "b-1",
       payload: { breakpoints: ["0x400002"] },
     });
-    await collector.waitFor((frames) => frames.length === 4);
-    expect(collector.frames[3]?.type).toBe("debug_paused");
-    if (collector.frames[3]?.type === "debug_paused") {
-      expect(collector.frames[3].payload.reason).toBe("breakpoint");
-      expect(collector.frames[3].payload.addressHex).toBe("0x400002");
+    const breakpointPause = await collector.waitForType("debug_paused", 1);
+    if (breakpointPause.type === "debug_paused") {
+      expect(breakpointPause.payload.reason).toBe("breakpoint");
+      expect(breakpointPause.payload.addressHex).toBe("0x400002");
     }
+    const pushedStream1 = collector.nextAfter(breakpointPause);
+    expect(pushedStream1?.type).toBe("debug_instruction_stream");
 
-    // 全内存检索(重放写入的字节命中)+ 指令流 + 函数表展示数据。
+    // 全内存检索(重放写入的字节命中)+ 指令流上下文推送。
     send({
       protocolVersion: 1,
       type: "debug_search",
@@ -212,13 +241,21 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "st-1",
       payload: {},
     });
-    await collector.waitFor((frames) => frames.length === 6);
-    if (collector.frames[4]?.type === "debug_search_results") {
-      expect(collector.frames[4].payload.hits.length).toBeGreaterThanOrEqual(1);
-      expect(collector.frames[4].payload.hits[0]?.bytesHex).toBe("41414141");
+    const searchResults = await collector.waitForType("debug_search_results");
+    if (searchResults.type === "debug_search_results") {
+      expect(searchResults.payload.hits.length).toBeGreaterThanOrEqual(1);
+      expect(searchResults.payload.hits[0]?.bytesHex).toBe("41414141");
     }
-    if (collector.frames[5]?.type === "debug_paused") {
-      expect(["step", "program_halt"]).toContain(collector.frames[5].payload.reason);
+    const stepPause = await collector.waitForType("debug_paused", 2);
+    if (stepPause.type === "debug_paused") {
+      expect(["step", "program_halt"]).toContain(stepPause.payload.reason);
+    }
+    const pushedStream2 = collector.nextAfter(stepPause);
+    expect(pushedStream2?.type).toBe("debug_instruction_stream");
+    if (pushedStream2?.type === "debug_instruction_stream") {
+      // 推送帧不带 requestId(S→C 主动推送语义;定案)。
+      expect(pushedStream2.requestId).toBeUndefined();
+      expect(pushedStream2.payload.instructions.length).toBeGreaterThanOrEqual(1);
     }
 
     // 展示数据(伪指令流 + 函数表;IR 不出进程,D5)。
@@ -230,7 +267,7 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "b-2",
       payload: { breakpoints: ["0x400000"] },
     });
-    await collector.waitFor((frames) => frames.length === 7);
+    await collector.waitForType("debug_paused", 3);
     send({
       protocolVersion: 1,
       type: "debug_window",
@@ -239,7 +276,7 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
       requestId: "i-1",
       payload: { addressHex: "0x400000", byteLength: 16 },
     });
-    await collector.waitFor((frames) => frames.length === 8);
+    await collector.waitForType("debug_window_data", 3);
 
     // 零装载断言 ③:权威日志零污染(调试交互前后长度一致),真实会话
     // revision 不受调试帧影响(条款 4:调试交互不进权威日志)。

@@ -20,6 +20,17 @@
  *   DebugFrameSchema 重新校验 → 方向检查(客户端只发 5 值请求帧)→ 会话
  *   绑定 → DebugChannelOrchestrator(attach 重放对齐 / 帧转发)→ S→C 帧
  *   下发(requestId 回显,载荷原样转发,零本地推导)。
+ *
+ * 展示上下文推送(主控定案 = 推送模型;协议 v1 无 C→S 拉取帧,WP-40 §三.1
+ * 五帧封闭):attach 完成(`debug_attached` 之后)推一次
+ * `debug_function_table`;每次暂停(`debug_paused` 之后,含 attach 携带的
+ * paused)推送当前地址的 `debug_instruction_stream`(maxItems = 服务端常量
+ * DEBUG_CONTEXT_INSTRUCTION_ITEMS)。帧序确定性:paused → instruction_stream;
+ * attached → function_table →(若有 paused)instruction_stream。
+ * requestId 定案:function_table / instruction_stream 推送帧不带 requestId
+ * (S→C 主动推送语义);唯一例外 = attach 主帧携带 requestId 时,
+ * function_table 推送帧回显该值(attach 应答族的伴生上下文);指令流推送帧
+ * 一律不带(attach 携带 paused 触发的推流也不例外)。
  */
 import {
   DEBUG_CHANNEL_PROTOCOL_VERSION,
@@ -41,6 +52,7 @@ import {
   DEBUG_CLOSE_INTERNAL_DRIFT,
   DEBUG_CLOSE_SEND_BUFFER_OVERFLOW,
   DEBUG_CLOSE_SHUTDOWN,
+  DEBUG_CONTEXT_INSTRUCTION_ITEMS,
   DEBUG_IDLE_TIMEOUT_ERROR,
   DEBUG_INTERNAL_ERROR,
   DEBUG_MALFORMED_FRAME_ERROR,
@@ -50,7 +62,11 @@ import {
   DEBUG_UNSUPPORTED_VERSION_ERROR,
 } from "./debug-channel-constants.js";
 import { parseDebugChannelFrame, type DebugFrameRejection } from "./debug-frame-contract.js";
-import { DebugChannelError, type DebugChannelOrchestrator } from "./debug-channel-orchestrator.js";
+import {
+  DebugChannelError,
+  type DebugChannelOrchestrator,
+  type DebugDisplayEntry,
+} from "./debug-channel-orchestrator.js";
 
 /** 服务端 WebSocket 连接的最小结构面(与既有通道同一形态;测试可注入替身)。 */
 export interface DebugChannelSocket {
@@ -286,6 +302,13 @@ export class DebugChannelConnection {
                 : { paused: { addressHex: receipt.pausedAddressHex } }),
             },
           });
+          // 推送模型:attached 之后推函数表一次;attach 携带 paused(对齐后
+          // 处于暂停态)时再推当前地址的指令流(帧序确定性,见文件头定案)。
+          // 串行链保证推送完成后才处理下一入站帧(帧序 = 执行序)。
+          await this.#pushFunctionTable(requestId);
+          if (receipt.pausedAddressHex !== undefined) {
+            await this.#pushInstructionStream(receipt.pausedAddressHex);
+          }
           return;
         }
         case "debug_window": {
@@ -311,7 +334,7 @@ export class DebugChannelConnection {
         }
         case "debug_step": {
           const receipt = await this.#options.orchestrator.step(this.#claims.sessionId, this.#claims.tenantId);
-          this.#emitPaused(receipt, requestId);
+          await this.#emitPaused(receipt, requestId);
           return;
         }
         case "debug_run_to_breakpoint": {
@@ -320,7 +343,7 @@ export class DebugChannelConnection {
             this.#claims.tenantId,
             frame.payload.breakpoints,
           );
-          this.#emitPaused(receipt, requestId);
+          await this.#emitPaused(receipt, requestId);
           return;
         }
         case "debug_search": {
@@ -362,11 +385,15 @@ export class DebugChannelConnection {
     }
   }
 
-  /** debug_paused(wire 载荷 = reason + addressHex,WP-40 冻结;步数只进日志)。 */
-  #emitPaused(
+  /**
+   * debug_paused(wire 载荷 = reason + addressHex,WP-40 冻结;步数只进日志)。
+   * 推送模型:paused 之后推送当前地址的 debug_instruction_stream(每次暂停
+   * 恰一帧上下文;maxItems = DEBUG_CONTEXT_INSTRUCTION_ITEMS 服务端常量)。
+   */
+  async #emitPaused(
     receipt: { reason: string; addressHex: string; stepsExecuted: number },
     requestId: { requestId?: string },
-  ): void {
+  ): Promise<void> {
     this.#log.debug({ reason: receipt.reason, steps: receipt.stepsExecuted }, "debug execution paused");
     this.#emitFrame({
       protocolVersion: this.#anchoredVersion ?? DEBUG_CHANNEL_PROTOCOL_VERSION,
@@ -376,6 +403,93 @@ export class DebugChannelConnection {
       ...requestId,
       payload: { reason: receipt.reason, addressHex: receipt.addressHex },
     });
+    // 指令流推送帧一律不带 requestId(S→C 主动推送语义;文件头定案)。
+    await this.#pushInstructionStream(receipt.addressHex);
+  }
+
+  // ── 出站:展示上下文推送(推送模型;协议 v1 无 C→S 拉取帧)──────────────
+
+  /**
+   * debug_function_table 推送(attach 完成后恰一次)。requestId 定案:推送帧
+   * 不带 requestId(S→C 主动推送语义);唯一例外 = 主帧(attach)携带
+   * requestId 时回显该值(attach 应答族的伴生上下文)。
+   */
+  async #pushFunctionTable(requestId: { requestId?: string }): Promise<void> {
+    try {
+      const receipt = await this.#options.orchestrator.functionTable(this.#claims.sessionId, this.#claims.tenantId);
+      this.#emitFrame({
+        protocolVersion: this.#anchoredVersion ?? DEBUG_CHANNEL_PROTOCOL_VERSION,
+        type: "debug_function_table",
+        sessionId: this.#claims.sessionId,
+        seq: this.#nextSeq(),
+        ...requestId,
+        payload: {
+          functions: this.#normalizeDisplayEntries(receipt.functions),
+          ...(receipt.truncated ? { truncated: true } : {}),
+        },
+      });
+    } catch (error) {
+      this.#onContextPushFailed(error);
+    }
+  }
+
+  /**
+   * debug_instruction_stream 推送(每次暂停后恰一次,地址 = 暂停落点)。
+   * requestId 定案:指令流推送帧一律不带 requestId(S→C 主动推送语义)。
+   */
+  async #pushInstructionStream(addressHex: string): Promise<void> {
+    try {
+      const receipt = await this.#options.orchestrator.instructionStream(
+        this.#claims.sessionId,
+        this.#claims.tenantId,
+        addressHex,
+        DEBUG_CONTEXT_INSTRUCTION_ITEMS,
+      );
+      this.#emitFrame({
+        protocolVersion: this.#anchoredVersion ?? DEBUG_CHANNEL_PROTOCOL_VERSION,
+        type: "debug_instruction_stream",
+        sessionId: this.#claims.sessionId,
+        seq: this.#nextSeq(),
+        payload: {
+          instructions: this.#normalizeDisplayEntries(receipt.instructions),
+          ...(receipt.truncated ? { truncated: true } : {}),
+        },
+      });
+    } catch (error) {
+      this.#onContextPushFailed(error);
+    }
+  }
+
+  /**
+   * 展示条目线形归一化(WP-44 发现的线形差异):worker 对展示条目缺席的
+   * 可选字段(bytesHex / jumpTargetHex)序列化为 null,冻结 Schema 要求
+   * "缺席而非 null"(strictObject + optional)——发射点逐项剔除 null /
+   * undefined 值字段(条目其余字段原样,零内容推导),保证推送载荷过
+   * #emitFrame 的 DebugFrameSchema 契约自检(漂移即连接策略关闭)。
+   */
+  #normalizeDisplayEntries(entries: readonly DebugDisplayEntry[]): DebugDisplayEntry[] {
+    return entries.map((entry) =>
+      Object.fromEntries(
+        Object.entries(entry).filter(([, value]) => !(value === null || value === undefined)),
+      ),
+    );
+  }
+
+  /**
+   * 推送失败兜底(DebugChannelError 等):照既有帧处理 catch 形态 log warn +
+   * internal_error 错误帧,连接不断(与帧处理一致;主帧回执已先行下发,
+   * 推送失败只降级上下文可见性,不断开)。
+   */
+  #onContextPushFailed(error: unknown): void {
+    if (error instanceof DebugChannelError) {
+      this.#log.warn({ reason: error.message }, "debug context push failed in orchestrator domain");
+    } else {
+      this.#log.warn(
+        { type: error instanceof Error ? error.name : "NonError" },
+        "debug context push failed with unknown error",
+      );
+    }
+    this.#emitError(DEBUG_INTERNAL_ERROR);
   }
 
   // ── 出站:错误帧与信封 ──────────────────────────────────────────────────
