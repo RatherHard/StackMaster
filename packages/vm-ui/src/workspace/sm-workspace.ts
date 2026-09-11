@@ -59,6 +59,7 @@ import "./sm-workspace-menu.js";
 import type { WorkspaceMenuActionDetail } from "./sm-workspace-menu.js";
 import {
   defaultTabTypeRegistry,
+  PAYLOAD_TAB_TYPE,
   type WorkspaceTabTypeDescriptor,
   type WorkspaceTabTypeRegistry,
 } from "./tab-registry.js";
@@ -277,11 +278,14 @@ export class SmWorkspace extends LitElement {
       return null;
     }
     // Hyprland 式分割:新标签页落入焦点列(模型负责插入位),内容工厂产出
-    // 内容元素;字节页注入行装饰挂点(交叉标注 + 跳转链)。
+    // 内容元素;字节页注入行装饰挂点(交叉标注 + 跳转链);payload 页等
+    // 声明 actionSink 属性的内容(duck-typing,同 dataSource 约定)注入
+    // 会话客户端(动作提交面)。
     const content = descriptor.createContent?.({ dataSource: this.dataSource }) ?? null;
     if (content instanceof SmByteTab) {
       content.rowDecorator = this.#rowDecorator;
     }
+    this.#bindActionSink(content);
     const id = this.#model.openTab(type, descriptor.label);
     if (content !== null) {
       this.#contents.set(id, content);
@@ -412,6 +416,18 @@ export class SmWorkspace extends LitElement {
       if ("dataSource" in content && bindable.dataSource !== dataSource) {
         bindable.dataSource = dataSource;
       }
+      this.#bindActionSink(content);
+    }
+  }
+
+  /**
+   * 动作提交面注入(WP-F6 payload 页;duck-typing 约定同 dataSource):
+   * 内容声明 `actionSink` 属性即接收会话客户端(SessionClient 结构兼容
+   * `PayloadActionSink`)。client 换绑 → dataSource 变更 → 经此处重绑。
+   */
+  #bindActionSink(content: HTMLElement | null): void {
+    if (content !== null && "actionSink" in content) {
+      (content as { actionSink?: unknown }).actionSink = this.client;
     }
   }
 
@@ -434,6 +450,12 @@ export class SmWorkspace extends LitElement {
         // FE-WS-04a:指令步进 = step 动作(恰执行一条指令后暂停)。
         this.#submitAction({ type: "step", args: {} });
         break;
+      case "payload-step":
+        // FE-WS-04b(WP-F6):积木步进 = payload 程序推进一步(一个原子
+        // 动作)并暂停;语义由焦点 payload 标签页承载(菜单仅在 payload
+        // 标签页激活时可用——本处为防御性 no-op 兜底)。
+        this.#stepFocusedPayload();
+        break;
       case "reset":
         // FE-WS-05(Q5/M11):运行中 = reset;终态菜单已禁用(引导新建)。
         this.#submitAction({ type: "reset", args: {} });
@@ -451,6 +473,22 @@ export class SmWorkspace extends LitElement {
         this.openTab(action.tabType);
         break;
     }
+  }
+
+  /** 焦点标签页为 payload 页时驱动其单步(FE-WS-04b;否则防御性 no-op)。 */
+  #stepFocusedPayload(): void {
+    const focusedTabId = this.#model.focusedTabId;
+    const content = focusedTabId === null ? null : (this.#contents.get(focusedTabId) ?? null);
+    const stepOnce = (content as { stepOnce?: () => void } | null)?.stepOnce;
+    if (typeof stepOnce === "function") {
+      stepOnce.call(content);
+    }
+  }
+
+  /** 焦点标签页是否为 payload 页(菜单「积木步进」可用性依据)。 */
+  get #payloadStepEnabled(): boolean {
+    const focusedTabId = this.#model.focusedTabId;
+    return focusedTabId !== null && this.#model.tab(focusedTabId)?.type === PAYLOAD_TAB_TYPE;
   }
 
   #submitAction(action: ActionObject): void {
@@ -647,6 +685,7 @@ export class SmWorkspace extends LitElement {
         .projectionStatus=${this.#projectionStatus}
         .revision=${this.#revision}
         .hasSession=${this.client !== null}
+        .payloadStepEnabled=${this.#payloadStepEnabled}
         .lastError=${this.#lastError}
         @workspace-menu-action=${this.#onMenuAction}
       ></sm-workspace-menu>

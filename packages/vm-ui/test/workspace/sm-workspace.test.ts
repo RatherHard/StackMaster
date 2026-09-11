@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionClient } from "../../src/client/session-client.js";
 import { SmWorkspace } from "../../src/workspace/sm-workspace.js";
+import { PAYLOAD_TAB_TYPE } from "../../src/workspace/tab-registry.js";
 import {
   CREATE_INPUT,
   FakeFrames,
@@ -491,8 +492,55 @@ describe("<sm-workspace> 标签页生命周期(FE-WS-01 / FE-MV-01)", () => {
 
   it("未登记类型打开返回 null(注册表封闭消费面)", async () => {
     const workspace = await mountWorkspace();
-    expect(workspace.openTab("payload")).toBeNull();
+    expect(workspace.openTab("totally-unregistered-kind")).toBeNull();
     expect(workspace.layoutSnapshot.tabs).toHaveLength(0);
+    workspace.remove();
+  });
+
+  it("payload 标签页(WP-F6):工厂产出内容、组合根注入 actionSink、菜单积木步进接线(FE-WS-04b)", async () => {
+    const workspace = await mountWorkspace();
+    workspace.dataSource = new FakeMemoryDataSource(
+      [
+        {
+          regionId: "region-stack",
+          label: "stack",
+          startAddressHex: "0x1000",
+          byteLength: 4096,
+          permissions: "rw",
+          windowBytesHex: "00",
+        },
+      ],
+      [],
+    );
+    const tabId = workspace.openTab(PAYLOAD_TAB_TYPE);
+    expect(tabId).not.toBeNull();
+    await settleFrames(2);
+
+    const content = shadowOf(workspace).querySelector("sm-payload-tab") as HTMLElement & {
+      actionSink?: unknown;
+      stepOnce?: () => void;
+    };
+    expect(content).not.toBeNull();
+    // 组合根注入:actionSink 当前为 null(未接 client),但属性面已就位。
+    expect("actionSink" in content).toBe(true);
+    expect(typeof content.stepOnce).toBe("function");
+
+    // 焦点标签页 = payload → 菜单「积木步进」可用。
+    await workspace.updateComplete;
+    const payloadStepButton = menuShadow(workspace).querySelector(
+      "button.payload-step-button",
+    ) as HTMLButtonElement;
+    expect(payloadStepButton.disabled).toBe(false);
+
+    // 菜单动作 → 内容元素 stepOnce()(未接通道:可解释反馈,不抛错)。
+    expect(() =>
+      menuShadow(workspace).querySelector("button.payload-step-button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true }),
+      ),
+    ).not.toThrow();
+    await settleFrames(2);
+    const logLines = [...content.shadowRoot?.querySelectorAll("ol.output-log li") ?? []];
+    expect(logLines.some((line) => line.textContent?.includes("尚未连接会话"))).toBe(true);
     workspace.remove();
   });
 });

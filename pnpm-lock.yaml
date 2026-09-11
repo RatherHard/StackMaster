@@ -172,6 +172,9 @@ importers:
       '@stackmaster/protocol':
         specifier: workspace:*
         version: link:../protocol
+      blockly:
+        specifier: ^13.2.1
+        version: 13.2.1(jsdom@30.0.1)
       lit:
         specifier: ^3.3.3
         version: 3.3.3
@@ -179,6 +182,9 @@ importers:
       '@types/node':
         specifier: ^26.4.0
         version: 26.4.0
+      axe-core:
+        specifier: ^4.13.0
+        version: 4.13.0
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
@@ -729,6 +735,10 @@ packages:
   avvio@9.3.0:
     resolution: {integrity: sha512-g2tQ7LE7oOSqDfwEm3M+ZCMTJc7KiZCdJ4UwyZJb5ckTKyYu50OYmvv0mCFXPuYXoM4zkSt8zM9XQ9KCvxA74A==}
 
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
+    engines: {node: '>=4'}
+
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
@@ -741,6 +751,12 @@ packages:
 
   block-stream2@2.1.0:
     resolution: {integrity: sha512-suhjmLI57Ewpmq00qaygS8UgEq2ly2PCItenIyhMqVjo4t4pGzqMvfgJuX8iWTeSDdfSSqS6j38fL4ToNL7Pfg==}
+
+  blockly@13.2.1:
+    resolution: {integrity: sha512-iOa37H0ks5Zup2G1zZyviLX9E5WzWh3h0Zs8Nta2cPKmnAGHjZ6wrp3VqLTaquTJReJKPwaJZ39K7AD24rT4lg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      jsdom: '>=27.4.0 <30.0.0'
 
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
@@ -2336,6 +2352,8 @@ snapshots:
       '@fastify/error': 4.2.0
       fastq: 1.20.3
 
+  axe-core@4.13.0: {}
+
   balanced-match@4.0.4: {}
 
   bidi-js@1.1.0:
@@ -2347,6 +2365,10 @@ snapshots:
   block-stream2@2.1.0:
     dependencies:
       readable-stream: 3.6.2
+
+  blockly@13.2.1(jsdom@30.0.1):
+    dependencies:
+      jsdom: 30.0.1
 
   brace-expansion@5.0.9:
     dependencies:

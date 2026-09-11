@@ -11,6 +11,10 @@
  *  - src/workspace/  WP-F5:工作区容器(sm-workspace 列式滚动平铺 + 标签页
  *                    生命周期 + 顶部菜单)、tab-type registry、布局模型、
  *                    字节页组合(vma 回路)、寄存器交叉标注展开组件;
+ *  - src/payload/    WP-F6:Payload 搭建(sm-payload-tab 三区布局)、
+ *                    积木 → 12 动作编译器(无头 Blockly,序列化 JSON 输入)、
+ *                    客户端求值环境(公开投影快照)、步进执行器(原子动作
+ *                    粒度,Q3 定案);
  *  - src/client/     session-client:REST 5 命令、认证 WSS、断线重连、rAF 合帧;
  *                    projection-store:公开投影状态存储(最近投影 + 增量应用);
  *                    transport / session-errors:可注入传输层与错误面;
@@ -32,6 +36,14 @@ export * from "./workspace/tab-registry.js";
 export * from "./workspace/workspace-model.js";
 export * from "./workspace/byte-tab.js";
 export * from "./workspace/sm-register-annotation.js";
+
+// ── Payload 搭建(WP-F6)──
+export * from "./payload/sm-payload-tab.js";
+export * from "./payload/executor.js";
+export * from "./payload/compiler/types.js";
+export * from "./payload/compiler/blocks.js";
+export * from "./payload/compiler/compile.js";
+export * from "./payload/compiler/eval.js";
 
 // ── 字节视图(WP-F3)──
 export * from "./views/byte/byte-view.js";

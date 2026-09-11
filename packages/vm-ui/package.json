@@ -27,10 +27,12 @@
   "dependencies": {
     "@lit-labs/virtualizer": "^2.1.1",
     "@stackmaster/protocol": "workspace:*",
+    "blockly": "^13.2.1",
     "lit": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
+    "axe-core": "^4.13.0",
     "jsdom": "^30.0.1",
     "vite": "^8.3.0",
     "vitest": "^4.1.11"

@@ -2,11 +2,12 @@
  * <sm-workspace-menu> —— 工作区顶部菜单(WP-F5 / FE-WS-03)。
  *
  * 职责:作用于工作区/标签页**整体**(而非单个标签页内部)的常驻菜单与状态面:
- *  - **打开标签页**:按注册表条目渲染打开项(可扩展结构——WP-F6 payload 等
+ *  - **打开标签页**:按注册表条目渲染打开项(可扩展结构——payload 等
  *    新类型登记后自动出现);
- *  - **指令步进**(FE-WS-04a)= `step` 动作;**积木步进不归本 WP**(Q3 定案,
- *    FE-WS-04b 归 WP-F6);**运行到断点归 WP-F8**(FE-WS-04c / FE-WS-04a 注:
- *    断点由调试通道承载);
+ *  - **指令步进**(FE-WS-04a)= `step` 动作;**积木步进**(FE-WS-04b,WP-F6)
+ *    = `payload-step` 动作——仅 payload 标签页激活时可用,语义(编译 + 推进
+ *    一个原子动作)由 payload 标签页承载;**运行到断点归 WP-F8**
+ *    (FE-WS-04c / FE-WS-04a 注:断点由调试通道承载);
  *  - **重启测试环境**(FE-WS-05,Q5 / M11 口径):运行中(running/paused)可点
  *    = `reset` 动作;**终态(won/failed)禁用**并呈现引导
  *    "测试环境已结束,请新建会话"(引导动作 = new-session 事件:宿主 close_session
@@ -37,6 +38,8 @@ export type WorkspaceMenuAction =
   | { readonly action: "reset" }
   | { readonly action: "reconnect" }
   | { readonly action: "new-session" }
+  /** 积木步进(FE-WS-04b,WP-F6):payload 程序推进一步(一个原子动作)并暂停。 */
+  | { readonly action: "payload-step" }
   | { readonly action: "open-tab"; readonly tabType: string };
 
 /** `workspace-menu-action` 事件 detail。 */
@@ -80,6 +83,13 @@ export class SmWorkspaceMenu extends LitElement {
   /** 是否已有会话(未建会话时动作项禁用)。 */
   @property({ type: Boolean, attribute: "has-session" })
   hasSession = false;
+
+  /**
+   * 积木步进可用性(WP-F6 / FE-WS-04b):**仅 payload 标签页激活时可用**
+   * (由宿主按焦点标签页类型计算注入;本组件不感知注册表语义)。
+   */
+  @property({ type: Boolean, attribute: "payload-step-enabled" })
+  payloadStepEnabled = false;
 
   /** 最近一次被拒动作的用户可见错误(onActionRejected 呈现)。 */
   @property({ type: Object, attribute: false })
@@ -227,8 +237,19 @@ export class SmWorkspaceMenu extends LitElement {
           >
             指令步进
           </button>
+          <button
+            type="button"
+            class="payload-step-button"
+            ?disabled=${!this.payloadStepEnabled}
+            title=${this.payloadStepEnabled
+              ? "Payload 积木程序推进一步(一个原子动作)并暂停"
+              : "仅 Payload 标签页激活时可用"}
+            @click=${() => this.#emit({ action: "payload-step" })}
+          >
+            积木步进
+          </button>
           <!-- 模式切换挂点(WP-F8):解题/调试模式切换项(FE-WS-06/07)在此加入;
-               运行到断点(FE-WS-04c)与积木步进(FE-WS-04b)分别归 WP-F8 / WP-F6。 -->
+               运行到断点(FE-WS-04c)归 WP-F8(断点由调试通道承载,ADR-DC1)。 -->
           <button
             type="button"
             class="reset-button"

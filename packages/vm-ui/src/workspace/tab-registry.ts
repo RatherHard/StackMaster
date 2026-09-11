@@ -18,16 +18,19 @@
  */
 import { SmByteTab } from "./byte-tab.js";
 import { SmRegisterView } from "../views/register/sm-register-view.js";
+import { SmPayloadTab } from "../payload/sm-payload-tab.js";
 import type { MemoryDataSource } from "../datasource/types.js";
 
 /** 已登记标签页类型键(公开四类;开放 string 供 WP-F6 payload 等追加)。 */
 export type WorkspaceTabType = string;
 
-/** 已登记类型键常量(WP-F5 四类)。 */
+/** 已登记类型键常量(WP-F5 四类 + WP-F6 payload)。 */
 export const STACK_TAB_TYPE: WorkspaceTabType = "stack";
 export const FREE_TAB_TYPE: WorkspaceTabType = "free";
 export const REGISTERS_TAB_TYPE: WorkspaceTabType = "registers";
 export const DEBUG_TAB_TYPE: WorkspaceTabType = "debug";
+/** Payload 搭建标签页(WP-F6 / FE-PB;积木 → 12 动作编译 + 步进执行)。 */
+export const PAYLOAD_TAB_TYPE: WorkspaceTabType = "payload";
 
 /** 标签页内容工厂上下文:视图组件只经 MemoryDataSource 接口消费投影。 */
 export interface WorkspaceTabFactoryContext {
@@ -115,6 +118,19 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
     label: "寄存器视图",
     createContent: ({ dataSource }) => {
       const element = new SmRegisterView();
+      element.dataSource = dataSource;
+      return element;
+    },
+  });
+  // Payload 搭建(WP-F6 / FE-PB-01~03/05/06):积木画布 + 程序区 + 输出区;
+  // 内容元素实现 refresh?()(投影更新 → 重建求值环境重编译)与可赋值
+  // dataSource 属性(workspace 约定);动作提交面(actionSink)由工作区
+  // 组合根按同一约定注入(FE-WS-04b「积木步进」经工作区菜单驱动)。
+  registry.register({
+    type: PAYLOAD_TAB_TYPE,
+    label: "Payload 搭建",
+    createContent: ({ dataSource }) => {
+      const element = new SmPayloadTab();
       element.dataSource = dataSource;
       return element;
     },

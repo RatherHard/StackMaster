@@ -24,7 +24,7 @@ function menuOf(element: SmWorkspaceMenu): ShadowRoot {
 }
 
 describe("<sm-workspace-menu> 打开分组(FE-WS-03 菜单项可扩展)", () => {
-  it("按注册表渲染打开项,点击发出 open-tab 动作(含 debug 占位项)", async () => {
+  it("按注册表渲染打开项,点击发出 open-tab 动作(含 payload 与 debug 占位项)", async () => {
     const element = await mountMenu();
     const actions: unknown[] = [];
     element.addEventListener("workspace-menu-action", (event) => {
@@ -36,13 +36,14 @@ describe("<sm-workspace-menu> 打开分组(FE-WS-03 菜单项可扩展)", () => 
       "栈视图",
       "自由视图",
       "寄存器视图",
+      "Payload 搭建",
       "调试",
     ]);
-    (openButtons[3] as HTMLButtonElement).click();
+    (openButtons[4] as HTMLButtonElement).click();
 
     expect(actions).toEqual([{ action: "open-tab", tabType: "debug" }]);
     // 占位项的提示文案:空态指向 WP-F8(注册存在不实现)。
-    expect((openButtons[3] as HTMLButtonElement).getAttribute("title")).toContain("WP-F8");
+    expect((openButtons[4] as HTMLButtonElement).getAttribute("title")).toContain("WP-F8");
     element.remove();
   });
 });
@@ -188,6 +189,35 @@ describe("<sm-workspace-menu> 状态与断线横幅(FE-WS-03)", () => {
     (menuOf(element).querySelector("button.step-button") as HTMLButtonElement).click();
     (menuOf(element).querySelector("button.reset-button") as HTMLButtonElement).click();
     expect(actions).toEqual([{ action: "step" }, { action: "reset" }]);
+    element.remove();
+  });
+});
+
+describe("<sm-workspace-menu> 积木步进(FE-WS-04b,WP-F6)", () => {
+  it("payload 标签页未激活时禁用(缺省不可用)", async () => {
+    const element = await mountMenu();
+    element.hasSession = true;
+    element.connectionStatus = "connected";
+    await element.updateComplete;
+    const button = menuOf(element).querySelector("button.payload-step-button") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("title")).toContain("仅 Payload 标签页激活时可用");
+    element.remove();
+  });
+
+  it("payload 标签页激活时可用,点击发出 payload-step 动作", async () => {
+    const element = await mountMenu();
+    element.payloadStepEnabled = true;
+    await element.updateComplete;
+    const button = menuOf(element).querySelector("button.payload-step-button") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    const actions: unknown[] = [];
+    element.addEventListener("workspace-menu-action", (event) => {
+      actions.push((event as CustomEvent).detail.action);
+    });
+    button.click();
+    expect(actions).toEqual([{ action: "payload-step" }]);
     element.remove();
   });
 });
