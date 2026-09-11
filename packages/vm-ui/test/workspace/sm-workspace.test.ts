@@ -478,14 +478,16 @@ describe("<sm-workspace> 标签页生命周期(FE-WS-01 / FE-MV-01)", () => {
     workspace.remove();
   });
 
-  it("debug 占位类型:呈现「调试模式档由 WP-F8 提供」空态(注册位不实现)", async () => {
+  it("debug 类型(WP-F8)= 指令视图真工厂:解题模式呈现调试模式引导空态", async () => {
     const workspace = await mountWorkspace();
     const tabId = workspace.openTab("debug");
     expect(tabId).not.toBeNull();
     await workspace.updateComplete;
 
     const panel = shadowOf(workspace).querySelector(`[data-tab-id="${tabId}"]`);
-    expect(panel?.querySelector(".tab-placeholder")?.textContent).toContain("调试模式档由 WP-F8 提供");
+    // 解题模式(公开投影数据源,无 instructionStream)→ 指令视图呈现引导。
+    expect(panel?.querySelector("sm-instruction-view")).toBeInstanceOf(HTMLElement);
+    expect(panel?.querySelector("sm-instruction-view")?.shadowRoot?.textContent).toContain("切换到调试模式");
     expect(panel?.querySelector("sm-byte-tab")).toBeNull();
     workspace.remove();
   });
@@ -777,7 +779,7 @@ describe("<sm-workspace> 跨视图集成接线", () => {
     const { workspace, harness } = await mountConnectedWorkspace();
     const view = firstByteView(workspace);
     const scrollToIndex = vi.fn();
-    const list = view.shadowRoot.querySelector("lit-virtualizer") as unknown as {
+    const list = view.shadowRoot.querySelector("sm-window-list") as unknown as {
       scrollToIndex: unknown;
     };
     list.scrollToIndex = scrollToIndex;
@@ -803,7 +805,7 @@ describe("<sm-workspace> 跨视图集成接线", () => {
     const { workspace, harness } = await mountConnectedWorkspace();
     const view = firstByteView(workspace);
     const scrollToIndex = vi.fn();
-    const list = view.shadowRoot.querySelector("lit-virtualizer") as unknown as {
+    const list = view.shadowRoot.querySelector("sm-window-list") as unknown as {
       scrollToIndex: unknown;
     };
     list.scrollToIndex = scrollToIndex;

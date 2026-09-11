@@ -181,6 +181,55 @@ export function readSessionForm(handles: WorkspaceShellHandles): SessionCreateIn
   };
 }
 
+// ── 夹具描述包注入(WP-F8 / FE-WS-06:调试可用性 + ED 教学面)────────────────
+
+/**
+ * 夹具公开描述包的结构切面(开发壳本地类型;数据形态对齐
+ * challenge-schema 公开包,**零代码依赖**——夹具 JSON 数据占位无秘密)。
+ * vm-ui 以结构化类型消费(ed-types.ts 本地面),此处只透传数据。
+ */
+export interface DevDescriptor {
+  /** debugMode 声明(opt-out;true = 工作区菜单呈现解题/调试模式切换项)。 */
+  readonly debugMode?: boolean;
+  /** 提示 ladder(FE-ED-06;透传 <sm-hint-ladder>.hints)。 */
+  readonly hintLadder?: readonly unknown[];
+  /** 错误教学注解映射(FE-ED-07;透传 <sm-error-explainer>.mappings)。 */
+  readonly publicErrorMapping?: readonly unknown[];
+}
+
+/**
+ * 把夹具描述包注入工作区装配(debugModeAvailable / hintLadder /
+ * publicErrorMapping;sm-workspace 未升级(产物未加载)时至少落
+ * debugModeAvailable 属性——自定义元素升级后 Lit 初始化消费该值)。
+ */
+export function applyChallengeDescriptor(handles: WorkspaceShellHandles, descriptor: DevDescriptor): void {
+  const workspace = handles.workspace as {
+    debugModeAvailable?: boolean;
+    challengeDescriptor?: unknown;
+  };
+  workspace.debugModeAvailable = descriptor.debugMode === true;
+  workspace.challengeDescriptor = {
+    hintLadder: descriptor.hintLadder ?? [],
+    publicErrorMapping: descriptor.publicErrorMapping ?? [],
+  };
+  if (descriptor.debugMode === true) {
+    handles.status.textContent = `${handles.status.textContent} 调试模式可用(夹具描述包 debugMode=true)。`;
+  }
+}
+
+/** 缺省夹具描述包加载:fetch 本地 JSON(开发联调面;失败 = fail-soft null)。 */
+export async function loadDevDescriptor(url = "/fixtures/dev-descriptor.json"): Promise<DevDescriptor | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as DevDescriptor;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 接线会话 demo:表单提交 = 创建并连接;「新建会话」按钮与工作区终态引导
  * 事件(new-session-request)= close_session(如未关)+ create_session 新流程。
@@ -253,16 +302,25 @@ function defaultLoadModule(): Promise<{ SessionClient: new () => SessionDemoClie
 /**
  * 开发壳引导(仅供 index.html 调用;测试经 mountWorkspaceShell +
  * wireSessionDemo 注入替身)。动态加载 vm-ui 产物并完成接线;产物缺失时
- * (未先构建 packages/vm-ui)在状态行给出可操作指引。
+ * (未先构建 packages/vm-ui)在状态行给出可操作指引。夹具描述包
+ * (WP-F8)fail-soft 加载后注入工作区:debugModeAvailable + ED 教学面。
  */
 export async function boot(
   root: HTMLElement,
   loadModule: () => Promise<{ SessionClient: new () => SessionDemoClientLike }> = defaultLoadModule,
+  loadDescriptor: () => Promise<DevDescriptor | null> = () => loadDevDescriptor(),
 ): Promise<SessionDemoController | null> {
   const handles = mountWorkspaceShell(root);
   try {
     const vmUi = await loadModule();
-    return wireSessionDemo(handles, () => new vmUi.SessionClient());
+    const controller = wireSessionDemo(handles, () => new vmUi.SessionClient());
+    const descriptor = await loadDescriptor();
+    if (descriptor !== null) {
+      applyChallengeDescriptor(handles, descriptor);
+    } else {
+      handles.status.textContent = `${handles.status.textContent} 夹具描述包未加载:调试模式切换项隐藏(降级明示)。`;
+    }
+    return controller;
   } catch (error) {
     handles.status.textContent = `vm-ui 产物加载失败:${
       error instanceof Error ? error.message : String(error)

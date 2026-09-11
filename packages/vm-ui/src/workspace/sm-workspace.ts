@@ -31,7 +31,11 @@ import { customElement, property } from "lit/decorators.js";
 
 import type {
   ActionObject,
+  ActionResponse,
+  CheckpointRef,
+  ProjectionDelta,
   PublicError,
+  VisibleMemoryRegion,
 } from "@stackmaster/protocol";
 
 import {
@@ -41,13 +45,22 @@ import {
   type SessionClient,
 } from "../client/session-client.js";
 import { SessionClientError } from "../client/session-errors.js";
+import {
+  createDebugDataSource,
+  DebugDataSource,
+  type DebugDataSourceChangeEvent,
+  type DebugSessionLike,
+} from "../datasource/debug-data-source.js";
 import { ProjectionDataSource } from "../datasource/projection-data-source.js";
 import type { MemoryDataSource, Row } from "../datasource/types.js";
+import type { PublicErrorMapping, PublicHint } from "../ed/ed-types.js";
+import { buildTimeline, type ActionTimelineRecord } from "../ed/timeline.js";
 import { formatAddressHex } from "../render/hex.js";
 import { crossAnnotateRegisters, type RegisterHit } from "../views/register/cross-annotation.js";
 import { resolveJumpChain } from "../views/chain/resolve.js";
 // 模板依赖的自定义元素经 side-effect import 注册(独立入口自包含;
-// sm-byte-tab 会级联注册字节视图 / VMA 侧栏,此处补齐跳转链与标注、菜单)。
+// sm-byte-tab 会级联注册字节视图 / VMA 侧栏,此处补齐跳转链与标注、菜单、
+// ED 教学组件——F8 工作区挂接)。
 import "../views/chain/sm-jump-chain.js";
 import type { ViewportJumpDetail } from "../views/chain/sm-jump-chain.js";
 import {
@@ -57,6 +70,17 @@ import { SmByteTab, type ByteTabRowDecorator } from "./byte-tab.js";
 import "./sm-register-annotation.js";
 import "./sm-workspace-menu.js";
 import type { WorkspaceMenuActionDetail } from "./sm-workspace-menu.js";
+// ED 七组件(F9 契约面)挂接:教学面板(提示 / 错误解释)与 ED 标签页内容。
+// 侧作用 import 注册自定义元素;类型经各组件模块导出面引用(见下方 import)。
+import "../views/ed/sm-structure-view.js";
+import "../views/ed/sm-call-stack.js";
+import "../views/ed/sm-memory-diff.js";
+import "../views/ed/sm-timeline.js";
+import "../views/ed/sm-checkpoints.js";
+import "../views/ed/sm-hint-ladder.js";
+import "../views/ed/sm-error-explainer.js";
+import "../views/instruction/sm-instruction-view.js";
+import type { HighlightJumpDetail } from "../views/ed/sm-structure-view.js";
 import {
   defaultTabTypeRegistry,
   PAYLOAD_TAB_TYPE,
@@ -67,6 +91,28 @@ import { WorkspaceLayoutModel, type MoveTarget, type WorkspaceLayoutSnapshot } f
 
 /** 拖拽启动的位移阈值(px):超过才算拖拽(否则视为激活点击)。 */
 const DRAG_THRESHOLD_PX = 3;
+
+/** 工作区模式(FE-WS-06):解题(公开投影)与调试(调试通道)双档。 */
+export type WorkspaceMode = "solve" | "debug";
+
+/**
+ * 题目公开描述包的教学切面(宿主注入;本地结构类型,对齐锚 = ed-types.ts,
+ * 双包 Schema 语义)。浏览器只保存公开投影与 UI 状态——描述包本身 PUBLIC。
+ */
+export interface WorkspaceChallengeDescriptor {
+  /** 提示 ladder(FE-ED-06;revealPolicy 语义在组件本地执行)。 */
+  readonly hintLadder?: readonly PublicHint[];
+  /** 错误教学注解映射(FE-ED-07;按 errorCode 匹配)。 */
+  readonly publicErrorMapping?: readonly PublicErrorMapping[];
+}
+
+/** 调试档数据源工厂(测试接缝;缺省 = createDebugDataSource 组合根装配)。 */
+export type DebugDataSourceFactory = (client: SessionClient) => DebugDataSource | null;
+
+/** 字节视图滚动面(SmByteView 结构子集;解耦视图案与测试替身)。 */
+interface SmByteViewLike {
+  scrollToAddress(addressHex: string): boolean;
+}
 
 @customElement("sm-workspace")
 export class SmWorkspace extends LitElement {
@@ -88,6 +134,25 @@ export class SmWorkspace extends LitElement {
   @property({ attribute: false })
   tabTypes: WorkspaceTabTypeRegistry = defaultTabTypeRegistry;
 
+  /**
+   * 调试模式可用性(FE-WS-06):题目 debugMode 声明(plugin-dev 开发壳经
+   * 夹具描述包注入)。false = 未启用调试的题目,菜单隐藏模式切换项。
+   */
+  @property({ type: Boolean, attribute: "debug-mode-available" })
+  debugModeAvailable = false;
+
+  /** 题目公开描述包教学切面(提示 ladder / 错误注解;ED 组件挂接数据)。 */
+  @property({ attribute: false })
+  challengeDescriptor: WorkspaceChallengeDescriptor | null = null;
+
+  /**
+   * 调试档数据源工厂(测试接缝):缺省 = 组合根装配
+   * `createDebugDataSource(client)`(DebugChannelClient 缺省传输);
+   * 测试注入假传输 / 替身数据源。返回 null = 会话未创建。
+   */
+  @property({ attribute: false })
+  debugDataSourceFactory: DebugDataSourceFactory | null = null;
+
   // ── 内部状态 ─────────────────────────────────────────────────────────────
 
   readonly #model = new WorkspaceLayoutModel();
@@ -106,6 +171,30 @@ export class SmWorkspace extends LitElement {
 
   // 交叉标注缓存(投影变更重建;行装饰按行区间过滤)。
   #registerHits: readonly RegisterHit[] = [];
+
+  // ── 模式切换与调试档状态(FE-WS-06/07,WP-F8)──
+  #mode: WorkspaceMode = "solve";
+  #debugDataSource: DebugDataSource | null = null;
+  /** 调试档变更退订(切回解题模式 / client 换绑时注销)。 */
+  #debugChangeDisposer: (() => void) | null = null;
+  /** 调试交互反馈(暂停原因 / attach / 通道错误;菜单下方状态行)。 */
+  #debugFeedback: string | null = null;
+
+  // ── 动作账本与教学组件状态(ED 挂接,公开投影 + UI 状态)──
+  /** 动作账本(onActionResponse 流 × 发送侧 FIFO 配对;时间线数据源)。 */
+  readonly #actionRecords: ActionTimelineRecord[] = [];
+  /** 发送侧动作 FIFO(响应无动作本体;教学 UI 不与其他动作入口混用——F6 已登记取舍)。 */
+  readonly #pendingActions: ActionObject[] = [];
+  /** checkpoint 列表(list_checkpoints REST 刷新;时间线 + checkpoint 页)。 */
+  #checkpoints: readonly CheckpointRef[] = [];
+  /** 教学失败计数(ActionResponse failed 反馈自账;提示 ladder 解锁依据)。 */
+  #failureCount = 0;
+  /** 前一投影 visibleRegions(内存 diff 的动作前快照)。 */
+  #beforeRegions: readonly VisibleMemoryRegion[] | undefined = undefined;
+  /** 最近一次投影增量(内存 diff 的 dirtyRanges 源)。 */
+  #lastDelta: ProjectionDelta | null = null;
+  /** 最近已知区域快照(store 订阅维护,产出下一动作的前快照)。 */
+  #lastRegionsSnapshot: readonly VisibleMemoryRegion[] | undefined = undefined;
 
   // 拖拽态(pointer 事件;标题栏按下 → 阈值外位移 = 拖拽,否则 = 激活)。
   #drag: { tabId: string; startX: number; startY: number; moved: boolean } | null = null;
@@ -221,6 +310,42 @@ export class SmWorkspace extends LitElement {
       font-size: 0.75rem;
       border-block-end: 1px solid rgb(0 0 0 / 10%);
     }
+
+    /* 调试档状态行(F8):切换 / attach / 暂停反馈(降级文案明示)。 */
+    .debug-feedback {
+      margin: 0;
+      padding: 0.25rem 0.75rem;
+      color: canvastext;
+      font-size: 0.75rem;
+      background: color-mix(in srgb, field 94%, accentcolor 6%);
+      border-block-end: 1px solid rgb(0 0 0 / 10%);
+    }
+
+    /* 教学面板(F8 ED 挂接,取简 = details 折叠区):提示 ladder + 错误解释。 */
+    .teaching-panel {
+      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      font-size: 0.8125rem;
+    }
+
+    .teaching-panel > summary {
+      padding: 0.25rem 0.75rem;
+      color: graytext;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    .teaching-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 0.5rem;
+      padding: 0.25rem 0.75rem 0.5rem;
+    }
+
+    @media (max-width: 48rem) {
+      .teaching-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
   `;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -290,6 +415,8 @@ export class SmWorkspace extends LitElement {
     if (content !== null) {
       this.#contents.set(id, content);
     }
+    // ED 组件面:新开标签页立即注入当前投影 / 账本切面(不等下一次投影事件)。
+    this.#syncEdContents();
     this.requestUpdate();
     return id;
   }
@@ -334,19 +461,35 @@ export class SmWorkspace extends LitElement {
 
   #onClientChanged(): void {
     this.#detachClientListeners();
+    // client 换绑(新会话)= 调试会话失效:确定性退回解题模式(重连 / 重放
+    // 对齐语义归新会话的调试通道,旧调试缓存不跨会话复用)。
+    this.#teardownDebugSource();
+    this.#mode = "solve";
+    this.#debugFeedback = null;
+    // 动作账本 / 失败计数 / diff 快照随会话作废(UI 状态以会话为界)。
+    this.#actionRecords.length = 0;
+    this.#pendingActions.length = 0;
+    this.#checkpoints = [];
+    this.#failureCount = 0;
+    this.#beforeRegions = undefined;
+    this.#lastDelta = null;
+    this.#lastRegionsSnapshot = undefined;
     const client = this.client;
     if (client === null) {
       this.#syncConnectionFrom("disconnected", null, 0, null);
       this.#projectionStatus = null;
       this.#revision = null;
+      this.dataSource = null;
       return;
     }
-    // 组合根装配(README):数据源 = client.store 的公开档包装。
+    // 组合根装配(README):数据源 = client.store 的公开档包装(解题模式)。
     this.dataSource = new ProjectionDataSource(client.store);
+    this.#lastRegionsSnapshot = client.store.snapshot?.visibleRegions;
     this.#attachClientListeners();
     this.#syncConnectionFrom(client.status, null, 0, null);
     this.#syncFromProjection();
     this.#refreshContents();
+    this.#syncEdContents();
   }
 
   #attachClientListeners(): void {
@@ -359,6 +502,7 @@ export class SmWorkspace extends LitElement {
       client.onProjectionChanged(() => {
         this.#syncFromProjection();
         this.#refreshContents();
+        this.#syncEdContents();
         this.requestUpdate();
       }),
       client.onConnectionStatus((event: ConnectionStatusEvent) => {
@@ -368,7 +512,22 @@ export class SmWorkspace extends LitElement {
       client.onActionRejected((error: PublicError) => {
         // 拒绝耦合:userVisibleError 必在(含 explanation 教学解释)。
         this.#lastError = error;
+        this.#syncEdContents();
         this.requestUpdate();
+      }),
+      // 动作账本(ED 时间线 / 失败计数 / checkpoint 刷新时点)。
+      client.onActionResponse((response: ActionResponse) => this.#recordActionResponse(response)),
+      // store 级订阅:捕获"前一投影 visibleRegions + delta"(内存 diff 前快照;
+      // onProjectionChanged 是合帧后通知,拿不到前值,必须在 store 变更点维护)。
+      client.store.subscribe((change) => {
+        if (change.kind === "delta" && change.delta !== null) {
+          this.#beforeRegions = this.#lastRegionsSnapshot;
+          this.#lastDelta = change.delta;
+        } else if (change.kind === "replace") {
+          this.#beforeRegions = undefined;
+          this.#lastDelta = null;
+        }
+        this.#lastRegionsSnapshot = client.store.snapshot?.visibleRegions;
       }),
     ];
     this.#listenerDisposers = disposers;
@@ -441,6 +600,182 @@ export class SmWorkspace extends LitElement {
     return this.tabTypes.get(type);
   }
 
+  // ── 动作账本(ED 时间线 / 失败计数 / checkpoint 刷新时点)────────────────
+
+  /**
+   * 响应 → 账本条目:响应不携带动作本体,以发送侧 FIFO 配对(教学 UI 约定
+   * payload 运行 / 暂停期间不混用其他动作入口,F6 已登记取舍;队列空时的
+   * 响应以 step 占位呈现,不伪造动作参数)。
+   */
+  #recordActionResponse(response: ActionResponse): void {
+    const action = this.#pendingActions.shift() ?? ({ type: "step", args: {} } as ActionObject);
+    this.#actionRecords.push({ action, response, at: Date.now() });
+    // 教学失败计数(FE-ED-06):failed 状态反馈自账;rejected 是动作非法
+    // (不走提示解锁),won / paused / running 不计。
+    if (response.status === "failed") {
+      this.#failureCount += 1;
+    }
+    // checkpoint 刷新时点(WP-F9 对接登记):create/checkout 响应到达且
+    // 未被拒 → 重拉 list_checkpoints 刷新列表与时间线。
+    if (
+      (action.type === "create_checkpoint" || action.type === "checkout_checkpoint") &&
+      response.status !== "rejected"
+    ) {
+      void this.#refreshCheckpoints();
+    }
+    this.#syncEdContents();
+    this.requestUpdate();
+  }
+
+  async #refreshCheckpoints(): Promise<void> {
+    const client = this.client;
+    if (client === null) {
+      return;
+    }
+    try {
+      const response = await client.listCheckpoints();
+      if (response.command === "list_checkpoints") {
+        this.#checkpoints = response.payload.checkpoints;
+        this.#syncEdContents();
+        this.requestUpdate();
+      }
+    } catch {
+      // 列表刷新失败静默(下一次 checkpoint 动作回流重试);零伪造数据。
+    }
+  }
+
+  // ── 模式切换(FE-WS-06/07,WP-F8)────────────────────────────────────────
+
+  /** 当前工作区模式(诊断 / 测试面)。 */
+  get mode(): WorkspaceMode {
+    return this.#mode;
+  }
+
+  /** 调试档数据源(调试模式;解题模式为 null)。 */
+  get debugDataSource(): DebugDataSource | null {
+    return this.#debugDataSource;
+  }
+
+  #onDebugSourceChange(event: DebugDataSourceChangeEvent): void {
+    switch (event.kind) {
+      case "paused":
+        if (event.paused !== undefined) {
+          const reason =
+            event.paused.reason === "step"
+              ? "单步暂停"
+              : event.paused.reason === "breakpoint"
+                ? "命中断点,已暂停"
+                : event.paused.reason === "program_halt"
+                  ? "程序已自行停机(exit / 停机指令)"
+                  : "预算耗尽,确定性暂停";
+          this.#debugFeedback = `${reason} @ ${event.paused.addressHex}`;
+        }
+        break;
+      case "attached":
+        this.#debugFeedback = "调试实例已对齐(重放完成),调试通道已就绪";
+        break;
+      case "error":
+        this.#debugFeedback = "调试通道错误:请求被拒绝或帧异常(详见指令视图状态)";
+        break;
+      case "connection":
+        this.#debugFeedback =
+          this.#debugDataSource?.connectionStatus === "disconnected"
+            ? "调试通道已断开:重新切换到调试模式以重新 attach"
+            : null;
+        break;
+      default:
+        break;
+    }
+    this.requestUpdate();
+  }
+
+  /** 切换到调试模式:重绑数据源(DebugDataSource)→ 连接并 attach。 */
+  #enterDebugMode(): void {
+    const client = this.client;
+    if (client === null || client.sessionId === null) {
+      this.#debugFeedback = "尚未创建会话:无法切换到调试模式";
+      this.requestUpdate();
+      return;
+    }
+    this.#teardownDebugSource();
+    const factory = this.debugDataSourceFactory ?? ((session: DebugSessionLike) => createDebugDataSource(session));
+    const debugSource = factory(client);
+    if (debugSource === null) {
+      this.#debugFeedback = "调试数据源装配失败(会话不可用)";
+      this.requestUpdate();
+      return;
+    }
+    this.#debugDataSource = debugSource;
+    this.#debugChangeDisposer = debugSource.onChange((event) => this.#onDebugSourceChange(event));
+    this.#mode = "debug";
+    // 断点积木双档(FE-WS-07):payload 断点集合并入调试断点(最小接线挂点)。
+    this.#mergePayloadBreakpoints(debugSource);
+    // 换绑数据源(字节视图换绑即重建 = 锚点/滚动重置,F5 既有验收口径)。
+    this.dataSource = debugSource;
+    debugSource.attach();
+    this.#debugFeedback = "调试通道连接中(attach 重放对齐后可用)……";
+    this.#rebindContents();
+    this.#syncEdContents();
+    this.requestUpdate();
+  }
+
+  /** 切回解题模式:释放调试档 → 重绑公开投影数据源。 */
+  #exitDebugMode(): void {
+    this.#teardownDebugSource();
+    this.#mode = "solve";
+    this.#debugFeedback = null;
+    const client = this.client;
+    this.dataSource = client === null ? null : new ProjectionDataSource(client.store);
+    this.#lastRegionsSnapshot = client?.store.snapshot?.visibleRegions;
+    this.#rebindContents();
+    this.#rebuildAnnotationCache();
+    this.#syncEdContents();
+    this.requestUpdate();
+  }
+
+  #teardownDebugSource(): void {
+    this.#debugChangeDisposer?.();
+    this.#debugChangeDisposer = null;
+    this.#debugDataSource?.dispose();
+    this.#debugDataSource = null;
+  }
+
+  /**
+   * 断点积木双档(FE-WS-07):payload 断点积木在解题模式 = 步进暂停(WP-F6
+   * 现状);调试模式 = 断点集合并入调试断点。v1 编译器断点步骤无地址承载
+   * (PayloadStep.kind "breakpoint" 无 addressHex 字段),本挂点消费内容元素
+   * `breakpointAddresses()` 声明面——v1 payload 页返回空,编译器演进携带地址
+   * 后即自动并入(最小接线登记)。
+   */
+  #mergePayloadBreakpoints(debugSource: DebugDataSource): void {
+    for (const content of this.#contents.values()) {
+      const provider = (content as { breakpointAddresses?: () => readonly string[] } | null)
+        ?.breakpointAddresses;
+      if (typeof provider !== "function") {
+        continue;
+      }
+      for (const address of provider.call(content)) {
+        debugSource.addBreakpoint(address);
+      }
+    }
+  }
+
+  /** 「运行到断点」可用性:调试模式 && 断点集合非空 && 会话通道可用且未终态。 */
+  get #runToBreakpointEnabled(): boolean {
+    if (this.#mode !== "debug" || (this.#debugDataSource?.breakpointCount ?? 0) === 0) {
+      return false;
+    }
+    return this.#sessionActionable && !this.#isTerminal;
+  }
+
+  get #sessionActionable(): boolean {
+    return this.client !== null && this.#connectionStatus === "connected";
+  }
+
+  get #isTerminal(): boolean {
+    return this.#projectionStatus !== null && ["won", "failed"].includes(this.#projectionStatus);
+  }
+
   // ── 菜单动作 ─────────────────────────────────────────────────────────────
 
   #onMenuAction(event: Event): void {
@@ -459,6 +794,23 @@ export class SmWorkspace extends LitElement {
       case "reset":
         // FE-WS-05(Q5/M11):运行中 = reset;终态菜单已禁用(引导新建)。
         this.#submitAction({ type: "reset", args: {} });
+        break;
+      case "run-to-breakpoint":
+        // FE-WS-04c(F8):运行到断点 = 调试通道 debug_run_to_breakpoint,
+        // 断点集合 = 当前集合(菜单仅调试模式且集合非空时可用;防御性 no-op 兜底)。
+        void this.#debugDataSource
+          ?.runToBreakpoint()
+          .catch(() => {
+            // 运行失败(未连接 / 预算)经 onChange(error) 反馈;此处不重复呈现。
+          });
+        break;
+      case "toggle-debug-mode":
+        // FE-WS-06(F8):解题/调试模式切换(可用性 = debugModeAvailable)。
+        if (this.#mode === "debug") {
+          this.#exitDebugMode();
+        } else {
+          this.#enterDebugMode();
+        }
         break;
       case "reconnect":
         // 手动重连(单连接策略:connection-replaced 不自动重连,宿主可点)。
@@ -485,6 +837,64 @@ export class SmWorkspace extends LitElement {
     }
   }
 
+  // ── ED 组件挂接(F9 契约面 × F8 组合根)──────────────────────────────────
+
+  /**
+   * ED 内容属性同步(duck-typing 同 dataSource / actionSink 约定):按内容
+   * 元素声明的属性注入公开投影 / 账本切面——ED 组件本身只依赖属性
+   * (F9 独立组件纪律),组合根承担 client → 属性的装配。
+   */
+  #syncEdContents(): void {
+    const client = this.client;
+    const snapshot = client?.store.snapshot ?? null;
+    const descriptor = this.challengeDescriptor;
+    for (const content of this.#contents.values()) {
+      const bindable = content as unknown as Record<string, unknown>;
+      if ("highlights" in bindable) {
+        bindable["highlights"] = snapshot?.semanticHighlights ?? [];
+      }
+      if ("frames" in bindable) {
+        bindable["frames"] = snapshot?.callStackSummary ?? [];
+      }
+      if ("beforeRegions" in bindable) {
+        bindable["beforeRegions"] = this.#beforeRegions;
+      }
+      if ("delta" in bindable) {
+        bindable["delta"] = this.#lastDelta;
+      }
+      if ("entries" in bindable) {
+        bindable["entries"] = buildTimeline(this.#actionRecords, this.#checkpoints);
+      }
+      if ("currentRevision" in bindable) {
+        bindable["currentRevision"] = client?.store.revision ?? null;
+      }
+      if ("checkpoints" in bindable) {
+        bindable["checkpoints"] = this.#checkpoints;
+      }
+      if ("sendAction" in bindable) {
+        bindable["sendAction"] = (action: ActionObject) => this.#submitAction(action);
+      }
+      if ("sessionTerminal" in bindable) {
+        bindable["sessionTerminal"] = this.#isTerminal;
+      }
+      if ("hints" in bindable) {
+        bindable["hints"] = descriptor?.hintLadder ?? [];
+      }
+      if ("failures" in bindable) {
+        bindable["failures"] = this.#failureCount;
+      }
+      if ("mappings" in bindable) {
+        bindable["mappings"] = descriptor?.publicErrorMapping ?? [];
+      }
+      if (content.localName === "sm-error-explainer") {
+        // 错误解释(FE-ED-07):userVisibleError + 描述包注解(F5 菜单内联
+        // 拒绝呈现的增强并存;error 属性名与 sm-checkpoints 的 string 文案面
+        // 重合,以元素身份区分注入)。
+        bindable["error"] = this.#lastError;
+      }
+    }
+  }
+
   /** 焦点标签页是否为 payload 页(菜单「积木步进」可用性依据)。 */
   get #payloadStepEnabled(): boolean {
     const focusedTabId = this.#model.focusedTabId;
@@ -499,8 +909,11 @@ export class SmWorkspace extends LitElement {
       return;
     }
     try {
+      // 发送侧 FIFO 配对(ED 时间线动作账本;响应不携带动作本体)。
+      this.#pendingActions.push(action);
       client.sendAction(action);
     } catch (error) {
+      this.#pendingActions.pop();
       // sendAction 断线 / 无会话抛 SessionClientError:呈现为可解释错误
       // (不排队、不本地补执行——动作只能经认证 WSS)。
       this.#lastError = {
@@ -552,6 +965,10 @@ export class SmWorkspace extends LitElement {
    * 某可见区域范围)才挂载 `<sm-jump-chain>`(FE-ST-07;窗口外 / 非地址不挂)。
    */
   #renderRowJumpChain(row: Row, dataSource: MemoryDataSource): unknown {
+    // 调试档(FE-ST-08/10):DebugDataSource 时呈现「延伸」入口——prefetch
+    // 后可解引用延伸(同步 resolveJumpChain 语义保留;延伸反馈归链组件)。
+    const debugSource = this.#debugDataSource;
+    const extendable = debugSource !== null && dataSource === debugSource;
     try {
       const segments = resolveJumpChain(row.addressHex, dataSource, { maxSegments: 1 });
       const first = segments[0];
@@ -564,6 +981,10 @@ export class SmWorkspace extends LitElement {
     return html`<sm-jump-chain
       class="row-jump-chain"
       .dataSource=${dataSource}
+      .extendable=${extendable}
+      .extendHandler=${extendable && debugSource !== null
+        ? (addressHex: string) => debugSource.prefetchWindow(addressHex)
+        : null}
       start-address-hex=${row.addressHex}
     ></sm-jump-chain>`;
   }
@@ -577,11 +998,54 @@ export class SmWorkspace extends LitElement {
     const addressText = formatAddressHex(detail.addressHex, 8);
     const byteTab = event.composedPath().find((node): node is SmByteTab => node instanceof SmByteTab);
     const view = byteTab?.byteView ?? null;
-    const moved = detail.withinWindow ? (view?.scrollToAddress(detail.addressHex) ?? false) : false;
-    this.#jumpFeedback = moved
-      ? `已跳转到 ${addressText}`
-      : `${addressText} 在可见窗口之外`;
+    void this.#handleViewportJump(detail.addressHex, view, addressText);
+  };
+
+  /**
+   * 跳转落点处理:优先滚动;调试档(FE-ST-05 全量口径)滚动失败时自动
+   * prefetchWindow 后重试一次,仍不可达 → "窗口外"反馈(解题档维持现状,
+   * 不做任何窗口拉取——D3)。
+   */
+  async #handleViewportJump(addressHex: string, view: SmByteViewLike | null, addressText: string): Promise<void> {
+    if (view !== null && view.scrollToAddress(addressHex)) {
+      this.#jumpFeedback = `已跳转到 ${addressText}`;
+      this.requestUpdate();
+      return;
+    }
+    const debugSource = this.#debugDataSource;
+    if (this.#mode === "debug" && debugSource !== null && view !== null) {
+      try {
+        await debugSource.prefetchWindow(addressHex);
+        this.#refreshContents();
+      } catch {
+        // prefetch 失败(通道未连接 / 地址不可达)→ 落回窗口外反馈。
+      }
+    }
+    const movedAfter = view?.scrollToAddress(addressHex) ?? false;
+    this.#jumpFeedback = movedAfter ? `已跳转到 ${addressText}` : `${addressText} 在可见窗口之外`;
     this.requestUpdate();
+  }
+
+  /**
+   * highlight-jump(FE-ED-01 结构视图 → 字节视图联动,WP-F8 接线):
+   * 定位到高亮条目所在区域 + 滚动到地址行(取第一个字节标签页承载)。
+   */
+  readonly #onHighlightJump = (event: Event): void => {
+    const detail = (event as CustomEvent<HighlightJumpDetail>).detail;
+    if (detail === undefined) {
+      return;
+    }
+    const byteTab =
+      [...this.#contents.values()].find((content): content is SmByteTab => content instanceof SmByteTab) ?? null;
+    if (byteTab === null) {
+      this.#jumpFeedback = `结构标注 ${detail.addressHex}:尚未打开栈/自由视图,无法定位`;
+      this.requestUpdate();
+      return;
+    }
+    byteTab.byteView?.showRegion(detail.regionId);
+    const view = byteTab.byteView;
+    const addressText = formatAddressHex(detail.addressHex, 8);
+    void this.#handleViewportJump(detail.addressHex, view, addressText);
   };
 
   // ── 拖拽排布(pointer 事件;动画只用 opacity)────────────────────────────
@@ -675,6 +1139,7 @@ export class SmWorkspace extends LitElement {
 
   protected override render(): unknown {
     const snapshot = this.#model.snapshot;
+    const descriptor = this.challengeDescriptor;
     return html`
       <sm-workspace-menu
         .tabTypes=${this.tabTypes.list()}
@@ -686,14 +1151,38 @@ export class SmWorkspace extends LitElement {
         .revision=${this.#revision}
         .hasSession=${this.client !== null}
         .payloadStepEnabled=${this.#payloadStepEnabled}
+        .runToBreakpointEnabled=${this.#runToBreakpointEnabled}
+        .debugModeAvailable=${this.debugModeAvailable}
+        .debugModeActive=${this.#mode === "debug"}
         .lastError=${this.#lastError}
         @workspace-menu-action=${this.#onMenuAction}
       ></sm-workspace-menu>
+      ${this.#renderDebugFeedback()}
+      <details class="teaching-panel" part="teaching-panel">
+        <summary>教学面板(提示 / 错误解释)</summary>
+        <div class="teaching-grid">
+          <sm-hint-ladder
+            .hints=${descriptor?.hintLadder ?? []}
+            .failures=${this.#failureCount}
+          ></sm-hint-ladder>
+          <sm-error-explainer
+            .error=${this.#lastError}
+            .mappings=${descriptor?.publicErrorMapping ?? []}
+          ></sm-error-explainer>
+        </div>
+      </details>
       ${this.#jumpFeedback === null
         ? nothing
         : html`<p class="jump-feedback" role="status">${this.#jumpFeedback}</p>`}
       ${snapshot.columns.length === 0 ? this.#renderEmptyState() : nothing}
-      <main class="columns" data-columns aria-label="工作区标签页区域" @viewport-jump=${this.#onViewportJump}>
+      <main
+        class="columns"
+        data-columns
+        aria-label="工作区标签页区域"
+        @viewport-jump=${this.#onViewportJump}
+        @highlight-jump=${this.#onHighlightJump}
+        @breakpoints-changed=${() => this.requestUpdate()}
+      >
         ${snapshot.columns.map((column, columnIndex) => html`
           <div class="column" data-column-index=${columnIndex}>
             ${column.tabIds.map((tabId) => this.#renderPanel(tabId))}
@@ -701,6 +1190,14 @@ export class SmWorkspace extends LitElement {
         `)}
       </main>
     `;
+  }
+
+  /** 调试档状态行(FE-WS-06 切换反馈 / 暂停原因 / 通道降级明示)。 */
+  #renderDebugFeedback(): unknown {
+    if (this.#mode !== "debug" || this.#debugFeedback === null) {
+      return nothing;
+    }
+    return html`<p class="debug-feedback" role="status">${this.#debugFeedback}</p>`;
   }
 
   #renderEmptyState(): unknown {

@@ -6,21 +6,27 @@
  *    新类型登记后自动出现);
  *  - **指令步进**(FE-WS-04a)= `step` 动作;**积木步进**(FE-WS-04b,WP-F6)
  *    = `payload-step` 动作——仅 payload 标签页激活时可用,语义(编译 + 推进
- *    一个原子动作)由 payload 标签页承载;**运行到断点归 WP-F8**
- *    (FE-WS-04c / FE-WS-04a 注:断点由调试通道承载);
- *  - **重启测试环境**(FE-WS-05,Q5 / M11 口径):运行中(running/paused)可点
- *    = `reset` 动作;**终态(won/failed)禁用**并呈现引导
- *    "测试环境已结束,请新建会话"(引导动作 = new-session 事件:宿主 close_session
- *    + create_session 新流程);
+ *    一个原子动作)由 payload 标签页承载;
+ *  - **重启测试环境**(FE-WS-05,Q5 / M11 口径):运行中可点 = `reset` 动作;
+ *    **终态(won/failed)禁用**并呈现引导"测试环境已结束,请新建会话";
+ *  - **运行到断点**(FE-WS-04c,WP-F8):调试模式原生暂停点——由宿主经
+ *    `runToBreakpointEnabled` 注入可用性(调试模式 && 断点集合非空 && 通道
+ *    可用),动作语义 = `debug_run_to_breakpoint`(断点集合 = 当前集合),
+ *    由宿主(sm-workspace)执行;
+ *  - **解题/调试模式切换**(FE-WS-06,WP-F8):`toggle-debug-mode` 动作;
+ *    **调试可用性由题目声明**(`debugModeAvailable`,plugin-dev 开发壳经
+ *    夹具描述包注入)——未启用的题目**隐藏切换项**(FE-WS-06);
+ *  - **what-if 纪律横幅**(ADR-DC1 条款 7):调试模式下常驻显式呈现
+ *    "调试通过 ≠ 提交通过(裁决以提交为准)"+ ASLR 地址差异提示语,
+ *    调试结果不得被误读为权威结论;
  *  - **会话状态显示**:status + revision + 连接状态机(connecting/connected/
  *    reconnecting/disconnected);reconnecting 呈现 attempt / retryDelayMs;
  *    connection-replaced 提示可手动重连;
  *  - **断线横幅**:断线时整体呈现"最近一次公开投影 + 重连中"(硬门槛:禁止
  *    本地 VM 降级——本菜单不提供任何本地执行入口);
  *  - **拒绝呈现**:动作被拒(onActionRejected)呈现 userVisibleError,含
- *    explanation 教学解释(不只 code);
- *  - **模式切换挂点(注释位,WP-F8)**:解题/调试模式切换项在 FE-WS-06/07
- *    落地时加入本菜单(FE-WS-03"菜单项可扩展");本 WP 只留注册位。
+ *    explanation 教学解释(不只 code;F8 起与教学面板 sm-error-explainer
+ *    增强并存)。
  *
  * 本组件是纯呈现 + 事件出站面:动作语义由宿主(sm-workspace)执行。
  * 动画纪律:零动画;语义化 DOM(nav / button / role=status / role=alert)。
@@ -40,6 +46,10 @@ export type WorkspaceMenuAction =
   | { readonly action: "new-session" }
   /** 积木步进(FE-WS-04b,WP-F6):payload 程序推进一步(一个原子动作)并暂停。 */
   | { readonly action: "payload-step" }
+  /** 运行到断点(FE-WS-04c,WP-F8):调试通道 debug_run_to_breakpoint(断点 = 当前集合)。 */
+  | { readonly action: "run-to-breakpoint" }
+  /** 解题/调试模式切换(FE-WS-06,WP-F8;可用性 = debugModeAvailable 题目声明)。 */
+  | { readonly action: "toggle-debug-mode" }
   | { readonly action: "open-tab"; readonly tabType: string };
 
 /** `workspace-menu-action` 事件 detail。 */
@@ -90,6 +100,24 @@ export class SmWorkspaceMenu extends LitElement {
    */
   @property({ type: Boolean, attribute: "payload-step-enabled" })
   payloadStepEnabled = false;
+
+  /**
+   * 运行到断点可用性(WP-F8 / FE-WS-04c):调试模式 && 断点集合非空 &&
+   * 会话通道可用(宿主计算注入;本组件不感知调试通道状态)。
+   */
+  @property({ type: Boolean, attribute: "run-to-breakpoint-enabled" })
+  runToBreakpointEnabled = false;
+
+  /**
+   * 调试模式可用性(FE-WS-06):题目 debugMode 声明(plugin-dev 开发壳经
+   * 夹具描述包注入)。false = 未启用调试的题目,**隐藏模式切换项**。
+   */
+  @property({ type: Boolean, attribute: "debug-mode-available" })
+  debugModeAvailable = false;
+
+  /** 当前是否处于调试模式(what-if 横幅显隐 + 切换项文案)。 */
+  @property({ type: Boolean, attribute: "debug-mode-active" })
+  debugModeActive = false;
 
   /** 最近一次被拒动作的用户可见错误(onActionRejected 呈现)。 */
   @property({ type: Object, attribute: false })
@@ -178,6 +206,27 @@ export class SmWorkspaceMenu extends LitElement {
       font-size: 0.75rem;
     }
 
+    /* what-if 纪律横幅(F8):调试模式常驻(ADR-DC1 条款 7)。 */
+    .whatif-banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.25rem 0.75rem;
+      margin: 0;
+      padding: 0.375rem 0.75rem;
+      background: color-mix(in srgb, field 94%, accentcolor 6%);
+      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      font-size: 0.75rem;
+    }
+
+    .whatif-banner strong {
+      color: canvastext;
+    }
+
+    .whatif-banner span {
+      color: graytext;
+    }
+
     .banner[role="alert"] {
       background: color-mix(in srgb, mark 12%, canvas);
     }
@@ -228,6 +277,10 @@ export class SmWorkspaceMenu extends LitElement {
           ${this.tabTypes.map((descriptor) => this.#renderOpenButton(descriptor))}
         </span>
         <span class="group">
+          <span class="group-label">模式</span>
+          <strong class="mode-indicator">${this.debugModeActive ? "调试模式" : "解题模式"}</strong>
+        </span>
+        <span class="group">
           <span class="group-label">运行</span>
           <button
             type="button"
@@ -248,8 +301,35 @@ export class SmWorkspaceMenu extends LitElement {
           >
             积木步进
           </button>
-          <!-- 模式切换挂点(WP-F8):解题/调试模式切换项(FE-WS-06/07)在此加入;
-               运行到断点(FE-WS-04c)归 WP-F8(断点由调试通道承载,ADR-DC1)。 -->
+          <!-- FE-WS-04c(F8):运行到断点 = 调试通道原生暂停点(断点集合 = 当前集合)。 -->
+          <button
+            type="button"
+            class="run-to-breakpoint-button"
+            ?disabled=${!this.runToBreakpointEnabled}
+            title=${this.runToBreakpointEnabled
+              ? "调试模式:运行到断点(命中任一地址断点后暂停)"
+              : this.debugModeActive
+                ? "调试模式下、断点集合非空且通道可用时可用(在指令视图添加断点)"
+                : "调试模式下可用(先切换到调试模式)"}
+            @click=${() => this.#emit({ action: "run-to-breakpoint" })}
+          >
+            运行到断点
+          </button>
+          <!-- FE-WS-06(F8):解题/调试模式切换;未启用调试的题目隐藏本项。 -->
+          ${this.debugModeAvailable
+            ? html`
+                <button
+                  type="button"
+                  class="mode-toggle-button"
+                  title=${this.debugModeActive
+                    ? "返回解题模式(内存视图换绑公开投影,锚点/滚动重置)"
+                    : "切换到调试模式(调试通道承载任意地址 / 指令流 / 断点;what-if 语义)"}
+                  @click=${() => this.#emit({ action: "toggle-debug-mode" })}
+                >
+                  ${this.debugModeActive ? "返回解题模式" : "切换到调试模式"}
+                </button>
+              `
+            : nothing}
           <button
             type="button"
             class="reset-button"
@@ -262,7 +342,27 @@ export class SmWorkspaceMenu extends LitElement {
         </span>
         ${this.#renderStatus()}
       </nav>
-      ${this.#renderBanner()} ${this.#renderGuidance()} ${this.#renderError()}
+      ${this.#renderWhatIfBanner()} ${this.#renderBanner()} ${this.#renderGuidance()} ${this.#renderError()}
+    `;
+  }
+
+  /**
+   * what-if 纪律横幅(ADR-DC1 条款 7,WP-F8):调试模式下常驻——"调试通过
+   * ≠ 提交通过"不可误读 + ASLR 地址差异教学提示语。role=status 非警示:
+   * what-if 是常驻教学语境,不是异常。
+   */
+  #renderWhatIfBanner(): unknown {
+    if (!this.debugModeActive) {
+      return nothing;
+    }
+    return html`
+      <p class="whatif-banner" role="status" data-testid="whatif-banner">
+        <strong>调试通过 ≠ 提交通过(裁决以提交为准)</strong>
+        <span>
+          当前为调试模式(what-if):调试交互不进入权威会话日志;ASLR 开启的题目中,
+          调试实例地址与真实实例可能不同——硬编码绝对地址跨实例失效属预期教学语义。
+        </span>
+      </p>
     `;
   }
 

@@ -8,7 +8,7 @@
  *    (`renderSpecialDisplayCell`,窗口外 cell 自动携带 `cell-outside`);
  *  - **高地址在下**(FE-ST-01):行按地址升序渲染(低地址在视口上方);
  *  - **语义化 DOM + 虚拟列表**(硬门槛):role=table/row/cell 的 DOM 行 +
- *    `<lit-virtualizer>` 虚拟化——区域窗口最大 4096 B = 512 行(网格外扩
+ *    `<sm-window-list>` 窗口化虚拟列表(自研;依赖缺陷登记见 README)——区域窗口最大 4096 B = 512 行(网格外扩
  *    至多 513 行),虚拟化必须真实生效;
  *  - **rsp/rbp 视角锚点**(FE-ST-04 公开档):进入视图/切区域时视口锚定
  *    rsp(否则顶部);锚点行高亮 + 回锚按钮;值在窗口外 → 明示
@@ -32,7 +32,7 @@
  */
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { LitVirtualizer } from "@lit-labs/virtualizer";
+import { SmWindowList } from "../virtual/sm-window-list.js";
 
 import {
   byteViewQueryRange,
@@ -137,7 +137,7 @@ export class SmByteView extends LitElement {
       this.#rebuild();
     }
     if (changed.has("rowDecorator")) {
-      // 装饰器换绑:重建行渲染器(lit-virtualizer 以 renderItem 身份变化
+      // 装饰器换绑:重建行渲染器(sm-window-list 以 renderItem 身份变化
       // 重渲染可视行;不触发数据重建——装饰纯呈现)。
       this.#rowRenderer = this.#makeRowRenderer();
     }
@@ -247,7 +247,7 @@ export class SmByteView extends LitElement {
   }
 
   #scrollRowToView(index: number): void {
-    const list = this.renderRoot.querySelector("lit-virtualizer") as LitVirtualizer<Row> | null;
+    const list = this.renderRoot.querySelector("sm-window-list") as SmWindowList | null;
     if (list === null) {
       return;
     }
@@ -297,9 +297,43 @@ export class SmByteView extends LitElement {
         this.#jumpStatus = `${formatAddressHex(resolution.addressHex, ADDRESS_MIN_DIGITS)} 在可见窗口之外`;
       }
     } else if (resolution.status === "outside-window") {
-      this.#jumpStatus = `${formatAddressHex(resolution.addressHex, ADDRESS_MIN_DIGITS)} 在可见窗口之外(仅窗口内可达)`;
+      // WP-F8(FE-ST-05 调试档):数据源声明 prefetchWindow(DebugDataSource)
+      // 时,窗口外地址自动请求调试窗口后重试一次;解题档(公开档,无此方法)
+      // 维持"窗口外"反馈现状(D3:零窗口拉取)。
+      void this.#jumpOutsideWindow(resolution.addressHex);
     } else {
       this.#jumpStatus = "无法识别的跳转目标(支持 0x 十六进制地址或十进制窗口偏移)";
+    }
+    this.requestUpdate();
+  }
+
+  /** 窗口外跳转:调试档 = prefetch 后重试;解题档 = 窗口外反馈(不报错)。 */
+  async #jumpOutsideWindow(addressHex: string): Promise<void> {
+    const prefetchable = this.dataSource as {
+      prefetchWindow?: (addressHex: string, byteLength?: number) => Promise<unknown>;
+    } | null;
+    const display = formatAddressHex(addressHex, ADDRESS_MIN_DIGITS);
+    if (prefetchable === null || typeof prefetchable.prefetchWindow !== "function") {
+      this.#jumpStatus = `${display} 在可见窗口之外(仅窗口内可达)`;
+      this.requestUpdate();
+      return;
+    }
+    this.#jumpStatus = `${display} 在已缓存窗口之外,正在请求调试窗口……`;
+    this.requestUpdate();
+    try {
+      await prefetchable.prefetchWindow(addressHex);
+    } catch {
+      this.#jumpStatus = `${display} 窗口请求失败(调试通道未连接或地址不可达)`;
+      this.requestUpdate();
+      return;
+    }
+    this.#rebuild();
+    const index = rowIndexForAddress(this.#spans, addressHex);
+    if (index !== null) {
+      this.#jumpStatus = `已跳转到 ${display}`;
+      this.#pendingScrollIndex = index;
+    } else {
+      this.#jumpStatus = `${display} 超出可缓存范围(地址不可达)`;
     }
     this.requestUpdate();
   }
@@ -367,12 +401,12 @@ export class SmByteView extends LitElement {
             <span class="row-hex" role="columnheader">十六进制</span>
             <span class="row-special" role="columnheader">特殊显示</span>
           </div>
-          <lit-virtualizer
+          <sm-window-list
             class="byte-list"
             role="rowgroup"
             .items=${this.#rows}
             .renderItem=${this.#rowRenderer}
-          ></lit-virtualizer>
+          ></sm-window-list>
         </div>
         ${this.#rows.length === 0 ? html`<p class="empty" role="status">窗口内暂无字节</p>` : nothing}
       </section>
@@ -626,11 +660,11 @@ export class SmByteView extends LitElement {
       min-block-size: 0;
     }
 
-    lit-virtualizer.byte-list {
-      display: block;
-      flex: 1;
+    sm-window-list.byte-list {
+      /* 窗口化列表自身即滚动容器(组件内置 relative + overflow-y);
+         flex 链下以 flex-grow 撑开视口。 */
+      flex: 1 1 0;
       min-block-size: 0;
-      overflow-y: auto;
       overscroll-behavior: contain;
     }
 

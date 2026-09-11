@@ -72,4 +72,33 @@ describe("公开入口导出面", () => {
     expect(vmUi.PAYLOAD_DEFAULT_ALLOWED_ACTIONS).not.toContain("run_to_event");
     expect(vmUi.PAYLOAD_DEFAULT_ALLOWED_ACTIONS).toHaveLength(11);
   });
+
+  it("WP-F8 调试档:调试通道客户端 / DebugDataSource / 指令视图 / ED 组件全部导出", () => {
+    // 调试通道客户端与装配面(独立端点独立协议版本,ADR-DC1 条款 1)。
+    expect(vmUi.DebugChannelClient).toBeTypeOf("function");
+    expect(vmUi.DebugChannelClientError).toBeTypeOf("function");
+    expect(vmUi.resolveDebugChannelUrl).toBeTypeOf("function");
+    expect(vmUi.DEBUG_CHANNEL_PATH).toBe("/sessions/debug-channel");
+    expect(vmUi.createDebugDataSource).toBeTypeOf("function");
+    // 指令视图(FE-IN-01~08,调试档独有)。
+    expect(vmUi.SmInstructionView).toBeTypeOf("function");
+    expect(vmUi.pausedReasonText("breakpoint")).toContain("断点");
+    // ED 教学组件面(WP-F9 组件 × WP-F8 挂接)。
+    expect(vmUi.SmStructureView).toBeTypeOf("function");
+    expect(vmUi.SmCallStack).toBeTypeOf("function");
+    expect(vmUi.SmMemoryDiff).toBeTypeOf("function");
+    expect(vmUi.SmTimeline).toBeTypeOf("function");
+    expect(vmUi.SmCheckpoints).toBeTypeOf("function");
+    expect(vmUi.SmHintLadder).toBeTypeOf("function");
+    expect(vmUi.SmErrorExplainer).toBeTypeOf("function");
+    expect(vmUi.buildTimeline).toBeTypeOf("function");
+    expect(vmUi.computeByteDiff).toBeTypeOf("function");
+    expect(vmUi.validateCheckpointLabel("x")).toBeNull();
+    // ED 标签页类型键。
+    expect(vmUi.STRUCTURE_TAB_TYPE).toBe("structure");
+    expect(vmUi.CALL_STACK_TAB_TYPE).toBe("call-stack");
+    expect(vmUi.MEMORY_DIFF_TAB_TYPE).toBe("memory-diff");
+    expect(vmUi.TIMELINE_TAB_TYPE).toBe("timeline");
+    expect(vmUi.CHECKPOINTS_TAB_TYPE).toBe("checkpoints");
+  });
 });

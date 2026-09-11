@@ -18,24 +18,42 @@
  *  - src/client/     session-client:REST 5 命令、认证 WSS、断线重连、rAF 合帧;
  *                    projection-store:公开投影状态存储(最近投影 + 增量应用);
  *                    transport / session-errors:可注入传输层与错误面;
+ *                    debug-channel-client:调试通道客户端(WP-F8,独立端点);
  *  - src/datasource/ MemoryDataSource 双档抽象(视图唯一依赖面)、
- *                    ProjectionDataSource 公开档、DebugDataSource 占位(WP-F8);
+ *                    ProjectionDataSource 公开档、DebugDataSource 调试档(WP-F8
+ *                    填充:调试通道缓存 + 扩展方法);
+ *  - src/ed/ +       ED 教学组件面(WP-F9 组件 + 纯函数;WP-F8 挂接工作区);
  *  - src/render/     共享渲染原语(hex / special-display / rows);
  *  - src/views/      WP-F3 字节视图(byte-view / vma-list)、WP-F4 寄存器视图
- *                    与跳转链(register / chain)。
+ *                    与跳转链(register / chain)、WP-F8 指令视图(instruction)。
  *
  * 视图组件纪律(前端实施计划 §四):视图禁止绕过 MemoryDataSource 接口直读
  * session-client 投影存储;浏览器任何位置只保存公开投影与 UI 状态;断线只展示
  * 最近一次公开投影,重连走 sync-projection,禁止任何本地 VM 执行降级。
  */
 
-// ── 工作区容器与菜单(WP-F5)──
+// ── 工作区容器与菜单(WP-F5;WP-F8 模式切换 / ED 挂接)──
 export * from "./workspace/sm-workspace.js";
 export * from "./workspace/sm-workspace-menu.js";
 export * from "./workspace/tab-registry.js";
 export * from "./workspace/workspace-model.js";
 export * from "./workspace/byte-tab.js";
 export * from "./workspace/sm-register-annotation.js";
+
+// ── ED 教学组件面(WP-F9 组件 × WP-F8 工作区挂接;导出 + 注册)──
+export * from "./ed/ed-types.js";
+export * from "./ed/memory-diff.js";
+export * from "./ed/timeline.js";
+export * from "./views/ed/sm-structure-view.js";
+export * from "./views/ed/sm-call-stack.js";
+export * from "./views/ed/sm-memory-diff.js";
+export * from "./views/ed/sm-timeline.js";
+export * from "./views/ed/sm-checkpoints.js";
+export * from "./views/ed/sm-hint-ladder.js";
+export * from "./views/ed/sm-error-explainer.js";
+
+// ── 指令视图(WP-F8 / FE-IN-01~08,调试档)──
+export * from "./views/instruction/sm-instruction-view.js";
 
 // ── Payload 搭建(WP-F6)──
 export * from "./payload/sm-payload-tab.js";
@@ -63,6 +81,8 @@ export * from "./client/session-client.js";
 export * from "./client/projection-store.js";
 export * from "./client/session-errors.js";
 export * from "./client/transport.js";
+// 调试通道客户端(WP-F8;独立端点独立协议版本,ADR-DC1 条款 1)。
+export * from "./client/debug-channel-client.js";
 
 // ── 双档数据源抽象 ──
 export * from "./datasource/types.js";

@@ -23,11 +23,15 @@ src/
 │   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——打开分组
 │   │                               (注册表驱动)/ 指令步进 step / 积木步进
 │   │                               payload-step(WP-F6,仅 payload 页激活时
-│   │                               可用)/ 重启 reset(终态禁用+引导)/
-│   │                               会话状态与断线横幅 / 拒绝错误呈现
+│   │                               可用)/ 运行到断点(WP-F8,调试档)/
+│   │                               解题/调试模式切换(WP-F8,debugMode
+│   │                               可用才显示)/ 重启 reset(终态禁用+引导)/
+│   │                               会话状态与断线横幅 / what-if 纪律横幅 /
+│   │                               拒绝错误呈现
 │   ├── tab-registry.ts             标签页类型注册表(stack / free / registers /
-│   │                               payload 带工厂;debug 登记占位不实现;
-│   │                               可扩展)
+│   │                               payload / debug=指令视图 带工厂;ED 组件面
+│   │                               五类(structure/call-stack/memory-diff/
+│   │                               timeline/checkpoints)登记;可扩展)
 │   ├── workspace-model.ts          布局模型纯状态机——列/标签页结构、焦点
 │   │                               管理、开关与拖拽移动、类型内序号
 │   ├── byte-tab.ts                 <sm-byte-tab> 字节页组合(字节视图 + VMA
@@ -64,13 +68,21 @@ src/
 │   ├── projection-store.ts         ProjectionStore——最近公开投影 + ProjectionDelta
 │   │                               增量应用 + 订阅 API(rAF 批量通知视图)
 │   ├── transport.ts                可注入传输面(WsLikeSocket / fetch / rAF / 定时器)
+│   ├── debug-channel-client.ts     DebugChannelClient——调试通道客户端(WP-F8:
+│   │                               独立端点 /sessions/debug-channel、独立协议
+│   │                               版本锚定、attach 自动化、requestId 关联、
+│   │                               推送帧事件面;ADR-DC1 条款 1 / §六 R3)
 │   └── session-errors.ts           SessionClientError / SessionCommandError
 ├── datasource/                     WP-F2:双档数据源抽象
 │   ├── types.ts                    MemoryDataSource 接口(视图唯一依赖面)+
 │   │                               AddrRange / ByteQuery / Hit / Row / RegisterRow /
 │   │                               VmaList / Instr
 │   ├── projection-data-source.ts   公开档 ProjectionDataSource(冻结公开投影)
-│   └── debug-data-source.ts        调试档占位骨架(WP-F8 填充;方法抛错)
+│   └── debug-data-source.ts        调试档 DebugDataSource(WP-F8:调试通道
+│                                   推送+显式拉取的本地缓存;扩展方法
+│                                   prefetchWindow / searchAllMemory / step /
+│                                   runToBreakpoint / 断点集合;组合根装配
+│                                   createDebugDataSource)
 ├── render/                         WP-F2:共享渲染原语(WP-F3/F4 并行消费,
 │                                   避免两视图互相依赖)
 │   ├── hex.ts                      bytesHex 小写 / valueHex 恒 0x+大写归一化、
@@ -91,14 +103,27 @@ src/
     │   │                           diff 增补 rowDecorator 挂点与 scrollToAddress)
     │   └── vma-list.ts             <sm-vma-list> VMA 列表侧栏(FE-FV-06;
     │                               regions() 直读、按地址有序、vma-select 事件)
+    ├── instruction/(WP-F8 指令视图,调试档)
+    │   └── sm-instruction-view.ts  <sm-instruction-view>:FE-IN-01~08(三段
+    │                               布局 / jumpTarget 延展 / 函数表 / rip 锚点 /
+    │                               检索双入口 / 行断点 / prefetch 跳转管线)
     ├── register/(WP-F4 寄存器视图)
     │   ├── sm-register-view.ts     <sm-register-view>:FE-RG-01/02/03
     │   └── cross-annotation.ts     FE-RG-04 交叉标注纯函数 + 渲染辅助
-    └── chain/(WP-F4 跳转链)
-        ├── resolve.ts              FE-ST-07/09 链解析纯函数(小端、回环、窗口外)
-        ├── visible-run.ts          FE-ST-10 可见字符延伸
-        └── sm-jump-chain.ts        <sm-jump-chain>:链芯片 + SVG 回环 + 展开;
-                                    viewport-jump 事件(组件只发事件)
+    ├── chain/(WP-F4 跳转链;WP-F8 增补延伸挂点)
+    │   ├── resolve.ts              FE-ST-07/09 链解析纯函数(小端、回环、窗口外)
+    │   ├── visible-run.ts          FE-ST-10 可见字符延伸
+    │   └── sm-jump-chain.ts        <sm-jump-chain>:链芯片 + SVG 回环 + 展开;
+    │                               viewport-jump 事件(组件只发事件);
+    │                               extendable/extendHandler 延伸入口(F8)
+    └── ed/(WP-F9 ED 七组件,属性驱动可独立实例化;挂接归 WP-F8)
+        ├── sm-structure-view.ts    <sm-structure-view>(FE-ED-01;highlight-jump)
+        ├── sm-call-stack.ts        <sm-call-stack>(FE-ED-02;截断明示)
+        ├── sm-memory-diff.ts       <sm-memory-diff>(FE-ED-03;整体替换)
+        ├── sm-timeline.ts          <sm-timeline>(FE-ED-04)
+        ├── sm-checkpoints.ts       <sm-checkpoints>(FE-ED-05;两步确认)
+        ├── sm-hint-ladder.ts       <sm-hint-ladder>(FE-ED-06;本地 revealPolicy)
+        └── sm-error-explainer.ts   <sm-error-explainer>(FE-ED-07;teachingNote)
 ```
 
 ## 双档数据源纪律(评审解耦的关键约束)
@@ -122,8 +147,8 @@ interface MemoryDataSource {          // UI 组件只依赖此接口
   区域起点,`windowByteLength` = 已下发前缀)与 `currentInstruction` 单条约束;
   **越界查询返回"窗口外"标记 cell(byteHex/byte/offset 为 null)而非报错**;
   `search` 仅在已下发窗口字节内检索;`instructionStream` 不实现。
-- 调试档 `DebugDataSource`:WP-F8 填充(全量语义;`instructionStream` 仅此档
-  存在);本包内仅占位骨架,方法一律抛"调试档由 WP-F8 填充"。
+- 调试档 `DebugDataSource`(WP-F8 填充,契约见下方 WP-F8 章节):调试通道
+  缓存模型(全量语义;`instructionStream` 仅此档存在)+ 调试档独有扩展方法。
 
 装配形态(F5 接线参考):`dataSource = new ProjectionDataSource(client.store)`
 ——该装配发生在**组合根**(工作区容器),视图只接收 `MemoryDataSource`。
@@ -629,6 +654,12 @@ sink 记录调用序:逐步提交时序 / 断点暂停恢复 / 用户暂停 / re
 运行 / 注册表登记);`test/workspace/`(注册表五类 / 菜单积木步进禁用矩阵
 / payload 页 actionSink 注入与菜单接线)。
 
+## 虚拟列表裁决(WP-F7 收口,2026-09-11):lit-virtualizer → 自研 sm-window-list
+
+- **缺陷证据**:@lit-labs/virtualizer 2.1.1 在本仓库实际环境(Vite 8/rolldown 构建产物 + 嵌套 shadow DOM 挂载)下,scroller 模式 `rangeChanged` 不触发行不渲染,且最小复现(纯文档级两实例)呈现"仅首个实例渲染"的时序性——两实例创建顺序互换、结果随之互换。jsdom 兼容冒烟(F1)无法暴露该缺陷(jsdom 无真实布局时序)。
+- **裁决**:字节/指令视图改用自研 `<sm-window-list>`(确定性窗口化:流内 sizer + translateY 切片 + light DOM 渲染;jsdom/隐藏态以有界回退视口窗口化,"虚拟化真实生效"在任何环境有界)。窗口上限 512 行,性能余量充足。
+- **保留面**:`@lit-labs/virtualizer` 依赖与 `test/lit-virtualizer-compat.test.ts` 兼容冒烟保留,作为上游修复后的回归重试锚;上行风险登记于阶段四验收评审。
+
 ## 第三方依赖审计(WP-F6,2026-09-11;风险表「Blockly 体积与产物隔离扫描
 的交互」闭环)
 
@@ -638,3 +669,127 @@ sink 记录调用序:逐步提交时序 / 断点暂停恢复 / 用户暂停 / re
 | core-js 说明 | 风险表假设"core-js 为其可选依赖"——实测 blockly 13.2.1 **不含 core-js**(依赖表为空),该假设不成立,无 build 脚本被 pnpm 忽略的副作用面;如未来版本引入再补审计。 |
 | 体积量级 | `blockly_compressed.js` 约 634 KB(原始);经 vite 库模式内联后 vm-ui 主 chunk 约 1.2 MB(gzip ≈ 294 KB),其中 Blockly 贡献约 0.9 MB 原始(gzip ≈ 250 KB)。积木编辑器是重型交互面,该量级在教学主功能可接受;如需瘦身可后续按入口拆分(Blockly 独立 chunk),本 WP 不做。 |
 | scan:public 交互 | dist 内 blockly 产物对私有面标记/引擎标识/节点内建**零命中**(dist 中两处 `jsdom` 字符串 = rolldown 路径注释 + Blockly 运行时告警文案,非导入;无 `require(...)`)。`pnpm scan:public` 实测通过:3 个公开包已扫描、0 违规(仅 protocol 既有 3 条 allowlist)。扫描基线在 F7 一次建立的口径不变。 |
+
+## WP-F8:调试模式档落地(WP-F8 主章节,2026-09-11)
+
+轨道 C 汇合交付面(依赖 WP-40/41/42/44 调试通道全线 + WP-F5 工作区):
+`DebugDataSource` 填充、`DebugChannelClient` 调试通道客户端、
+`<sm-instruction-view>` 指令视图全量(FE-IN-01~08)、原生断点 /
+run-to-breakpoint(FE-IN-08 / FE-WS-04c)、跳转链全延伸(FE-ST-08/10)、
+工作区解题/调试模式切换与 payload 状态共用(FE-WS-06/07)、ED 七组件
+工作区挂接(轨道 C 收口)、what-if UI 纪律(ADR-DC1 条款 7)。
+
+### 定案登记(主控已裁决,同时登记于源码注释)
+
+1. **DebugDataSource 数据模型 = 推送 + 显式拉取的本地缓存**(全部属
+   "公开投影与 UI 状态",调试通道数据公开性由零装载保证,ADR-DC1 条款 2;
+   **只消费调试通道数据,零旁路真实私有包内容**):
+   - 窗口缓存:`debug_window_data` 回执(显式拉取唯一来源)按地址归并为
+     互不重叠/相邻的连续段;`bytesRows` / `search` 只覆盖缓存窗口,缓存外 =
+     "窗口外" cell(与公开档同形,越界不报错);
+   - `regions()` = 解题模式公开投影 `visibleRegions` 的**结构同构映射**;
+     `windowByteLength` = 区域内已缓存字节的最大覆盖面(中段空洞以窗口外
+     cell 显式呈现,不伪造)。**已知边界:v1 夹具 aslrEnabled 恒缺席/false,
+     区域地址与调试实例一致;aslr-on 题目的调试档区域列表精度 = 结构描述级,
+     地址对齐演进 = D-J8 / D-J10 登记项**(协议 v1 调试通道不携带 ASLR 布尔
+     与基址派生面到浏览器;投影仍携带会话真实地址,双实例地址差异的 UI 呈现
+     由 what-if 横幅 ASLR 提示语承接);
+   - `registers()` = 公开投影 `visibleRegisters`(调试协议 v1 无寄存器帧;
+     重放对齐后公开投影寄存器面即结构同构展示面);
+   - `instructionStream(range)` 实现于**缓存指令流**(仅 `debug_instruction_
+     stream` 推送覆盖面;每次暂停推送暂停落点上下文 maxItems=16,§九推送
+     模型;协议 v1 无 C→S 拉取帧 → 超出覆盖面 = 空数组,不伪造);
+   - 函数表来自 attach 推送帧(`debug_function_table` 恰一次,按起始地址
+     升序缓存);
+   - **扩展方法契约(调试档独有面,不在 MemoryDataSource 接口上——照接口
+     注释惯例,视图 duck-typing 探测)**:`prefetchWindow(addressHex,
+     byteLength?)`(异步,发出 `debug_window` 帧并入缓存,视图在事件回调里
+     await 后 refresh)、`searchAllMemory(patternHex, maxHits?)`(异步全内存
+     `debug_search`,与同步 `search()`(仅缓存窗口)双入口区分)、
+     `step()` / `runToBreakpoint(addresses?)`(异步,回执 = `debug_paused`;
+     缺省断点集合 = 当前集合,空集合确定性抛错)、断点集合管理
+     (`addBreakpoint` / `removeBreakpoint` / `toggleBreakpoint` /
+     `breakpoints` / `breakpointCount` / `isBreakpoint`)、状态面
+     (`instructions()` / `instructionAt()` / `functions` / `paused` /
+     `pausedAddressHex` / `attached` / `connectionStatus`)与 `onChange`
+     (缓存 / 暂停 / 断点 / 连接变更事件;调试推送异步到达,视图自订阅后
+     refresh——公开投影的 rAF 合帧仍归 SessionClient)。
+2. **指令视图 FE-IN 全量口径**:`<sm-instruction-view>` 挂在 `debug` 标签页
+   类型(F5 占位替换为真工厂,FE-IN-01"替换 debug 占位的同时新增");
+   FE-IN-02 三段布局(地址 / 伪机器码 bytesHex 可缺席呈现"—"/文本 +
+   jumpTargetHex 延展);FE-IN-03 jumpTarget 延展显示 + 点击跳转;FE-IN-04
+   函数表面板(来自推送,点击跳转);FE-IN-05 rip 锚点(最新 paused 地址行
+   高亮 + 回锚;三级回退 debug_paused → attach paused → RIP 寄存器公开值);
+   FE-IN-06 地址跳转 = 推送覆盖面内滚动定位,超出覆盖面 → 自动 prefetchWindow
+   后重试一次,仍不可达给"覆盖面之外"反馈(窗口字节已入缓存,字节视图可看);
+   FE-IN-07 检索双入口分开呈现:字节检索走 `debug_search`(全内存,异步)+
+   指令文本检索走缓存流过滤(大小写不敏感);FE-IN-08 行断点切换(断点集合 =
+   调试档 UI 状态,`breakpoints-changed` 事件回流工作区)。暂停原因呈现
+   (debug_paused 封闭四值各自文案):step = 单步暂停 / breakpoint = 命中断点
+   已暂停 / program_halt = 程序已自行停机 / budget = 预算耗尽确定性暂停。
+   解题模式(公开档数据源)下呈现"切换到调试模式"引导空态,不伪造指令流。
+3. **FE-IN-08 / FE-WS-04c 原生断点**:行断点切换(调试档集合)+ 菜单
+   「运行到断点」动作(仅调试模式 && 断点集合非空 && 会话通道可用且未终态
+   可用,宿主计算 `runToBreakpointEnabled` 注入)→ `debug_run_to_breakpoint`
+   (breakpoints = 当前集合);命中 / 预算 / 停机文案见上。
+4. **FE-WS-06/07 模式切换**:工作区菜单「切换到调试模式 / 返回解题模式」
+   (`debugModeAvailable` 属性门槛——可用性 = plugin-dev 开发壳经夹具描述包
+   `debugMode` 注入;未启用题目隐藏切换项);切换 = workspace 重绑数据源
+   (公开档 ProjectionDataSource ↔ DebugDataSource,`debugDataSourceFactory`
+   测试接缝,缺省 `createDebugDataSource(client)` 组合根装配),字节视图换绑
+   即重建 = 锚点/滚动重置(F5 既有行为,验收口径);client 换绑(新会话)
+   确定性退回解题模式。**payload 标签页状态两模式共用**(切换不销毁 payload
+   元素,`#contents` 生命周期不变);断点积木双档:解题模式 = 步进暂停
+   (WP-F6 现状),调试模式 = 断点集合并入调试断点——挂点 = 内容元素
+   `breakpointAddresses()` 声明面(sm-payload-tab 已实现,v1 编译器断点步骤
+   无地址承载返回空,编译器演进携带 addressHex 后自动并入,零工作区改动)。
+   **what-if 纪律(条款 7)**:调试模式下工作区顶部常驻显式横幅
+   「调试通过 ≠ 提交通过(裁决以提交为准)」+ ASLR 地址差异提示语
+   ("调试实例地址与真实实例可能不同,硬编码绝对地址跨实例失效属预期教学
+   语义");调试交互反馈(attach / 暂停原因 / 通道断开)独立状态行,降级
+   文案明示。
+5. **FE-ST-08/10 跳转链全延伸**:调试模式下 `<sm-jump-chain>` 数据源 =
+   DebugDataSource;组件增补 `extendable` + `extendHandler` 挂点(最小 diff)
+   ——链末段窗口外时呈现「延伸」按钮 → 宿主 prefetchWindow 目标段并入缓存 →
+   组件重解析(resolveJumpChain 同步语义保留),呈现「已延伸至缓存边界」
+   反馈(仍不可达)或延伸后的新链;失败给降级文案。解题档(extendable 缺省
+   false)维持窗口外截断现状。工作区 viewport-jump / highlight-jump 的窗口外
+   落点在调试模式下同样自动 prefetch 后重试一次。
+6. **ED 组件挂接(轨道 C 收口)**:ED 七组件按 F9 README 契约挂入工作区——
+   新增标签页类型 structure(FE-ED-01,highlights = 快照 semanticHighlights,
+   highlight-jump → 字节视图 showRegion/scrollToAddress + 调试档 prefetch
+   重试)、call-stack(FE-ED-02)、timeline(FE-ED-04,entries =
+   buildTimeline(动作账本, checkpoints);动作账本 = 宿主自 onActionResponse
+   记录(发送侧 FIFO 配对,响应不携带动作本体;payload 运行期不混用其他
+   动作入口的既有取舍沿用),公开投影 + UI 状态,合规)、checkpoints
+   (FE-ED-05,sendAction 注入;create/checkout 响应到达且未拒 → 重拉
+   `list_checkpoints` 刷新)、memory-diff(FE-ED-03,取简 = 独立标签页;宿主
+   经 `client.store.subscribe` 维护"前一投影 visibleRegions + 最新 delta")
+   ——注入机制 = 组合根 `#syncEdContents` duck-typing(同 dataSource /
+   actionSink 约定);FE-ED-06 提示 ladder + FE-ED-07 错误解释挂工作区
+   「教学面板」(`<details>` 折叠区,提示 = 夹具描述包 hintLadder,失败计数 =
+   宿主自 onActionResponse `failed` 状态自账;错误解释与 F5 菜单内联拒绝呈现
+   **增强并存**,数据 = userVisibleError + 夹具描述包 publicErrorMapping)。
+   `src/index.ts` 导出 ED 组件、纯函数与 DebugDataSource / DebugChannelClient。
+7. **夹具描述包注入(plugin-dev)**:`apps/plugin-dev/fixtures/dev-descriptor.
+   json` 本地夹具(照 `packages/challenge-schema/test/fixtures/public-
+   descriptor/basic.json` 数据形态自建,**只复制数据形态,零代码依赖**,数据
+   占位无秘密);开发壳 boot 读入后 `applyChallengeDescriptor` 把
+   debugModeAvailable / hintLadder / publicErrorMapping 注入工作区装配;
+   描述包加载失败 fail-soft(状态行降级明示,切换项隐藏)。
+
+### 测试面
+
+`test/client/debug-channel-client.test.ts`(attach 自动化帧形态 / requestId
+关联 / 推送帧 / 错误帧关联拒绝 / 版本锚定·方向·会话绑定漂移兜底 / seq /
+dispose)、`test/datasource/debug-data-source.test.ts`(缓存窗口命中·窗口外·
+归并、prefetch 帧形态与 regions 映射、search 双入口、instructionStream 缓存
+边界、函数表、断点集合、step/runToBreakpoint 帧发送(fake transport)、组合根
+装配)、`test/views/instruction/sm-instruction-view.test.ts`(三段渲染缺席
+语义 / rip 锚点 / jumpTarget·函数表·地址跳转 prefetch 管线 / 检索双入口 /
+断点切换事件 / 暂停文案)、`test/workspace/sm-workspace-mode.test.ts`
+(debugModeAvailable 门槛、换绑后数据源替换与横幅显隐、payload 元素保留与
+断点积木并入口、运行到断点矩阵、ED 挂接:结构视图联动 / 时间线条目 /
+checkpoint 刷新时点 / 提示揭示 / 错误解释)、`test/views/chain/
+sm-jump-chain-extend.test.ts`(延伸入口 / 缓存边界反馈 / 失败降级)、
+`test/views/byte/byte-view.test.ts`(调试档窗口外跳转 prefetch 重试)。

@@ -51,6 +51,26 @@ export class SmJumpChain extends LitElement {
   @property({ type: Boolean })
   expanded = false;
 
+  /**
+   * 链延伸可用性(WP-F8 / FE-ST-08/10 调试档):宿主对调试数据源置 true——
+   * 链末段窗口外时呈现「延伸」入口;解题档(false)维持窗口外截断现状。
+   */
+  @property({ type: Boolean })
+  extendable = false;
+
+  /**
+   * 延伸处理器(WP-F8;宿主注入):点击「延伸」→ 宿主 prefetchWindow 目标段
+   * 地址并入缓存 → 组件重解析(同步 resolveJumpChain 语义保留)。缺席 =
+   * 不呈现延伸入口(解题档)。
+   */
+  @property({ attribute: false })
+  extendHandler: ((addressHex: string) => Promise<void>) | null = null;
+
+  /** 延伸进行中(按钮 aria-busy;防重入)。 */
+  #extending = false;
+  /** 延伸反馈(已延伸至缓存边界 / 失败文案;短暂承载)。 */
+  #extendStatus: string | null = null;
+
   static override styles = css`
     :host {
       display: block;
@@ -84,7 +104,8 @@ export class SmJumpChain extends LitElement {
     }
 
     .chain-address:focus-visible,
-    .chain-expand:focus-visible {
+    .chain-expand:focus-visible,
+    .chain-extend-button:focus-visible {
       outline: 2px solid accentcolor;
       outline-offset: 1px;
     }
@@ -104,6 +125,29 @@ export class SmJumpChain extends LitElement {
       font: inherit;
       font-size: 0.75rem;
       cursor: pointer;
+    }
+
+    /* 延伸入口 + 反馈(WP-F8 调试档;FE-ST-08/10)。 */
+    .chain-extend-button {
+      padding: 0 0.375rem;
+      border: 1px solid rgb(0 0 0 / 20%);
+      border-radius: 4px;
+      background: canvas;
+      color: linktext;
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    .chain-extend-button:disabled {
+      color: graytext;
+      cursor: not-allowed;
+    }
+
+    .chain-extend-status {
+      color: graytext;
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
     }
 
     /* 竖向完整链(展开态):一行一段,段号 + 地址 + 值。 */
@@ -148,11 +192,65 @@ export class SmJumpChain extends LitElement {
           ${horizontal.map((segment, index) => this.#renderSegment(segment, index))}
           ${limitReached ? this.#renderTrailingTarget(horizontal) : nothing}
         </span>
-        ${visibleRun === "" ? nothing : renderVisibleRun(visibleRun)}
+        ${this.#renderExtendEntry(horizontal)} ${visibleRun === "" ? nothing : renderVisibleRun(visibleRun)}
         ${limitReached ? this.#renderExpandToggle() : nothing}
         ${full === null ? nothing : this.#renderVertical(full)}
       </div>
     `;
+  }
+
+  /**
+   * 延伸入口(WP-F8 / FE-ST-08/10 调试档骨架):链末段窗口外 + 宿主注入
+   * 延伸处理器时呈现;点击 → prefetch → 重解析,呈现"已延伸至缓存边界"
+   * 反馈(仍窗口外)或继续延伸后的新链。
+   */
+  #renderExtendEntry(segments: readonly JumpChainSegment[]): TemplateResult | typeof nothing {
+    const last = segments.at(-1);
+    if (
+      !this.extendable ||
+      this.extendHandler === null ||
+      last === undefined ||
+      last.outsideWindow !== true
+    ) {
+      return nothing;
+    }
+    return html`
+      <button
+        type="button"
+        class="chain-extend-button"
+        data-extend-address=${last.addressHex}
+        ?disabled=${this.#extending}
+        aria-busy=${this.#extending ? "true" : "false"}
+        title="请求该地址窗口并延伸链(调试模式)"
+        @click=${() => this.#runExtend(last.addressHex)}
+      >
+        ${this.#extending ? "延伸中…" : "延伸"}
+      </button>
+      ${this.#extendStatus === null
+        ? nothing
+        : html`<span class="chain-extend-status" role="status">${this.#extendStatus}</span>`}
+    `;
+  }
+
+  async #runExtend(addressHex: string): Promise<void> {
+    const handler = this.extendHandler;
+    if (handler === null || this.#extending) {
+      return;
+    }
+    this.#extending = true;
+    this.#extendStatus = null;
+    this.requestUpdate();
+    try {
+      await handler(addressHex);
+      const resolved = this.#resolve(JUMP_CHAIN_HORIZONTAL_LIMIT);
+      const stillOutside = resolved?.at(-1)?.outsideWindow === true;
+      this.#extendStatus = stillOutside ? "已延伸至缓存边界" : null;
+    } catch {
+      this.#extendStatus = "延伸失败(调试通道未连接或地址不可达)";
+    } finally {
+      this.#extending = false;
+      this.requestUpdate();
+    }
   }
 
   /** 解析链:起始地址非法等解析失败 → null(静默空渲染,不抛错)。 */

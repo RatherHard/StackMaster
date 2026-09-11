@@ -387,6 +387,27 @@ export class SmPayloadTab extends LitElement {
     }
   }
 
+  /**
+   * 断点积木地址并入口(FE-WS-07,WP-F8 最小接线挂点):断点积木双档——
+   * 解题模式 = 步进暂停(执行器现状);调试模式 = 断点集合并入调试断点
+   * (工作区切调试模式时 duck-typing 调用本面)。v1 编译器断点步骤
+   * (PayloadStep.kind "breakpoint")无地址承载 → 返回空;编译器演进携带
+   * addressHex 后由本面自动并入,零工作区改动。
+   */
+  breakpointAddresses(): readonly string[] {
+    const steps = this.#program?.steps ?? [];
+    const addresses: string[] = [];
+    for (const step of steps) {
+      if (step.kind === "breakpoint") {
+        const address = (step as { addressHex?: unknown }).addressHex;
+        if (typeof address === "string") {
+          addresses.push(address);
+        }
+      }
+    }
+    return addresses;
+  }
+
   // ── 内部:画布与编译 ─────────────────────────────────────────────────────
 
   #currentSerializedState(): BlocklySerializedState | null {

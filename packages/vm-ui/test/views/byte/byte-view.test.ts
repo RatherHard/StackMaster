@@ -3,12 +3,12 @@
  * 三段布局、高地址在下、窗口外 cell 语义、rsp/rbp 锚点(M13)、对齐偏移、
  * 窗口内导航/检索(M3)、region 切换、虚拟列表首屏有界。
  */
-import { LitVirtualizer } from "@lit-labs/virtualizer";
+import { SmWindowList } from "../../../src/views/virtual/sm-window-list.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { SmByteView } from "../../../src/views/byte/byte-view.js";
 import type { ByteViewKind } from "../../../src/views/byte/byte-view.js";
-import type { MemoryDataSource } from "../../../src/datasource/types.js";
+import type { AddrRange, MemoryDataSource, Row } from "../../../src/datasource/types.js";
 import { FakeMemoryDataSource } from "./fake-data-source.js";
 
 /** 等待若干渲染帧(ResizeObserver 桩 → 可见范围计算 → 重渲染链路收敛)。 */
@@ -81,7 +81,7 @@ async function rerender(element: SmByteView): Promise<void> {
 }
 
 function dataRows(element: SmByteView): Element[] {
-  return [...(element.shadowRoot?.querySelectorAll("lit-virtualizer .byte-row") ?? [])];
+  return [...(element.shadowRoot?.querySelectorAll("sm-window-list .byte-row") ?? [])];
 }
 
 function query(element: SmByteView, selector: string): Element {
@@ -93,7 +93,7 @@ function query(element: SmByteView, selector: string): Element {
 }
 
 function installScrollSpy(element: SmByteView): ReturnType<typeof vi.fn> {
-  const list = query(element, "lit-virtualizer") as unknown as { scrollToIndex: unknown };
+  const list = query(element, "sm-window-list") as unknown as { scrollToIndex: unknown };
   const spy = vi.fn();
   list.scrollToIndex = spy;
   return spy;
@@ -179,7 +179,7 @@ describe("<sm-byte-view> 窗口外 cell 语义(D3)", () => {
 
 describe("<sm-byte-view> rsp/rbp 视角锚点(FE-ST-04 / M13)", () => {
   it("进入视图锚定 rsp 行;锚点行高亮标记 + 回锚按钮", async () => {
-    const spy = vi.spyOn(LitVirtualizer.prototype, "scrollToIndex").mockImplementation(() => {});
+    const spy = vi.spyOn(SmWindowList.prototype, "scrollToIndex").mockImplementation(() => {});
     const element = await mountByteView(makeDataSource());
     expect(spy).toHaveBeenCalledWith(0, "center"); // RSP = 0x1004 → 行 0。
 
@@ -314,7 +314,96 @@ describe("<sm-byte-view> 窗口内导航(FE-ST-06 公开档 / M3)", () => {
     expect(query(element, ".jump-status").textContent).toContain("无法识别");
     element.remove();
   });
+
+  it("调试档(FE-ST-05,WP-F8):数据源声明 prefetchWindow 时窗口外跳转自动请求窗口后重试", async () => {
+    const source = new PrefetchableDataSource();
+    const element = await mountByteView(source);
+    const input = query(element, ".jump-input") as HTMLInputElement;
+
+    input.value = "0x1080";
+    submitForm(element, ".jump-form");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await rerender(element);
+
+    expect(source.prefetchRequests).toEqual(["0x1080"]);
+    expect(query(element, ".jump-status").textContent).toContain("已跳转到 0x00001080");
+    element.remove();
+  });
+
+  it("调试档:prefetch 失败(通道不可达)给降级明示文案", async () => {
+    const source = new PrefetchableDataSource();
+    source.fail = true;
+    const element = await mountByteView(source);
+    const input = query(element, ".jump-input") as HTMLInputElement;
+
+    input.value = "0x1080";
+    submitForm(element, ".jump-form");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await rerender(element);
+    expect(query(element, ".jump-status").textContent).toContain("窗口请求失败");
+    element.remove();
+  });
 });
+
+/** 调试档替身(WP-F8):窗口可动态扩(prefetch 入缓存 → regions 覆盖面扩)。 */
+class PrefetchableDataSource implements MemoryDataSource {
+  windowBytes = 16;
+  fail = false;
+  readonly prefetchRequests: string[] = [];
+
+  regions() {
+    return [
+      {
+        regionId: "region-stack",
+        label: "stack",
+        startAddressHex: "0x1000",
+        byteLength: 4096,
+        permissions: "rw",
+        windowByteLength: this.windowBytes,
+        truncated: this.windowBytes < 4096,
+      },
+    ];
+  }
+
+  registers() {
+    return [
+      { name: "RSP", valueHex: "0x1004" },
+      { name: "RBP", valueHex: "0x100c" },
+    ];
+  }
+
+  bytesRows(range: AddrRange): Row[] {
+    const rows: Row[] = [];
+    const start = BigInt(range.startAddressHex);
+    const end = BigInt(range.endAddressHex);
+    for (let address = start; address < end; address += 1n) {
+      const offset = Number(address - 0x1000n);
+      const inWindow = offset >= 0 && offset < this.windowBytes;
+      rows.push({
+        addressHex: `0x${(address & ~7n).toString(16)}`,
+        cells: [
+          inWindow
+            ? { addressHex: `0x${address.toString(16)}`, regionId: "region-stack", offset, byteHex: "ab", byte: 0xab }
+            : { addressHex: `0x${address.toString(16)}`, regionId: "region-stack", offset: null, byteHex: null, byte: null },
+        ],
+      });
+    }
+    return rows;
+  }
+
+  search() {
+    return [];
+  }
+
+  async prefetchWindow(addressHex: string): Promise<unknown> {
+    if (this.fail) {
+      throw new Error("channel unavailable (fake)");
+    }
+    this.prefetchRequests.push(addressHex);
+    this.windowBytes = Number(BigInt(addressHex) - 0x1000n) + 8; // 模拟窗口并入缓存。
+    return { addressHex, bytesHex: "ab" };
+  }
+}
 
 describe("<sm-byte-view> 字节检索(FE-ST-06 公开档 / M3 仅窗口内)", () => {
   it("命中列表点击滚动到命中行", async () => {
@@ -495,7 +584,7 @@ describe("<sm-byte-view> 数据纪律与刷新", () => {
     element.dataSource = null;
     await rerender(element);
     expect(query(element, ".empty").textContent).toContain("暂无可见内存区域");
-    expect(element.shadowRoot?.querySelector("lit-virtualizer .byte-row")).toBeNull();
+    expect(element.shadowRoot?.querySelector("sm-window-list .byte-row")).toBeNull();
     element.remove();
   });
 

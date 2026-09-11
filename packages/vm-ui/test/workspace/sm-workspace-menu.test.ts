@@ -1,8 +1,9 @@
 /**
- * <sm-workspace-menu> 工作区菜单行为测试(WP-F5 / FE-WS-03/04a/05):
- * 打开分组、step/reset 禁用矩阵、终态引导(Q5/M11)、断线横幅
- * (reconnecting attempt/retryDelayMs、connection-replaced 手动重连)、
- * 拒绝错误呈现(含 explanation,不只 code)。
+ * <sm-workspace-menu> 工作区菜单行为测试(WP-F5 / FE-WS-03/04a/05;WP-F8
+ * 增补 FE-WS-04c/06 + what-if 横幅):打开分组、step/reset 禁用矩阵、终态
+ * 引导(Q5/M11)、断线横幅(reconnecting attempt/retryDelayMs、
+ * connection-replaced 手动重连)、拒绝错误呈现(含 explanation,不只 code)、
+ * 运行到断点与模式切换门槛、what-if 纪律横幅。
  */
 import { describe, expect, it } from "vitest";
 
@@ -24,7 +25,7 @@ function menuOf(element: SmWorkspaceMenu): ShadowRoot {
 }
 
 describe("<sm-workspace-menu> 打开分组(FE-WS-03 菜单项可扩展)", () => {
-  it("按注册表渲染打开项,点击发出 open-tab 动作(含 payload 与 debug 占位项)", async () => {
+  it("按注册表渲染打开项,点击发出 open-tab 动作(WP-F8:debug = 指令视图 + ED 组件面五类)", async () => {
     const element = await mountMenu();
     const actions: unknown[] = [];
     element.addEventListener("workspace-menu-action", (event) => {
@@ -37,13 +38,18 @@ describe("<sm-workspace-menu> 打开分组(FE-WS-03 菜单项可扩展)", () => 
       "自由视图",
       "寄存器视图",
       "Payload 搭建",
-      "调试",
+      "指令视图",
+      "结构视图",
+      "调用栈",
+      "内存 diff",
+      "时间线",
+      "checkpoint",
     ]);
     (openButtons[4] as HTMLButtonElement).click();
 
     expect(actions).toEqual([{ action: "open-tab", tabType: "debug" }]);
-    // 占位项的提示文案:空态指向 WP-F8(注册存在不实现)。
-    expect((openButtons[4] as HTMLButtonElement).getAttribute("title")).toContain("WP-F8");
+    // 指令视图(WP-F8 真工厂):提示文案 = 展示名(有工厂,非占位空态)。
+    expect((openButtons[4] as HTMLButtonElement).getAttribute("title")).toContain("指令视图");
     element.remove();
   });
 });
@@ -260,6 +266,71 @@ describe("<sm-workspace-menu> 拒绝错误呈现(可解释性反馈)", () => {
     element.lastError = { code: "stale_base_revision", message: "baseRevision 过期" };
     await element.updateComplete;
     expect(menuOf(element).querySelector(".error")?.textContent).toContain("stale_base_revision");
+    element.remove();
+  });
+});
+
+// ── WP-F8:运行到断点 / 模式切换 / what-if 横幅(FE-WS-04c/06,ADR-DC1 条款 7)──
+
+describe("<sm-workspace-menu> 模式切换与运行到断点(WP-F8)", () => {
+  it("debugModeAvailable=false:隐藏模式切换项(未启用调试的题目);运行到断点禁用", async () => {
+    const element = await mountMenu();
+    expect(menuOf(element).querySelector(".mode-toggle-button")).toBeNull();
+    expect((menuOf(element).querySelector(".run-to-breakpoint-button") as HTMLButtonElement).disabled).toBe(true);
+    element.remove();
+  });
+
+  it("debugModeAvailable=true:切换项可见;点击发出 toggle-debug-mode;文案随模式反转", async () => {
+    const element = await mountMenu();
+    element.debugModeAvailable = true;
+    await element.updateComplete;
+    const actions: unknown[] = [];
+    element.addEventListener("workspace-menu-action", (event) => {
+      actions.push((event as CustomEvent).detail.action);
+    });
+
+    const toggle = menuOf(element).querySelector(".mode-toggle-button") as HTMLButtonElement;
+    expect(toggle.textContent).toContain("切换到调试模式");
+    toggle.click();
+    expect(actions).toEqual([{ action: "toggle-debug-mode" }]);
+
+    element.debugModeActive = true;
+    await element.updateComplete;
+    expect((menuOf(element).querySelector(".mode-toggle-button") as HTMLButtonElement).textContent).toContain(
+      "返回解题模式",
+    );
+    element.remove();
+  });
+
+  it("运行到断点:宿主注入的可用性直控禁用态;点击发出 run-to-breakpoint 动作", async () => {
+    const element = await mountMenu();
+    element.debugModeAvailable = true;
+    element.runToBreakpointEnabled = true;
+    await element.updateComplete;
+    const actions: unknown[] = [];
+    element.addEventListener("workspace-menu-action", (event) => {
+      actions.push((event as CustomEvent).detail.action);
+    });
+
+    const runButton = menuOf(element).querySelector(".run-to-breakpoint-button") as HTMLButtonElement;
+    expect(runButton.disabled).toBe(false);
+    runButton.click();
+    expect(actions).toEqual([{ action: "run-to-breakpoint" }]);
+    element.remove();
+  });
+
+  it("what-if 纪律横幅:仅调试模式常驻呈现(条款 7 不可误读)", async () => {
+    const element = await mountMenu();
+    element.debugModeAvailable = true;
+    await element.updateComplete;
+    expect(menuOf(element).querySelector(".whatif-banner")).toBeNull();
+
+    element.debugModeActive = true;
+    await element.updateComplete;
+    const banner = menuOf(element).querySelector(".whatif-banner");
+    expect(banner?.textContent).toContain("调试通过 ≠ 提交通过");
+    expect(banner?.textContent).toContain("裁决以提交为准");
+    expect(banner?.textContent).toContain("ASLR");
     element.remove();
   });
 });

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "challengeId": "dev-debug-0001",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "locale": "zh-CN",
+  "debugMode": true,
+  "briefing": {
+    "title": "调试模式开发夹具(占位数据)",
+    "summary": "plugin-dev 开发壳本地夹具:只复制公开描述包数据形态,零代码依赖,数据全部占位无秘密。",
+    "learningObjectives": [
+      "理解调试模式 what-if 语义",
+      "理解地址断点与运行到断点"
+    ],
+    "teachingNotes": [
+      "调试通过不等于提交通过:裁决以提交为准"
+    ]
+  },
+  "vmProfile": {
+    "registers": [
+      { "name": "RAX", "displayLabel": "通用累加器" },
+      { "name": "RBX" },
+      { "name": "RSP", "displayLabel": "栈顶指针" },
+      { "name": "RBP", "displayLabel": "栈帧基址" },
+      { "name": "RIP", "displayLabel": "指令指针" }
+    ],
+    "flagRegisterNames": ["FLAG0"],
+    "endianness": "little",
+    "pageSizeBytes": 4096,
+    "archBits": 64,
+    "canary": { "enabled": true, "sizeBytes": 8 }
+  },
+  "memoryLayout": {
+    "regions": [
+      {
+        "regionId": "code",
+        "kind": "code",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "publicLabel": "代码段"
+      },
+      {
+        "regionId": "stack",
+        "kind": "stack",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "publicLabel": "栈"
+      }
+    ]
+  },
+  "allowedActions": ["write_bytes", "push", "pop", "ret", "step"],
+  "resourceLimits": {
+    "predicateEvalBudgetPerSession": 10000,
+    "rollbackBudgetPerSession": 200,
+    "maxWriteBytesPerAction": 64
+  },
+  "hintLadder": [
+    {
+      "order": 1,
+      "revealPolicy": "on_request",
+      "hintText": "开发夹具提示一:先在指令视图锚定 rip,观察当前暂停落点。"
+    },
+    {
+      "order": 2,
+      "revealPolicy": "after_n_failures",
+      "failureThreshold": 2,
+      "hintText": "开发夹具提示二:canary 槽与返回地址槽的相对位置决定覆写偏移。"
+    }
+  ],
+  "publicErrorMapping": [
+    {
+      "errorCode": "offset_out_of_range",
+      "teachingNote": "开发夹具注解:写入越过区域边界,检查偏移与字节长度。"
+    },
+    {
+      "errorCode": "canary_violation",
+      "teachingNote": "开发夹具注解:canary 被破坏,写入长度越过了缓冲区。"
+    }
+  ],
+  "randomizationNotice": "开发夹具使用固定布局与占位初始状态,无随机化面。",
+  "initialProjection": {
+    "visibleRegions": [
+      {
+        "regionId": "code",
+        "label": "代码段",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "bytesHex": "554889e5c39090909090909090909090",
+        "truncated": true
+      },
+      {
+        "regionId": "stack",
+        "label": "栈",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "bytesHex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "truncated": true
+      }
+    ],
+    "visibleRegisters": [
+      { "name": "RSP", "valueHex": "0x7FFFFFF8" },
+      { "name": "RBP", "valueHex": "0x7FFFFFF8" },
+      { "name": "RIP", "valueHex": "0x400100" },
+      { "name": "RAX", "valueHex": "0x0" }
+    ],
+    "semanticHighlights": [
+      {
+        "kind": "buffer_start",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFF000",
+        "byteLength": 16,
+        "label": "输入缓冲区(占位)"
+      },
+      {
+        "kind": "canary_slot",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFFFF0",
+        "byteLength": 8,
+        "label": "canary 槽(占位)"
+      },
+      {
+        "kind": "return_address_slot",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFFFF8",
+        "byteLength": 8,
+        "label": "返回地址槽(占位)"
+      }
+    ]
+  }
+}
