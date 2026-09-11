@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口) |
-| 日期 | 2026-09-10 |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;**阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补——既有 D-API-1~73 条目零改动**) |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -508,6 +508,23 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 3. `concurrent-sessions.js`——ramping-vus 阶梯并发,每 VU 持有会话(周期动作维持)→ REST close;服务端并发数经 `GET /metrics` 采样(`session_api_live_sessions`,指标面的端到端观察)。
 
 执行形态:**docker `grafana/k6` 官方镜像**(本机无 k6 二进制;`k6/run-baseline.mjs` 以 stdin 传脚本免卷挂载的 Windows 路径转换问题),对 **compose 全拓扑(容器形态)** 首采——`compose:app:up` 一键拓扑即被测系统,被测地址 `host.docker.internal:13000`(宿主侧探活 / 指标采样走 `127.0.0.1:13000`)。基线题目由 `k6/seed-challenge.mjs` 经持久化端口登记(与 compose 集成测试同一登记路径:双包 + Ed25519 登记签名,真实验签;版本不可变,重复运行复用既有版本)。**不设通过阈值**(10.3 / 13.6:性能数字经 benchmark 后再定,避免过早优化;本基线只作 T2 触发判据的数据源)——场景无 threshold 配置,采集数值不构成性能承诺。结果归档:`apps/session-api/k6/results/<UTC 时间戳>/`(逐场景原始 summary JSON + stderr 留档 + 采集前 / 后 `/metrics` 快照 + `summary.md` 人读摘要);首采记录 2026-09-10(容器拓扑;动作 RTT p50 6ms / p95 10ms,REST 生命周期整环 p50 61ms,服务端并发 gauge 峰值 6,与场景设计一致),位置 `k6/results/2026-09-09T223628898Z/`。基线负载数值纪律:限流与并发预算是生产行为(429 冻结形态),压测脚本以每迭代唯一用户规避 120 req/min 护栏的刻意削顶,**不得以调低护栏的方式做压测**;`SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT`(默认 8)是真实护栏,并发场景峰值压在预算内。
+
+## 三·十、调试通道(阶段四 WP-40 / WP-41;ADR-DC1;D-API-74)
+
+### D-API-74 独立调试通道:独立端点、独立版本锚定、帧族与共用限额(阶段四 WP-40 契约冻结 / WP-41 通道承载;ADR-DC1 条款 1~8)
+
+调试通道是浏览器 ↔ 编排器的**第二通道**,承载调试模式档(ADR-DC1 调试克隆通道,2026-09-10 评审接受;阶段四范围扩展)。**既有 WSS 动作通道(D-API-1 / D-API-2 / D-API-40~49)行为零 diff**,本决策只登记新增面;协议语义与帧 Schema 的权威 = `packages/protocol/docs/调试通道协议语义.md`(v1 冻结)与 `@stackmaster/protocol`(`src/transport/debug-frame.ts`;变体镜像 server-only 契约 `src/debug/debug-variant-bundle.ts`),本文不重复其字段级论证。
+
+- **独立端点**:调试通道登记为 **`GET /sessions/debug-channel`**(D-API-1 路由表的服务端面补充行;会话凭证 Cookie 交付同模型 D-API-12,升级即认证复用同一 `buildCredentialPreHandler`,401 失败响应字节级一致;GET 升级非变更方法不走 CSRF 闸,D-API-17 同纪律)。会话锚定 = 凭证 claims `sessionId`;帧绑定会话不符确定性拒绝;
+- **独立协议版本与连接级锚定**:`DEBUG_CHANNEL_PROTOCOL_VERSION = 1`,受理集合锚点 `SUPPORTED_DEBUG_CHANNEL_PROTOCOL_VERSIONS`——**不随会话动作协议版本编号、不共享其常量**(D-API-2 的"传输帧随会话动作协议编号"边界不变:既有通道零触碰,调试通道自建同款锚定机制);首帧即本连接解释版本,漂移帧确定性拒绝(冻结 `PublicError` 错误帧);响应帧不携带新版本;心跳走 RFC 6455 协议层 ping/pong(D-API-6 同款);帧字节护栏沿用 `MAX_WSS_FRAME_BYTES`;
+- **帧族一览**(12 值封闭判别联合,方向由类型唯一决定;语义详见协议语义文档 §三):客户端 → 服务端 5 帧(`debug_attach` / `debug_window` / `debug_step` / `debug_run_to_breakpoint` / `debug_search`);服务端 → 客户端 7 帧(`debug_attached` / `debug_window_data` / `debug_paused` / `debug_search_results` / `debug_instruction_stream` / `debug_function_table` / `error`);
+- **错误帧形态 = 冻结 `PublicError`,16 错误码封闭枚举零扩展**(D-API-14 / D-API-41 / D-API-32 同族):请求侧校验失败复用 `invalid_input_format` 等,预算耗尽复用 `budget_exhausted`(与解题侧 429 冻结形态字节级一致);通道级失败(未认证 / 畸形帧 / 频率超限)同形态,零校验器细节透出;逐 code 能力矩阵(E-1–E-6 / I-8)原样适用;
+- **限额共用(D-API-50~53 零新增限额类)**:调试帧经既有 `SessionActionRateLimiter` **同一每会话动作预算**(与每连接令牌桶叠加,同一实现实例);**不设第二类限额**(ADR-DC1 条款 6)。指令粒度调试步进与解题动作互相挤占预算的后果,以 `/metrics` 新增三指标族观察后调参:`session_api_debug_worker_processes`(调试 worker 占用)、`session_api_debug_frames_total{frame, outcome}`(调试帧计数;`frame` ∈ 5 值请求帧 + `other`)、`session_api_debug_budget_rejections_total`(挤占观察 = 调试帧被每会话预算拒绝计数);三指标族在指标白名单内,标签零秘密零标识符(过 `assertMetricsTextDiscipline`,D-API-71 同机检);
+- **展示流推送模型**(协议语义文档 §九定案):协议 v1 的 C→S 帧族无拉取请求帧;`debug_function_table` 于 attach 完成后推恰一次,`debug_instruction_stream` 于每次暂停(`debug_paused`,含 attach 携带 paused)后紧跟暂停落点推一帧(`DEBUG_CONTEXT_INSTRUCTION_ITEMS = 16` 服务端常量);推送帧不带 `requestId`(唯一例外 = `debug_attach` 主帧携带时其伴生 `debug_function_table` 回显);推送失败 = 冻结 `error` 帧且连接不断;
+- **编排面决策登记**(实现细节权威 = `docs/develop/会话编排语义规约.md` §七 D-W41-1~6 与 `docs/develop/引擎进程协议.md` §4.8):调试 worker 按需 spawn、attach 幂等复用、空闲回收复用断线保持窗口预算(不设第二类配置键);attach 重放对齐 = 权威动作日志确定性重放,**禁止真实 checkpoint 快照恢复进调试进程**;零装载(装载清单 = 变体镜像 + 公开描述包,判题面不构造、seed 不解析);调试交互不进权威日志;变体供给经 `DebugVariantProvider` 端口(WP-42 生产实现 = challenge-compiler `buildDebugVariantBundle` + 瞬态调试种子);
+- **机检与跨语言消费**:调试帧与变体镜像契约进入 golden fixture 摘要清单与 contract-smoke(§1 Schema 编译 / §2 实例同判 / §3 摘要 / §4 serde + schemars 镜像);ZR-B12(帧语料 ⊆ 变体镜像包含性)/ ZR-B13(派生复算)机检见 `docs/develop/秘密零驻留CI检查项映射.md` v1.9;D-API-60 跨域载荷录制机检的既有 ZR 面零改动。
+
+
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
