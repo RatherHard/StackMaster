@@ -9,9 +9,11 @@
     "build": "vite build && tsc -b --force",
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@stackmaster/vm-ui": "workspace:*",
     "@types/node": "^26.4.0",
     "jsdom": "^30.0.1",

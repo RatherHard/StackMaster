@@ -87,3 +87,27 @@ bundle**(阶段五形态),而不是把组件包打进宿主构建图。
 - `pnpm test`:jsdom 冒烟(壳结构、表单接线、新建会话流程、终态引导事件,
   客户端以替身注入);`<sm-workspace>` 的元素注册与渲染由 `packages/vm-ui`
   自身测试覆盖——本包测试环境不加载 vm-ui 产物(见上)。
+
+## 夹具描述包注入(WP-F8 / FE-WS-06)
+
+- `fixtures/dev-descriptor.json`:本地夹具公开描述包——照
+  `packages/challenge-schema/test/fixtures/public-descriptor/basic.json` 的
+  **数据形态**自建(零代码依赖,数据占位无秘密;`debugMode: true` +
+  `hintLadder` + `publicErrorMapping` 齐备);
+- 开发壳 boot 读入后经 `applyChallengeDescriptor` 注入工作区装配:
+  `debugModeAvailable`(= 描述包 `debugMode`,true 才呈现解题/调试模式切换
+  项,FE-WS-06 门槛)+ `challengeDescriptor`(hintLadder → 教学面板提示
+  ladder,publicErrorMapping → 错误解释 teachingNote);
+- 加载面 = dev server 静态路径 `/fixtures/dev-descriptor.json`;**fail-soft**:
+  描述包缺失(如纯静态部署未带夹具)时状态行降级明示「夹具描述包未加载:
+  调试模式切换项隐藏」,不阻塞解题模式;
+- 调试通道联调:切换到调试模式后工作区经 `DebugChannelClient` 连接
+  `/sessions/debug-channel`(vite 反代 `/sessions` 已覆盖,ws 同源升级),
+  attach 起点 = 会话当前 revision(重放对齐由 session-api 调试编排承担)。
+
+## 测试(WP-F8 增补)
+
+- `test/descriptor.test.ts`:夹具 JSON 形态自检(debugMode / hintLadder /
+  publicErrorMapping 齐备;占位数据零秘密面)、`applyChallengeDescriptor`
+  注入断言(含 debugMode 缺省 false 口径)、boot 描述包 fail-soft 降级、
+  既有 `wireSessionDemo` 接线回归。
