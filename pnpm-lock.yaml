@@ -259,9 +259,15 @@ importers:
 
   packages/web-component:
     dependencies:
+      '@stackmaster/embed-runtime':
+        specifier: workspace:*
+        version: link:../embed-runtime
       '@stackmaster/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@stackmaster/vm-ui':
+        specifier: workspace:*
+        version: link:../vm-ui
       lit:
         specifier: ^3.3.3
         version: 3.3.3

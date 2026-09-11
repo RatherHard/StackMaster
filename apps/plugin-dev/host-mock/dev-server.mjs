@@ -17,8 +17,12 @@
  *     同构:apps 不静态依赖浏览器包,dependency-cruiser
  *     no-backend-dependency-on-browser-packages 不产生模块依赖边)。
  *
- * CORS 姿态:开发替身只服务同源调用(vite dev origin),不回显 ACAO——
- * 跨来源插件 URL 的引导配置取回应由其自身后端承担(生产形态语义)。
+ * CORS 姿态:`/host-api/embed-tokens`(宿主页面签发代理)只服务同源调用
+ * (vite dev origin),不回显 ACAO——签发凭证不对其他 origin 开放(WP-51 姿态)。
+ * `POST /host-api/embed-bootstrap`(插件面的引导取回端点)自 WP-52 起对插件
+ * 独立来源 origin(PLUGIN_SITE_ORIGIN,默认 http://localhost:5174)回显精确
+ * ACAO——跨源插件 iframe 的取回是 D-API-75 默认形态;不在白名单的 origin
+ * fail-closed(不回显任何 ACAO)。
  * 本文件为纯 JavaScript + JSDoc(.mjs 不经 TS 编译,与 issue-embed-token.mjs
  * 同纪律);node 内建能力一律经显式 import,避免裸全局。
  */
@@ -34,6 +38,28 @@ const SESSION_API_BROWSER_ORIGIN_DEFAULT = "http://localhost:13000";
 
 /** esid 形态(与 protocol EmbedSessionIdSchema 的字符集/长度一致;dev 端预检)。 */
 const ESID_PATTERN = /^[A-Za-z0-9_-]{22,128}$/;
+
+/**
+ * 插件独立来源 origin(WP-52 demo 拓扑;plugin-site-server.mjs 的端口)。
+ * 仅 `POST /host-api/embed-bootstrap`(插件面的引导取回端点,D-API-75 通道 a)
+ * 对该 origin 回显 ACAO——跨源插件 iframe 的取回是 D-API-75 的默认形态;
+ * `/host-api/embed-tokens`(宿主页面的签发代理)保持同源-only(WP-51 姿态:
+ * 签发凭证不跨 origin 开放)。
+ */
+const PLUGIN_SITE_ORIGIN = process.env["PLUGIN_SITE_ORIGIN"] ?? "http://localhost:5174";
+
+/** 引导取回端点的 CORS 头(精确 origin 白名单;fail-closed:不在表内不回显)。 */
+function bootstrapCorsHeaders(req) {
+  const origin = req.headers.origin;
+  if (origin !== PLUGIN_SITE_ORIGIN) {
+    return {};
+  }
+  return {
+    "access-control-allow-origin": origin,
+    "vary": "Origin",
+    "access-control-allow-credentials": "false", // 引导取回零凭证语义(POST 体承载 esid)。
+  };
+}
 
 /** 进程内一次性引导配置记录表(esid → 记录;取走即删)。 */
 const bootstrapRecords = new Map();
@@ -76,6 +102,12 @@ async function readJsonBody(req) {
 /** JSON 响应写出的最小助手(带 dev 替身统一错误形态)。 */
 function writeJson(res, status, body) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+
+/** JSON 响应 + 附加头(引导取回端点的 CORS 面)。 */
+function writeJsonWithHeaders(res, status, extraHeaders, body) {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...extraHeaders });
   res.end(JSON.stringify(body));
 }
 
@@ -156,21 +188,33 @@ async function handleIssue(req, res) {
 
 /** /host-api/embed-bootstrap:插件经 POST 体以 esid 换引导配置(D-API-75 通道 a)。 */
 async function handleBootstrap(req, res) {
+  // WP-52 demo 拓扑:插件独立来源 iframe 跨源取回(精确 origin 白名单)。
+  const cors = bootstrapCorsHeaders(req);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      ...cors,
+      "access-control-allow-methods": "POST",
+      "access-control-allow-headers": "content-type",
+      "access-control-max-age": "600",
+    });
+    res.end();
+    return;
+  }
   const body = await readJsonBody(req);
   const esid = body?.embedSessionId;
   if (body === null || typeof esid !== "string" || !ESID_PATTERN.test(esid)) {
-    writeJson(res, 400, { error: "invalid_input_format", message: "引导取回必须以 POST 体携带 embedSessionId" });
+    writeJsonWithHeaders(res, 400, cors, { error: "invalid_input_format", message: "引导取回必须以 POST 体携带 embedSessionId" });
     return;
   }
   const record = bootstrapRecords.get(esid);
   if (record === undefined) {
     // 未登记 / 已消费同形拒绝:esid 单次有效,重载即轮换(D-API-75)。
-    writeJson(res, 404, { error: "bootstrap_not_found", message: "resource not found" });
+    writeJsonWithHeaders(res, 404, cors, { error: "bootstrap_not_found", message: "resource not found" });
     return;
   }
   bootstrapRecords.delete(esid);
   const config = envConfig();
-  writeJson(res, 200, {
+  writeJsonWithHeaders(res, 200, cors, {
     embedToken: record.embedToken,
     sessionApiOrigin: config.sessionApiBrowserOrigin,
     challengeId: record.challengeId,

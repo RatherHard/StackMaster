@@ -37,7 +37,7 @@ export default tseslint.config(
   },
   {
     // 宿主模拟页浏览器脚本(WP-51 联调面;dev-only,不经打包器,以 ES module
-    // 直接加载——浏览器全局在此声明,与上方 k6 / mjs 分段同先例)。
+    // 直接加载——浏览器全局在此声明,与下方 k6 / mjs 分段同先例)。
     files: ["apps/plugin-dev/host-mock/*.js"],
     languageOptions: {
       globals: {
@@ -47,6 +47,22 @@ export default tseslint.config(
         URL: "readonly",
         crypto: "readonly",
         console: "readonly",
+      },
+    },
+  },
+  {
+    // 宿主模拟页 / 插件站点 dev 脚本(WP-51/52 联调面;Node 侧零依赖脚本)。
+    // smoke-embed.mjs 的 page.waitForFunction / evaluate 回调运行于浏览器上下文,
+    // 故一并声明 window / document(声明过剩对纯 Node 脚本无害)。
+    files: ["apps/plugin-dev/host-mock/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        URL: "readonly",
+        fetch: "readonly",
+        window: "readonly",
+        document: "readonly",
       },
     },
   },

@@ -21,7 +21,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@stackmaster/embed-runtime": "workspace:*",
     "@stackmaster/protocol": "workspace:*",
+    "@stackmaster/vm-ui": "workspace:*",
     "lit": "^3.3.3"
   },
   "devDependencies": {

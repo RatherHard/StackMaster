@@ -4,8 +4,11 @@
 #
 # 在 CSRF/凭证 Origin 白名单中登记浏览器开发壳 origin(vite dev = 5173),
 # 使「浏览器打开 plugin-dev 开发壳 → 代理同源请求」的人肉走查路径可直连。
-# 精确 origin、逗号分隔;不改变其余拓扑语义。
+# 阶段五 WP-52 增补 5174:插件独立来源 demo 拓扑(plugin-site-server 承载的
+# 插件文档页)内 SessionClient 直连 session-api(create_session / 认证 WSS),
+# CORS 与 Origin 白名单需含插件 origin(嵌入协议 §4.1:业务数据走插件 ↔
+# session-api 认证通道,不经宿主转发)。精确 origin、逗号分隔;不改变其余拓扑语义。
 services:
   session-api:
     environment:
-      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000,http://localhost:5173"
+      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000,http://localhost:5173,http://localhost:5174"

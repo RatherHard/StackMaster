@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:plugin-site": "node host-mock/plugin-site-server.mjs",
     "build": "vite build && tsc -b --force",
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "vitest run",

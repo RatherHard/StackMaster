@@ -31,14 +31,17 @@
         联调面(WP-51,非交付物):扮演宿主平台页面。embed token 经本开发壳 vite
         代理层(宿主后端替身)向 session-api 签发(D-API-75 通道 a:token 只经
         服务端环境变量与 POST 体流转,不进 URL、不经 postMessage);iframe URL
-        fragment 只携带一次性 esid。插件 URL 可配置——默认指向「握手桩 iframe 页」
-        (桩页仅实现 hello/ready 协议侧,标注为联调桩;正式插件 Shell 归 WP-52)。
+        fragment 只携带一次性 esid。插件 URL 默认指向<strong>正式插件产物</strong>
+        (WP-52:独立来源插件文档页,`pnpm --filter @stackmaster/plugin-dev
+        dev:plugin-site` 启动,端口 5174;跨源引导取回由 dev-server 按
+        PLUGIN_SITE_ORIGIN 白名单放行)。WP-51 握手桩页(stub-plugin.*)已随
+        正式实现退场(历史见 git)。
       </p>
 
       <fieldset>
         <legend>嵌入控制</legend>
         <label>插件 URL
-          <input id="plugin-url" data-testid="host-mock-plugin-url" value="/host-mock/stub-plugin.html" />
+          <input id="plugin-url" data-testid="host-mock-plugin-url" value="http://localhost:5174/" />
         </label>
         <label>tenantId <input id="tenant-id" value="e2e-tenant" /></label>
         <label>userId <input id="user-id" value="e2e-user" /></label>

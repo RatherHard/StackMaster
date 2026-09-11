@@ -16,14 +16,20 @@
  *   反例 4  packages/session-core → 浏览器可达包    no-backend-dependency-on-browser-packages
  *                                                  (允许清单规则不得误伤 packages 侧)
  *   反例 5  embed-runtime → vm-ui(浏览器包横向)   browser-package-cross-dependency-into-vm-ui
- *                                                  (WP-51:唯一放行边之外全红灯)
+ *                                                  (WP-51 立;放行边之外全红灯)
  *   反例 6  vm-ui → react-wrapper(浏览器包横向)   browser-package-cross-dependency-into-react-wrapper
  *   反例 7  apps/session-api → react-wrapper        session-api-workspace-deps-allowlist
  *                                                  + no-backend-dependency-on-browser-packages
- *   正控 8  packages/vm-ui 包内边(index → 自包子模块)浏览器包规则不得触发
+ *   反例 8  vm-ui → web-component(浏览器包横向)   browser-package-cross-dependency-into-web-component
+ *                                                  (WP-52:→ web-component 方向无放行边)
+ *   反例 9  embed-runtime → web-component(横向)    browser-package-cross-dependency-into-web-component(同上)
+ *   正控 10 web-component → embed-runtime / vm-ui /
+ *           protocol 零违规                        (WP-52 两条放行边:Q4 无状态构件复用 +
+ *                                                  Q3 工作区装配;其余规则不得误触发)
+ *   正控 11 packages/vm-ui 包内边(index → 自包子模块)浏览器包规则不得触发
  *                                                  (WP-F1:包内边经 pathNot 排除)
- *   正控 9  react-wrapper → embed-runtime / protocol 零违规
- *                                                  (WP-51 唯一放行横向边 + protocol 公开入口)
+ *   正控 12 react-wrapper → embed-runtime / protocol 零违规
+ *                                                  (WP-51 放行横向边 + protocol 公开入口)
  *   对照组  apps/session-api → protocol / challenge-schema /
  *           challenge-compiler / session-core       零违规(允许清单全量,无误报)
  *
@@ -47,6 +53,15 @@ const FIXTURE_FILES = {
   "packages/session-core/src/index.ts": "export const placeholder = true;\n",
   "packages/vm-ui/src/index.ts": "export const placeholder = true;\n",
   "packages/embed-runtime/src/index.ts": "export const placeholder = true;\n",
+  "packages/web-component/src/ui/inner.ts": "export const placeholder = true;\n",
+  // 正控 10:web-component → embed-runtime(WP-52 放行边:Q4 无状态构件复用)+
+  // vm-ui(WP-52 放行边:Q3 工作区装配)+ protocol(公开入口)。
+  "packages/web-component/src/index.ts": [
+    'export * from "../../../packages/embed-runtime/src/index";',
+    'export * from "../../../packages/vm-ui/src/index";',
+    'export * from "../../../packages/protocol/src/index";',
+    "",
+  ].join("\n"),
   // 未登记进 session-api 允许清单、也不属浏览器面的假想工作区包。
   "packages/telemetry-extra/src/index.ts": "export const placeholder = true;\n",
   // 浏览器包包内结构:positive control(包内边不得触发浏览器包规则)。
@@ -82,6 +97,12 @@ const FIXTURE_FILES = {
   // 反例 7:apps → react-wrapper(双规则同边触发)。
   "apps/session-api/src/ce-react-wrapper.ts":
     'export * from "../../../packages/react-wrapper/src/index";\n',
+  // 反例 8:vm-ui → web-component(→ web-component 方向无放行边,WP-52)。
+  "packages/vm-ui/src/ce-web-component.ts":
+    'export * from "../../../packages/web-component/src/ui/inner";\n',
+  // 反例 9:embed-runtime → web-component(→ web-component 方向无放行边,WP-52)。
+  "packages/embed-runtime/src/ce-web-component.ts":
+    'export * from "../../../packages/web-component/src/ui/inner";\n',
   // 对照组:允许清单全量(必须零违规)。
   "apps/session-api/src/clean-allowlist.ts": [
     'export * from "../../../packages/protocol/src/index";',
@@ -99,7 +120,10 @@ const ENTRY_FILES = Object.keys(FIXTURE_FILES).filter(
     file === "packages/session-core/src/ce-browser-package.ts" ||
     file === "packages/vm-ui/src/index.ts" ||
     file === "packages/vm-ui/src/ce-react-wrapper.ts" ||
+    file === "packages/vm-ui/src/ce-web-component.ts" ||
     file === "packages/embed-runtime/src/ce-browser-import.ts" ||
+    file === "packages/embed-runtime/src/ce-web-component.ts" ||
+    file === "packages/web-component/src/index.ts" ||
     file === "packages/react-wrapper/src/index.ts",
 );
 
@@ -164,7 +188,56 @@ const EDGE_EXPECTATIONS = [
     reject: [],
   },
   {
-    label: "正控8 vm-ui包内边不违规",
+    label: "反例8 vm-ui→web-component(横向)",
+    edgeSuffix: "web-component/src/ui/inner.ts",
+    fromSuffix: "packages/vm-ui/src/ce-web-component.ts",
+    expect: ["browser-package-cross-dependency-into-web-component"],
+    reject: [
+      "browser-packages-only-depend-on-protocol",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    label: "反例9 embed-runtime→web-component(横向)",
+    edgeSuffix: "web-component/src/ui/inner.ts",
+    fromSuffix: "packages/embed-runtime/src/ce-web-component.ts",
+    expect: ["browser-package-cross-dependency-into-web-component"],
+    reject: [
+      "browser-packages-only-depend-on-protocol",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    label: "正控10a web-component→embed-runtime 放行(WP-52 Q4)",
+    edgeSuffix: "embed-runtime/src/index.ts",
+    fromSuffix: "packages/web-component/src/index.ts",
+    expect: [],
+    reject: [
+      "browser-package-cross-dependency-into-embed-runtime",
+      "browser-packages-only-depend-on-protocol",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    label: "正控10b web-component→vm-ui 放行(WP-52 Q3)",
+    edgeSuffix: "vm-ui/src/index.ts",
+    fromSuffix: "packages/web-component/src/index.ts",
+    expect: [],
+    reject: [
+      "browser-package-cross-dependency-into-vm-ui",
+      "browser-packages-only-depend-on-protocol",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    label: "正控10c web-component→protocol 放行",
+    edgeSuffix: "protocol/src/index.ts",
+    fromSuffix: "packages/web-component/src/index.ts",
+    expect: [],
+    reject: ["browser-packages-only-depend-on-protocol"],
+  },
+  {
+    label: "正控11 vm-ui包内边不违规",
     edgeSuffix: "vm-ui/src/ui/inner.ts",
     fromSuffix: "packages/vm-ui/src/index.ts",
     expect: [],
@@ -174,7 +247,7 @@ const EDGE_EXPECTATIONS = [
     ],
   },
   {
-    label: "正控9 react-wrapper→embed-runtime 放行",
+    label: "正控12 react-wrapper→embed-runtime 放行",
     edgeSuffix: "embed-runtime/src/index.ts",
     fromSuffix: "packages/react-wrapper/src/index.ts",
     expect: [],
@@ -185,7 +258,7 @@ const EDGE_EXPECTATIONS = [
     ],
   },
   {
-    label: "正控9 react-wrapper→protocol 放行",
+    label: "正控12 react-wrapper→protocol 放行",
     edgeSuffix: "protocol/src/index.ts",
     fromSuffix: "packages/react-wrapper/src/index.ts",
     expect: [],
@@ -300,7 +373,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    console.log("[self-test] 依赖边界反例自检全绿:11 组边期望全部满足");
+    console.log("[self-test] 依赖边界反例自检全绿:16 组边期望全部满足");
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
   }

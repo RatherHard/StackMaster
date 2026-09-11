@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StackMaster 插件页(pwn-memory-vm)</title>
+    <!--
+      插件文档页(WP-52 部署形态):独立来源 iframe 的 src 目标页。
+      受限 CSP 兼容自测基线:零内联脚本(唯一 script 经 src 相对路径引用产物)、
+      零内联事件处理器、零 eval——服务器按 `script-src 'self'` 形态下发 CSP 头
+      时本页可完整运行(dev 拓扑由 plugin-site-server 注入该头)。
+
+      部署说明:
+      1. 产物 = packages/web-component/dist/index.js(自包含单文件,lit / vm-ui
+         / protocol / embed-runtime 已内联);本页以相对路径 `./pwn-memory-vm.js`
+         引用——整目录拷贝即可部署在任意路径前缀下(非根路径兼容)。
+      2. 引导配置端点(D-API-75 通道 a)经 `<pwn-memory-vm>` 的
+         `bootstrap-endpoint` attribute 注入(宿主后端职责面的取回端点;
+         esid 经 POST 请求体换取引导配置)。备选注入形态:页面加载前置
+         `window.PWN_MEMORY_VM_CONFIG = { bootstrapEndpoint: "…" }`(零内联
+         脚本前提下由同源外部脚本提供);attribute 优先。
+      3. 本页同时用于 demo 拓扑(plugin-site-server,dev 端口 5174)与
+         WP-55 Playwright E2E。
+    -->
+  </head>
+  <body>
+    <pwn-memory-vm bootstrap-endpoint="http://localhost:5173/host-api/embed-bootstrap"></pwn-memory-vm>
+    <!-- 相对路径引用(非根路径部署兼容);产物加载即注册 <pwn-memory-vm>。 -->
+    <script type="module" src="./pwn-memory-vm.js"></script>
+  </body>
+</html>

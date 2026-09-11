@@ -94,6 +94,9 @@ function mountIframe(session, opaque) {
   // 桩页经 POST 体取回引导配置(通道 a)。真实部署为独立来源 iframe。
   iframe.sandbox = opaque ? "allow-scripts allow-forms" : "allow-scripts allow-same-origin allow-forms";
   iframe.src = session.buildIframeSrc();
+  // 挂接 iframe(V-1' / V-5 窗口绑定:source === iframe.contentWindow;
+  // WP-52 修正:缺失时 contentWindow 绑定为 null,一切 hello 被 fail-closed 拒绝)。
+  session.attachIframe(iframe);
   iframe.addEventListener("load", () => session.notifyIframeLoad());
   el("iframe-slot").replaceChildren(iframe);
   state.iframe = iframe;
@@ -168,11 +171,15 @@ async function embed() {
   logEvent(`embed token 已签发(内存持有,过期时刻 ${issued.expiresAt});esid=${esid}`);
 
   // 3. 建会话 + iframe(opaque 开关切换 §4.1 / §4.2 路径)。
+  // 显式传 sessionId:签发记录与 iframe fragment 的 esid 必须同值(D-API-75
+  // 通道 a 的一致性前提——插件以 fragment esid 换取的引导配置由该签发登记担保;
+  // WP-52 修正:不传时 SDK 自行生成新 esid,与签发 esid 脱节,引导取回必 404)。
   const session = runtime.createEmbedSession({
     pluginUrl,
     pluginOrigin: pluginOriginOf(pluginUrl),
     opaqueOrigin: opaque,
     config: { theme: el("theme-select").value || "light", language: el("language-select").value || "zh-CN" },
+    sessionId: esid,
   });
   state.session = session;
   bindSessionEvents(session);
