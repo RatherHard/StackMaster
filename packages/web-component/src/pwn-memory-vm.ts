@@ -25,6 +25,13 @@
  * `color-scheme`;三值状态与语言字符串经 `appearanceSnapshot` 可读。主题双套
  * 变量与 i18n 抽取面归 WP-53,在本接口上增量。
  *
+ * M2 描述包正式下发接入(WP-54 增量面):引导配置就绪即并行获取公开描述包
+ * (`fetchChallengeDescriptor`,GET /descriptors/:challengeId/:version;哈希 +
+ * 尺寸护栏双闸的客户端侧),**不阻塞 workspace 就绪**——hintLadder /
+ * publicErrorMapping / 静态面 / debugMode 门控晚到即注入,加载失败 → 缺席
+ * 明示(会话不受影响,零降级、零重试风暴)。FE-ED-06 / FE-ED-07 自此由正式
+ * 下发通道驱动(夹具注入通道保留于 plugin-dev 开发壳的开发态)。
+ *
  * 依赖纪律(Q3 定案):本包消费 embed-runtime 无状态构件与 vm-ui 公开导出,
  * 自包含打包(lit / vm-ui / protocol / embed-runtime 内联进 dist 单产物)。
  */
@@ -37,6 +44,13 @@ import {
   HANDSHAKE_TIMEOUT_MS_DEFAULT,
   HELLO_MAX_RETRIES_DEFAULT,
 } from "@stackmaster/embed-runtime";
+import {
+  challengeStaticFace,
+  fetchChallengeDescriptor,
+  type ChallengeDescriptorView,
+  type ChallengeStaticFace,
+  type WorkspaceDescriptorStatus,
+} from "@stackmaster/vm-ui";
 import {
   PWN_EMBED_EVENTS,
   PluginEmbedHandshake,
@@ -95,6 +109,13 @@ export class PwnMemoryVm extends LitElement {
   @property({ type: String, attribute: "bootstrap-endpoint" })
   bootstrapEndpoint = "";
 
+  /**
+   * 描述包获取 origin(WP-54;缺省空 = 复用引导配置的 `sessionApiOrigin`)。
+   * 部署可经 attribute 指向独立源(如 dev 壳的反代同源形态)。
+   */
+  @property({ type: String, attribute: "descriptor-origin" })
+  descriptorOrigin = "";
+
   /** T_handshake(默认 10000;D-API-77 内置常量,属性面仅供部署收紧与测试)。 */
   @property({ type: Number, attribute: "handshake-timeout-ms" })
   handshakeTimeoutMs = HANDSHAKE_TIMEOUT_MS_DEFAULT;
@@ -152,6 +173,13 @@ export class PwnMemoryVm extends LitElement {
   @property({ attribute: false })
   matchMediaImpl: ((query: string) => MediaQueryLike | null) | null = null;
 
+  /**
+   * SHA-256 摘要注入(描述包完整性闸;默认 WebCrypto subtle——真实浏览器
+   * 全局可用,jsdom 测试注入 Node webcrypto 同语义实现)。
+   */
+  @property({ attribute: false })
+  sha256Hex: ((bytes: Uint8Array) => Promise<string>) | null = null;
+
   /* ── 内部状态(非响应式声明;变更点手动 requestUpdate)────────────────── */
 
   readonly #workspaceRef: Ref<SmWorkspace> = createRef();
@@ -170,6 +198,11 @@ export class PwnMemoryVm extends LitElement {
   #resizeObserver: ResizeObserverLike | null = null;
   #localCounters: Record<string, number> = {};
   #appearanceDisposer: (() => void) | null = null;
+
+  // M2 描述包接入状态(WP-54;晚到注入,变更点手动 requestUpdate)。
+  #descriptorView: ChallengeDescriptorView | null = null;
+  #descriptorStatic: ChallengeStaticFace | null = null;
+  #descriptorStatus: WorkspaceDescriptorStatus = "loading";
 
   static override styles = css`
     :host {
@@ -247,6 +280,11 @@ export class PwnMemoryVm extends LitElement {
   /** port 备用通道凭证是否已收取(只报布尔,凭证值零回显)。 */
   get portCredentialReceived(): boolean {
     return this.#portCredential !== null;
+  }
+
+  /** 描述包接入状态(WP-54 诊断 / 测试锚;loading → loaded | absent)。 */
+  get descriptorStatus(): WorkspaceDescriptorStatus {
+    return this.#descriptorStatus;
   }
 
   /* ── 生命周期 ───────────────────────────────────────────────────────── */
@@ -360,7 +398,38 @@ export class PwnMemoryVm extends LitElement {
       if (this.#degraded === "bootstrap-failed") {
         this.#degraded = null;
       }
+      // M2 描述包获取(与 create_session 并行;不阻塞 workspace 就绪)。
+      void this.#loadDescriptor(config);
       void this.#tryStartSession();
+    }
+    this.requestUpdate();
+  }
+
+  /**
+   * 描述包正式下发获取(WP-54):challengeId / version / origin 来自引导配置
+   * (descriptor-origin attribute 可覆盖 origin)。成功 → hintLadder /
+   * publicErrorMapping / 静态面 / debugMode 门控注入 workspace;失败 → 缺席
+   * 明示(会话不受影响、零中断,失败细节不进 DOM)。无重试入口(网络失败
+   * 的至多一次重试在加载器内;缺席明示为终态,重载 iframe 重新走管线)。
+   */
+  async #loadDescriptor(config: EmbedBootstrapConfig): Promise<void> {
+    const origin = this.descriptorOrigin.trim() !== "" ? this.descriptorOrigin.trim() : config.sessionApiOrigin;
+    const outcome = await fetchChallengeDescriptor({
+      sessionApiOrigin: origin,
+      challengeId: config.challengeId,
+      challengeVersion: config.challengeVersion,
+      ...(this.fetchImpl !== null ? { fetchImpl: this.fetchImpl } : {}),
+      ...(this.sha256Hex !== null ? { sha256Hex: this.sha256Hex } : {}),
+    });
+    if (this.#disposed) return;
+    if (outcome.ok) {
+      this.#descriptorView = outcome.descriptor;
+      this.#descriptorStatic = challengeStaticFace(outcome.descriptor);
+      this.#descriptorStatus = "loaded";
+    } else {
+      this.#descriptorView = null;
+      this.#descriptorStatic = null;
+      this.#descriptorStatus = "absent";
     }
     this.requestUpdate();
   }
@@ -580,6 +649,15 @@ export class PwnMemoryVm extends LitElement {
           <sm-workspace
             ${ref(this.#workspaceRef)}
             .client=${this.#client}
+            .challengeDescriptor=${this.#descriptorView === null
+              ? null
+              : {
+                  hintLadder: this.#descriptorView.hintLadder,
+                  publicErrorMapping: this.#descriptorView.publicErrorMapping,
+                }}
+            .challengeStatic=${this.#descriptorStatic}
+            .descriptorStatus=${this.#descriptorStatus}
+            .debugModeAvailable=${this.#descriptorView?.debugMode === true}
             @new-session-request=${this.#onNewSessionRequest}
           ></sm-workspace>
         </div>

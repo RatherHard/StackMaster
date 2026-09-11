@@ -97,6 +97,20 @@ export const en: Record<SmMessageKey, string> = {
     "Structure annotation {address}: no stack/free view is open, cannot locate",
   "workspace.noSessionError": "No session connected: action not submitted",
   "workspace.actionSubmitFailed": "Failed to submit the action (client-side error)",
+  // Challenge static face (WP-54: briefing / vmProfile / encodingTable from the
+  // officially delivered descriptor)
+  "workspace.challengePanel": "Challenge briefing",
+  "workspace.challengeAbsentTitle": "Challenge descriptor not loaded",
+  "workspace.challengeAbsentBody":
+    "The challenge descriptor failed to load: briefing, hint ladder and error teaching notes are unavailable (session and solving are unaffected).",
+  "workspace.challengeDtArch": "Architecture width",
+  "workspace.challengeDtEndianness": "Endianness",
+  "workspace.challengeDtPageSize": "Page size",
+  "workspace.challengeDtRegisters": "Registers",
+  "workspace.challengeDtCanary": "Canary",
+  "workspace.challengeCanaryOn": "enabled",
+  "workspace.challengeCanaryOff": "disabled",
+  "workspace.challengeDtEncodingTable": "Encoding table",
 
   // ── debug ─────────────────────────────────────────────────────────────────
   "debug.pausedStep": "Paused after a single step",

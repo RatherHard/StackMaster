@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "challengeId": "chal-formal-e2e",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "locale": "zh-CN",
+  "debugMode": true,
+  "briefing": {
+    "title": "WP-54 正式下发通道 E2E 题(占位数据)",
+    "summary": "由 session-api descriptor 端点正式下发的公开描述包(生命周期教学题同源形态;内容占位零秘密)。",
+    "learningObjectives": [
+      "理解正式下发通道的数据流",
+      "理解提示阶梯与错误教学注解"
+    ],
+    "teachingNotes": [
+      "提示与注解均来自正式下发数据(非夹具)"
+    ]
+  },
+  "vmProfile": {
+    "registers": [
+      {
+        "name": "RSP"
+      },
+      {
+        "name": "RBP"
+      },
+      {
+        "name": "RIP"
+      },
+      {
+        "name": "RAX"
+      }
+    ],
+    "flagRegisterNames": [
+      "FLAG_SYS"
+    ],
+    "endianness": "little",
+    "archBits": 32,
+    "pageSizeBytes": 4096,
+    "canary": {
+      "enabled": false
+    },
+    "encodingTable": [
+      {
+        "tokenHex": "0x00",
+        "op": "mov",
+        "operands": [
+          {
+            "kind": "register",
+            "name": "RAX"
+          },
+          {
+            "kind": "register",
+            "name": "RAX"
+          }
+        ]
+      },
+      {
+        "tokenHex": "0x50",
+        "op": "push",
+        "operands": [
+          {
+            "kind": "register",
+            "name": "RAX"
+          }
+        ]
+      },
+      {
+        "tokenHex": "0xc3",
+        "op": "ret"
+      }
+    ]
+  },
+  "memoryLayout": {
+    "regions": [
+      {
+        "regionId": "code",
+        "kind": "code",
+        "startAddressHex": "0x401000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "publicLabel": "代码区"
+      },
+      {
+        "regionId": "buffer",
+        "kind": "heap",
+        "startAddressHex": "0x20000000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "publicLabel": "缓冲区"
+      },
+      {
+        "regionId": "stack",
+        "kind": "stack",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "publicLabel": "栈"
+      }
+    ]
+  },
+  "allowedActions": [
+    "write_bytes",
+    "push",
+    "pop",
+    "call",
+    "ret",
+    "step",
+    "run_to_event",
+    "pause",
+    "undo",
+    "checkout_checkpoint",
+    "reset",
+    "create_checkpoint"
+  ],
+  "resourceLimits": {},
+  "hintLadder": [
+    {
+      "order": 1,
+      "revealPolicy": "on_request",
+      "hintText": "E2E 正式通道提示一:打开栈视图观察 rip 停靠窗口。"
+    },
+    {
+      "order": 2,
+      "revealPolicy": "after_n_failures",
+      "failureThreshold": 2,
+      "hintText": "E2E 正式通道提示二:失败计数达标后自动解锁的教学提示。"
+    }
+  ],
+  "publicErrorMapping": [
+    {
+      "errorCode": "inaccessible_address",
+      "teachingNote": "E2E 正式通道注解:目标地址不在任何可见区域(I-9)。"
+    },
+    {
+      "errorCode": "offset_out_of_range",
+      "teachingNote": "E2E 正式通道注解:写入越过区域边界,检查偏移与字节长度。"
+    }
+  ],
+  "randomizationNotice": "E2E 正式通道语料使用固定布局与占位初始状态,无随机化面。",
+  "initialProjection": {
+    "visibleRegions": [
+      {
+        "regionId": "code",
+        "label": "代码区",
+        "startAddressHex": "0x401000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "bytesHex": "c3000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "truncated": true
+      },
+      {
+        "regionId": "buffer",
+        "label": "缓冲区",
+        "startAddressHex": "0x20000000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "bytesHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "truncated": true
+      },
+      {
+        "regionId": "stack",
+        "label": "栈",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "bytesHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "truncated": true
+      }
+    ],
+    "visibleRegisters": [
+      {
+        "name": "RSP",
+        "valueHex": "0x7FFFF008"
+      },
+      {
+        "name": "RBP",
+        "valueHex": "0x7FFFF008"
+      },
+      {
+        "name": "RIP",
+        "valueHex": "0x0"
+      },
+      {
+        "name": "RAX",
+        "valueHex": "0x0"
+      }
+    ]
+  }
+}

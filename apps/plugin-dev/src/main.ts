@@ -12,6 +12,11 @@
  * 真实拓扑;dependency-cruiser no-backend-dependency-on-browser-packages
  * 禁止 apps 静态依赖浏览器可达包)。运行时经 `import("/index.js")` 取命名
  * 导出(动态 URL,不进构建图)。详见 README「加载模型」。
+ *
+ * 描述包双通道(WP-54):夹具通道(`?descriptor=` 缺省,本地
+ * fixtures/dev-descriptor.json,开发态零依赖正式部署)与正式下发通道
+ * (`?descriptor=formal`,经 vm-ui 加载器走 session-api descriptor 端点,
+ * /descriptors 反代同源)并存可切换,详见 README「描述包双通道」。
  */
 
 /** 会话创建输入(冻结 create_session 载荷;身份零承载)。 */
@@ -181,12 +186,13 @@ export function readSessionForm(handles: WorkspaceShellHandles): SessionCreateIn
   };
 }
 
-// ── 夹具描述包注入(WP-F8 / FE-WS-06:调试可用性 + ED 教学面)────────────────
+// ── 描述包双通道(WP-54:夹具通道保留 + 正式下发通道并存)────────────────────
 
 /**
  * 夹具公开描述包的结构切面(开发壳本地类型;数据形态对齐
  * challenge-schema 公开包,**零代码依赖**——夹具 JSON 数据占位无秘密)。
  * vm-ui 以结构化类型消费(ed-types.ts 本地面),此处只透传数据。
+ * WP-54 起同时承载正式下发通道的返回视图(结构兼容,全字段可选)。
  */
 export interface DevDescriptor {
   /** debugMode 声明(opt-out;true = 工作区菜单呈现解题/调试模式切换项)。 */
@@ -195,6 +201,87 @@ export interface DevDescriptor {
   readonly hintLadder?: readonly unknown[];
   /** 错误教学注解映射(FE-ED-07;透传 <sm-error-explainer>.mappings)。 */
   readonly publicErrorMapping?: readonly unknown[];
+  /** 静态面切面(WP-54;briefing / vmProfile / randomizationNotice)。 */
+  readonly briefing?: { readonly title?: string; readonly summary?: string };
+  readonly vmProfile?: {
+    readonly archBits?: number;
+    readonly endianness?: string;
+    readonly pageSizeBytes?: number;
+    readonly registers?: readonly { readonly name: string }[];
+    readonly canary?: { readonly enabled: boolean };
+    readonly encodingTable?: readonly unknown[];
+  };
+  readonly randomizationNotice?: string | null;
+}
+
+/** 工作区静态面注入形状(与 vm-ui ChallengeStaticFace 结构兼容的本地最小面)。 */
+export interface DevStaticFace {
+  readonly title: string;
+  readonly summary: string;
+  readonly archBits: number;
+  readonly endianness: string;
+  readonly pageSizeBytes: number;
+  readonly registerNames: readonly string[];
+  readonly canaryEnabled: boolean;
+  readonly encodingTable: readonly unknown[];
+}
+
+/**
+ * 正式下发通道加载结果(与 vm-ui `fetchChallengeDescriptor` 的返回结构兼容;
+ * 确定性失败面:ok=false + reason 码,reason 不进玩家可见 DOM)。
+ */
+export type DevDescriptorOutcome =
+  | { readonly ok: true; readonly descriptor: DevDescriptor }
+  | { readonly ok: false; readonly reason: string };
+
+/** vm-ui 产物模块的开发壳消费面(结构最小;loadModule 动态 import 的返回)。 */
+export interface VmUiModuleLike {
+  readonly SessionClient: new () => SessionDemoClientLike;
+  /** 正式通道加载器(WP-54;fixture 通道不消费,允许缺席以兼容既有替身)。 */
+  readonly fetchChallengeDescriptor?: (input: {
+    readonly sessionApiOrigin: string;
+    readonly challengeId: string;
+    readonly challengeVersion: string;
+  }) => Promise<DevDescriptorOutcome>;
+}
+
+/** 描述包通道(dev 壳;切换方式登记于 README / WP-54 决策草稿)。 */
+export type DescriptorChannel = "fixture" | "formal";
+
+/**
+ * 通道解析:URL 查询参数 `?descriptor=formal` 切正式下发通道(缺省 = 夹具
+ * 通道,开发态零依赖正式部署)。正式通道的题目上下文取同页
+ * `?challengeId=` / `?challengeVersion=`(缺省回落表单演示值)。
+ */
+export function resolveDescriptorChannel(search: string = window.location.search): DescriptorChannel {
+  return new URLSearchParams(search).get("descriptor") === "formal" ? "formal" : "fixture";
+}
+
+/**
+ * 描述包视图 → 工作区静态面投影(纯函数;briefing / vmProfile 不齐备时
+ * 返回 null = 工作区不渲染静态面)。
+ */
+export function descriptorStaticFace(descriptor: DevDescriptor): DevStaticFace | null {
+  const briefing = descriptor.briefing;
+  const vmProfile = descriptor.vmProfile;
+  if (
+    briefing === undefined ||
+    vmProfile === undefined ||
+    typeof briefing.title !== "string" ||
+    typeof briefing.summary !== "string"
+  ) {
+    return null;
+  }
+  return {
+    title: briefing.title,
+    summary: briefing.summary,
+    archBits: vmProfile.archBits ?? 0,
+    endianness: vmProfile.endianness ?? "little",
+    pageSizeBytes: vmProfile.pageSizeBytes ?? 0,
+    registerNames: (vmProfile.registers ?? []).map((register) => register.name),
+    canaryEnabled: vmProfile.canary?.enabled === true,
+    encodingTable: vmProfile.encodingTable ?? [],
+  };
 }
 
 /**
@@ -213,7 +300,28 @@ export function applyChallengeDescriptor(handles: WorkspaceShellHandles, descrip
     publicErrorMapping: descriptor.publicErrorMapping ?? [],
   };
   if (descriptor.debugMode === true) {
-    handles.status.textContent = `${handles.status.textContent} 调试模式可用(夹具描述包 debugMode=true)。`;
+    handles.status.textContent = `${handles.status.textContent} 调试模式可用(描述包 debugMode=true)。`;
+  }
+}
+
+/**
+ * 描述包接入状态注入(WP-54):`challengeStatic` + `descriptorStatus` 落
+ * 工作区(loaded = 静态面渲染;absent = 缺席明示面板;unknown = 不渲染面,
+ * 夹具缺失的开发态沿用状态行提示)。absent 时状态行附确定性明示。
+ */
+export function applyDescriptorState(
+  handles: WorkspaceShellHandles,
+  status: "loading" | "loaded" | "absent" | "unknown",
+  staticFace: DevStaticFace | null,
+): void {
+  const workspace = handles.workspace as {
+    challengeStatic?: unknown;
+    descriptorStatus?: string;
+  };
+  workspace.descriptorStatus = status;
+  workspace.challengeStatic = staticFace;
+  if (status === "absent") {
+    handles.status.textContent = `${handles.status.textContent} 题目描述包未加载:简介与教学面暂不可用(会话不受影响)。`;
   }
 }
 
@@ -295,31 +403,77 @@ export function wireSessionDemo(
 const vmUiModuleUrl = "/index.js";
 
 /** 产物动态加载(运行时 URL;@vite-ignore 保持运行时语义,不进构建图)。 */
-function defaultLoadModule(): Promise<{ SessionClient: new () => SessionDemoClientLike }> {
-  return import(/* @vite-ignore */ vmUiModuleUrl);
+function defaultLoadModule(): Promise<VmUiModuleLike> {
+  return import(/* @vite-ignore */ vmUiModuleUrl) as Promise<VmUiModuleLike>;
+}
+
+/**
+ * 描述包双通道装配(WP-54):
+ *  - **夹具通道(缺省)**:`loadDescriptor()` 读本地夹具 JSON(fail-soft),
+ *    开发态零依赖正式部署;
+ *  - **正式通道(`?descriptor=formal`)**:经 vm-ui 加载器
+ *    `fetchChallengeDescriptor` 走 session-api descriptor 端点(dev 壳经
+ *    `/descriptors` 反代同源,ETag 可读);成功 → ED 教学面 + 静态面 +
+ *    debugMode 门控注入,失败 → 缺席明示(会话不受影响)。
+ *
+ * 正式通道以 URL 参数的题目上下文为准(boot 时一次获取);表单创建不同题目
+ * 上下文时刷新页面(登记于 README「双通道」)。
+ */
+async function applyDescriptorChannel(
+  handles: WorkspaceShellHandles,
+  vmUi: VmUiModuleLike,
+  loadDescriptor: () => Promise<DevDescriptor | null>,
+): Promise<void> {
+  if (resolveDescriptorChannel() === "formal") {
+    const loader = vmUi.fetchChallengeDescriptor;
+    if (typeof loader !== "function") {
+      applyDescriptorState(handles, "absent", null);
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const challengeId = params.get("challengeId")?.trim() || DEMO_DEFAULTS.challengeId;
+    const challengeVersion = params.get("challengeVersion")?.trim() || DEMO_DEFAULTS.challengeVersion;
+    applyDescriptorState(handles, "loading", null);
+    const outcome = await loader({
+      // dev 壳经 vite 反代同源访问 descriptor 端点(ETag 非简单响应头,跨源
+      // 读取需服务端 exposeHeaders;同源反代形态免配置,登记于 README)。
+      sessionApiOrigin: window.location.origin,
+      challengeId,
+      challengeVersion,
+    });
+    if (outcome.ok) {
+      applyChallengeDescriptor(handles, outcome.descriptor);
+      applyDescriptorState(handles, "loaded", descriptorStaticFace(outcome.descriptor));
+    } else {
+      applyDescriptorState(handles, "absent", null);
+    }
+    return;
+  }
+  const descriptor = await loadDescriptor();
+  if (descriptor !== null) {
+    applyChallengeDescriptor(handles, descriptor);
+    applyDescriptorState(handles, "loaded", descriptorStaticFace(descriptor));
+  } else {
+    handles.status.textContent = `${handles.status.textContent} 夹具描述包未加载:调试模式切换项隐藏(降级明示)。`;
+  }
 }
 
 /**
  * 开发壳引导(仅供 index.html 调用;测试经 mountWorkspaceShell +
  * wireSessionDemo 注入替身)。动态加载 vm-ui 产物并完成接线;产物缺失时
- * (未先构建 packages/vm-ui)在状态行给出可操作指引。夹具描述包
- * (WP-F8)fail-soft 加载后注入工作区:debugModeAvailable + ED 教学面。
+ * (未先构建 packages/vm-ui)在状态行给出可操作指引。描述包按
+ * `resolveDescriptorChannel` 双通道装配(WP-54)。
  */
 export async function boot(
   root: HTMLElement,
-  loadModule: () => Promise<{ SessionClient: new () => SessionDemoClientLike }> = defaultLoadModule,
+  loadModule: () => Promise<VmUiModuleLike> = defaultLoadModule,
   loadDescriptor: () => Promise<DevDescriptor | null> = () => loadDevDescriptor(),
 ): Promise<SessionDemoController | null> {
   const handles = mountWorkspaceShell(root);
   try {
     const vmUi = await loadModule();
     const controller = wireSessionDemo(handles, () => new vmUi.SessionClient());
-    const descriptor = await loadDescriptor();
-    if (descriptor !== null) {
-      applyChallengeDescriptor(handles, descriptor);
-    } else {
-      handles.status.textContent = `${handles.status.textContent} 夹具描述包未加载:调试模式切换项隐藏(降级明示)。`;
-    }
+    await applyDescriptorChannel(handles, vmUi, loadDescriptor);
     return controller;
   } catch (error) {
     handles.status.textContent = `vm-ui 产物加载失败:${

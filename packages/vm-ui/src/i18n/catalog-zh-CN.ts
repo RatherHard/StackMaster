@@ -97,6 +97,19 @@ export const zhCN = {
   "workspace.highlightNoView": "结构标注 {address}:尚未打开栈/自由视图,无法定位",
   "workspace.noSessionError": "尚未连接会话:动作未提交",
   "workspace.actionSubmitFailed": "动作提交失败(客户端侧错误)",
+  // 题目静态面(WP-54:正式下发描述包的 briefing / vmProfile / encodingTable 渲染)
+  "workspace.challengePanel": "题目简介",
+  "workspace.challengeAbsentTitle": "题目描述未加载",
+  "workspace.challengeAbsentBody":
+    "题目描述包未成功加载:题目简介、提示阶梯与错误教学注解暂不可用(不影响会话与解题)。",
+  "workspace.challengeDtArch": "架构位宽",
+  "workspace.challengeDtEndianness": "端序",
+  "workspace.challengeDtPageSize": "页大小",
+  "workspace.challengeDtRegisters": "寄存器",
+  "workspace.challengeDtCanary": "canary",
+  "workspace.challengeCanaryOn": "已启用",
+  "workspace.challengeCanaryOff": "未启用",
+  "workspace.challengeDtEncodingTable": "编码表",
 
   // ── debug(调试模式共享文案:暂停原因 / 通道状态)──────────────────────────
   "debug.pausedStep": "单步暂停",

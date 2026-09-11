@@ -179,6 +179,11 @@ export function buildAuthPlugin(options: AuthPluginOptions): FastifyPluginAsync 
       credentials: true,
       methods: ["GET", "HEAD", "POST", "OPTIONS"],
       maxAge: 600,
+      // ETag 必须对跨源浏览器脚本可读(D-API-76 增补,2026-09-11):描述包
+      // 下发端点的 ETag = 登记摘要,是描述包客户端加载器的完整性校验锚——
+      // 跨源插件 iframe 的 fetch 读不到该头即无法做客户端侧哈希比对。
+      // (选项名是 @fastify/cors 的 exposedHeaders,非 Express 风格 exposeHeaders。)
+      exposedHeaders: ["ETag"],
     });
 
     // 请求侧身份面初始化(preHandler 之后可读;之前恒 null)。

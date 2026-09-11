@@ -43,18 +43,32 @@ export interface E2EFixtures {
  * 用例间以唯一租户 + 该租户下的幂等题目登记隔离(同一题目内容重复登记确定性
  * 拒绝并复用,与 seed 脚本同语义),互不挤占预算,残留会话也不阻塞复跑。
  *
+ * @param options.registerChallenge 题目登记帮手(WP-54:descriptor.spec 传入
+ *   seedFormalChallenge 以登记正式下发语料题;缺省 = 生命周期教学题 seed)。
+ * @param options.path 页面路径(WP-54:正式通道传
+ *   `/?descriptor=formal&challengeId=…&challengeVersion=…`)。
  * @returns 建立的 sessionId(dev-status 确认文本解析;尽力回收用)。
  */
-export async function createSessionViaForm(page: Page): Promise<string | null> {
+export async function createSessionViaForm(
+  page: Page,
+  options: {
+    readonly registerChallenge?: (ctx: { challengeId: string; tenantId: string }) => void;
+    readonly path?: string;
+    readonly challengeId?: string;
+    readonly tenantId?: string;
+  } = {},
+): Promise<string | null> {
   const env = e2eEnv();
   // 1. 本用例唯一租户下登记题目(幂等;失败即环境问题,快速报错)。
   //    challenge_versions 全局唯一键 = (challenge_id, content_version),无租户
   //    维度——题目隔离必须用「每用例唯一 challengeId」表达(跨租户复用同一
   //    challengeId 会撞全局唯一键且按租户复查落空)。
-  const tenantId = `e2e-${randomBytes(5).toString("hex")}`;
+  //    WP-54:challengeId / tenantId 可由用例显式给定(正式下发通道的页面
+  //    路径需在 goto 前携带题目上下文)。
+  const tenantId = options.tenantId ?? `e2e-${randomBytes(5).toString("hex")}`;
   const userId = `e2e-user-${randomBytes(4).toString("hex")}`;
-  const challengeId = `chal-e2e-${randomBytes(5).toString("hex")}`;
-  seedChallenge({ challengeId, tenantId });
+  const challengeId = options.challengeId ?? `chal-e2e-${randomBytes(5).toString("hex")}`;
+  (options.registerChallenge ?? seedChallenge)({ challengeId, tenantId });
   // 2. 服务端间签发(凭证只经环境变量;embedSessionId 每用例唯一,且与表单
   //    填写值一致——create_session 对 token claims 与 payload 做三方比对)。
   const embedSessionId = randomBytes(16).toString("base64url");
@@ -68,7 +82,7 @@ export async function createSessionViaForm(page: Page): Promise<string | null> {
     embedSessionId,
   });
   // 3. 开发壳表单填写(与 token claims 三方一致的题目上下文)→ 提交。
-  await page.goto("/");
+  await page.goto(options.path ?? "/");
   // vm-ui 产物动态加载 + 接线完成信号:组件注册发生在模块求值期,接线是
   // 其后的同一微任务链——观察到 custom element 即表单提交处理器已挂。
   await page.waitForFunction(() => customElements.get("sm-workspace") !== undefined);

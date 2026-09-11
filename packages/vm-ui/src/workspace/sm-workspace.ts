@@ -55,6 +55,11 @@ import { ProjectionDataSource } from "../datasource/projection-data-source.js";
 import type { MemoryDataSource, Row } from "../datasource/types.js";
 import type { PublicErrorMapping, PublicHint } from "../ed/ed-types.js";
 import { buildTimeline, type ActionTimelineRecord } from "../ed/timeline.js";
+import type {
+  ChallengeStaticFace,
+  DescriptorEncodingEntryView,
+  DescriptorEncodingOperandView,
+} from "../descriptor/challenge-descriptor.js";
 import { LocaleController, t } from "../i18n/i18n.js";
 import { formatAddressHex } from "../render/hex.js";
 import { ensureSmThemeStyles, SM_THEME_ATTRIBUTE, type SmThemeValue } from "../theme/theme-tokens.js";
@@ -100,7 +105,9 @@ export type WorkspaceMode = "solve" | "debug";
 
 /**
  * 题目公开描述包的教学切面(宿主注入;本地结构类型,对齐锚 = ed-types.ts,
- * 双包 Schema 语义)。浏览器只保存公开投影与 UI 状态——描述包本身 PUBLIC。
+ * 双包 Schema 语义)。WP-54 起宿主(插件装配管线 / dev 壳正式通道)以
+ * `fetchChallengeDescriptor` 加载正式下发数据注入;夹具注入保留为 dev 壳
+ * 开发通道。浏览器只保存公开投影与 UI 状态——描述包本身 PUBLIC。
  */
 export interface WorkspaceChallengeDescriptor {
   /** 提示 ladder(FE-ED-06;revealPolicy 语义在组件本地执行)。 */
@@ -108,6 +115,19 @@ export interface WorkspaceChallengeDescriptor {
   /** 错误教学注解映射(FE-ED-07;按 errorCode 匹配)。 */
   readonly publicErrorMapping?: readonly PublicErrorMapping[];
 }
+
+/** 工作区静态面注入形状(WP-54;= 描述包视图的 ChallengeStaticFace 投影)。 */
+export type WorkspaceChallengeStaticFace = ChallengeStaticFace;
+
+/**
+ * 描述包接入状态(WP-54 缺席明示纪律:加载失败 ≠ 空数据)——
+ *  - `unknown`:宿主未接入描述包(缺省;不渲染任何描述包面,既有装配零影响);
+ *  - `loading`:获取进行中(不渲染,晚到即注入);
+ *  - `loaded`:已就绪(`challengeDescriptor` / `challengeStatic` 携带数据);
+ *  - `absent`:加载失败或未下发(静态面明示缺席,与「题目没有配置提示」区分;
+ *    会话不受影响)。
+ */
+export type WorkspaceDescriptorStatus = "unknown" | "loading" | "loaded" | "absent";
 
 /** 调试档数据源工厂(测试接缝;缺省 = createDebugDataSource 组合根装配)。 */
 export type DebugDataSourceFactory = (client: SessionClient) => DebugDataSource | null;
@@ -147,6 +167,20 @@ export class SmWorkspace extends LitElement {
   /** 题目公开描述包教学切面(提示 ladder / 错误注解;ED 组件挂接数据)。 */
   @property({ attribute: false })
   challengeDescriptor: WorkspaceChallengeDescriptor | null = null;
+
+  /**
+   * 题目静态面(WP-54):标题 / 简介 / VM Profile / encodingTable 投影
+   * (来自正式下发描述包;`descriptorStatus = "loaded"` 时渲染)。
+   */
+  @property({ attribute: false })
+  challengeStatic: WorkspaceChallengeStaticFace | null = null;
+
+  /**
+   * 描述包接入状态(WP-54):缺省 `unknown` = 宿主未接入(零渲染面,既有
+   * 装配零影响);`absent` = 静态面缺席明示;`loaded` = briefing 面渲染。
+   */
+  @property({ attribute: false })
+  descriptorStatus: WorkspaceDescriptorStatus = "unknown";
 
   /**
    * 调试档数据源工厂(测试接缝):缺省 = 组合根装配
@@ -362,6 +396,77 @@ export class SmWorkspace extends LitElement {
       .teaching-grid {
         grid-template-columns: minmax(0, 1fr);
       }
+    }
+
+    /* 题目静态面(WP-54:briefing / vmProfile / encodingTable;沿 teaching-panel
+       的 details 折叠取简,零视觉重设计)。 */
+    .challenge-panel {
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      font-size: 0.8125rem;
+    }
+
+    .challenge-panel > summary {
+      padding: 0.25rem 0.75rem;
+      color: graytext;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    .challenge-body {
+      padding: 0.25rem 0.75rem 0.5rem;
+      display: grid;
+      gap: 0.375rem;
+    }
+
+    .challenge-title {
+      margin: 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .challenge-summary {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .challenge-facts {
+      margin: 0;
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.125rem 0.75rem;
+    }
+
+    .challenge-facts dt {
+      color: graytext;
+    }
+
+    .challenge-facts dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .mono {
+      font-family: ui-monospace, monospace;
+    }
+
+    .encoding-table {
+      margin: 0;
+      border-collapse: collapse;
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+    }
+
+    .encoding-table th,
+    .encoding-table td {
+      padding: 0.125rem 0.5rem;
+      border: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
+      text-align: left;
+    }
+
+    .challenge-absent {
+      margin: 0;
+      padding: 0.25rem 0.75rem 0.5rem;
+      color: graytext;
     }
   `;
 
@@ -1195,6 +1300,7 @@ export class SmWorkspace extends LitElement {
         @workspace-menu-action=${this.#onMenuAction}
       ></sm-workspace-menu>
       ${this.#renderDebugFeedback()}
+      ${this.#renderChallengePanel()}
       <details class="teaching-panel" part="teaching-panel">
         <summary>${t("workspace.teachingPanel")}</summary>
         <div class="teaching-grid">
@@ -1235,6 +1341,92 @@ export class SmWorkspace extends LitElement {
       return nothing;
     }
     return html`<p class="debug-feedback" role="status">${this.#debugFeedback}</p>`;
+  }
+
+  /**
+   * 题目静态面(WP-54):`loaded` = briefing(标题 / 简介)+ VM Profile +
+   * encodingTable(存在才渲染,缺席不渲染纪律);`absent` = 缺席明示;
+   * `unknown` / `loading` = 零渲染面(晚到即注入,loading 中不闪占位)。
+   */
+  #renderChallengePanel(): unknown {
+    if (this.descriptorStatus === "absent") {
+      return html`
+        <details class="challenge-panel" part="challenge-panel" data-descriptor-status="absent">
+          <summary>${t("workspace.challengeAbsentTitle")}</summary>
+          <p class="challenge-absent" role="status">${t("workspace.challengeAbsentBody")}</p>
+        </details>
+      `;
+    }
+    if (this.descriptorStatus !== "loaded") {
+      return nothing;
+    }
+    const face = this.challengeStatic;
+    if (face === null) {
+      return nothing;
+    }
+    const encodingTable = face.encodingTable;
+    return html`
+      <details class="challenge-panel" part="challenge-panel" data-descriptor-status="loaded" open>
+        <summary>${t("workspace.challengePanel")}</summary>
+        <div class="challenge-body">
+          <h2 class="challenge-title">${face.title}</h2>
+          <p class="challenge-summary">${face.summary}</p>
+          <dl class="challenge-facts">
+            <dt>${t("workspace.challengeDtArch")}</dt>
+            <dd class="mono">${face.archBits}</dd>
+            <dt>${t("workspace.challengeDtEndianness")}</dt>
+            <dd class="mono">${face.endianness}</dd>
+            <dt>${t("workspace.challengeDtPageSize")}</dt>
+            <dd>${t("ed.bytesSuffix", { count: face.pageSizeBytes })}</dd>
+            <dt>${t("workspace.challengeDtRegisters")}</dt>
+            <dd class="mono">${face.registerNames.join(", ")}</dd>
+            <dt>${t("workspace.challengeDtCanary")}</dt>
+            <dd>${face.canaryEnabled ? t("workspace.challengeCanaryOn") : t("workspace.challengeCanaryOff")}</dd>
+            ${encodingTable === undefined || encodingTable.length === 0
+              ? nothing
+              : html`
+                  <dt>${t("workspace.challengeDtEncodingTable")}</dt>
+                  <dd>${this.#renderEncodingTable(encodingTable)}</dd>
+                `}
+          </dl>
+        </div>
+      </details>
+    `;
+  }
+
+  /** 编码表最小渲染:tokenHex / op / operands 紧凑结构文本(操作数 kind 为协议词不译)。 */
+  #renderEncodingTable(entries: readonly DescriptorEncodingEntryView[]): unknown {
+    return html`
+      <table class="encoding-table">
+        <tbody>
+          ${entries.map(
+            (entry) => html`
+              <tr>
+                <td class="mono">${entry.tokenHex}</td>
+                <td class="mono">${entry.op}</td>
+                <td class="mono">${(entry.operands ?? []).map((operand) => this.#operandToText(operand))}</td>
+              </tr>
+            `,
+          )}
+        </tbody>
+      </table>
+    `;
+  }
+
+  /** 操作数紧凑结构文本(数据词不译:寄存器名 / arch / interfaceId 为协议词汇)。 */
+  #operandToText(operand: DescriptorEncodingOperandView): string {
+    switch (operand.kind) {
+      case "register":
+        return operand.name;
+      case "immediate":
+        return "imm:arch";
+      case "memory":
+        return `[${operand.baseRegister}:arch]`;
+      case "interface":
+        return `iface:${String(operand.interfaceId)}`;
+      default:
+        return String(operand);
+    }
   }
 
   #renderEmptyState(): unknown {

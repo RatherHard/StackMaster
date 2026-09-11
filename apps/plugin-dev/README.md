@@ -88,26 +88,66 @@ bundle**(阶段五形态),而不是把组件包打进宿主构建图。
   客户端以替身注入);`<sm-workspace>` 的元素注册与渲染由 `packages/vm-ui`
   自身测试覆盖——本包测试环境不加载 vm-ui 产物(见上)。
 
-## 夹具描述包注入(WP-F8 / FE-WS-06)
+## 描述包双通道(WP-F8 夹具注入 → WP-54 双通道并存)
 
-- `fixtures/dev-descriptor.json`:本地夹具公开描述包——照
-  `packages/challenge-schema/test/fixtures/public-descriptor/basic.json` 的
-  **数据形态**自建(零代码依赖,数据占位无秘密;`debugMode: true` +
-  `hintLadder` + `publicErrorMapping` 齐备);
-- 开发壳 boot 读入后经 `applyChallengeDescriptor` 注入工作区装配:
-  `debugModeAvailable`(= 描述包 `debugMode`,true 才呈现解题/调试模式切换
-  项,FE-WS-06 门槛)+ `challengeDescriptor`(hintLadder → 教学面板提示
+开发壳的题目描述包(debugMode 门控 + FE-ED-06 提示阶梯 + FE-ED-07 错误教学
+注解 + 题目静态面)由**两条并存通道**供给,`?descriptor=` 查询参数切换:
+
+### 夹具通道(缺省;开发态零依赖正式部署)
+
+- URL:`http://localhost:5173/`(不带 `descriptor` 参数即夹具通道);
+- 数据源:`fixtures/dev-descriptor.json`(照公开描述包数据形态自建的本地
+  夹具,占位数据零秘密;加载面 = dev server 静态路径
+  `/fixtures/dev-descriptor.json`);
+- **fail-soft**:夹具缺失(如纯静态部署未带夹具)时状态行降级明示
+  「夹具描述包未加载:调试模式切换项隐藏」,不阻塞解题模式;
+- 夹具同时是**测试锚**:形态自检测试(对公开 Schema)在
+  `test/descriptor.test.ts` 与 `packages/challenge-schema/test/
+  fixture-consistency.test.ts` 双侧生效(对齐锚 = 公开 Schema,阶段四定案
+  延续)。
+
+### 正式下发通道(`?descriptor=formal`;WP-54)
+
+- URL 形态:`http://localhost:5173/?descriptor=formal&challengeId=<ID>&challengeVersion=<SEMVER>`
+  (题目上下文缺省回落表单演示值;**以 URL 参数为 boot 时一次获取的上下文,
+  表单创建不同题目上下文时请刷新页面**);
+- 数据流:`fetchChallengeDescriptor`(vm-ui 描述包客户端加载器)→
+  `GET {origin}/descriptors/{challengeId}/{version}`(WP-50 端点)→
+  **完整性校验**(响应体 SHA-256 与 `ETag` 登记摘要比对)+
+  **客户端尺寸护栏双闸**(字节 / 深度 / 数组 / 字符串,与服务端 §8.3 成对)
+  → **结构校验**(对齐锚 = 公开 Schema)→ 强类型视图注入工作区;
+- 失败语义(全部确定性):404 / 网络失败 / 哈希不符 / 超限 / 坏形态 →
+  工作区「题目描述未加载」缺席明示面板,会话与解题不受影响,零重试风暴
+  (网络失败至多一次显式重试);
+- **同源反代**:`vite.config.ts` 把 `/descriptors` 代理到 session-api(环境
+  变量 `SESSION_API_ORIGIN`,与 `/sessions` 反代同源形态)——`ETag` 非简单
+  响应头,跨源读取需服务端 `Access-Control-Expose-Headers: ETag`;开发壳经
+  同源反代消费免服务端配置。若关闭反代直连后端(`SESSION_API_PROXY=off`),
+  加载器将因 ETag 不可读确定性缺席(呈现 = 缺席明示,非故障);
+- 真实链路前置:compose 拓扑已登记目标题目(session-api
+  `k6/seed-challenge.mjs` 路径),E2E 用例见 `e2e/descriptor.spec.ts`
+  (正式下发数据驱动 hintLadder / 错误解释全链路)。
+
+### 注入点(两通道共用)
+
+- `applyChallengeDescriptor`:`debugModeAvailable`(= 描述包 `debugMode`,
+  FE-WS-06 模式切换门槛)+ `challengeDescriptor`(hintLadder → 教学面板提示
   ladder,publicErrorMapping → 错误解释 teachingNote);
-- 加载面 = dev server 静态路径 `/fixtures/dev-descriptor.json`;**fail-soft**:
-  描述包缺失(如纯静态部署未带夹具)时状态行降级明示「夹具描述包未加载:
-  调试模式切换项隐藏」,不阻塞解题模式;
-- 调试通道联调:切换到调试模式后工作区经 `DebugChannelClient` 连接
-  `/sessions/debug-channel`(vite 反代 `/sessions` 已覆盖,ws 同源升级),
-  attach 起点 = 会话当前 revision(重放对齐由 session-api 调试编排承担)。
+- `applyDescriptorState`(WP-54):`descriptorStatus`(loading / loaded /
+  absent)+ `challengeStatic`(标题 / 简介 / VM Profile / encodingTable
+  静态面,`loaded` 时渲染;`absent` 时呈现缺席明示面板)。
 
-## 测试(WP-F8 增补)
+### 调试通道联调(沿 WP-F8)
+
+切换到调试模式后工作区经 `DebugChannelClient` 连接 `/sessions/debug-channel`
+(vite 反代 `/sessions` 已覆盖,ws 同源升级),attach 起点 = 会话当前
+revision(重放对齐由 session-api 调试编排承担)。
+
+## 测试(WP-F8 增补;WP-54 扩展)
 
 - `test/descriptor.test.ts`:夹具 JSON 形态自检(debugMode / hintLadder /
   publicErrorMapping 齐备;占位数据零秘密面)、`applyChallengeDescriptor`
   注入断言(含 debugMode 缺省 false 口径)、boot 描述包 fail-soft 降级、
-  既有 `wireSessionDemo` 接线回归。
+  既有 `wireSessionDemo` 接线回归;WP-54 增补:通道解析、静态面投影
+  (`descriptorStaticFace`)、接入状态注入(`applyDescriptorState`)、
+  boot 正式通道成功注入 / 失败缺席明示(夹具通道未触达断言)。

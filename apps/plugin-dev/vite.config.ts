@@ -41,6 +41,10 @@ export default defineConfig({
           "/sessions": { target: sessionApiOrigin, changeOrigin: true, ws: true },
           // embed token 开发签发面(POST /auth/embed-tokens;凭证走环境变量,不入库)。
           "/auth": { target: sessionApiOrigin, changeOrigin: true },
+          // 公开描述包下发端点(WP-54 正式通道;GET /descriptors/:id/:version)。
+          // 同源反代使 ETag(登记摘要)可读——跨源读取需服务端
+          // Access-Control-Expose-Headers,开发壳以免配置的同源形态承接。
+          "/descriptors": { target: sessionApiOrigin, changeOrigin: true },
         }
       : undefined,
   },

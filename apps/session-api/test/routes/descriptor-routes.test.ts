@@ -235,6 +235,10 @@ describe("公开描述包下发通道(GET /descriptors/:challengeId/:version;WP-
     });
     expect(allowed.statusCode).toBe(200);
     expect(allowed.headers["access-control-allow-origin"]).toBe("https://plugin.example");
+    // ETag 对跨源浏览器脚本可读(D-API-76 增补):描述包客户端加载器的
+    // 完整性校验锚是 ETag=登记摘要,跨源插件 iframe 读不到该头即无法做
+    // 客户端侧哈希比对——Access-Control-Expose-Headers 必须含 ETag。
+    expect(allowed.headers["access-control-expose-headers"]).toContain("ETag");
 
     const denied = await rig.app.inject({
       method: "GET",

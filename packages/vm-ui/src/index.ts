@@ -76,6 +76,9 @@ export * from "./views/chain/resolve.js";
 export * from "./views/chain/visible-run.js";
 export * from "./views/chain/sm-jump-chain.js";
 
+// ── 公开描述包客户端加载器(WP-54;M2 正式下发通道消费)──
+export * from "./descriptor/challenge-descriptor.js";
+
 // ── 会话客户端与投影存储 ──
 export * from "./client/session-client.js";
 export * from "./client/projection-store.js";
