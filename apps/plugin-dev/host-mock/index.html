@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StackMaster 宿主平台模拟页(WP-51 联调面)</title>
+    <style>
+      /* 联调面最小样式(非交付物;正式插件视觉归 WP-52/53)。 */
+      :root { color-scheme: light dark; }
+      body { font: system-ui 0.875rem sans-serif; margin: 0 auto; max-inline-size: 78rem; padding: 1rem; }
+      h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+      .note { color: graytext; font-size: 0.8125rem; margin: 0.25rem 0 1rem; }
+      fieldset { border: 1px solid rgb(128 128 128 / 40%); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; margin-block-end: 1rem; padding: 0.75rem; }
+      label { display: flex; flex-direction: column; font-size: 0.75rem; gap: 0.125rem; }
+      input, select, button { font: inherit; }
+      input, select { min-inline-size: 14ch; padding: 0.25rem 0.375rem; }
+      button { cursor: pointer; padding: 0.3125rem 0.75rem; }
+      .row-inline { display: flex; align-items: center; gap: 0.375rem; }
+      .status-grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.75rem; font-size: 0.8125rem; }
+      code { overflow-wrap: anywhere; }
+      #event-log { font-size: 0.75rem; color: graytext; max-block-size: 8rem; overflow: auto; margin: 0.25rem 0; padding-inline-start: 1.25rem; }
+      table { border-collapse: collapse; font-size: 0.75rem; }
+      th, td { border: 1px solid rgb(128 128 128 / 40%); padding: 0.125rem 0.5rem; text-align: left; }
+      .iframe-area iframe { block-size: 480px; inline-size: 100%; border: 1px solid rgb(128 128 128 / 50%); border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>宿主平台模拟页</h1>
+      <p class="note">
+        联调面(WP-51,非交付物):扮演宿主平台页面。embed token 经本开发壳 vite
+        代理层(宿主后端替身)向 session-api 签发(D-API-75 通道 a:token 只经
+        服务端环境变量与 POST 体流转,不进 URL、不经 postMessage);iframe URL
+        fragment 只携带一次性 esid。插件 URL 可配置——默认指向「握手桩 iframe 页」
+        (桩页仅实现 hello/ready 协议侧,标注为联调桩;正式插件 Shell 归 WP-52)。
+      </p>
+
+      <fieldset>
+        <legend>嵌入控制</legend>
+        <label>插件 URL
+          <input id="plugin-url" data-testid="host-mock-plugin-url" value="/host-mock/stub-plugin.html" />
+        </label>
+        <label>tenantId <input id="tenant-id" value="e2e-tenant" /></label>
+        <label>userId <input id="user-id" value="e2e-user" /></label>
+        <label>challengeId <input id="challenge-id" value="chal-e2e-plugin-dev" /></label>
+        <label>challengeVersion <input id="challenge-version" value="1.0.0" /></label>
+        <label class="row-inline">
+          <input type="checkbox" id="opaque-mode" data-testid="host-mock-opaque-toggle" />
+          opaque 模式(sandbox 无 allow-same-origin)
+        </label>
+        <button id="embed-button" data-testid="host-mock-embed-button">签发并嵌入</button>
+        <button id="reload-button" data-testid="host-mock-reload-button" disabled>iframe 重载</button>
+        <button id="port-button" data-testid="host-mock-port-button" disabled>经 port 下发 token</button>
+        <label>主题
+          <select id="theme-select" data-testid="host-mock-theme-select" disabled>
+            <option value="light">light</option>
+            <option value="dark">dark</option>
+            <option value="auto">auto</option>
+          </select>
+        </label>
+        <label>语言
+          <select id="language-select" data-testid="host-mock-language-select" disabled>
+            <option value="zh-CN">zh-CN</option>
+            <option value="en-US">en-US</option>
+          </select>
+        </label>
+        <button id="dispose-button" data-testid="host-mock-dispose-button" disabled>解除会话</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>embed 会话状态(V-12 宿主本地面)</legend>
+        <div class="status-grid">
+          <span>状态</span><span id="state" data-testid="host-mock-state">未嵌入</span>
+          <span>esid</span><span><code id="esid" data-testid="host-mock-esid">—</code></span>
+          <span>协商版本</span><span><code id="negotiated" data-testid="host-mock-negotiated">—</code></span>
+          <span>授予能力</span><span><code id="granted" data-testid="host-mock-granted">—</code></span>
+        </div>
+        <ul id="event-log" data-testid="host-mock-event-log" aria-label="事件日志"></ul>
+        <table id="counters" data-testid="host-mock-counters" aria-label="违规计数">
+          <thead><tr><th>规则</th><th>计数</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </fieldset>
+
+      <div class="iframe-area" id="iframe-slot" data-testid="host-mock-iframe-slot"></div>
+    </main>
+    <script type="module" src="/host-mock/host-mock.js"></script>
+  </body>
+</html>

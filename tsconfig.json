@@ -6,6 +6,8 @@
     { "path": "apps/session-api" },
     { "path": "packages/vm-ui" },
     { "path": "packages/web-component" },
+    { "path": "packages/embed-runtime" },
+    { "path": "packages/react-wrapper" },
     { "path": "apps/plugin-dev" }
   ]
 }

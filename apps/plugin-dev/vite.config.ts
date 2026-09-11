@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
+import { hostMockDevServer } from "./host-mock/dev-server.mjs";
+
 /**
  * plugin-dev 开发壳 Vite 配置(WP-F1;仅供开发联调,不参与生产部署)。
  *
@@ -27,6 +29,10 @@ const proxyEnabled = process.env.SESSION_API_PROXY !== "off";
 
 export default defineConfig({
   publicDir: vmUiDist,
+  // 宿主模拟页 dev 替身(WP-51):/host-api 签发代理 + 引导配置取回端点 +
+  // /vendor/embed-runtime 静态资源;apply: serve = dev-only,详见
+  // host-mock/dev-server.mjs(纯 Node 侧,不产生浏览器包依赖边)。
+  plugins: [hostMockDevServer()],
   server: {
     port: 5173,
     proxy: proxyEnabled

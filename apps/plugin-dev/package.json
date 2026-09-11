@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@stackmaster/embed-runtime": "workspace:*",
     "@stackmaster/vm-ui": "workspace:*",
     "@types/node": "^26.4.0",
     "jsdom": "^30.0.1",

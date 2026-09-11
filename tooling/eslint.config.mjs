@@ -31,6 +31,22 @@ export default tseslint.config(
       globals: {
         process: "readonly",
         console: "readonly",
+        URL: "readonly",
+      },
+    },
+  },
+  {
+    // 宿主模拟页浏览器脚本(WP-51 联调面;dev-only,不经打包器,以 ES module
+    // 直接加载——浏览器全局在此声明,与上方 k6 / mjs 分段同先例)。
+    files: ["apps/plugin-dev/host-mock/*.js"],
+    languageOptions: {
+      globals: {
+        window: "readonly",
+        document: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        crypto: "readonly",
+        console: "readonly",
       },
     },
   },

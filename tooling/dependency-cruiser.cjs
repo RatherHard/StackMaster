@@ -84,7 +84,7 @@ module.exports = {
       name: "browser-packages-only-depend-on-protocol",
       severity: "error",
       comment:
-        "浏览器侧包(vm-ui、web-component、embed-runtime、react-wrapper)对**其他工作区包**只允许依赖 protocol;浏览器包自身包内边(src/test/dist 的内部模块边)不属工作区包依赖,经 to 侧 pathNot 一并排除(WP-F1:规则原形会把任何多模块浏览器包连自身测试在内全部误伤,与本注释声明的意图相悖)。",
+        "浏览器侧包(vm-ui、web-component、embed-runtime、react-wrapper)对**其他工作区包**只允许依赖 protocol;浏览器包自身包内边(src/test/dist 的内部模块边)不属工作区包依赖,经 to 侧 pathNot 一并排除(WP-F1:规则原形会把任何多模块浏览器包连自身测试在内全部误伤,与本注释声明的意图相悖——浏览器包横向依赖由 browser-package-cross-dependency-* 规则族单独收紧,WP-51)。",
       from: { path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/" },
       to: {
         path: "^packages/",
@@ -93,6 +93,47 @@ module.exports = {
           "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
         ],
       },
+    },
+    {
+      name: "browser-package-cross-dependency-into-vm-ui",
+      severity: "error",
+      comment:
+        "浏览器包横向依赖收紧(WP-51,Q4 配套):横向边只允许 react-wrapper → embed-runtime(薄封装消费宿主侧 SDK)。本规则族按目标包各立一条,from 侧 pathNot 排除目标包自身(包内边不属跨包依赖,WP-F1 先例);除 react-wrapper → embed-runtime 外的横向边一律禁止。",
+      from: {
+        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+        pathNot: "^packages/vm-ui/",
+      },
+      to: { path: "^packages/vm-ui/" },
+    },
+    {
+      name: "browser-package-cross-dependency-into-web-component",
+      severity: "error",
+      comment: "见 browser-package-cross-dependency-into-vm-ui(WP-51:唯一放行边 = react-wrapper → embed-runtime)。",
+      from: {
+        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+        pathNot: "^packages/web-component/",
+      },
+      to: { path: "^packages/web-component/" },
+    },
+    {
+      name: "browser-package-cross-dependency-into-react-wrapper",
+      severity: "error",
+      comment: "见 browser-package-cross-dependency-into-vm-ui(WP-51:唯一放行边 = react-wrapper → embed-runtime;任何包 → react-wrapper 均禁止)。",
+      from: {
+        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+        pathNot: "^packages/react-wrapper/",
+      },
+      to: { path: "^packages/react-wrapper/" },
+    },
+    {
+      name: "browser-package-cross-dependency-into-embed-runtime",
+      severity: "error",
+      comment: "见 browser-package-cross-dependency-into-vm-ui(WP-51:react-wrapper → embed-runtime 为唯一放行边,from 侧一并豁免 react-wrapper)。",
+      from: {
+        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+        pathNot: ["^packages/embed-runtime/", "^packages/react-wrapper/"],
+      },
+      to: { path: "^packages/embed-runtime/" },
     },
     {
       name: "protocol-schema-generator-not-importable",
