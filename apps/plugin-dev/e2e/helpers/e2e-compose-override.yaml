@@ -1,0 +1,11 @@
+# WP-55 E2E 拓扑增补(非根路径部署形态;仅测试拓扑,零 session-api 文件改动):
+# 插件自包含产物以子路径前缀部署于 5175(e2e webServer 以
+# `plugin-site-server.mjs --port 5175 --base-path /e2e/sub/path` 拉起),
+# 插件 iframe 内 SessionClient 直连 session-api(CORS / CSRF / WSS Origin
+# 白名单)需含该 origin。精确 origin、逗号分隔;在 demo-override 三 origin
+# 基础上增补 5175,其余拓扑语义不变。装配:e2e/helpers/compose.ts 的
+# COMPOSE_FILES 以绝对路径追加本文件(最后合并,同键 env 以此为准)。
+services:
+  session-api:
+    environment:
+      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000,http://localhost:5173,http://localhost:5174,http://localhost:5175"

@@ -2,8 +2,12 @@
  * compose 拓扑装配帮手(WP-F7 E2E global-setup / teardown 共用)。
  *
  * 等价 `pnpm --filter @stackmaster/session-api compose:app:up / compose:app:down`
- * (docker compose -f deps.yaml -f app.yaml),不经 pnpm 直调 docker 以解除
- * Windows 下 .cmd 解析的壳层依赖。拓扑语义见 apps/session-api/README.md §二。
+ * 叠加 demo-override(WP-55:嵌入面 E2E 的插件独立来源 origin——浏览器面
+ * SessionClient 自插件 iframe(5174)直连 session-api,CORS / CSRF / WSS
+ * Origin 白名单须含 5173 / 5174;demo-override 精确登记三个开发 origin,
+ * 既有用例的 Origin 对齐改写值(13000)仍在表内,零回退),不经 pnpm 直调
+ * docker 以解除 Windows 下 .cmd 解析的壳层依赖。拓扑语义见
+ * apps/session-api/README.md §二。
  */
 import { spawnSync, type StdioOptions } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -15,8 +19,15 @@ export const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 /** session-api 包目录(compose 文件与 seed 脚本相对锚点)。 */
 export const SESSION_API_DIR = join(REPO_ROOT, "apps", "session-api");
 
-/** compose 文件对(与 session-api package.json scripts 一致)。 */
-const COMPOSE_FILES = ["-f", "compose/deps.yaml", "-f", "compose/app.yaml"];
+/** compose 文件组(与 session-api compose:app:up 一致 + demo-override + E2E 增补)。 */
+const COMPOSE_FILES = [
+  "-f", "compose/deps.yaml",
+  "-f", "compose/app.yaml",
+  "-f", "compose/demo-override.yaml",
+  // E2E 专属增补(绝对路径;本文件位于 apps/plugin-dev/e2e/helpers/):
+  // 非根路径部署形态的插件 origin(5175)登记,WP-55 13.4。
+  "-f", join(REPO_ROOT, "apps", "plugin-dev", "e2e", "helpers", "e2e-compose-override.yaml"),
+];
 
 /** 前置产物检查:vm-ui 产物(webServer publicDir)与 session-api dist(seed 依赖)。 */
 export function assertPrerequisites(): void {

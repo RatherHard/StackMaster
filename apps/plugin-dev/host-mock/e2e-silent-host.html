@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>E2E 静默宿主(axe 降级面)</title>
+    <!--
+      WP-55 axe 扫描变体(联调面,非交付物):「静默宿主」形态——只签发引导
+      记录(POST /host-api/embed-tokens,同源),随后建指向插件变体页
+      (/axe-fast.html,T_handshake 收紧)的 iframe,但不监听消息、不回 ready
+      ——插件 hello 落空,T_handshake 耗尽 → 降级显示面(axe 扫描对象)。
+      本页为真实服务器路由(vite 静态承载):fulfill 合成文档会触发 LNA
+      (loopback 地址空间)拦截,插件面跨源取回全灭,见 WP-55 决策草稿 §二。
+    -->
+  </head>
+  <body>
+    <script type="module">
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      const esid = btoa(String.fromCharCode(...bytes))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      await fetch("/host-api/embed-tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          tenantId: "e2e-axe-degraded",
+          userId: "e2e-user-axe",
+          challengeId: "chal-e2e-plugin-dev",
+          challengeVersion: "1.0.0",
+          embedSessionId: esid,
+        }),
+      });
+      const iframe = document.createElement("iframe");
+      iframe.sandbox = "allow-scripts allow-same-origin allow-forms";
+      iframe.setAttribute("data-testid", "host-mock-iframe");
+      iframe.src = "http://localhost:5174/axe-fast.html#esid=" + esid;
+      document.body.append(iframe);
+    </script>
+  </body>
+</html>

@@ -102,6 +102,15 @@ function mountIframe(session, opaque) {
   state.iframe = iframe;
 }
 
+/** 宿主可授予能力集(WP-55 诊断控制:三勾选框;空集 = 完全静态形态)。 */
+function readGrantableCapabilities() {
+  const granted = [];
+  if (el("cap-auto-resize").checked) granted.push("auto_resize");
+  if (el("cap-theme").checked) granted.push("theme");
+  if (el("cap-language").checked) granted.push("language");
+  return granted;
+}
+
 function bindSessionEvents(session) {
   const { EMBED_SESSION_EVENTS } = state.runtime;
   session.addEventListener(EMBED_SESSION_EVENTS.handshakeComplete, (event) => {
@@ -180,6 +189,9 @@ async function embed() {
     opaqueOrigin: opaque,
     config: { theme: el("theme-select").value || "light", language: el("language-select").value || "zh-CN" },
     sessionId: esid,
+    // 能力降级诊断(WP-55 §4.4 矩阵):宿主可授予集 = 勾选交集;未勾选项
+    // 即便插件 hello 声明也不授予(V-8 的宿主侧授予面)。
+    grantableCapabilities: readGrantableCapabilities(),
   });
   state.session = session;
   bindSessionEvents(session);
@@ -238,6 +250,104 @@ function disposeSession(note) {
   el("state").textContent = note ?? "未嵌入";
 }
 
+/* ── 诊断注入(WP-55 E2E;伪造消息 → 对端丢弃 + 本地计数,零反馈,V-12)── */
+
+/** 会话内合法 esid 形态的「错值」(满足 Schema 字符集/长度,V-4 放行、V-5 落网)。 */
+const FORGED_WRONG_ESID = `wrong-esid-${"0".repeat(14)}`;
+
+/**
+ * 注入伪造消息(诊断面板按钮):
+ *  - 目标 = 宿主窗口:本页窗口自投递宿主→插件方向的完整信封——source 为本页
+ *    窗口而非 iframe.contentWindow(origin 也非插件来源),宿主侧 V-1 / V-1'
+ *    落网(不受信来源场景);
+ *  - 目标 = 插件 iframe:经 iframe.contentWindow.postMessage 向插件投递伪造的
+ *    宿主→插件方向控制消息——source === window.parent(V-1' 通过)、origin 为
+ *    钉住值(V-1 通过),由场景字段命中 V-5 / V-6 / V-7 / V-8。
+ * 一切注入的预期:对端丢弃 + 本地计数、零回复、会话不中断(插件侧计数经
+ * violationCounters 诊断 getter 由 E2E 读出)。
+ */
+function injectForged() {
+  const session = state.session;
+  if (session === null) {
+    logEvent("诊断注入:无活动 embed 会话(先签发并嵌入)");
+    return;
+  }
+  const esid = session.getEmbedSessionId();
+  const target = el("inject-target").value;
+  const scenario = el("inject-scenario").value;
+
+  if (target === "host-window") {
+    // ready 形态信封(宿主→插件方向)投给宿主自身:方向集先于 Schema 语义,
+    // 但来源检查(V-1/V-1')最先落网——两条计数都可作为断言锚。
+    window.postMessage(
+      {
+        protocolVersion: 1,
+        type: "ready",
+        sessionId: esid,
+        seq: 99,
+        payload: { grantedCapabilities: ["theme"], config: { theme: "dark", language: "zh-CN" } },
+      },
+      window.location.origin,
+    );
+    logEvent("诊断注入 → 宿主窗口:不受信来源伪造消息(预期 V-1/V-1' 计数,零反馈)");
+    return;
+  }
+
+  const contentWindow = state.iframe?.contentWindow ?? null;
+  if (contentWindow === null) {
+    logEvent("诊断注入:iframe 未挂接");
+    return;
+  }
+  const pluginOrigin = pluginOriginOf(el("plugin-url").value.trim());
+  const post = (message) => contentWindow.postMessage(message, pluginOrigin);
+  switch (scenario) {
+    case "wrong-esid-ready":
+      post({
+        protocolVersion: 1,
+        type: "ready",
+        sessionId: FORGED_WRONG_ESID,
+        seq: 5,
+        payload: { grantedCapabilities: ["theme"], config: { theme: "dark", language: "zh-CN" } },
+      });
+      logEvent("诊断注入 → 插件:ready 携带错 sessionId(预期插件 V-5 计数)");
+      break;
+    case "wrong-direction-hello":
+      post({
+        protocolVersion: 1,
+        type: "hello",
+        sessionId: esid,
+        seq: 9,
+        payload: { supportedVersions: [1], capabilities: ["theme"] },
+      });
+      logEvent("诊断注入 → 插件:hello 为插件→宿主方向(预期插件 V-6 计数)");
+      break;
+    case "stale-seq-theme":
+      // seq Schema 下限 = 1:乱序形态用「已过期的合法 seq」表达(握手完成后
+      // 插件侧高水位 ≥ 1,seq=1 必然 ≤ 高水位 → V-7)。
+      post({
+        protocolVersion: 1,
+        type: "theme_changed",
+        sessionId: esid,
+        seq: 1,
+        payload: { theme: "dark" },
+      });
+      logEvent("诊断注入 → 插件:theme_changed seq 过期(预期插件 V-7 计数)");
+      break;
+    case "ungranted-theme":
+      post({
+        protocolVersion: 1,
+        type: "theme_changed",
+        sessionId: esid,
+        seq: 99,
+        payload: { theme: "dark" },
+      });
+      logEvent("诊断注入 → 插件:theme_changed 而 theme 未授予(预期插件 V-8 计数)");
+      break;
+    default:
+      logEvent(`诊断注入:未知场景 ${scenario}`);
+  }
+}
+
 /* ── 接线 ────────────────────────────────────────────────────────────── */
 
 async function boot() {
@@ -254,6 +364,7 @@ async function boot() {
   el("reload-button").addEventListener("click", () => void reload());
   el("port-button").addEventListener("click", deliverViaPort);
   el("dispose-button").addEventListener("click", () => disposeSession());
+  el("inject-button").addEventListener("click", injectForged);
   el("theme-select").addEventListener("change", (event) => {
     try {
       const sent = state.session?.sendThemeChanged(event.target.value) ?? false;

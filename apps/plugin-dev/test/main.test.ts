@@ -80,7 +80,10 @@ describe("plugin-dev 开发壳:壳结构", () => {
     expect(handles.root.querySelector("h1")?.textContent).toContain("plugin-dev");
     expect(handles.status.id).toBe("dev-status");
     expect(handles.status.textContent).toContain("开发壳就绪");
-    expect(handles.tabArea.getAttribute("aria-label")).toBe("工作区标签页区域");
+    // WP-55 axe 真机修正:壳页 tab 区为无可访问名的 section(带名 section 即
+    // region landmark,会把工作区组件 shadow 内的文档唯一 main 嵌成非顶层)。
+    expect(handles.tabArea.tagName.toLowerCase()).toBe("section");
+    expect(handles.tabArea.getAttribute("aria-label")).toBeNull();
     // jsdom 测试环境不加载 vm-ui 产物(见 README 加载模型),<sm-workspace>
     // 保持未升级的占位元素;元素注册与渲染由 packages/vm-ui 自身测试覆盖。
     const workspace = handles.tabArea.querySelector("sm-workspace");

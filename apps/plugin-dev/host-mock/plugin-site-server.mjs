@@ -18,7 +18,13 @@
  *   GET /pwn-memory-vm.js → packages/web-component/dist/index.js
  *   其余             → 404(JSON,与 dev-server.mjs 同款错误形态)
  *
+ * 子路径前缀形态(WP-55 13.4 非根路径部署):`--base-path /some/prefix`(或
+ * 环境变量 PLUGIN_SITE_BASE_PATH)使服务器只在该前缀下应答(前缀外的路径
+ * 404)——等价「整目录拷贝部署于任意路径前缀」的真实服务器形态;产物以相对
+ * 路径引用(plugin/index.html `./pwn-memory-vm.js`),前缀剥离后路由不变。
+ *
  * 启动:`pnpm --filter @stackmaster/plugin-dev dev:plugin-site`
+ *   (变体:node host-mock/plugin-site-server.mjs --port 5175 --base-path /sub)
  * (需先构建 packages/web-component:pnpm --filter @stackmaster/web-component build)。
  * 本文件为纯 JavaScript + JSDoc(.mjs 不经 TS 编译);node 内建能力一律显式 import。
  */
@@ -27,7 +33,23 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PLUGIN_SITE_PORT = Number(process.env["PLUGIN_SITE_PORT"] ?? 5174);
+/** CLI 参数(--port / --base-path)优先于环境变量,环境变量优先于缺省值。 */
+function argValue(flag, envKey, fallback) {
+  const argv = process.argv;
+  const flagIndex = argv.indexOf(flag);
+  if (flagIndex !== -1 && typeof argv[flagIndex + 1] === "string") {
+    return argv[flagIndex + 1];
+  }
+  return process.env[envKey] ?? fallback;
+}
+
+const PLUGIN_SITE_PORT = Number(argValue("--port", "PLUGIN_SITE_PORT", 5174));
+/** 子路径前缀(规范化为「以 / 开头、不以 / 结尾」;空串 = 根路径形态)。 */
+const BASE_PATH = (() => {
+  const raw = String(argValue("--base-path", "PLUGIN_SITE_BASE_PATH", ""));
+  const trimmed = raw.replace(/\/+$/, "");
+  return trimmed === "" || trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+})();
 
 /** 插件文档页与产物源(packages/web-component;dist 须先构建)。 */
 const WEB_COMPONENT_ROOT = join(
@@ -49,10 +71,56 @@ const ROUTES = new Map([
   ],
 ]);
 
+/**
+ * E2E 扫描变体页(WP-55 axe;真实服务器路由——fulfill 形态的合成文档在本
+ * 机 Chromium 下会触发 LNA(loopback 地址空间)拦截,插件面后续取回全灭,
+ * 故以真实路由承载;内容与正式页同构,仅注入测试 attribute)。脚本以绝对
+ * 路径引用产物(同源,CSP script-src 'self' 兼容)。
+ */
+const VARIANT_TEMPLATE = (attributes) =>
+  `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">` +
+  `<title>StackMaster 插件页(pwn-memory-vm)</title></head>` +
+  `<body><pwn-memory-vm bootstrap-endpoint="http://localhost:5173/host-api/embed-bootstrap"${attributes}></pwn-memory-vm>` +
+  `<script type="module" src="/pwn-memory-vm.js"></script></body></html>`;
+
+const VARIANT_ROUTES = new Map([
+  ["/axe.html", VARIANT_TEMPLATE("")],
+  ["/axe-fast.html", VARIANT_TEMPLATE(' handshake-timeout-ms="3000" hello-max-retries="0"')],
+]);
+
 const server = createServer((req, res) => {
   const pathname = (req.url ?? "/").split("?")[0];
-  const route = ROUTES.get(pathname === "" ? "/" : pathname);
-  if (route === undefined || !existsSync(route.file) || !statSync(route.file).isFile()) {
+  // 子路径前缀剥离(非根路径部署形态):前缀必须精确匹配,前缀外一律 404
+  // (部署面前缀语义;剥离后走同一张固定路由表,零额外穿越面)。
+  const relative =
+    BASE_PATH === ""
+      ? pathname
+      : pathname === BASE_PATH
+        ? "/"
+        : pathname.startsWith(`${BASE_PATH}/`)
+          ? pathname.slice(BASE_PATH.length)
+          : null;
+  if (relative === null) {
+    res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: "resource_not_found", message: "resource not found" }));
+    return;
+  }
+  const route = ROUTES.get(relative === "" ? "/" : relative);
+  const variantHtml = VARIANT_ROUTES.get(relative === "" ? "/" : relative);
+  if (route === undefined && variantHtml === undefined) {
+    res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: "resource_not_found", message: "resource not found" }));
+    return;
+  }
+  if (route === undefined) {
+    res.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": "script-src 'self'",
+    });
+    res.end(variantHtml);
+    return;
+  }
+  if (!existsSync(route.file) || !statSync(route.file).isFile()) {
     res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ error: "resource_not_found", message: "resource not found" }));
     return;

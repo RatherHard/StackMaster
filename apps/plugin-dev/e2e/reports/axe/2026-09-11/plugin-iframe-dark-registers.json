@@ -1,0 +1,26 @@
+{
+  "url": "http://localhost:5174/axe.html#esid=zOae_n2Do5IwxOwF-KmSdw",
+  "violations": [],
+  "colorContrastStatus": "incomplete",
+  "colorContrastCheckedNodes": 1,
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "count": 1,
+      "nodes": [
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "sm-byte-tab",
+              "sm-vma-list",
+              "h3"
+            ]
+          ],
+          "html": "<h3 class=\"heading\"><!--?lit$000403077$-->内存区域</h3>"
+        }
+      ]
+    }
+  ]
+}

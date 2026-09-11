@@ -19,6 +19,9 @@
       .status-grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.75rem; font-size: 0.8125rem; }
       code { overflow-wrap: anywhere; }
       #event-log { font-size: 0.75rem; color: graytext; max-block-size: 8rem; overflow: auto; margin: 0.25rem 0; padding-inline-start: 1.25rem; }
+      /* 窄视口纪律(WP-55 矩阵):事件文案含不可断行的 URL/esid,必须允许
+         任意断行,否则宿主页在 320/375 宽度格横向溢出。 */
+      #event-log li, #state, #granted { overflow-wrap: anywhere; }
       table { border-collapse: collapse; font-size: 0.75rem; }
       th, td { border: 1px solid rgb(128 128 128 / 40%); padding: 0.125rem 0.5rem; text-align: left; }
       .iframe-area iframe { block-size: 480px; inline-size: 100%; border: 1px solid rgb(128 128 128 / 50%); border-radius: 8px; }
@@ -51,6 +54,9 @@
           <input type="checkbox" id="opaque-mode" data-testid="host-mock-opaque-toggle" />
           opaque 模式(sandbox 无 allow-same-origin)
         </label>
+        <label class="row-inline"><input type="checkbox" id="cap-auto-resize" data-testid="host-mock-cap-auto-resize" checked /> 授予 auto_resize</label>
+        <label class="row-inline"><input type="checkbox" id="cap-theme" data-testid="host-mock-cap-theme" checked /> 授予 theme</label>
+        <label class="row-inline"><input type="checkbox" id="cap-language" data-testid="host-mock-cap-language" checked /> 授予 language</label>
         <button id="embed-button" data-testid="host-mock-embed-button">签发并嵌入</button>
         <button id="reload-button" data-testid="host-mock-reload-button" disabled>iframe 重载</button>
         <button id="port-button" data-testid="host-mock-port-button" disabled>经 port 下发 token</button>
@@ -83,6 +89,32 @@
           <thead><tr><th>规则</th><th>计数</th></tr></thead>
           <tbody></tbody>
         </table>
+      </fieldset>
+
+      <fieldset>
+        <legend>诊断注入(WP-55 E2E;伪造消息零反馈观察面)</legend>
+        <p class="note">
+          联调诊断面:构造违反嵌入协议校验规则的 postMessage(宿主窗口自投递 =
+          不受信来源;经 iframe.contentWindow 投递 = 宿主→插件方向的伪造控制
+          消息)。一切注入的预期行为 = 对端丢弃 + 本地计数、零反馈、会话不中断
+          (V-12);插件侧计数经其 violationCounters 诊断 getter 读出。
+        </p>
+        <label>注入目标
+          <select id="inject-target" data-testid="host-mock-inject-target">
+            <option value="host-window">宿主窗口(本页 = 不受信来源)</option>
+            <option value="plugin-iframe">插件 iframe(伪造宿主控制消息)</option>
+          </select>
+        </label>
+        <label>注入场景
+          <select id="inject-scenario" data-testid="host-mock-inject-scenario">
+            <option value="wrong-direction-ready">宿主→插件方向消息投给宿主(V-1 方向形态)</option>
+            <option value="wrong-esid-ready">ready:错 sessionId → 插件 V-5</option>
+            <option value="wrong-direction-hello">hello 投给插件(方向违规)→ 插件 V-6</option>
+            <option value="stale-seq-theme">theme_changed seq=0(乱序)→ 插件 V-7</option>
+            <option value="ungranted-theme">theme_changed(未授予 theme)→ 插件 V-8</option>
+          </select>
+        </label>
+        <button id="inject-button" data-testid="host-mock-inject-button">注入伪造消息</button>
       </fieldset>
 
       <div class="iframe-area" id="iframe-slot" data-testid="host-mock-iframe-slot"></div>

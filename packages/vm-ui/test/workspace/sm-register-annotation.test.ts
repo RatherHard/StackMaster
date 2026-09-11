@@ -54,7 +54,11 @@ describe("<sm-register-annotation> 行左缘交叉标注", () => {
     expect(values).not.toBeNull();
     expect(textOf(element)).toContain("RSP = 0x1004");
     expect(textOf(element)).toContain("(→ 0x1004)");
-    expect(element.shadowRoot?.querySelector(".annotation")?.getAttribute("aria-expanded")).toBe("true");
+    // WP-55 axe 真机修正:展开态语义(aria-expanded)落在真实 button 上
+    // (generic 容器不允许 aria-expanded,且不得包装出嵌套可交互元素)。
+    expect(element.shadowRoot?.querySelector("button.reg-annotation")?.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
 
     button.click();
     await element.updateComplete;

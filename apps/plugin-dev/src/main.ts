@@ -147,9 +147,11 @@ export function mountWorkspaceShell(root: HTMLElement): WorkspaceShellHandles {
   newSessionButton.textContent = "新建会话";
   form.append(createButton, newSessionButton);
 
-  const tabArea = document.createElement("main");
+  // 区块语义用 section 而非 main,且不带可访问名:带名 section 即 region
+  // landmark,会把工作区组件(shadow 内文档唯一 main)嵌成非顶层 landmark
+  // (WP-55 axe 真机扫描修正;壳页是其宿主,不额外提供 landmark)。
+  const tabArea = document.createElement("section");
   tabArea.className = "tab-area";
-  tabArea.setAttribute("aria-label", "工作区标签页区域");
   // vm-ui 产物加载后该元素升级为 <sm-workspace>;未加载时保持未升级占位元素。
   const workspace = document.createElement("sm-workspace");
 

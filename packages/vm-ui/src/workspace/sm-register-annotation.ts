@@ -78,8 +78,10 @@ export class SmRegisterAnnotation extends LitElement {
       return nothing;
     }
     return html`
-      <span class="annotation" aria-expanded=${this.expanded ? "true" : "false"} @click=${this.#onToggle}>
-        ${renderRegisterAnnotationCell(this.hits)}
+      <!-- 展开态语义(aria-expanded)由 renderRegisterAnnotationCell 落在
+           真实 button 上(WP-55 axe 真机修正);外层容器保持 generic。 -->
+      <span class="annotation" @click=${this.#onToggle}>
+        ${renderRegisterAnnotationCell(this.hits, { expanded: this.expanded })}
         ${this.expanded ? this.#renderValues() : nothing}
       </span>
     `;
@@ -104,6 +106,7 @@ export class SmRegisterAnnotation extends LitElement {
   /**
    * 点击标注按钮 → 切换展开(模板内监听:同 shadow 树内 target 不重定向,
    * 复用 F4 无按钮逻辑的渲染辅助;展开条内点击不收起,便于选中复制)。
+   * 键盘激活由真实 button 原生承担(WP-55 axe 真机修正)。
    */
   readonly #onToggle = (event: Event): void => {
     const target = event.target;

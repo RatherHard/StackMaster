@@ -69,6 +69,10 @@ try {
   );
 
   // 5. height_changed 上报(iframe 内容高度 → 宿主事件日志)。
+  // 环境口径(WP-55):Playwright/Chromium 对跨源 iframe 按需出帧,rAF 合流
+  // 管道首帧排队——先在 iframe 内驱动一次交互(打开寄存器视图)出帧释放。
+  await plugin.locator('button.open-tab[data-tab-type="registers"]').click();
+  await plugin.locator("sm-register-view").waitFor({ timeout: STEP_TIMEOUT_MS });
   await page.waitForFunction(
     () => document.querySelector('[data-testid="host-mock-event-log"]')?.textContent?.includes("height_changed"),
     null,

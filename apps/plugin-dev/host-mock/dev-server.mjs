@@ -40,18 +40,24 @@ const SESSION_API_BROWSER_ORIGIN_DEFAULT = "http://localhost:13000";
 const ESID_PATTERN = /^[A-Za-z0-9_-]{22,128}$/;
 
 /**
- * 插件独立来源 origin(WP-52 demo 拓扑;plugin-site-server.mjs 的端口)。
+ * 插件独立来源 origin 清单(WP-52 demo 拓扑;WP-55 增补逗号分隔多形态)。
  * 仅 `POST /host-api/embed-bootstrap`(插件面的引导取回端点,D-API-75 通道 a)
- * 对该 origin 回显 ACAO——跨源插件 iframe 的取回是 D-API-75 的默认形态;
+ * 对清单内 origin 回显 ACAO——跨源插件 iframe 的取回是 D-API-75 的默认形态;
  * `/host-api/embed-tokens`(宿主页面的签发代理)保持同源-only(WP-51 姿态:
- * 签发凭证不跨 origin 开放)。
+ * 签发凭证不跨 origin 开放)。缺省 = 5174(正式产物)+ 5175(非根路径部署
+ * 形态,同源产物换前缀部署的 E2E 面);生产语义由宿主后端按其插件来源清单配置。
  */
-const PLUGIN_SITE_ORIGIN = process.env["PLUGIN_SITE_ORIGIN"] ?? "http://localhost:5174";
+const PLUGIN_SITE_ORIGINS = new Set(
+  (process.env["PLUGIN_SITE_ORIGIN"] ?? "http://localhost:5174,http://localhost:5175")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== ""),
+);
 
 /** 引导取回端点的 CORS 头(精确 origin 白名单;fail-closed:不在表内不回显)。 */
 function bootstrapCorsHeaders(req) {
   const origin = req.headers.origin;
-  if (origin !== PLUGIN_SITE_ORIGIN) {
+  if (typeof origin !== "string" || !PLUGIN_SITE_ORIGINS.has(origin)) {
     return {};
   }
   return {

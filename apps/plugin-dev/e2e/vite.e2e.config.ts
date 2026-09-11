@@ -26,6 +26,8 @@ import { defineConfig, type Connect, type Plugin } from "vite";
 // 继承应用配置(e2e 配置位于 apps/plugin-dev/e2e/ 下)。
 // @ts-expect-error -- vite 配置装载器原生支持相对导入 TS 配置文件。
 import appConfig from "../vite.config";
+// host-mock dev 替身(WP-51;/host-api 与 /vendor/embed-runtime 承载面)。
+import { hostMockDevServer } from "../host-mock/dev-server.mjs";
 
 /** vm-ui 构建产物目录(与 vite.config.ts 的 publicDir 同源)。 */
 const VM_UI_DIST = fileURLToPath(new URL("../../../packages/vm-ui/dist", import.meta.url));
@@ -74,5 +76,8 @@ function vmUiDistModuleRedirect(): Plugin {
 
 export default defineConfig({
   ...(appConfig as Record<string, unknown>),
-  plugins: [vmUiDistModuleRedirect()],
+  // 插件数组不能 spread 继承(Vite 数组语义为整体替换):显式装配 host-mock
+  // dev 替身(WP-55 嵌入面 E2E 前置:/host-api 签发代理 + 引导取回端点 +
+  // /vendor/embed-runtime 静态资源)+ vm-ui dist 模块化请求重定向。
+  plugins: [hostMockDevServer(), vmUiDistModuleRedirect()],
 });

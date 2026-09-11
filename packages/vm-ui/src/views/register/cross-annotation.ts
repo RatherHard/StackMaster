@@ -78,9 +78,15 @@ function findOwningWindowRegion(value: bigint, regions: VmaList): VmaEntry | nul
  *    携带"名=值"详情);**点击展开寄存器值的行为由宿主(F5)接线**——本辅助
  *    只产出语义化展示面,不直接改 sm-byte-view;
  *  - 无命中 → `nothing`(不渲染,标注缺席)。
+ *
+ * WP-55 axe 真机修正(源码修补清单):`expanded` 可选项把展开态语义
+ * (aria-expanded)落在真实 button 上——外层 generic 容器不允许携带
+ * aria-expanded(axe aria-allowed-attr),且容器包装按钮会构成嵌套可交互
+ * 元素(axe nested-interactive)。
  */
 export function renderRegisterAnnotationCell(
   hits: readonly RegisterHit[],
+  options: { expanded?: boolean } = {},
 ): TemplateResult | typeof nothing {
   if (hits.length === 0) {
     return nothing;
@@ -93,5 +99,6 @@ export function renderRegisterAnnotationCell(
     data-registers="${names}"
     title="${detail}"
     aria-label=${t("annot.aria", { detail })}
+    aria-expanded=${options.expanded === true ? "true" : "false"}
   >${names}</button>`;
 }
