@@ -40,6 +40,47 @@ pnpm --filter @stackmaster/plugin-dev dev    # http://localhost:5173
 > 真实会话端到端的自动化验收归 WP-F7 Playwright 最小集;本 WP 以组件级 +
 > mock 全链路集成测试收口(见 `packages/vm-ui/test/workspace/`)。
 
+## 嵌入面 demo 拓扑与人工走查(阶段五 WP-51/52 交付;验收证据《阶段五验收评审》)
+
+宿主模拟页 × 插件文档页的**独立来源双端口拓扑**(嵌入协议 §4.1 默认演示形态):
+
+| 面 | URL | 承载 |
+|---|---|---|
+| 宿主模拟页(签发代理 + 建 iframe + 控制面板) | `http://localhost:5173/host-mock/` | 本包 vite dev(dev-only 中间件 `host-mock/dev-server.mjs`) |
+| 插件文档页(正式产物 `<pwn-memory-vm>`) | `http://localhost:5174/` | `pnpm --filter @stackmaster/plugin-dev dev:plugin-site`(plugin-site-server.mjs,CSP `script-src 'self'`) |
+| session-api(compose) | `http://localhost:13000` | `pnpm --filter @stackmaster/session-api compose:app:up`(demo-override 登记 5173/5174 origin) |
+
+人工走查路径(签发 → 嵌入 → 握手 → 会话全流程):
+
+```bash
+# 0) 后端拓扑 + 题目种子(演示 challengeId 经 k6/seed-challenge.mjs 路径登记)
+pnpm --filter @stackmaster/session-api compose:app:up
+
+# 1) 构建产物(web-component 自包含 dist + vm-ui dist;turbo build 覆盖)
+pnpm build
+
+# 2) 两个开发服务(两个终端)
+pnpm --filter @stackmaster/plugin-dev dev              # 5173 宿主模拟页
+pnpm --filter @stackmaster/plugin-dev dev:plugin-site  # 5174 插件文档页
+
+# 3) 浏览器打开 http://localhost:5173/host-mock/ :
+#    能力授予勾选(theme/language/auto_resize)→「签发并嵌入」→ 握手面板
+#    ready / 协商版本 / 计数面板 → 工作区挂载 → 主题/语言下拉切换 → step 步进
+```
+
+- **签发代理凭证**:dev-only 中间件持 `SESSION_API_HOST_BACKEND_TOKEN` 环境变量
+  调 session-api `POST /auth/embed-tokens`(compose dev 拓扑的合成值;凭证只走
+  环境变量,不入库不入浏览器,D-API-75 通道 a 的宿主后端替身);
+- **引导配置取回**:`POST /host-api/embed-bootstrap`(esid POST 体换取
+  `{embedToken, sessionApiOrigin, challengeId, challengeVersion, embedSessionId}`),
+  对 `PLUGIN_SITE_ORIGIN` 白名单(缺省 `http://localhost:5174`,逗号分隔可扩)
+  回显精确 ACAO,fail-closed;
+- **冒烟脚本**(E2E 同款前置):`pnpm --filter @stackmaster/plugin-dev exec
+  playwright test e2e/embed-protocol.spec.ts` 或组件冒烟六步
+  `node host-mock/smoke-embed.mjs`(前置 = 步骤 0~2 + `SESSION_API_HOST_BACKEND_TOKEN`);
+- **描述包双通道**(开发壳页面,非宿主模拟页):`http://localhost:5173/`
+  缺省夹具通道、`?descriptor=formal` 正式下发通道,见下节。
+
 ## 加载模型(为什么开发壳不 import vm-ui)
 
 dependency-cruiser 规则 `no-backend-dependency-on-browser-packages`

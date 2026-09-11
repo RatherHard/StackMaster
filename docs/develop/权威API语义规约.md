@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;**阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补——既有 D-API-1~74 条目零改动**) |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50) |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**) |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -593,6 +593,74 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 | `theme_changed` / `language_changed` 频率(V-10) | 每秒上限 10(低频控制消息;宿主 → 插件方向,宿主自控) | 构造选项 `controlMessageMaxPerSecond`(1–120) | WP-51 embed-runtime | 未授予能力时恒不发送(§4.4 降级矩阵,V-8) |
 
 选值理由:`T_handshake` = 10 s 量级覆盖慢速网络下的 iframe 加载 + 握手往返,同时把不可用 embed 会话的僵尸窗口限制在用户可感知的秒级(§4.3 降级显示随即接管);`height_changed` 动画帧级合流使宿主布局更新频率 ≤ 渲染帧率(协议 §三"宿主可按实现期节流策略进一步收紧"的落地),每秒硬上限封堵非 rAF 环境的绕行;控制消息每秒 10 远高于人工切换主题 / 语言的合理速率,低于任何资源压力。全部超限处置统一"丢弃 + 本地计数,不回错误、不中断会话"(V-10 / V-12);计数面对 WP-51 的"超时降级路径事件计数面"条目可见。
+
+## 三·十二、嵌入实现面(阶段五 WP-51 ~ WP-54;D-API-78 ~ D-API-82)
+
+> 本节为 WP-51~54 实现期定案的**事后收编**(事实源 = 五决策草稿 `docs/develop/阶段五WP51~55决策草稿.md`;全部定案**零契约改动**——嵌入协议 v1(`EmbedMessage` 六字段五类型、V-1~V-13、handshake 五路径、能力枚举与主题三值)与公开描述包 Schema 16 字段均为冻结面,本节只登记实现语义)。WP-55 的 E2E 场景映射、axe 扫描口径与 13.4 矩阵口径为**测试基建口径**(随实现演进,非 API 语义),登记于其决策草稿,不入 D-API。
+
+### D-API-78 embed-runtime 宿主侧 SDK:Q4 分层同源、构造参数解析形态、违规计数键与 port 凭证信封 wire 形态(阶段五 WP-51;嵌入协议 §四 / §五 / V-1~V-13;零契约改动)
+
+**Q4(V 规则引擎落点)定案 = 分层同源**:消息契约层消费 `@stackmaster/protocol` 公开入口天然同源(零新决策);V 规则编排层中**无状态构件单实现双侧复用**——版本协商 `negotiateEmbedProtocolVersion`(max-wins 纯函数)、esid 生成 / 校验 `generateEmbedSessionId` / `validateEmbedSessionId`、按类型滑动窗口限速器 `TypeRateLimiter`(D-API-77 两频率参数同款语义)、违规计数键 `VIOLATION_COUNTER_KEYS`(键集以规则编号为前缀,双侧计数面同键名,E2E 同一断言词汇);**宿主独有编排**(来源 / source 三重绑定、esid 全等 + 窗口绑定、接收端高水位、能力授予 `granted ⊆ hello.capabilities`、T_handshake 超时、port 转移发送面)与**插件独有编排**(fragment 读取的发起方角色、插件侧高水位、能力降级三行、宿主 origin 钉住)各自持有——理由:协议解析器已同源,双侧真正同构的只有无状态构件,强行共享方向参数化引擎复杂度高于收益。
+
+**实现定案**:
+
+1. **构造参数解析单点化**:`createEmbedSession(options)` 内 `resolveEmbedSessionOptions` 统一解析——`handshakeTimeoutMs` clamp 3000–30000(默认 10000)、`heightChangedMaxPerSecond` clamp 1–120(默认 30)、`controlMessageMaxPerSecond` clamp 1–120(默认 10)、`helloMaxRetries` clamp 0–10(默认 3),非整数 / 负数装配拒绝(`EmbedInvalidOptionError`);`maxHeightPx` 默认 = 协议冻结常量、只可收紧、超上限**拒绝装配**(不 clamp,与 D-API-77 逐字一致);
+2. **`helloMaxRetries` 宿主侧语义**:该参数是插件侧重试预算(§4.3),宿主不消费其值发起重试——握手完成后再收 hello 按状态违规丢弃 + 计数(§4.5);选项保留仅为参数面完整性(react-wrapper 透传、诊断面板 `getResolvedParameters()` 可读);
+3. **supportedVersions fail-closed**:宿主声明支持的每个版本必须在版本 → Schema 注册表有对应版本 Schema(冻结期只有 v1),否则装配拒绝——宿主不得声明无法校验的版本(N-1 窗口开启时随 protocol 新 Schema 一起注册);
+4. **违规计数键命名**:规则编号前缀(`v1-origin-mismatch` … `v10-rate-limit`)+ `state-hello-after-ready` + `unavailable-drop`;每次递增伴随 `violation-counters-changed` 事件、快照全键稳定(未命中补 0)——V-12"宿主本地面"的可读出形态,不向对端反馈任何内容;
+5. **入站校验序**(未在契约冻结,实现定案):不可用后迟到消息 → V-1 / V-1'(含非 opaque 的窗口绑定复核,失败计 `v1p-source-mismatch`)→ V-2(字节上限在 JSON.parse 前)→ V-3 → V-4 → V-5 → V-6 → 状态机分发(V-7 → V-8 → V-10);
+6. **宿主 API 误用 = 同步类型化错误**,不属于 V-12 反馈面:不可用后调控制面方法抛 `EmbedUnavailableError`、未授予能力抛 `EmbedCapabilityNotGrantedError`、握手未完成调 port 交付抛 `EmbedPortDeliveryError`;V-12 约束的是 postMessage 通道对端反馈,入站违规永远静默丢弃 + 计数;
+7. **V-10 出站自限**:宿主自身发送(theme_changed / language_changed)受 `controlMessageMaxPerSecond` 约束,超限静默丢弃 + 计数并返回 false(seq 不消费;插件侧跳号可接受,V-7);
+8. **重载语义(§4.5)**:`reload()` 生成新 esid、旧值立即作废、对端 seq 高水位与能力授予清零、port 关闭复位、状态回 idle;`embed-reload-initiated` 事件携带新 esid 与新 iframe src;重载后 token 重签由宿主自理(旧 token 因会话绑定不匹配自然失效);
+9. **iframe URL fragment 纪律的机械执行**:`buildIframeSrc()` 是 fragment 唯一产生点(`#esid=<esid>`);构造选项 `pluginUrl` 携带 fragment 即装配拒绝;
+10. **opaque 路径(V-1')**:opaque 模式完全忽略 `event.origin`,仅接受 `event.source === iframe.contentWindow`(经 `attachIframe` 实时读取,重载后新文档自动获得正确绑定);iframe 未挂接 = fail-closed 拒绝;非 opaque 模式除 origin 全等外复核 source 绑定;
+11. **port 凭证信封 wire 形态**:port 转移消息 `data=null` 零载荷(不携带凭证与绑定值),port 在 `event.ports[0]`;凭证信封 `{kind: "stackmaster:embed-credential", credential}`(kind 常量 `EMBED_PORT_CREDENTIAL_KIND`);转移后宿主控制面消息改走 port(信封仍为 EmbedMessage 六字段);宿主 → 插件 EmbedMessage 以结构化对象 `postMessage` 到达(非 JSON 字符串),非 opaque 时 targetOrigin 恒为宿主声明 `pluginOrigin`、opaque 时 `"*"`(凭证永不走该面)。
+
+测试锚:`packages/embed-runtime/test/`(62 用例:状态机 / V-1~V-13 逐规则红灯 / 计数键稳定性 / clamp 与装配拒绝矩阵 / port 信封 / 重载语义);react-wrapper 8 用例;E2E 伪造消息矩阵(`apps/plugin-dev/e2e/embed-protocol.spec.ts`)以同一计数键词汇断言。
+
+### D-API-79 插件 Shell(`<pwn-memory-vm>`)装配形态与插件侧协议行为:Q3 workspace 依赖 + 自包含单产物、demo 双端口拓扑、插件侧校验序(阶段五 WP-52;嵌入协议 §4.1 / §4.4 / §4.5;零契约改动)
+
+**Q3(web-component 与 vm-ui 装配形态)定案 = workspace 依赖 + vite 库模式自包含打包**(占位期"不得依赖 vm-ui"边界解除):依赖面 = `@stackmaster/vm-ui`(工作区装配)+ `@stackmaster/embed-runtime`(Q4 无状态构件复用)+ `@stackmaster/protocol`(公开入口;浏览器绝不解析 token);产物 = 单入口单产物 `dist/index.js`(lit / vm-ui / protocol / embed-runtime 全部内联,`codeSplitting: false`),机械断言 `test/artifact.test.ts`(零外部导入、零相对 chunk、组件注册面完整);插件文档页以**相对路径**引用产物(非根路径部署兼容)、零内联脚本(`script-src 'self'` 真实运行证明)。dependency-cruiser 放行边修订(随规则修订必带反例自检):新增 `web-component → embed-runtime`、`web-component → vm-ui` 两条放行,`→ web-component` / `→ react-wrapper` 方向仍全禁(装配叶子),`lint:deps:self-test` 同步 16 组边期望。
+
+**demo 拓扑(独立来源双端口)**:宿主模拟页 `http://localhost:5173/host-mock/`(plugin-dev vite dev + 签发代理 `/host-api/embed-tokens` + 引导取回 `/host-api/embed-bootstrap`)× 插件文档页 `http://localhost:5174/`(plugin-site-server 零依赖静态服务器,`dev:plugin-site`);引导取回端点对 `PLUGIN_SITE_ORIGIN` 白名单(缺省 5174)回显精确 ACAO + OPTIONS 预检(fail-closed);`compose/demo-override.yaml` 增补 5174 进 `SESSION_API_ALLOWED_ORIGINS`(插件 iframe 内 SessionClient 直连 session-api 的 CORS / CSRF / WSS Origin 白名单;业务数据走插件 ↔ session-api 认证通道不经宿主转发)。签发代理 `/host-api/embed-tokens` 保持同源-only(宿主页面面),跨来源插件取回由 `/host-api/embed-bootstrap` 承担(D-API-75 默认形态的 dev 替身)。
+
+**插件侧协议行为定案**(嵌入协议 §四 / §五插件角色):
+
+1. **hello 窗口语义**:窗口内总发送次数 = 1 + `helloMaxRetries`(默认 3 → 至多 4 发),固定间隔 = `T_handshake / (helloMaxRetries + 1)`(默认 2500 ms);窗口到期未就绪 → 降级显示(静态文案,零反射面),不向宿主重试风暴;每次发送 seq 严格递增;`retry()` = 同会话重开窗口与预算、seq 不清零;
+2. **降级态的迟到 ready**:通过全部校验的迟到 ready 仍完成握手并撤除降级 UI(降级显示是 UI 状态而非会话终结;宿主侧超时路径才是会话不可用的权威面);
+3. **入站校验序**(与宿主侧登记序同构):port 转移识别 → V-1'(source === window.parent 恒核)→ V-1(钉住后核 origin)→ V-2(**结构化对象与字符串 JSON 双形态受理**)→ V-3(受理集 [1])→ V-4 → V-5(esid 全等)→ V-6 → 分发(ready:V-7 → 防御性 V-8 → 钉住 origin → 幂等重放;控制消息:V-7 → V-8 → 高水位 → V-10 入站外圈);
+4. **V-10 插件侧双闸**:入站控制消息外圈(`TypeRateLimiter` 复用)+ 出站 height_changed 管道自限;本地计数键 `pwn-height-oversize`(内容高度超 `MAX_EMBED_HEIGHT_PX` 整条不发)/ `pwn-height-rate-limit`,与协议违规键合并经 `violationCounters` 可读;
+5. **能力降级三行(§4.4)**:未授予 auto_resize → 固定高度不发 height_changed;未授予 theme / language → 内置默认(light / zh-CN);空数组 = 完全静态形态;违反方向的消息丢弃 + 计数不中断;
+6. **装配时序**:esid 读取(fragment 一次性)→ hello 立即发出(握手不依赖 token)∥ 引导配置取回 → ready + 引导配置双就绪 → `SessionClient.createSession`(embedToken 随命令体、`embedSessionId = esid`、credentials: "include" 冻结契约)→ `connect()` → 挂载 `<sm-workspace>`;create_session 失败 → 静态文案降级(PublicError 细节不进 DOM);
+7. **iframe 重载 = 新文档新实例**:全部状态从零(esid 重读、seq 自 1、外观回内置默认、零持久化写入);工作区 `new-session-request` → 宿主重载 iframe(§4.5 新 esid)归宿主 UI。
+
+测试锚:`packages/web-component/test/`(76 用例:handshake 25 / 高度上报 7 / 能力降级矩阵 / 集成 4 / 描述包通道 8 / 产物机械断言);真实浏览器冒烟六步(`apps/plugin-dev/host-mock/smoke-embed.mjs`);E2E `embed-protocol.spec.ts` 全套。
+
+### D-API-80 主题机制最小面:Q6 八变量功能对比度、`data-sm-theme` 锚注入、auto 由 CSS 承担(阶段五 WP-53;嵌入协议 §三 theme 三值;零契约改动)
+
+**Q6(主题层最小面)定案 = 8 个 CSS 自定义属性功能对比度最小面**(视觉风格零重设计,light 值 = 现行硬编码值原样、像素级零变化;dark 值 = 功能对比度初值,以 axe 真机门禁为唯一口径——真机扫描零 violations,初值直通零校准):`--sm-border` / `--sm-border-button` / `--sm-border-strong` / `--sm-divider` / `--sm-divider-faint` / `--sm-badge-bg` / `--sm-badge-bg-soft` / `--sm-danger`。**系统颜色关键词不入变量面**(`canvas / canvastext / graytext / highlight / accentcolor / mark / field / linktext` 及 color-mix 组合随 `color-scheme` 自动适应明暗)——这是"最小面"收敛到 8 个的原因。
+
+**注入机制**:变量经 `data-sm-theme` 属性锚(light|dark|auto 三值)+ 文档级样式表(`ensureSmThemeStyles()` 幂等注入)+ CSS 自定义属性继承穿透 shadow DOM 落地——各组件 `var(--sm-*, <light 值>)` 消费,嵌套组件零重复定义、组件零硬编码颜色(机械护栏测试);`auto` 的暗色规则置于 `@media (prefers-color-scheme: dark)` 内,vm-ui 零 JS 解析、零监听器泄漏。**边界登记**:嵌入形态的 `auto` 已由 WP-52 `EmbedAppearanceController` 按插件自身 `prefers-color-scheme` 解析为二值 `resolvedTheme` 落锚(matchMedia 注入缝可测),两条 auto 路径互不依赖;独立使用形态 `<sm-workspace theme="light|dark|auto">` 属性转写为自身锚(最近锚优先,确定性)。
+
+测试锚:`packages/vm-ui/test/theming/theme.test.ts`(变量面 / 锚注入 / 机械护栏 / axe 双主题零 violations,`color-contrast` jsdom 豁免已由 WP-55 真机关闭);`packages/web-component/test/plugin/appearance.test.ts`(resolvedTheme / matchMedia);真机证据 `apps/plugin-dev/e2e/reports/axe/2026-09-11/`。
+
+### D-API-81 语言机制:Q5 全量抽取 zh-CN + en、BCP-47 确定性降级、`data-sm-language` 锚消费与固化语义(阶段五 WP-53;嵌入协议 §三 language BCP-47;零契约改动)
+
+**Q5(语言内置集与 i18n 抽取面)定案 = 全量用户可见字符串抽取(~420 键),MVP 语言集 {zh-CN(默认), en}**:zh-CN 目录值 = 现行文案原样(抽取是"键化"不是改写,既有 518 用例文案断言一字不差零回退);en 目录给出真实可读英文翻译;zh-CN 目录为键集事实源(`as const` → `SmMessageKey`),en 目录 `Record<SmMessageKey, string>` 类型强制同键集(缺键 / 多键 = 编译错误 + 完整性测试红灯),参数占位 `{name}` 双语同构;键命名 `<域>.<语义名>`。**不入目录面**:协议 / 状态机词原样呈现(连接态、投影 status、动作类型名等)与数据值(地址、寄存器名、错误 code、十六进制)——协议词汇翻译反而破坏与契约的同形性。
+
+**降级与消费**:BCP-47 匹配降级确定性(`resolveLocale`:精确匹配(大小写 / 下划线归一)→ 主子标签前缀匹配(zh-TW → zh-CN、en-GB → en)→ 内置默认 zh-CN;未知 / 空 / 非法标签确定性落默认);响应式 locale = 模块级单例 store(`setLocale / getLocale / onLocaleChange`)+ Lit `LocaleController` 订阅(**全局单 locale 属 MVP 形态**,iframe 内单工作区);锚消费 = `consumeAnchoredLanguage()` 沿 composed 树找最近 `[data-sm-language]` + 共享 MutationObserver(运行中 `language_changed` 更新锚即生效;锚晚于组件连接出现不追溯——嵌入形态宿主元素 connectedCallback 即落锚,不发生)。
+
+**固化语义(定态登记)**:状态字符串(payload 执行日志、状态行、时间线 / 编译步骤标签)按生成时刻 locale 固化;标签页标题在打开时刻求值;积木画布按 Blockly 注册时刻 locale 固化(`registerPayloadBlocks()` 取词;常量保持 zh-CN 快照 = 既有测试与公开 API 面不变;运行中切换不追溯,演进项见验收评审 §六)。
+
+测试锚:`packages/vm-ui/test/i18n/i18n.test.ts`(目录完整性双向 / BCP-47 全矩阵 / 占位符集合一致)、`test/i18n/locale-anchor.test.ts`(锚消费与降级、无锚 = 默认,与 web-component 能力降级矩阵共用语义锚);E2E 语言切换双向 + 未知标签回退(`embed-protocol.spec.ts`)。
+
+### D-API-82 公开描述包客户端加载器:双闸护栏、ETag 完整性闸、失败折叠缺席明示与装配时序(阶段五 WP-54;§8.3 / D-API-76 / D-API-31;零契约改动)
+
+**落点 = `packages/vm-ui/src/descriptor/challenge-descriptor.ts`**(插件与 dev 壳共用;只依赖 protocol 公开入口与自身,零新契约)。**获取序**(每步确定性拒绝,折叠为布尔结果 + 原因码,不抛错):定位参数闸(origin 形态 / challengeId 冻结字符集 / version 路径卫生)→ `GET /descriptors/{challengeId}/{version}`(无凭证,D-API-76;网络失败至多一次显式重试)→ 非 200(404 → `not-found`,与未登记服务端同形,客户端不区分)→ **尺寸护栏第一闸**(Content-Length 显式超限不读体 / 响应体字节超限)→ **完整性闸**(`ETag` = 登记摘要,剥 `W/` 前缀与引号;缺失不可读 → `etag-missing`;WebCrypto SHA-256 复算不符 → `digest-mismatch`)→ JSON 解析 → **尺寸护栏第二闸**(深度 16 / 数组 256 / 字符串 4096,服务端 D-API-76 / D-API-31 同值的客户端镜像)→ 轻量结构校验(对齐锚 = 公开 Schema 16 字段:必需 / 未知顶层字段拒绝 / 枚举封闭集 / `after_n_failures ⇒ failureThreshold` 必填 / minItems 同值)→ 强类型 `ChallengeDescriptorView`(hintLadder / publicErrorMapping 直接复用 ed-types 结构类型;debugMode / aslrEnabled 归一化为布尔)。**客户端护栏数值**:`maxBodyBytes = 262144`(= 服务端 `SESSION_API_MAX_DESCRIPTOR_BYTES` 默认)/ 深度 16 / 数组 256 / 字符串 4096,可注入收紧。
+
+**失败呈现纪律**:全部失败折叠进 `descriptorStatus = "absent"` → 工作区「题目描述未加载」静态明示面板;原因码属诊断面不进玩家可见 DOM;不中断会话、零重试风暴。**装配时序**:引导配置就绪即并行发起描述包获取(与 create_session 并行),晚到即注入(hintLadder / publicErrorMapping / 静态面 / debugModeAvailable 到达即补写)、缺席不中断会话(渐进增强,workspace 就绪只等待握手 + create_session)。**静态面落点**:`sm-workspace.challengeStatic`(title / summary / VM Profile 事实表 / encodingTable)+ `<details>` 折叠形态零视觉重设计,新文案走 D-API-81 i18n 双目录;缺席明示 ≠ 空数据(与"本题没有配置提示"语义分离)。**plugin-dev 双通道**:夹具通道缺省保留(开发态零依赖正式部署,形态自检测试继续生效)、`?descriptor=formal` 经 vite `/descriptors` 反代同源走正式端点(同源形态 ETag 可读);跨源直取依赖服务端 `exposedHeaders: ["ETag"]`(D-API-76 增补段,主控已登记)。夹具 ↔ 公开 Schema 形态一致性断言(`packages/challenge-schema/test/fixture-consistency.test.ts`)对齐锚 = 公开 Schema。
+
+测试锚:`packages/vm-ui/test/descriptor/challenge-descriptor.test.ts`(获取序 / 红灯逐项 / 护栏 / 原因码)、`packages/vm-ui/test/workspace/sm-workspace-descriptor.test.ts`、`packages/web-component/test/descriptor-channel.test.ts`(装配管线,76 用例之一部)、`packages/challenge-schema/test/fixture-consistency.test.ts`;E2E `apps/plugin-dev/e2e/descriptor.spec.ts`(正式下发全链路 3 用例)。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
