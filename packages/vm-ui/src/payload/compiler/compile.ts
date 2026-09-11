@@ -24,6 +24,7 @@ import {
 } from "@stackmaster/protocol";
 import * as Blockly from "blockly";
 
+import { t } from "../../i18n/i18n.js";
 import { addressToHex } from "../../render/hex.js";
 import { bytesToBytesHex } from "../../render/hex.js";
 import {
@@ -147,7 +148,7 @@ function statementOf(block: Blockly.Block, name: string): Blockly.Block | null {
 function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
   ctx.evalStepCount += 1;
   if (ctx.evalStepCount > PAYLOAD_MAX_EVAL_STEPS) {
-    fail("eval_limit_exceeded", `表达式求值步数超过上限(${PAYLOAD_MAX_EVAL_STEPS})`, block.id);
+    fail("eval_limit_exceeded", t("compile.errEvalLimit", { limit: PAYLOAD_MAX_EVAL_STEPS }), block.id);
   }
   switch (block.type) {
     case PAYLOAD_NUM_TYPE:
@@ -158,7 +159,7 @@ function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
       const name = fieldText(block, "VAR").trim();
       const value = ctx.variables.get(name);
       if (value === undefined) {
-        fail("unknown_reference", `变量 ${name} 未赋值(先赋值再读取)`, block.id);
+        fail("unknown_reference", t("compile.errVarUnassigned", { name }), block.id);
       }
       return value;
     }
@@ -177,17 +178,17 @@ function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
       }
       if (op === "div") {
         if (b === 0n) {
-          fail("division_by_zero", "除零(÷ 0)确定性报错", block.id);
+          fail("division_by_zero", t("compile.errDivisionByZero"), block.id);
         }
         return a / b;
       }
       if (op === "mod") {
         if (b === 0n) {
-          fail("division_by_zero", "取模零(% 0)确定性报错", block.id);
+          fail("division_by_zero", t("compile.errModuloByZero"), block.id);
         }
         return a % b;
       }
-      return fail("invalid_field", `未知算术运算符:${op}`, block.id);
+      return fail("invalid_field", t("compile.errUnknownArithOp", { op }), block.id);
     }
     case PAYLOAD_COMPARE_TYPE: {
       const a = evalNumberInput(ctx, block, "A");
@@ -211,7 +212,7 @@ function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
       if (op === "ge") {
         return a >= b;
       }
-      return fail("invalid_field", `未知比较运算符:${op}`, block.id);
+      return fail("invalid_field", t("compile.errUnknownCompareOp", { op }), block.id);
     }
     case PAYLOAD_REGISTER_GET_TYPE:
       return ctx.environment.registerValue(fieldText(block, "REG"));
@@ -225,7 +226,7 @@ function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
       if (index < 0n || index >= BigInt(list.items.length)) {
         fail(
           "unknown_reference",
-          `列表下标越界:${index}(长度 ${list.items.length})`,
+          t("compile.errListIndexOutOfRange", { index: String(index), length: list.items.length }),
           block.id,
         );
       }
@@ -241,7 +242,7 @@ function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
     case PAYLOAD_FUNC_CALL_VALUE_TYPE:
       return callFunction(ctx, block, true);
     default:
-      fail("unknown_block_type", `积木 ${block.type} 不能作为取值表达式`, block.id);
+      fail("unknown_block_type", t("compile.errValueBlock", { type: block.type }), block.id);
   }
 }
 
@@ -249,7 +250,7 @@ function evalReporter(ctx: CompileContext, block: Blockly.Block): PayloadValue {
 function evalValueInput(ctx: CompileContext, block: Blockly.Block, name: string): PayloadValue {
   const connected = block.getInput(name)?.connection?.targetBlock() ?? null;
   if (connected === null) {
-    fail("missing_input", `积木缺少输入「${name}」`, block.id);
+    fail("missing_input", t("compile.errMissingInput", { name }), block.id);
   }
   return evalReporter(ctx, connected);
 }
@@ -271,7 +272,7 @@ function requireList(ctx: CompileContext, block: Blockly.Block): PayloadList {
   const name = fieldText(block, "LIST").trim();
   const list = ctx.lists.get(name);
   if (list === undefined) {
-    fail("unknown_reference", `列表 ${name} 不存在(先追加元素创建)`, block.id);
+    fail("unknown_reference", t("compile.errListUnknown", { name }), block.id);
   }
   return list;
 }
@@ -281,10 +282,14 @@ function callFunction(ctx: CompileContext, block: Blockly.Block, wantReturnValue
   const name = fieldText(block, "NAME").trim();
   const definition = ctx.functions.get(name);
   if (definition === undefined) {
-    fail("unknown_reference", `函数 ${name} 未定义(先在画布空白处定义)`, block.id);
+    fail("unknown_reference", t("compile.errFunctionUndefined", { name }), block.id);
   }
   if (ctx.callDepth >= PAYLOAD_MAX_CALL_DEPTH) {
-    fail("call_depth_exceeded", `函数内联深度超过上限(${PAYLOAD_MAX_CALL_DEPTH}),疑似递归失控`, block.id);
+    fail(
+      "call_depth_exceeded",
+      t("compile.errCallDepthExceeded", { limit: PAYLOAD_MAX_CALL_DEPTH }),
+      block.id,
+    );
   }
   ctx.callDepth += 1;
   try {
@@ -294,7 +299,7 @@ function callFunction(ctx: CompileContext, block: Blockly.Block, wantReturnValue
     }
     const connected = definition.getInput("RETURN")?.connection?.targetBlock() ?? null;
     if (connected === null) {
-      fail("missing_input", `函数 ${name} 未定义返回值,不能作为取值调用`, block.id);
+      fail("missing_input", t("compile.errFunctionNoReturn", { name }), block.id);
     }
     return evalReporter(ctx, connected);
   } finally {
@@ -309,7 +314,7 @@ function emitAction(ctx: CompileContext, block: Blockly.Block, action: ActionObj
   if (!ctx.allowedActions.has(action.type)) {
     ctx.errors.push({
       code: "unauthorized_action",
-      message: `积木映射的动作 ${action.type} 不在题目 allowedActions 白名单内`,
+      message: t("compile.errActionNotAllowed", { action: action.type }),
       blockId: block.id,
     });
     return;
@@ -318,7 +323,7 @@ function emitAction(ctx: CompileContext, block: Blockly.Block, action: ActionObj
   if (ctx.expandedActionCount > PAYLOAD_MAX_EXPANDED_ACTIONS) {
     fail(
       "expansion_limit_exceeded",
-      `展开动作数超过上限(${PAYLOAD_MAX_EXPANDED_ACTIONS}),请缩小循环或拆分程序`,
+      t("compile.errExpandedActionsExceeded", { limit: PAYLOAD_MAX_EXPANDED_ACTIONS }),
       block.id,
     );
   }
@@ -348,16 +353,27 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
       const address = evalNumberInput(ctx, block, "ADDR");
       const bytesHex = fieldText(block, "BYTES").trim();
       if (!/^(?:[0-9a-fA-F]{2})+$/.test(bytesHex)) {
-        fail("invalid_field", `字节内容必须为偶数长度十六进制串:${JSON.stringify(bytesHex)}`, block.id);
+        fail(
+          "invalid_field",
+          t("compile.errInvalidBytesHex", { value: JSON.stringify(bytesHex) }),
+          block.id,
+        );
       }
       if (bytesHex.length / 2 > MAX_WRITE_BYTES) {
-        fail("invalid_field", `字节内容超过协议级上限(${MAX_WRITE_BYTES} 字节)`, block.id);
+        fail(
+          "invalid_field",
+          t("compile.errBytesTooLong", { limit: MAX_WRITE_BYTES }),
+          block.id,
+        );
       }
       emitAction(
         ctx,
         block,
         { type: "write_bytes", args: { addressHex: addressToHex(address), bytesHex: bytesHex.toLowerCase() } },
-        `写字节 ${addressToHex(address)} ← ${bytesHex.toLowerCase()}`,
+        t("compile.stepWriteBytes", {
+          address: addressToHex(address),
+          bytes: bytesHex.toLowerCase(),
+        }),
       );
       return;
     }
@@ -367,17 +383,21 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
       const address = evalNumberInput(ctx, block, "ADDR");
       const bytes = utf8Encode(text);
       if (bytes.length === 0) {
-        fail("invalid_field", "空字符串没有可写字节", block.id);
+        fail("invalid_field", t("compile.errEmptyString"), block.id);
       }
       if (bytes.length > MAX_WRITE_BYTES) {
-        fail("invalid_field", `字符串 UTF-8 编码超过协议级上限(${MAX_WRITE_BYTES} 字节)`, block.id);
+        fail(
+          "invalid_field",
+          t("compile.errStringTooLong", { limit: MAX_WRITE_BYTES }),
+          block.id,
+        );
       }
       const bytesHex = bytesToBytesHex(bytes);
       emitAction(
         ctx,
         block,
         { type: "write_bytes", args: { addressHex: addressToHex(address), bytesHex } },
-        `写字符串 "${text}" → ${addressToHex(address)}`,
+        t("compile.stepWriteString", { text, address: addressToHex(address) }),
       );
       return;
     }
@@ -387,12 +407,12 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
         ctx,
         block,
         { type: "push", args: { valueHex: `0x${value.toString(16).toUpperCase()}` } },
-        `压栈 0x${value.toString(16).toUpperCase()}`,
+        t("compile.stepPush", { value: value.toString(16).toUpperCase() }),
       );
       return;
     }
     case PAYLOAD_POP_TYPE:
-      emitAction(ctx, block, { type: "pop", args: {} }, "出栈");
+      emitAction(ctx, block, { type: "pop", args: {} }, t("compile.stepPop"));
       return;
     case PAYLOAD_CALL_TYPE: {
       const target = evalNumberInput(ctx, block, "TARGET");
@@ -400,19 +420,19 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
         ctx,
         block,
         { type: "call", args: { targetHex: addressToHex(target) } },
-        `调用 ${addressToHex(target)}`,
+        t("compile.stepCall", { address: addressToHex(target) }),
       );
       return;
     }
     case PAYLOAD_RET_TYPE:
-      emitAction(ctx, block, { type: "ret", args: {} }, "返回");
+      emitAction(ctx, block, { type: "ret", args: {} }, t("compile.stepRet"));
       return;
     case PAYLOAD_STEP_TYPE:
-      emitAction(ctx, block, { type: "step", args: {} }, "单步执行一条指令");
+      emitAction(ctx, block, { type: "step", args: {} }, t("compile.stepInstruction"));
       return;
     case PAYLOAD_BREAKPOINT_TYPE:
       // 断点(M7 变通):不是动作,是步进暂停点标记。
-      ctx.steps.push({ kind: "breakpoint", label: "断点(暂停观察)", blockId: block.id });
+      ctx.steps.push({ kind: "breakpoint", label: t("compile.stepBreakpoint"), blockId: block.id });
       return;
     case PAYLOAD_IF_TYPE: {
       // 分支:编译期求值,只展开被选中的支(Q3:暂停只发生在原子动作边界)。
@@ -429,7 +449,7 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
         if (ctx.expandedStatementCount > PAYLOAD_MAX_EXPANDED_ACTIONS) {
           fail(
             "expansion_limit_exceeded",
-            `循环展开超过上限(${PAYLOAD_MAX_EXPANDED_ACTIONS} 次),请缩小重复次数`,
+            t("compile.errRepeatExceeded", { limit: PAYLOAD_MAX_EXPANDED_ACTIONS }),
             block.id,
           );
         }
@@ -440,7 +460,7 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
     case PAYLOAD_VAR_SET_TYPE: {
       const name = fieldText(block, "VAR").trim();
       if (name === "") {
-        fail("invalid_field", "变量名不能为空", block.id);
+        fail("invalid_field", t("compile.errEmptyVarName"), block.id);
       }
       ctx.variables.set(name, evalValueInput(ctx, block, "VALUE"));
       return;
@@ -449,7 +469,7 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
       const name = fieldText(block, "VAR").trim();
       const current = ctx.variables.get(name);
       if (current === undefined) {
-        fail("unknown_reference", `变量 ${name} 未赋值(先赋值再增减)`, block.id);
+        fail("unknown_reference", t("compile.errVarUnassignedChange", { name }), block.id);
       }
       const delta = evalNumberInput(ctx, block, "DELTA");
       const base = valueToNumber(current);
@@ -462,7 +482,7 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
     case PAYLOAD_LIST_PUSH_TYPE: {
       const name = fieldText(block, "LIST").trim();
       if (name === "") {
-        fail("invalid_field", "列表名不能为空", block.id);
+        fail("invalid_field", t("compile.errEmptyListName"), block.id);
       }
       const item = evalValueInput(ctx, block, "ITEM");
       let list = ctx.lists.get(name);
@@ -475,17 +495,13 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
       return;
     }
     case PAYLOAD_FUNC_DEF_TYPE:
-      fail(
-        "misplaced_block",
-        "函数定义积木只能独立放在画布顶层空白处,不能连入程序序列",
-        block.id,
-      );
+      fail("misplaced_block", t("compile.errFunctionDefPosition"), block.id);
       return;
     case PAYLOAD_FUNC_CALL_STMT_TYPE:
       void callFunction(ctx, block, false);
       return;
     default:
-      fail("unknown_block_type", `未知语句积木类型:${block.type}`, block.id);
+      fail("unknown_block_type", t("compile.errUnknownStatementBlock", { type: block.type }), block.id);
   }
 }
 
@@ -513,8 +529,8 @@ export function compilePayload(
           {
             code: unknownType !== null ? "unknown_block_type" : "load_failed",
             message: unknownType !== null
-              ? `积木类型 ${unknownType[1]} 未定义(状态与积木定义版本不一致?)`
-              : `积木状态无法加载:${message}`,
+              ? t("compile.errLoadUnknownType", { type: unknownType[1] ?? "" })
+              : t("compile.errLoadFailed", { message }),
             blockId: null,
           },
         ],
@@ -526,7 +542,13 @@ export function compilePayload(
     if (starts.length === 0) {
       return {
         ok: false,
-        errors: [{ code: "no_start_block", message: "缺少起始积木:程序必须从唯一的「Payload 开始」开始", blockId: null }],
+        errors: [
+          {
+            code: "no_start_block",
+            message: t("compile.errNoStartBlock"),
+            blockId: null,
+          },
+        ],
       };
     }
     if (starts.length > 1) {
@@ -535,7 +557,7 @@ export function compilePayload(
         errors: [
           {
             code: "multiple_start_blocks",
-            message: `起始积木必须唯一(发现 ${starts.length} 个)`,
+            message: t("compile.errMultipleStartBlocks", { count: starts.length }),
             blockId: starts[1]?.id ?? null,
           },
         ],
@@ -563,11 +585,15 @@ export function compilePayload(
       }
       const name = fieldText(block, "NAME").trim();
       if (name === "") {
-        ctx.errors.push({ code: "invalid_field", message: "函数名不能为空", blockId: block.id });
+        ctx.errors.push({ code: "invalid_field", message: t("compile.errEmptyFunctionName"), blockId: block.id });
         continue;
       }
       if (ctx.functions.has(name)) {
-        ctx.errors.push({ code: "duplicate_definition", message: `函数 ${name} 重复定义`, blockId: block.id });
+        ctx.errors.push({
+          code: "duplicate_definition",
+          message: t("compile.errDuplicateFunction", { name }),
+          blockId: block.id,
+        });
         continue;
       }
       ctx.functions.set(name, block);
@@ -585,7 +611,9 @@ export function compilePayload(
       } else {
         ctx.errors.push({
           code: "load_failed",
-          message: `编译器内部错误:${error instanceof Error ? error.message : String(error)}`,
+          message: t("compile.errInternal", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
           blockId: null,
         });
       }

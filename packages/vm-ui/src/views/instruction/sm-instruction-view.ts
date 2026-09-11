@@ -36,6 +36,7 @@ import { SmWindowList } from "../virtual/sm-window-list.js";
 
 import type { DebugPauseReason } from "@stackmaster/protocol";
 
+import { LocaleController, t } from "../../i18n/i18n.js";
 import type { DebugDataSource, DebugInstructionEntry, DebugMemorySearchHit } from "../../datasource/debug-data-source.js";
 import type { MemoryDataSource } from "../../datasource/types.js";
 import {
@@ -44,6 +45,7 @@ import {
   normalizeBytesHex,
   parseAddressHex,
 } from "../../render/hex.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
 /** 十六进制段分组宽度(4 字节一组,与字节视图一致)。 */
 const HEX_GROUP_BYTES = 4;
@@ -59,17 +61,20 @@ export interface BreakpointsChangedDetail {
   readonly breakpoints: readonly string[];
 }
 
-/** 暂停原因 → 呈现文案(debug_paused 封闭四值;不含任何权威结论)。 */
+/**
+ * 暂停原因 → 呈现文案(debug_paused 封闭四值;不含任何权威结论)。
+ * 当前 locale 取词(WP-53;i18n 键 debug.paused*,zh-CN 值 = 现行文案原样)。
+ */
 export function pausedReasonText(reason: DebugPauseReason): string {
   switch (reason) {
     case "step":
-      return "单步暂停";
+      return t("debug.pausedStep");
     case "breakpoint":
-      return "命中断点,已暂停";
+      return t("debug.pausedBreakpoint");
     case "program_halt":
-      return "程序已自行停机(exit / 停机指令)";
+      return t("debug.pausedHalt");
     case "budget":
-      return "预算耗尽,确定性暂停";
+      return t("debug.pausedBudget");
   }
 }
 
@@ -107,11 +112,14 @@ export class SmInstructionView extends LitElement {
   #pendingScrollAddress: string | null = null;
   #unsubscribe: (() => void) | null = null;
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
   static override styles = css`
     :host {
       display: block;
       block-size: 24rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       background: canvas;
       color: canvastext;
@@ -130,7 +138,7 @@ export class SmInstructionView extends LitElement {
       flex-direction: column;
       gap: 0.25rem;
       padding: 0.5rem 0.75rem;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
     .toolbar-row {
@@ -212,7 +220,7 @@ export class SmInstructionView extends LitElement {
     .jump-target {
       margin-inline-start: 1ch;
       padding: 0 0.25rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
       background: canvas;
       color: linktext;
@@ -233,7 +241,7 @@ export class SmInstructionView extends LitElement {
     .breakpoint-toggle {
       margin-inline-end: 0.5ch;
       padding: 0 0.25rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
       background: canvas;
       color: canvastext;
@@ -242,15 +250,15 @@ export class SmInstructionView extends LitElement {
     }
 
     .breakpoint-toggle[aria-pressed="true"] {
-      color: crimson;
-      border-color: crimson;
+      color: var(--sm-danger, crimson);
+      border-color: var(--sm-danger, crimson);
     }
 
     .function-panel,
     .search-panel {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      border-block-start: 1px solid rgb(0 0 0 / 10%);
+      border-block-start: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       font-size: 0.75rem;
     }
 
@@ -315,6 +323,14 @@ export class SmInstructionView extends LitElement {
   override disconnectedCallback(): void {
     this.#detachSourceListener();
     super.disconnectedCallback();
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    // 主题锚样式表(幂等):变量经 data-sm-theme 宿主锚继承穿透 shadow DOM。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
   }
 
   // ── 公共 API(工作区接线面)──────────────────────────────────────────────
@@ -386,32 +402,32 @@ export class SmInstructionView extends LitElement {
     try {
       target = formatAddressHex(addressHex, ADDRESS_MIN_DIGITS);
     } catch {
-      this.#status = "无法识别的地址(支持 0x 前缀十六进制)";
+      this.#status = t("instr.jumpUnrecognized");
       this.requestUpdate();
       return;
     }
     if (this.#locateAndScroll(addressHex)) {
-      this.#status = `已跳转到 ${target}`;
+      this.#status = t("common.jumpOk", { target });
       this.requestUpdate();
       return;
     }
     // 覆盖面外:自动 prefetchWindow 后重试一次(FE-IN-06 定案)。
-    this.#status = `${target} 不在指令流覆盖面内,正在请求窗口……`;
+    this.#status = t("instr.prefetching", { target });
     this.requestUpdate();
     try {
       await debug.prefetchWindow(addressHex, JUMP_PREFETCH_BYTES);
     } catch {
-      this.#status = `${target} 窗口请求失败(调试通道未连接或地址不可达)`;
+      this.#status = t("common.prefetchFailed", { target });
       this.requestUpdate();
       return;
     }
     this.#rebuild();
     this.requestUpdate();
     if (this.#locateAndScroll(addressHex)) {
-      this.#status = `已跳转到 ${target}`;
+      this.#status = t("common.jumpOk", { target });
     } else {
       // 指令流只由暂停推送(协议 v1 无拉取帧);窗口字节已入缓存,字节视图可看。
-      this.#status = `${target} 在指令流覆盖面之外(指令流仅由暂停推送;窗口字节已可于字节视图查看)`;
+      this.#status = t("instr.outOfCoverage", { target });
     }
     this.requestUpdate();
   }
@@ -472,7 +488,7 @@ export class SmInstructionView extends LitElement {
     try {
       pattern = normalizeBytesHex(input.value.trim());
     } catch {
-      this.#status = "检索模式须为非空偶数长度十六进制(如 0102)";
+      this.#status = t("common.searchInvalidPattern");
       this.requestUpdate();
       return;
     }
@@ -483,15 +499,18 @@ export class SmInstructionView extends LitElement {
         this.#byteHitsTruncated = result.truncated;
         this.#status =
           result.hits.length === 0
-            ? "全内存无命中"
-            : `全内存检索命中 ${result.hits.length} 处${result.truncated ? "(已截断)" : ""}`;
+            ? t("instr.searchNoHits")
+            : t("instr.searchHits", {
+                count: result.hits.length,
+                truncated: result.truncated ? t("instr.searchTruncatedSuffix") : "",
+              });
         this.requestUpdate();
       })
       .catch(() => {
-        this.#status = "全内存检索失败(调试通道未连接或预算受限)";
+        this.#status = t("instr.searchFailed");
         this.requestUpdate();
       });
-    this.#status = "全内存检索中……";
+    this.#status = t("instr.searching");
     this.requestUpdate();
   }
 
@@ -504,7 +523,7 @@ export class SmInstructionView extends LitElement {
     const needle = input.value.trim().toLowerCase();
     if (needle.length === 0) {
       this.#textHits = [];
-      this.#status = "指令文本检索:输入为空";
+      this.#status = t("instr.textSearchEmpty");
       this.requestUpdate();
       return;
     }
@@ -513,7 +532,7 @@ export class SmInstructionView extends LitElement {
       .filter((entry) => entry.text.toLowerCase().includes(needle))
       .slice(0, SEARCH_DISPLAY_LIMIT);
     this.#status =
-      this.#textHits.length === 0 ? "指令流(已推送覆盖面)内无命中" : null;
+      this.#textHits.length === 0 ? t("instr.textSearchNoHits") : null;
     this.requestUpdate();
   }
 
@@ -556,8 +575,10 @@ export class SmInstructionView extends LitElement {
             class="breakpoint-toggle"
             data-breakpoint-address=${entry.addressHex}
             aria-pressed=${isBreakpoint ? "true" : "false"}
-            aria-label=${`断点 ${formatAddressHex(entry.addressHex, ADDRESS_MIN_DIGITS)}`}
-            title=${isBreakpoint ? "移除断点" : "添加断点"}
+            aria-label=${t("instr.breakpointAria", {
+              address: formatAddressHex(entry.addressHex, ADDRESS_MIN_DIGITS),
+            })}
+            title=${isBreakpoint ? t("instr.breakpointRemove") : t("instr.breakpointAdd")}
             @click=${() => this.#onBreakpointToggle(entry.addressHex)}
           >
             ${isBreakpoint ? "●" : "○"}
@@ -575,7 +596,7 @@ export class SmInstructionView extends LitElement {
                 type="button"
                 class="jump-target"
                 data-jump-target=${jumpTargetHex}
-                title="跳转到 ${safeFormat(jumpTargetHex, ADDRESS_MIN_DIGITS)}"
+                title=${t("instr.jumpTargetTitle", { target: safeFormat(jumpTargetHex, ADDRESS_MIN_DIGITS) })}
                 @click=${() => this.jumpToAddress(jumpTargetHex)}
               >
                 → ${safeFormat(jumpTargetHex, ADDRESS_MIN_DIGITS)}
@@ -588,46 +609,50 @@ export class SmInstructionView extends LitElement {
   protected override render(): unknown {
     if (this.#debug === null) {
       return html`
-        <section class="instruction-view" aria-label="指令视图">
+        <section class="instruction-view" aria-label=${t("instr.aria")}>
           <header class="toolbar">
-            <h3 class="heading">指令视图</h3>
+            <h3 class="heading">${t("tab.instruction")}</h3>
           </header>
           <p class="guide" role="status">
-            指令视图由调试通道承载(伪指令流 / 函数表 / 地址断点)。当前为解题模式——
-            请通过菜单「切换到调试模式」启用后使用。
+            ${t("instr.guide")}
           </p>
         </section>
       `;
     }
     return html`
-      <section class="instruction-view" aria-label="指令视图">
+      <section class="instruction-view" aria-label=${t("instr.aria")}>
         <header class="toolbar">
           <div class="toolbar-row">
-            <h3 class="heading">指令视图</h3>
+            <h3 class="heading">${t("tab.instruction")}</h3>
             ${this.#renderAnchor()}
           </div>
           <div class="toolbar-row">
             <form class="jump-form" @submit=${this.#onJumpSubmit}>
-              <input class="jump-input" type="text" aria-label="跳转地址" placeholder="0x401000" />
-              <button type="submit">跳转</button>
+              <input
+                class="jump-input"
+                type="text"
+                aria-label=${t("instr.jumpAria")}
+                placeholder=${t("instr.jumpPlaceholder")}
+              />
+              <button type="submit">${t("common.jumpButton")}</button>
             </form>
             <form class="byte-search-form" @submit=${this.#onByteSearchSubmit}>
               <input
                 class="byte-search-input"
                 type="text"
-                aria-label="字节检索(全内存)"
-                placeholder="十六进制字节(全内存)"
+                aria-label=${t("instr.byteSearchAria")}
+                placeholder=${t("instr.byteSearchPlaceholder")}
               />
-              <button type="submit">字节检索</button>
+              <button type="submit">${t("instr.byteSearchButton")}</button>
             </form>
             <form class="text-search-form" @submit=${this.#onTextSearchSubmit}>
               <input
                 class="text-search-input"
                 type="text"
-                aria-label="指令文本检索"
-                placeholder="伪汇编文本(如 push)"
+                aria-label=${t("instr.textSearchAria")}
+                placeholder=${t("instr.textSearchPlaceholder")}
               />
-              <button type="submit">文本检索</button>
+              <button type="submit">${t("instr.textSearchButton")}</button>
             </form>
           </div>
           ${this.#renderPausedLine()}
@@ -635,13 +660,13 @@ export class SmInstructionView extends LitElement {
         </header>
         ${this.#rows.length === 0
           ? html`<p class="empty" role="status">
-              指令流暂无推送覆盖(每次暂停后推送当前落点上下文;attach 后可单步 / 运行到断点)
+              ${t("instr.emptyStream")}
             </p>`
-          : html`<div class="table" role="table" aria-label="伪指令流(一条指令一行,高地址在下)">
+          : html`<div class="table" role="table" aria-label=${t("instr.tableAria")}>
               <div class="instruction-row header-row" role="row">
-                <span class="row-address" role="columnheader">地址</span>
-                <span class="row-bytes" role="columnheader">伪机器码</span>
-                <span class="row-text" role="columnheader">伪汇编</span>
+                <span class="row-address" role="columnheader">${t("instr.colAddress")}</span>
+                <span class="row-bytes" role="columnheader">${t("instr.colBytes")}</span>
+                <span class="row-text" role="columnheader">${t("instr.colText")}</span>
               </div>
               ${this.#renderRows()}
             </div>`}
@@ -655,19 +680,19 @@ export class SmInstructionView extends LitElement {
   #renderAnchor(): unknown {
     const paused = this.#pausedAddress;
     if (paused === null) {
-      return html`<span class="anchor-chip">rip 锚点:暂无暂停地址</span>`;
+      return html`<span class="anchor-chip">${t("instr.noPauseAddress")}</span>`;
     }
     const display = safeFormat(paused, ADDRESS_MIN_DIGITS);
     return html`
       <span class="anchor-chip">
-        <span class="anchor-value">rip = ${display}</span>
+        <span class="anchor-value">${t("instr.ripAnchor", { address: display })}</span>
         <button
           type="button"
           class="anchor-rewind"
-          aria-label="回锚 rip 行"
+          aria-label=${t("instr.anchorRewindAria")}
           @click=${() => this.jumpToAddress(paused)}
         >
-          回锚 rip
+          ${t("instr.anchorRewind")}
         </button>
       </span>
     `;
@@ -677,12 +702,16 @@ export class SmInstructionView extends LitElement {
     const reason = this.#pausedReason;
     if (reason === null) {
       return this.#attachedStatus === null
-        ? html`<p class="paused-line" role="status">调试实例:尚未 attach</p>`
-        : html`<p class="paused-line" role="status">调试实例已对齐(状态:${this.#attachedStatus})</p>`;
+        ? html`<p class="paused-line" role="status">${t("instr.notAttached")}</p>`
+        : html`<p class="paused-line" role="status">
+            ${t("instr.attachedStatus", { status: this.#attachedStatus })}
+          </p>`;
     }
     const address =
       this.#pausedAddress === null ? "" : ` @ ${safeFormat(this.#pausedAddress, ADDRESS_MIN_DIGITS)}`;
-    return html`<p class="paused-line" role="status">${pausedReasonText(reason)}${address}</p>`;
+    return html`<p class="paused-line" role="status">
+      ${t("debug.pausedAt", { reason: pausedReasonText(reason), address })}
+    </p>`;
   }
 
   #renderByteHits(): unknown {
@@ -691,7 +720,7 @@ export class SmInstructionView extends LitElement {
     }
     return html`
       <details class="search-panel" open>
-        <summary>字节检索命中(全内存)</summary>
+        <summary>${t("instr.byteHitsSummary")}</summary>
         <ul class="search-hits">
           ${this.#byteHits.map(
             (hit) => html`
@@ -709,7 +738,7 @@ export class SmInstructionView extends LitElement {
             `,
           )}
         </ul>
-        ${this.#byteHitsTruncated ? html`<p class="status-line">命中数超出上限,已截断</p>` : nothing}
+        ${this.#byteHitsTruncated ? html`<p class="status-line">${t("instr.hitsTruncated")}</p>` : nothing}
       </details>
     `;
   }
@@ -720,7 +749,7 @@ export class SmInstructionView extends LitElement {
     }
     return html`
       <details class="search-panel" open>
-        <summary>指令文本检索命中(已推送覆盖面)</summary>
+        <summary>${t("instr.textHitsSummary")}</summary>
         <ul class="search-hits">
           ${this.#textHits.map(
             (entry) => html`
@@ -748,7 +777,7 @@ export class SmInstructionView extends LitElement {
     }
     return html`
       <details class="function-panel">
-        <summary>函数表(${this.#functions.length})</summary>
+        <summary>${t("instr.functionTable", { count: this.#functions.length })}</summary>
         <ul class="function-list">
           ${this.#functions.map(
             (entry) => html`

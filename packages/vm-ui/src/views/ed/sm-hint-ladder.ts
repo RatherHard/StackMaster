@@ -22,13 +22,18 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { PublicHint } from "../../ed/ed-types.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
-/** on_request 揭示按钮文案(逐级揭示)。 */
+/**
+ * on_request 揭示按钮文案(逐级揭示)。导出常量 = zh-CN 快照(既有测试与
+ * 公开 API 面);组件渲染经 i18n 键 `ed.hintReveal`(WP-53)。
+ */
 export const HINT_REVEAL_BUTTON_TEXT = "显示下一条提示";
 
-/** after_n_failures 未达标锁定文案(N = 距解锁的剩余失败次数)。 */
+/** after_n_failures 未达标锁定文案(N = 距解锁的剩余失败次数;当前 locale 取词)。 */
 export function hintLockedText(remaining: number): string {
-  return `再失败 ${remaining} 次解锁`;
+  return t("ed.hintLocked", { count: remaining });
 }
 
 @customElement("sm-hint-ladder")
@@ -44,6 +49,16 @@ export class SmHintLadder extends LitElement {
   @state()
   private revealedOrders: readonly number[] = [];
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
+
   static override styles = css`
     :host {
       display: block;
@@ -58,7 +73,7 @@ export class SmHintLadder extends LitElement {
 
     li {
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid rgb(0 0 0 / 8%);
+      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
     }
 
     .hint-text {
@@ -72,7 +87,7 @@ export class SmHintLadder extends LitElement {
 
     .reveal-button {
       padding: 0.25rem 0.75rem;
-      border: 1px solid rgb(0 0 0 / 25%);
+      border: 1px solid var(--sm-border-strong, rgb(0 0 0 / 25%));
       border-radius: 4px;
       background: none;
       color: inherit;
@@ -95,7 +110,7 @@ export class SmHintLadder extends LitElement {
 
   protected override render(): TemplateResult {
     if (this.hints.length === 0) {
-      return html`<p class="empty" role="status">本题没有配置提示</p>`;
+      return html`<p class="empty" role="status">${t("ed.hintEmpty")}</p>`;
     }
     const ordered = [...this.hints].sort((a, b) => a.order - b.order);
     // "显示下一条提示"只挂在最前面的未揭示 on_request 条上(逐级揭示)。
@@ -103,7 +118,7 @@ export class SmHintLadder extends LitElement {
       (hint) => hint.revealPolicy === "on_request" && !this.#isRevealed(hint.order),
     );
     return html`
-      <section aria-label="提示阶梯">
+      <section aria-label=${t("ed.hintAria")}>
         <ol>
           ${ordered.map((hint) => this.#renderHint(hint, hint === nextRevealable))}
         </ol>
@@ -121,13 +136,13 @@ export class SmHintLadder extends LitElement {
       const threshold = hint.failureThreshold;
       const unlocked = threshold !== undefined && this.failures >= threshold;
       if (unlocked) {
-        return this.#renderRevealed(hint, "失败次数达标,自动解锁");
+        return this.#renderRevealed(hint, t("ed.hintAutoUnlocked"));
       }
       const lockedText =
-        threshold === undefined ? "失败达标后解锁" : hintLockedText(threshold - this.failures);
+        threshold === undefined ? t("ed.hintLockedNoThreshold") : hintLockedText(threshold - this.failures);
       return html`
         <li>
-          <span class="locked">提示 ${hint.order}(未解锁):${lockedText}</span>
+          <span class="locked">${t("ed.hintLockedLine", { order: hint.order, text: lockedText })}</span>
         </li>
       `;
     }
@@ -136,7 +151,7 @@ export class SmHintLadder extends LitElement {
     }
     return html`
       <li>
-        <span class="locked">提示 ${hint.order}(未揭示)</span>
+        <span class="locked">${t("ed.hintUnrevealed", { order: hint.order })}</span>
         ${isNextRevealable
           ? html`<span>
               <button type="button" class="reveal-button" @click=${() => this.#reveal(hint.order)}>
@@ -151,7 +166,7 @@ export class SmHintLadder extends LitElement {
   #renderRevealed(hint: PublicHint, unlockReason: string | undefined): TemplateResult {
     return html`
       <li>
-        <span class="hint-text">提示 ${hint.order}:${hint.hintText}</span>
+        <span class="hint-text">${t("ed.hintLine", { order: hint.order, text: hint.hintText })}</span>
         ${unlockReason === undefined ? nothing : html`<span class="locked">(${unlockReason})</span>`}
       </li>
     `;

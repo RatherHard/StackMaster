@@ -93,3 +93,14 @@ export * from "./datasource/debug-data-source.js";
 export * from "./render/hex.js";
 export * from "./render/rows.js";
 export * from "./render/special-display.js";
+
+// ── i18n 与主题机制面(WP-53)──
+// i18n:消息目录(zh-CN = 现行文案原样 / en)、t() 类型安全取词、响应式
+// locale(setLocale / onLocaleChange / LocaleController)、data-sm-language
+// 锚消费(嵌入协议语义,与 EmbedAppearanceController 对接)。
+export * from "./i18n/i18n.js";
+export * from "./i18n/catalog-zh-CN.js";
+export * from "./i18n/catalog-en.js";
+// 主题:light/dark 双套 CSS 自定义属性变量集 + data-sm-theme 文档级锚样式表
+// (auto 由 @media (prefers-color-scheme: dark) 承担,零 JS 解析)。
+export * from "./theme/theme-tokens.js";

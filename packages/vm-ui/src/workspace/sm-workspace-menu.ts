@@ -36,6 +36,8 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { ConnectionStatus, DisconnectReason } from "../client/session-client.js";
 import type { PublicError } from "@stackmaster/protocol";
+import { LocaleController, t } from "../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
 import type { WorkspaceTabTypeDescriptor } from "./tab-registry.js";
 
 /** 菜单动作(出站事件 detail;执行归宿主)。 */
@@ -127,10 +129,13 @@ export class SmWorkspaceMenu extends LitElement {
   @state()
   private errorDismissed = false;
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
   static override styles = css`
     :host {
       display: block;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       font-family: system-ui, sans-serif;
       font-size: 0.8125rem;
     }
@@ -156,7 +161,7 @@ export class SmWorkspaceMenu extends LitElement {
 
     button {
       padding: 0.125rem 0.5rem;
-      border: 1px solid rgb(0 0 0 / 20%);
+      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 6px;
       background: canvas;
       color: canvastext;
@@ -202,7 +207,7 @@ export class SmWorkspaceMenu extends LitElement {
       margin: 0;
       padding: 0.375rem 0.75rem;
       background: color-mix(in srgb, field 92%, highlight 8%);
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       font-size: 0.75rem;
     }
 
@@ -215,7 +220,7 @@ export class SmWorkspaceMenu extends LitElement {
       margin: 0;
       padding: 0.375rem 0.75rem;
       background: color-mix(in srgb, field 94%, accentcolor 6%);
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       font-size: 0.75rem;
     }
 
@@ -269,37 +274,47 @@ export class SmWorkspaceMenu extends LitElement {
     }
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    // 主题锚样式表(幂等):变量经 data-sm-theme 宿主锚继承穿透 shadow DOM。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
+
   protected override render(): unknown {
     return html`
-      <nav aria-label="工作区菜单" part="nav">
+      <nav aria-label=${t("menu.aria")} part="nav">
         <span class="group">
-          <span class="group-label">打开</span>
+          <span class="group-label">${t("menu.openGroup")}</span>
           ${this.tabTypes.map((descriptor) => this.#renderOpenButton(descriptor))}
         </span>
         <span class="group">
-          <span class="group-label">模式</span>
-          <strong class="mode-indicator">${this.debugModeActive ? "调试模式" : "解题模式"}</strong>
+          <span class="group-label">${t("menu.modeGroup")}</span>
+          <strong class="mode-indicator"
+            >${this.debugModeActive ? t("menu.modeDebug") : t("menu.modeSolve")}</strong
+          >
         </span>
         <span class="group">
-          <span class="group-label">运行</span>
+          <span class="group-label">${t("menu.runGroup")}</span>
           <button
             type="button"
             class="step-button"
             ?disabled=${this.#stepDisabled}
             @click=${() => this.#emit({ action: "step" })}
           >
-            指令步进
+            ${t("menu.step")}
           </button>
           <button
             type="button"
             class="payload-step-button"
             ?disabled=${!this.payloadStepEnabled}
             title=${this.payloadStepEnabled
-              ? "Payload 积木程序推进一步(一个原子动作)并暂停"
-              : "仅 Payload 标签页激活时可用"}
+              ? t("menu.payloadStepTitleOn")
+              : t("menu.payloadStepTitleOff")}
             @click=${() => this.#emit({ action: "payload-step" })}
           >
-            积木步进
+            ${t("menu.payloadStep")}
           </button>
           <!-- FE-WS-04c(F8):运行到断点 = 调试通道原生暂停点(断点集合 = 当前集合)。 -->
           <button
@@ -307,13 +322,13 @@ export class SmWorkspaceMenu extends LitElement {
             class="run-to-breakpoint-button"
             ?disabled=${!this.runToBreakpointEnabled}
             title=${this.runToBreakpointEnabled
-              ? "调试模式:运行到断点(命中任一地址断点后暂停)"
+              ? t("menu.runToBreakpointTitleOn")
               : this.debugModeActive
-                ? "调试模式下、断点集合非空且通道可用时可用(在指令视图添加断点)"
-                : "调试模式下可用(先切换到调试模式)"}
+                ? t("menu.runToBreakpointTitleDebugOff")
+                : t("menu.runToBreakpointTitleSolve")}
             @click=${() => this.#emit({ action: "run-to-breakpoint" })}
           >
-            运行到断点
+            ${t("menu.runToBreakpoint")}
           </button>
           <!-- FE-WS-06(F8):解题/调试模式切换;未启用调试的题目隐藏本项。 -->
           ${this.debugModeAvailable
@@ -322,11 +337,11 @@ export class SmWorkspaceMenu extends LitElement {
                   type="button"
                   class="mode-toggle-button"
                   title=${this.debugModeActive
-                    ? "返回解题模式(内存视图换绑公开投影,锚点/滚动重置)"
-                    : "切换到调试模式(调试通道承载任意地址 / 指令流 / 断点;what-if 语义)"}
+                    ? t("menu.modeToggleTitleToSolve")
+                    : t("menu.modeToggleTitleToDebug")}
                   @click=${() => this.#emit({ action: "toggle-debug-mode" })}
                 >
-                  ${this.debugModeActive ? "返回解题模式" : "切换到调试模式"}
+                  ${this.debugModeActive ? t("menu.modeToggleToSolve") : t("menu.modeToggleToDebug")}
                 </button>
               `
             : nothing}
@@ -337,7 +352,7 @@ export class SmWorkspaceMenu extends LitElement {
             title=${this.#resetDisabledTitle}
             @click=${() => this.#emit({ action: "reset" })}
           >
-            重启测试环境
+            ${t("menu.reset")}
           </button>
         </span>
         ${this.#renderStatus()}
@@ -357,10 +372,9 @@ export class SmWorkspaceMenu extends LitElement {
     }
     return html`
       <p class="whatif-banner" role="status" data-testid="whatif-banner">
-        <strong>调试通过 ≠ 提交通过(裁决以提交为准)</strong>
+        <strong>${t("menu.whatifTitle")}</strong>
         <span>
-          当前为调试模式(what-if):调试交互不进入权威会话日志;ASLR 开启的题目中,
-          调试实例地址与真实实例可能不同——硬编码绝对地址跨实例失效属预期教学语义。
+          ${t("menu.whatifBody")}
         </span>
       </p>
     `;
@@ -373,27 +387,34 @@ export class SmWorkspaceMenu extends LitElement {
         class="open-tab"
         data-tab-type=${descriptor.type}
         title=${descriptor.createContent === undefined
-          ? (descriptor.placeholderNote ?? "该类型暂未提供内容")
-          : descriptor.label}
+          ? (descriptor.placeholderNote ?? t("common.noContentNote"))
+          : this.#tabLabel(descriptor)}
         @click=${() => this.#emit({ action: "open-tab", tabType: descriptor.type })}
       >
-        ${descriptor.label}
+        ${this.#tabLabel(descriptor)}
       </button>
     `;
   }
 
+  /** 展示名解析:登记了 labelKey(默认注册表)的按当前 locale 取词。 */
+  #tabLabel(descriptor: WorkspaceTabTypeDescriptor): string {
+    return descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label;
+  }
+
   #renderStatus(): unknown {
     return html`
-      <span class="status" role="status" aria-label="会话状态">
-        会话状态
-        <strong class="session-status">${this.projectionStatus ?? "无会话"}</strong>
+      <span class="status" role="status" aria-label=${t("menu.sessionStatusLabel")}>
+        ${t("menu.sessionStatusLabel")}
+        <strong class="session-status">${this.projectionStatus ?? t("menu.noSession")}</strong>
         revision
         <strong class="revision">${this.revision === null ? "—" : this.revision}</strong>
-        连接
+        ${t("menu.connectionLabel")}
         <strong class="connection-status">${this.connectionStatus}</strong>
         ${this.connectionStatus === "reconnecting"
           ? html`<span class="reconnect-detail">
-              第 ${this.reconnectAttempt} 次重试${this.retryDelayMs === null ? "" : ` · 约 ${this.retryDelayMs} ms 后重试`}
+              ${this.retryDelayMs === null
+                ? t("menu.retryAttempt", { attempt: this.reconnectAttempt })
+                : t("menu.retryDetail", { attempt: this.reconnectAttempt, delay: this.retryDelayMs })}
             </span>`
           : nothing}
       </span>
@@ -409,19 +430,20 @@ export class SmWorkspaceMenu extends LitElement {
     return html`
       <p class="banner" role=${alertLike ? "alert" : "status"}>
         ${alertLike
-          ? html`<strong>连接已被同一会话的新连接取代</strong>`
+          ? html`<strong>${t("menu.replacedTitle")}</strong>`
           : this.connectionStatus === "reconnecting"
-            ? html`<strong>连接中断,正在重连</strong>`
-            : html`<strong>连接已断开</strong>`}
+            ? html`<strong>${t("menu.reconnectingTitle")}</strong>`
+            : html`<strong>${t("menu.disconnectedTitle")}</strong>`}
         <span>
-          正在呈现最近一次公开投影${this.revision === null ? "" : `(revision ${this.revision})`}
-          ——重连后自动 sync 对齐;本工作区不做任何本地 VM 执行降级。
+          ${t("menu.bannerBody", {
+            revision: this.revision === null ? "" : `(revision ${this.revision})`,
+          })}
         </span>
         ${this.connectionStatus === "reconnecting" && this.retryDelayMs !== null
-          ? html`<span>第 ${this.reconnectAttempt} 次重试 · 约 ${this.retryDelayMs} ms 后重试</span>`
+          ? html`<span>${t("menu.retryDetail", { attempt: this.reconnectAttempt, delay: this.retryDelayMs })}</span>`
           : nothing}
         <button type="button" class="reconnect-button" @click=${() => this.#emit({ action: "reconnect" })}>
-          手动重连
+          ${t("menu.reconnect")}
         </button>
       </p>
     `;
@@ -434,9 +456,9 @@ export class SmWorkspaceMenu extends LitElement {
     }
     return html`
       <p class="guidance" role="status">
-        测试环境已结束,请新建会话。
+        ${t("menu.guidanceTerminal")}
         <button type="button" class="new-session-button" @click=${() => this.#emit({ action: "new-session" })}>
-          新建会话
+          ${t("menu.newSession")}
         </button>
       </p>
     `;
@@ -451,7 +473,7 @@ export class SmWorkspaceMenu extends LitElement {
     const explanation = error.explanation;
     return html`
       <p class="error" role="alert">
-        <strong>动作被拒绝</strong>
+        <strong>${t("menu.actionRejected")}</strong>
         <span class="error-code">[${error.code}]</span>
         <span class="error-message">${error.message}</span>
         ${explanation === undefined
@@ -465,12 +487,12 @@ export class SmWorkspaceMenu extends LitElement {
         <button
           type="button"
           class="error-dismiss"
-          aria-label="关闭错误提示"
+          aria-label=${t("menu.dismissAria")}
           @click=${() => {
             this.errorDismissed = true;
           }}
         >
-          知道了
+          ${t("menu.dismiss")}
         </button>
       </p>
     `;
@@ -480,25 +502,25 @@ export class SmWorkspaceMenu extends LitElement {
   #explanationFacts(explanation: NonNullable<PublicError["explanation"]>): unknown {
     const facts: string[] = [];
     if (explanation.regionId !== undefined) {
-      facts.push(`区域 ${explanation.regionId}`);
+      facts.push(t("menu.factRegion", { id: explanation.regionId }));
     }
     if (explanation.permissions !== undefined) {
-      facts.push(`权限 ${explanation.permissions}`);
+      facts.push(t("menu.factPermissions", { value: explanation.permissions }));
     }
     if (explanation.valueHex !== undefined) {
-      facts.push(`值 ${explanation.valueHex}`);
+      facts.push(t("menu.factValue", { value: explanation.valueHex }));
     }
     if (explanation.interpretedAs !== undefined) {
-      facts.push(`按 ${explanation.interpretedAs} 解释`);
+      facts.push(t("menu.factInterpretedAs", { value: explanation.interpretedAs }));
     }
     if (explanation.alignmentBytes !== undefined) {
-      facts.push(`对齐 ${explanation.alignmentBytes} B`);
+      facts.push(t("menu.factAlignment", { count: explanation.alignmentBytes }));
     }
     if (explanation.expectedBytesLength !== undefined) {
-      facts.push(`期望 ${explanation.expectedBytesLength} B`);
+      facts.push(t("menu.factExpected", { count: explanation.expectedBytesLength }));
     }
     if (explanation.actualBytesLength !== undefined) {
-      facts.push(`实际 ${explanation.actualBytesLength} B`);
+      facts.push(t("menu.factActual", { count: explanation.actualBytesLength }));
     }
     if (facts.length === 0) {
       return nothing;
@@ -529,15 +551,15 @@ export class SmWorkspaceMenu extends LitElement {
 
   get #resetDisabledTitle(): string {
     if (this.#isTerminal) {
-      return "测试环境已结束,请新建会话";
+      return t("menu.resetTitleTerminal");
     }
     if (!this.hasSession) {
-      return "尚未创建会话";
+      return t("menu.resetTitleNoSession");
     }
     if (this.connectionStatus !== "connected") {
-      return "动作通道未连接,等待重连";
+      return t("menu.resetTitleDisconnected");
     }
-    return "重置会话到题目初始状态";
+    return t("menu.resetTitleDefault");
   }
 
   #emit(action: WorkspaceMenuAction): void {

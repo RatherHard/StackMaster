@@ -20,6 +20,8 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 import type { MemoryDataSource } from "../../datasource/types.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 import {
   JUMP_CHAIN_EXPANDED_LIMIT,
   JUMP_CHAIN_HORIZONTAL_LIMIT,
@@ -71,6 +73,16 @@ export class SmJumpChain extends LitElement {
   /** 延伸反馈(已延伸至缓存边界 / 失败文案;短暂承载)。 */
   #extendStatus: string | null = null;
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
+
   static override styles = css`
     :host {
       display: block;
@@ -91,7 +103,7 @@ export class SmJumpChain extends LitElement {
 
     .chain-address {
       padding: 0 0.25rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
       background: canvas;
       color: linktext;
@@ -118,7 +130,7 @@ export class SmJumpChain extends LitElement {
 
     .chain-expand {
       padding: 0 0.375rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
       background: none;
       color: graytext;
@@ -130,7 +142,7 @@ export class SmJumpChain extends LitElement {
     /* 延伸入口 + 反馈(WP-F8 调试档;FE-ST-08/10)。 */
     .chain-extend-button {
       padding: 0 0.375rem;
-      border: 1px solid rgb(0 0 0 / 20%);
+      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 4px;
       background: canvas;
       color: linktext;
@@ -221,10 +233,10 @@ export class SmJumpChain extends LitElement {
         data-extend-address=${last.addressHex}
         ?disabled=${this.#extending}
         aria-busy=${this.#extending ? "true" : "false"}
-        title="请求该地址窗口并延伸链(调试模式)"
+        title=${t("chain.extendTitle")}
         @click=${() => this.#runExtend(last.addressHex)}
       >
-        ${this.#extending ? "延伸中…" : "延伸"}
+        ${this.#extending ? t("chain.extending") : t("chain.extend")}
       </button>
       ${this.#extendStatus === null
         ? nothing
@@ -244,9 +256,9 @@ export class SmJumpChain extends LitElement {
       await handler(addressHex);
       const resolved = this.#resolve(JUMP_CHAIN_HORIZONTAL_LIMIT);
       const stillOutside = resolved?.at(-1)?.outsideWindow === true;
-      this.#extendStatus = stillOutside ? "已延伸至缓存边界" : null;
+      this.#extendStatus = stillOutside ? t("chain.extendedToBoundary") : null;
     } catch {
-      this.#extendStatus = "延伸失败(调试通道未连接或地址不可达)";
+      this.#extendStatus = t("chain.extendFailed");
     } finally {
       this.#extending = false;
       this.requestUpdate();
@@ -280,7 +292,9 @@ export class SmJumpChain extends LitElement {
       type="button"
       class="chain-address"
       data-address="${addressHex}"
-      title="跳转到 ${addressHex}${withinWindow ? "" : "(窗口外)"}"
+      title=${t("chain.jumpTitle", {
+        address: addressHex + (withinWindow ? "" : t("chain.outsideSuffix")),
+      })}
       @click=${() => this.#emitJump(addressHex, withinWindow)}
     >${addressHex}</button>`;
   }
@@ -290,8 +304,8 @@ export class SmJumpChain extends LitElement {
     return html`<span
       class="chain-loop"
       role="img"
-      aria-label="回环:目标 ${segment.targetAddressHex ?? segment.addressHex} 已在链中出现"
-      title="回环:该地址已在链中出现"
+      aria-label=${t("chain.loopAria", { target: segment.targetAddressHex ?? segment.addressHex })}
+      title=${t("chain.loopTitle")}
     >
       <svg
         class="chain-loop-icon"
@@ -343,7 +357,7 @@ export class SmJumpChain extends LitElement {
         this.expanded = !this.expanded;
       }}
     >
-      ${this.expanded ? "收起" : "展开完整链"}
+      ${this.expanded ? t("chain.collapse") : t("chain.expand")}
     </button>`;
   }
 
@@ -355,12 +369,12 @@ export class SmJumpChain extends LitElement {
           ${this.#renderAddressChip(segment.addressHex, segment.outsideWindow !== true)}
           ${segment.valueHex === undefined
             ? nothing
-            : html`<span class="chain-value">值 ${segment.valueHex}</span>`}
+            : html`<span class="chain-value">${t("chain.value", { value: segment.valueHex })}</span>`}
           ${segment.loopBack === true
-            ? html`<span class="chain-value">(回环)</span>`
+            ? html`<span class="chain-value">${t("chain.loopMark")}</span>`
             : nothing}
           ${segment.outsideWindow === true
-            ? html`<span class="chain-outside">(窗口外)</span>`
+            ? html`<span class="chain-outside">${t("chain.outsideMark")}</span>`
             : nothing}
         </li>`,
       )}

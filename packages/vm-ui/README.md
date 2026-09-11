@@ -271,6 +271,55 @@ const client = new SessionClient({
 本 WP 未强制跑 compose E2E(留给 WP-F7 的 Playwright 最小集);上述接入面已由
 mock 全链路测试覆盖同一代码路径。
 
+## 主题与语言机制面(WP-53,2026-09-11)
+
+嵌入协议冻结面的实现义务(阶段五边界裁决 2:**主题/语言是机制不是视觉美化,
+视觉风格零重设计**);定案细节与遗留登记见
+`docs/develop/阶段五WP53决策草稿.md`。
+
+### 主题(src/theme/theme-tokens.ts)
+
+- **变量面 = 8 个 CSS 自定义属性**(边框 3 档 / 分隔 2 档 / 徽标底 2 档 /
+  `--sm-danger`),light 值 = 现行硬编码值原样(light 零视觉变化),dark 值 =
+  功能对比度初值(以 axe 真机门禁为唯一口径,WX-55 校准);系统颜色关键词
+  (canvas/canvastext/graytext/…)随 `color-scheme` 自适应,不入变量面;
+- **注入 = `data-sm-theme` 属性锚 + 文档级样式表 + 自定义属性继承**:
+  `ensureSmThemeStyles(document)` 幂等注入(各组件 connectedCallback 调用),
+  文档级规则命中携带锚的宿主元素(嵌入形态 = WP-52 落的
+  `<pwn-memory-vm data-sm-theme>`),变量沿 composed 树继承穿透 shadow DOM,
+  组件以 `var(--sm-*, <light 值>)` 消费、零 JS 解析;`auto` 的系统跟随 =
+  `@media (prefers-color-scheme: dark)`(嵌入形态的 auto 已由 WP-52 解析为
+  二值锚,两条路径互不依赖);
+- **独立使用形态**:`<sm-workspace theme="light|dark|auto">`(转写为自身
+  `data-sm-theme`,最近锚优先);
+- 机械护栏测试(`test/theming/theme.test.ts`):全部组件样式 var() 之外零
+  `rgb(0 0 0` / `crimson` 硬编码;axe 套件 light / dark 锚双主题零 violations
+  (`color-contrast` 沿既有豁免,真机补测归 WP-55,dark 数值按其报告校准)。
+
+### i18n(src/i18n/)
+
+- **Q5 定案**:内置语言集 = {zh-CN(默认), en};zh-CN 目录值 = 现行文案
+  原样(抽取只增不破——既有测试文案断言零回退),en 为真实可读英文;
+  目录完整性由类型系统(`Record<SmMessageKey, string>`)+ 测试双向断言;
+- **取词**:`t(key, params?)` 类型安全,`{name}` 占位双语同构;**响应式**:
+  `setLocale / getLocale / onLocaleChange` 模块级 store + `LocaleController`
+  组件订阅(切换即重渲染);**BCP-47 降级确定性**:精确 → 主子标签前缀
+  (zh-TW→zh-CN、en-GB→en)→ 默认 zh-CN,未知标签确定性回落;
+- **锚消费**:组件连接时沿 composed 树找最近 `[data-sm-language]`(嵌入协议
+  语义 = WP-52 落的宿主锚)并挂 MutationObserver,运行中 `language_changed`
+  即生效;无锚(未授予 language,§4.4)= 保持内置默认;
+- **抽取面**:全部用户可见字符串(~420 键);协议/状态机词(connected、
+  running、write_bytes 等)与数据值(地址、regionId)不入目录;固化语义:
+  状态/日志/时间线/编译标签按生成时刻 locale,积木画布按 Blockly 注册时刻
+  (运行中切换不追溯,遗留登记)。
+
+### 测试增量(WP-53)
+
+`test/i18n/i18n.test.ts`(目录完整性 / BCP-47 矩阵 / 响应式 / 取词)、
+`test/i18n/locale-anchor.test.ts`(锚消费 / 运行中切换 / 降级矩阵 / 未授予
+禁用锚)、`test/theming/theme.test.ts`(锚样式表 / 变量面 / 机械护栏 /
+theme 属性转写 / axe 双主题);既有 518 用例零回退。
+
 ## 纪律速查
 
 - 视图组件禁止绕过 `MemoryDataSource` 接口直读 session-client 投影存储

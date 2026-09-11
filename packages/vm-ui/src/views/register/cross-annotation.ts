@@ -14,6 +14,7 @@
  */
 import { html, nothing, type TemplateResult } from "lit";
 import type { RegisterRow, VmaEntry, VmaList } from "../../datasource/types.js";
+import { t } from "../../i18n/i18n.js";
 import { addressToHex, normalizeValueHex, parseAddressHex } from "../../render/hex.js";
 
 /** 寄存器值命中行(字节视图行左缘标注与点击展开的数据依据)。 */
@@ -91,6 +92,6 @@ export function renderRegisterAnnotationCell(
     class="reg-annotation"
     data-registers="${names}"
     title="${detail}"
-    aria-label="寄存器标注:${detail}"
+    aria-label=${t("annot.aria", { detail })}
   >${names}</button>`;
 }

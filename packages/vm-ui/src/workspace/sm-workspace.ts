@@ -55,7 +55,9 @@ import { ProjectionDataSource } from "../datasource/projection-data-source.js";
 import type { MemoryDataSource, Row } from "../datasource/types.js";
 import type { PublicErrorMapping, PublicHint } from "../ed/ed-types.js";
 import { buildTimeline, type ActionTimelineRecord } from "../ed/timeline.js";
+import { LocaleController, t } from "../i18n/i18n.js";
 import { formatAddressHex } from "../render/hex.js";
+import { ensureSmThemeStyles, SM_THEME_ATTRIBUTE, type SmThemeValue } from "../theme/theme-tokens.js";
 import { crossAnnotateRegisters, type RegisterHit } from "../views/register/cross-annotation.js";
 import { resolveJumpChain } from "../views/chain/resolve.js";
 // 模板依赖的自定义元素经 side-effect import 注册(独立入口自包含;
@@ -80,6 +82,7 @@ import "../views/ed/sm-checkpoints.js";
 import "../views/ed/sm-hint-ladder.js";
 import "../views/ed/sm-error-explainer.js";
 import "../views/instruction/sm-instruction-view.js";
+import { pausedReasonText } from "../views/instruction/sm-instruction-view.js";
 import type { HighlightJumpDetail } from "../views/ed/sm-structure-view.js";
 import {
   defaultTabTypeRegistry,
@@ -153,6 +156,15 @@ export class SmWorkspace extends LitElement {
   @property({ attribute: false })
   debugDataSourceFactory: DebugDataSourceFactory | null = null;
 
+  /**
+   * 主题属性(WP-53 / Q6 独立使用形态便捷注入面):`light` / `dark` / `auto`
+   * (auto = 跟随系统 prefers-color-scheme,CSS media 承担)。设值即转写为
+   * 自身 `data-sm-theme`(最近锚优先——显式属性胜过祖先锚);缺省 null =
+   * 不写锚,由最近的祖先 `data-sm-theme`(嵌入形态)或 light 缺省决定。
+   */
+  @property({ type: String, attribute: "theme" })
+  theme: SmThemeValue | null = null;
+
   // ── 内部状态 ─────────────────────────────────────────────────────────────
 
   readonly #model = new WorkspaceLayoutModel();
@@ -200,12 +212,17 @@ export class SmWorkspace extends LitElement {
   #drag: { tabId: string; startX: number; startY: number; moved: boolean } | null = null;
   #lastVisibleTabId: string | null = null;
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+  /** theme 属性是否写过自身锚(null 归位时只清理自身写入面)。 */
+  #themeAnchorWritten = false;
+
   static override styles = css`
     :host {
       display: flex;
       flex-direction: column;
       min-block-size: 24rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       background: canvas;
       color: canvastext;
@@ -239,7 +256,7 @@ export class SmWorkspace extends LitElement {
       min-block-size: 9rem;
       display: flex;
       flex-direction: column;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       overflow: hidden;
       background: canvas;
@@ -259,7 +276,7 @@ export class SmWorkspace extends LitElement {
       align-items: center;
       gap: 0.375rem;
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       background: color-mix(in srgb, canvas 92%, highlight 8%);
       cursor: grab;
       user-select: none;
@@ -274,7 +291,7 @@ export class SmWorkspace extends LitElement {
     .tab-close {
       margin-inline-start: auto;
       padding: 0 0.375rem;
-      border: 1px solid rgb(0 0 0 / 20%);
+      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 4px;
       background: canvas;
       color: canvastext;
@@ -308,7 +325,7 @@ export class SmWorkspace extends LitElement {
       padding: 0.25rem 0.75rem;
       color: graytext;
       font-size: 0.75rem;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
     /* 调试档状态行(F8):切换 / attach / 暂停反馈(降级文案明示)。 */
@@ -318,12 +335,12 @@ export class SmWorkspace extends LitElement {
       color: canvastext;
       font-size: 0.75rem;
       background: color-mix(in srgb, field 94%, accentcolor 6%);
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
     /* 教学面板(F8 ED 挂接,取简 = details 折叠区):提示 ladder + 错误解释。 */
     .teaching-panel {
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       font-size: 0.8125rem;
     }
 
@@ -357,6 +374,9 @@ export class SmWorkspace extends LitElement {
       this.#rebindContents();
       this.#rebuildAnnotationCache();
     }
+    if (changed.has("theme")) {
+      this.#syncThemeAnchor();
+    }
   }
 
   protected override updated(): void {
@@ -372,12 +392,29 @@ export class SmWorkspace extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    // 主题锚样式表(幂等)+ 独立使用形态的 theme 属性转写(最近锚优先)。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+    this.#syncThemeAnchor();
     // pointer 拖拽监听挂在 shadow root 内:避免跨 shadow 边界的 target 重定向。
     this.renderRoot.addEventListener("pointermove", this.#onPointerMove as EventListener);
     this.renderRoot.addEventListener("pointerup", this.#onPointerUp as EventListener);
     this.renderRoot.addEventListener("pointercancel", this.#onPointerCancel as EventListener);
     if (this.client !== null && this.#listenerDisposers.length === 0) {
       this.#attachClientListeners();
+    }
+  }
+
+  /** 独立使用形态:theme 属性 → 自身 data-sm-theme(最近锚优先,确定性)。 */
+  #syncThemeAnchor(): void {
+    if (this.theme !== null) {
+      this.setAttribute(SM_THEME_ATTRIBUTE, this.theme);
+      this.#themeAnchorWritten = true;
+    } else if (this.#themeAnchorWritten) {
+      // 归位 null:只移除自身经 theme 属性写入的锚,不动外部直接设置的锚。
+      this.removeAttribute(SM_THEME_ATTRIBUTE);
+      this.#themeAnchorWritten = false;
     }
   }
 
@@ -411,7 +448,9 @@ export class SmWorkspace extends LitElement {
       content.rowDecorator = this.#rowDecorator;
     }
     this.#bindActionSink(content);
-    const id = this.#model.openTab(type, descriptor.label);
+    // 展示名:i18n 键优先(WP-53),按打开时刻 locale 求值(标题固化,登记)。
+    const label = descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label;
+    const id = this.#model.openTab(type, label);
     if (content !== null) {
       this.#contents.set(id, content);
     }
@@ -660,27 +699,23 @@ export class SmWorkspace extends LitElement {
     switch (event.kind) {
       case "paused":
         if (event.paused !== undefined) {
-          const reason =
-            event.paused.reason === "step"
-              ? "单步暂停"
-              : event.paused.reason === "breakpoint"
-                ? "命中断点,已暂停"
-                : event.paused.reason === "program_halt"
-                  ? "程序已自行停机(exit / 停机指令)"
-                  : "预算耗尽,确定性暂停";
-          this.#debugFeedback = `${reason} @ ${event.paused.addressHex}`;
+          const reason = pausedReasonText(event.paused.reason);
+          this.#debugFeedback = t("debug.pausedAt", {
+            reason,
+            address: ` @ ${event.paused.addressHex}`,
+          });
         }
         break;
       case "attached":
-        this.#debugFeedback = "调试实例已对齐(重放完成),调试通道已就绪";
+        this.#debugFeedback = t("debug.attachedReady");
         break;
       case "error":
-        this.#debugFeedback = "调试通道错误:请求被拒绝或帧异常(详见指令视图状态)";
+        this.#debugFeedback = t("debug.channelError");
         break;
       case "connection":
         this.#debugFeedback =
           this.#debugDataSource?.connectionStatus === "disconnected"
-            ? "调试通道已断开:重新切换到调试模式以重新 attach"
+            ? t("debug.channelDisconnected")
             : null;
         break;
       default:
@@ -693,7 +728,7 @@ export class SmWorkspace extends LitElement {
   #enterDebugMode(): void {
     const client = this.client;
     if (client === null || client.sessionId === null) {
-      this.#debugFeedback = "尚未创建会话:无法切换到调试模式";
+      this.#debugFeedback = t("debug.noSession");
       this.requestUpdate();
       return;
     }
@@ -701,7 +736,7 @@ export class SmWorkspace extends LitElement {
     const factory = this.debugDataSourceFactory ?? ((session: DebugSessionLike) => createDebugDataSource(session));
     const debugSource = factory(client);
     if (debugSource === null) {
-      this.#debugFeedback = "调试数据源装配失败(会话不可用)";
+      this.#debugFeedback = t("debug.sourceFailed");
       this.requestUpdate();
       return;
     }
@@ -713,7 +748,7 @@ export class SmWorkspace extends LitElement {
     // 换绑数据源(字节视图换绑即重建 = 锚点/滚动重置,F5 既有验收口径)。
     this.dataSource = debugSource;
     debugSource.attach();
-    this.#debugFeedback = "调试通道连接中(attach 重放对齐后可用)……";
+    this.#debugFeedback = t("debug.connecting");
     this.#rebindContents();
     this.#syncEdContents();
     this.requestUpdate();
@@ -904,7 +939,7 @@ export class SmWorkspace extends LitElement {
   #submitAction(action: ActionObject): void {
     const client = this.client;
     if (client === null) {
-      this.#lastError = { code: "internal_error", message: "尚未连接会话:动作未提交" };
+      this.#lastError = { code: "internal_error", message: t("workspace.noSessionError") };
       this.requestUpdate();
       return;
     }
@@ -919,7 +954,7 @@ export class SmWorkspace extends LitElement {
       this.#lastError = {
         code: "internal_error",
         message:
-          error instanceof SessionClientError ? error.message : "动作提交失败(客户端侧错误)",
+          error instanceof SessionClientError ? error.message : t("workspace.actionSubmitFailed"),
       };
       this.requestUpdate();
     }
@@ -1008,7 +1043,7 @@ export class SmWorkspace extends LitElement {
    */
   async #handleViewportJump(addressHex: string, view: SmByteViewLike | null, addressText: string): Promise<void> {
     if (view !== null && view.scrollToAddress(addressHex)) {
-      this.#jumpFeedback = `已跳转到 ${addressText}`;
+      this.#jumpFeedback = t("common.jumpOk", { target: addressText });
       this.requestUpdate();
       return;
     }
@@ -1022,7 +1057,9 @@ export class SmWorkspace extends LitElement {
       }
     }
     const movedAfter = view?.scrollToAddress(addressHex) ?? false;
-    this.#jumpFeedback = movedAfter ? `已跳转到 ${addressText}` : `${addressText} 在可见窗口之外`;
+    this.#jumpFeedback = movedAfter
+      ? t("common.jumpOk", { target: addressText })
+      : t("common.jumpOutside", { target: addressText });
     this.requestUpdate();
   }
 
@@ -1038,7 +1075,7 @@ export class SmWorkspace extends LitElement {
     const byteTab =
       [...this.#contents.values()].find((content): content is SmByteTab => content instanceof SmByteTab) ?? null;
     if (byteTab === null) {
-      this.#jumpFeedback = `结构标注 ${detail.addressHex}:尚未打开栈/自由视图,无法定位`;
+      this.#jumpFeedback = t("workspace.highlightNoView", { address: detail.addressHex });
       this.requestUpdate();
       return;
     }
@@ -1159,7 +1196,7 @@ export class SmWorkspace extends LitElement {
       ></sm-workspace-menu>
       ${this.#renderDebugFeedback()}
       <details class="teaching-panel" part="teaching-panel">
-        <summary>教学面板(提示 / 错误解释)</summary>
+        <summary>${t("workspace.teachingPanel")}</summary>
         <div class="teaching-grid">
           <sm-hint-ladder
             .hints=${descriptor?.hintLadder ?? []}
@@ -1178,7 +1215,7 @@ export class SmWorkspace extends LitElement {
       <main
         class="columns"
         data-columns
-        aria-label="工作区标签页区域"
+        aria-label=${t("workspace.columnsAria")}
         @viewport-jump=${this.#onViewportJump}
         @highlight-jump=${this.#onHighlightJump}
         @breakpoints-changed=${() => this.requestUpdate()}
@@ -1201,7 +1238,7 @@ export class SmWorkspace extends LitElement {
   }
 
   #renderEmptyState(): unknown {
-    return html`<p class="empty" role="status">工作区为空:从顶部菜单「打开」选择一个标签页类型开始</p>`;
+    return html`<p class="empty" role="status">${t("workspace.empty")}</p>`;
   }
 
   #renderPanel(tabId: string): unknown {
@@ -1226,7 +1263,7 @@ export class SmWorkspace extends LitElement {
           <button
             type="button"
             class="tab-close"
-            aria-label="关闭 ${info.title}"
+            aria-label=${t("workspace.closeTabAria", { title: info.title })}
             @pointerdown=${(event: PointerEvent) => event.stopPropagation()}
             @click=${() => this.closeTab(info.id)}
           >
@@ -1236,7 +1273,7 @@ export class SmWorkspace extends LitElement {
         <div class="tab-content">
           ${content ??
           html`<p class="tab-placeholder" role="status">
-            ${descriptor?.placeholderNote ?? "该类型暂未提供内容"}
+            ${descriptor?.placeholderNote ?? t("common.noContentNote")}
           </p>`}
         </div>
       </section>

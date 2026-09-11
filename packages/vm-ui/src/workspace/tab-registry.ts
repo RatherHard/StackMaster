@@ -28,6 +28,7 @@ import { SmCallStack } from "../views/ed/sm-call-stack.js";
 import { SmMemoryDiff } from "../views/ed/sm-memory-diff.js";
 import { SmTimeline } from "../views/ed/sm-timeline.js";
 import { SmCheckpoints } from "../views/ed/sm-checkpoints.js";
+import type { SmMessageKey } from "../i18n/i18n.js";
 import type { MemoryDataSource } from "../datasource/types.js";
 
 /** 已登记标签页类型键(公开四类;开放 string 供 WP-F6 payload 等追加)。 */
@@ -57,8 +58,14 @@ export interface WorkspaceTabFactoryContext {
 export interface WorkspaceTabTypeDescriptor {
   /** 类型键(稳定 id;开放集合,登记即扩展)。 */
   readonly type: WorkspaceTabType;
-  /** 展示名(菜单项与标签页标题基名)。 */
+  /** 展示名(菜单项与标签页标题基名;模块加载时刻的静态快照)。 */
   readonly label: string;
+  /**
+   * 展示名 i18n 键(WP-53;可缺省):登记后菜单项按**当前 locale** 取词
+   * (渲染时解析,语言切换即生效);缺省回落 `label`。标签页标题在打开
+   * 时刻求值固化(打开后不随切换追溯——登记于决策草稿)。
+   */
+  readonly labelKey?: SmMessageKey;
   /**
    * 内容工厂:返回该标签页的内容元素。缺席 = **占位类型**(如 debug):
    * 工作区呈现 `placeholderNote` 空态,不创建内容元素。
@@ -112,6 +119,7 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   registry.register({
     type: STACK_TAB_TYPE,
     label: "栈视图",
+    labelKey: "tab.stack",
     createContent: ({ dataSource }) => {
       const element = new SmByteTab();
       element.viewKind = "stack";
@@ -122,6 +130,7 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   registry.register({
     type: FREE_TAB_TYPE,
     label: "自由视图",
+    labelKey: "tab.free",
     createContent: ({ dataSource }) => {
       const element = new SmByteTab();
       element.viewKind = "free";
@@ -132,6 +141,7 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   registry.register({
     type: REGISTERS_TAB_TYPE,
     label: "寄存器视图",
+    labelKey: "tab.registers",
     createContent: ({ dataSource }) => {
       const element = new SmRegisterView();
       element.dataSource = dataSource;
@@ -146,6 +156,7 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   registry.register({
     type: PAYLOAD_TAB_TYPE,
     label: "Payload 搭建",
+    labelKey: "tab.payload",
     createContent: ({ dataSource }) => {
       const element = new SmPayloadTab();
       element.dataSource = dataSource;
@@ -158,6 +169,7 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   registry.register({
     type: DEBUG_TAB_TYPE,
     label: "指令视图",
+    labelKey: "tab.instruction",
     createContent: ({ dataSource }) => {
       const element = new SmInstructionView();
       element.dataSource = dataSource;
@@ -169,26 +181,31 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   registry.register({
     type: STRUCTURE_TAB_TYPE,
     label: "结构视图",
+    labelKey: "tab.structure",
     createContent: () => new SmStructureView(),
   });
   registry.register({
     type: CALL_STACK_TAB_TYPE,
     label: "调用栈",
+    labelKey: "tab.callStack",
     createContent: () => new SmCallStack(),
   });
   registry.register({
     type: MEMORY_DIFF_TAB_TYPE,
     label: "内存 diff",
+    labelKey: "tab.memoryDiff",
     createContent: () => new SmMemoryDiff(),
   });
   registry.register({
     type: TIMELINE_TAB_TYPE,
     label: "时间线",
+    labelKey: "tab.timeline",
     createContent: () => new SmTimeline(),
   });
   registry.register({
     type: CHECKPOINTS_TAB_TYPE,
     label: "checkpoint",
+    labelKey: "tab.checkpoints",
     createContent: () => new SmCheckpoints(),
   });
   return registry;

@@ -27,10 +27,12 @@ import { customElement, property } from "lit/decorators.js";
 import * as Blockly from "blockly";
 
 import type { MemoryDataSource } from "../datasource/types.js";
+import { LocaleController, t } from "../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
 import { createPublicEvalEnvironment } from "./compiler/eval.js";
 import {
   PAYLOAD_START_BLOCK_TYPE,
-  PAYLOAD_TOOLBOX,
+  buildPayloadToolbox,
   registerPayloadBlocks,
 } from "./compiler/blocks.js";
 import { compilePayload } from "./compiler/compile.js";
@@ -107,6 +109,9 @@ export class SmPayloadTab extends LitElement {
   /** Blockly 结构事件抑制(预置/编程性装载不触发过期标记)。 */
   #suppressStructureEvents = false;
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
   static override styles = css`
     :host {
       display: block;
@@ -128,7 +133,7 @@ export class SmPayloadTab extends LitElement {
     .canvas-pane {
       display: flex;
       min-block-size: 24rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       overflow: hidden;
     }
@@ -163,7 +168,7 @@ export class SmPayloadTab extends LitElement {
 
     .toolbar button {
       padding: 0.125rem 0.5rem;
-      border: 1px solid rgb(0 0 0 / 20%);
+      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 6px;
       background: canvas;
       color: canvastext;
@@ -186,7 +191,7 @@ export class SmPayloadTab extends LitElement {
       display: flex;
       flex-direction: column;
       min-block-size: 0;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       overflow: hidden;
     }
@@ -202,7 +207,7 @@ export class SmPayloadTab extends LitElement {
     .pane h3 {
       margin: 0;
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       background: color-mix(in srgb, canvas 92%, highlight 8%);
       font-size: 0.75rem;
       font-weight: 600;
@@ -222,14 +227,14 @@ export class SmPayloadTab extends LitElement {
     }
 
     .program-list li.breakpoint {
-      color: crimson;
+      color: var(--sm-danger, crimson);
     }
 
     .stale-note,
     .compile-errors {
       margin: 0;
       padding: 0.25rem 0.5rem;
-      color: crimson;
+      color: var(--sm-danger, crimson);
       font-size: 0.75rem;
     }
 
@@ -241,7 +246,7 @@ export class SmPayloadTab extends LitElement {
     }
 
     .output-log li.error {
-      color: crimson;
+      color: var(--sm-danger, crimson);
     }
   `;
 
@@ -260,6 +265,10 @@ export class SmPayloadTab extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    // 主题锚消费(i18n)由 LocaleController 承担;此处确保主题锚样式表在场。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
     // 轻 DOM 画布宿主(shadow DOM 适配定案;slot 承接布局)。
     if (this.#canvasHost === null) {
       const host = document.createElement("div");
@@ -330,7 +339,7 @@ export class SmPayloadTab extends LitElement {
   compileNow(): CompilePayloadResult | null {
     const state = this.#currentSerializedState();
     if (state === null) {
-      this.#appendLog("info", "画布不可用:无法读取积木程序");
+      this.#appendLog("info", t("payload.logCanvasUnavailable"));
       return null;
     }
     const environment = this.dataSource === null ? undefined : createPublicEvalEnvironment(this.dataSource);
@@ -344,13 +353,18 @@ export class SmPayloadTab extends LitElement {
       this.#compileErrors = [];
       this.#appendLog(
         "info",
-        `编译完成:${result.program.steps.length} 个原子步骤(含断点标记)`,
+        t("payload.logCompiled", { count: result.program.steps.length }),
       );
       this.#executor?.load(result.program);
     } else {
       this.#program = null;
       this.#compileErrors = result.errors;
-      this.#appendLog("error", `编译失败:${result.errors.map((error) => error.message).join(";")}`);
+      this.#appendLog(
+        "error",
+        t("payload.logCompileFailed", {
+          messages: result.errors.map((error) => error.message).join(";"),
+        }),
+      );
     }
     this.#applyBlockWarnings(result);
     this.requestUpdate();
@@ -382,7 +396,7 @@ export class SmPayloadTab extends LitElement {
   resetProgram(): void {
     if (this.#program !== null && this.#executor !== null) {
       this.#executor.load(this.#program);
-      this.#appendLog("info", "步进已复位(游标回零)");
+      this.#appendLog("info", t("payload.logReset"));
       this.requestUpdate();
     }
   }
@@ -427,7 +441,7 @@ export class SmPayloadTab extends LitElement {
       const workspace = Blockly.inject(host, {
         // 工具箱定义为 readonly 常量;Blockly Options 面要求可变数组(注入
         // 后不改写),此处单点窄化。
-        toolbox: PAYLOAD_TOOLBOX as never,
+        toolbox: buildPayloadToolbox() as never,
         trashcan: true,
         scrollbars: true,
       });
@@ -446,7 +460,7 @@ export class SmPayloadTab extends LitElement {
       // Blockly 环境不可用(极端嵌入环境):画布容器保留,呈兜底文案。
       this.#canvasUnavailable = true;
       this.#workspace = null;
-      host.textContent = "积木画布在当前环境不可用(容器已保留)";
+      host.textContent = t("payload.canvasUnavailableText");
     }
   }
 
@@ -507,21 +521,39 @@ export class SmPayloadTab extends LitElement {
       this.#executorCursor = event.index + 1;
       this.#appendLog(
         "step",
-        `#${event.index + 1} ${event.step.label} → 已执行(revision ${event.response.revision},状态 ${event.response.status})`,
+        t("payload.logStepExecuted", {
+          index: event.index + 1,
+          label: event.step.label,
+          revision: event.response.revision,
+          status: event.response.status,
+        }),
       );
       this.requestUpdate();
     });
     executor.onPaused((event) => {
       this.#executorCursor = event.index;
-      const reason = event.reason === "breakpoint" ? "断点" : event.reason === "user" ? "暂停请求" : "单步";
-      this.#appendLog("info", `已暂停于第 ${event.index + 1} 步前(${reason})`);
+      const reason =
+        event.reason === "breakpoint"
+          ? t("payload.pauseReasonBreakpoint")
+          : event.reason === "user"
+            ? t("payload.pauseReasonUser")
+            : t("payload.pauseReasonStep");
+      this.#appendLog("info", t("payload.logPaused", { index: event.index + 1, reason }));
       this.requestUpdate();
     });
     executor.onError((event: PayloadExecutorErrorEvent) => {
       this.#executorCursor = event.index;
       const code = event.error?.code ?? "client_error";
-      const detail = event.error?.message ?? event.message ?? "未知错误";
-      this.#appendLog("error", `#${event.index + 1} ${this.#program?.steps[event.index]?.label ?? ""} → 被拒绝 [${code}] ${detail}`);
+      const detail = event.error?.message ?? event.message ?? t("payload.unknownError");
+      this.#appendLog(
+        "error",
+        t("payload.logRejected", {
+          index: event.index + 1,
+          label: this.#program?.steps[event.index]?.label ?? "",
+          code,
+          detail,
+        }),
+      );
       this.requestUpdate();
     });
     this.#executor = executor;
@@ -535,7 +567,7 @@ export class SmPayloadTab extends LitElement {
   /** 运行/单步前置:程序就绪(过期即重编译)+ 执行器就绪(有动作通道)。 */
   #ensureExecutorReady(): boolean {
     if (this.actionSink === null) {
-      this.#appendLog("error", "尚未连接会话:动作无法提交(等待工作区接线)");
+      this.#appendLog("error", t("payload.logNoSink"));
       this.requestUpdate();
       return false;
     }
@@ -569,17 +601,17 @@ export class SmPayloadTab extends LitElement {
     const status = this.#executorStatus;
     return html`
       <div class="layout">
-        <section class="canvas-pane" aria-label="积木画布">
+        <section class="canvas-pane" aria-label=${t("payload.canvasAria")}>
           <slot name="canvas"></slot>
         </section>
         <div class="side">
-          <div class="toolbar" role="toolbar" aria-label="Payload 工具栏">
+          <div class="toolbar" role="toolbar" aria-label=${t("payload.toolbarAria")}>
             <button
               type="button"
               class="compile-button"
               @click=${() => this.compileNow()}
             >
-              编译
+              ${t("payload.compile")}
             </button>
             <button
               type="button"
@@ -587,7 +619,7 @@ export class SmPayloadTab extends LitElement {
               ?disabled=${!programReady || !sinkReady || status === "running" || total === 0}
               @click=${() => this.runProgram()}
             >
-              运行
+              ${t("payload.run")}
             </button>
             <button
               type="button"
@@ -595,7 +627,7 @@ export class SmPayloadTab extends LitElement {
               ?disabled=${!programReady || !sinkReady || status === "running" || status === "done" || total === 0}
               @click=${() => this.stepOnce()}
             >
-              单步
+              ${t("payload.step")}
             </button>
             <button
               type="button"
@@ -603,7 +635,7 @@ export class SmPayloadTab extends LitElement {
               ?disabled=${status !== "running"}
               @click=${() => this.pauseProgram()}
             >
-              暂停
+              ${t("payload.pause")}
             </button>
             <button
               type="button"
@@ -611,17 +643,19 @@ export class SmPayloadTab extends LitElement {
               ?disabled=${this.#executor === null || this.#executorCursor === 0}
               @click=${() => this.resetProgram()}
             >
-              复位步进
+              ${t("payload.reset")}
             </button>
             <span class="executor-status" role="status">
-              状态:${this.#executorStatus}
-              ${total === 0 ? nothing : html`(步 ${Math.min(this.#executorCursor, total)}/${total})`}
+              ${t("payload.statusLabel", { status: this.#executorStatus })}
+              ${total === 0
+                ? nothing
+                : html`${t("payload.stepPosition", { cursor: Math.min(this.#executorCursor, total), total })}`}
             </span>
           </div>
-          <section class="pane program-pane" aria-label="程序原子步骤">
-            <h3>程序(原子动作序列)</h3>
+          <section class="pane program-pane" aria-label=${t("payload.programAria")}>
+            <h3>${t("payload.programHeading")}</h3>
             ${this.#programStale
-              ? html`<p class="stale-note" role="status">积木已修改,待重新编译(运行/单步将自动编译并复位游标)</p>`
+              ? html`<p class="stale-note" role="status">${t("payload.staleNote")}</p>`
               : nothing}
             ${this.#compileErrors.length > 0
               ? html`<p class="compile-errors" role="alert">
@@ -629,7 +663,7 @@ export class SmPayloadTab extends LitElement {
                 </p>`
               : nothing}
             ${total === 0
-              ? html`<p class="empty">尚未编译:先在左侧拖拽积木,再点「编译」。</p>`
+              ? html`<p class="empty">${t("payload.programEmpty")}</p>`
               : html`
                   <ol class="program-list">
                     ${steps.map((step, index) => {
@@ -655,10 +689,10 @@ export class SmPayloadTab extends LitElement {
                   </ol>
                 `}
           </section>
-          <section class="pane output-pane" aria-label="执行输出">
-            <h3>执行输出</h3>
+          <section class="pane output-pane" aria-label=${t("payload.outputAria")}>
+            <h3>${t("payload.outputHeading")}</h3>
             ${this.#log.length === 0
-              ? html`<p class="empty">暂无执行记录。</p>`
+              ? html`<p class="empty">${t("payload.outputEmpty")}</p>`
               : html`
                   <ol class="output-log" role="log" aria-live="polite">
                     ${this.#log.map(

@@ -11,7 +11,8 @@
  *    不渲染解释段;explanation 子字段逐键"存在才渲染"(strictObject 下
  *    缺席 = 键整体缺席,不存在空串/null 占位形态);
  *  - **teachingNote**:按 `errorCode` 匹配题目映射;无匹配给默认教学文案
- *    "该错误暂无教学注解"(规约口径,见 ed-types.ts DEFAULT_TEACHING_NOTE)。
+ *    "该错误暂无教学注解"(规约口径 = ed-types.ts DEFAULT_TEACHING_NOTE 的
+ *    zh-CN 快照;渲染经 i18n 键 `ed.noTeachingNote`,WP-53)。
  *
  * 数据面:属性驱动;error 由宿主接 onActionRejected / userVisibleError 注入,
  * mappings 由公开描述包 `publicErrorMapping` 注入(接线归 WP-F8)。
@@ -27,8 +28,10 @@ import { customElement, property } from "lit/decorators.js";
 
 import type { PublicError } from "@stackmaster/protocol";
 
-import { DEFAULT_TEACHING_NOTE, type PublicErrorMapping } from "../../ed/ed-types.js";
+import type { PublicErrorMapping } from "../../ed/ed-types.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
 import { normalizeValueHex } from "../../render/hex.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
 @customElement("sm-error-explainer")
 export class SmErrorExplainer extends LitElement {
@@ -39,6 +42,16 @@ export class SmErrorExplainer extends LitElement {
   /** 题目错误教学注解映射(公开描述包 publicErrorMapping)。 */
   @property({ attribute: false })
   mappings: readonly PublicErrorMapping[] = [];
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   static override styles = css`
     :host {
@@ -57,7 +70,7 @@ export class SmErrorExplainer extends LitElement {
       flex: none;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: rgb(0 0 0 / 8%);
+      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
       font-family: ui-monospace, monospace;
       font-size: 0.75rem;
     }
@@ -86,7 +99,7 @@ export class SmErrorExplainer extends LitElement {
     .teaching-note {
       margin: 0.5rem 0 0;
       padding: 0.25rem 0.5rem;
-      border-inline-start: 3px solid rgb(0 0 0 / 20%);
+      border-inline-start: 3px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       font-size: 0.875rem;
     }
 
@@ -101,19 +114,19 @@ export class SmErrorExplainer extends LitElement {
   protected override render(): TemplateResult {
     const error = this.error;
     if (error === null) {
-      return html`<p class="empty" role="status">当前没有错误</p>`;
+      return html`<p class="empty" role="status">${t("ed.errorEmpty")}</p>`;
     }
     const teachingNote =
       this.mappings.find((mapping) => mapping.errorCode === error.code)?.teachingNote ??
-      DEFAULT_TEACHING_NOTE;
+      t("ed.noTeachingNote");
     return html`
-      <section aria-label="错误解释" part="panel">
+      <section aria-label=${t("ed.errorAria")} part="panel">
         <p class="code-line">
           <span class="code-badge">${error.code}</span>
           <span class="message">${error.message}</span>
         </p>
         ${this.#renderAddress(error)} ${this.#renderExplanation(error)}
-        <p class="teaching-note">教学注解:${teachingNote}</p>
+        <p class="teaching-note">${t("ed.teachingNoteLine", { note: teachingNote })}</p>
       </section>
     `;
   }
@@ -126,7 +139,7 @@ export class SmErrorExplainer extends LitElement {
     }
     return html`
       <dl>
-        <dt>地址</dt>
+        <dt>${t("ed.dtAddress")}</dt>
         <dd class="mono">${addressHex}</dd>
       </dl>
     `;
@@ -142,28 +155,28 @@ export class SmErrorExplainer extends LitElement {
       <dl>
         ${explanation.regionId === undefined
           ? nothing
-          : html`<dt>区域</dt><dd class="mono">${explanation.regionId}</dd>`}
+          : html`<dt>${t("ed.dtRegion")}</dt><dd class="mono">${explanation.regionId}</dd>`}
         ${explanation.permissions === undefined
           ? nothing
-          : html`<dt>区域权限</dt><dd class="mono">${explanation.permissions}</dd>`}
+          : html`<dt>${t("ed.dtPermissions")}</dt><dd class="mono">${explanation.permissions}</dd>`}
         ${explanation.valueHex === undefined
           ? nothing
-          : html`<dt>涉及的值</dt><dd class="mono">${normalizeValueHex(explanation.valueHex)}</dd>`}
+          : html`<dt>${t("ed.dtValue")}</dt><dd class="mono">${normalizeValueHex(explanation.valueHex)}</dd>`}
         ${explanation.interpretedAs === undefined
           ? nothing
-          : html`<dt>值被解释为</dt><dd class="mono">${explanation.interpretedAs}</dd>`}
+          : html`<dt>${t("ed.dtInterpretedAs")}</dt><dd class="mono">${explanation.interpretedAs}</dd>`}
         ${explanation.alignmentBytes === undefined
           ? nothing
-          : html`<dt>对齐要求</dt><dd>${explanation.alignmentBytes} 字节</dd>`}
+          : html`<dt>${t("ed.dtAlignment")}</dt><dd>${t("ed.bytesSuffix", { count: explanation.alignmentBytes })}</dd>`}
         ${explanation.expectedBytesLength === undefined
           ? nothing
-          : html`<dt>期望长度</dt><dd>${explanation.expectedBytesLength} 字节</dd>`}
+          : html`<dt>${t("ed.dtExpected")}</dt><dd>${t("ed.bytesSuffix", { count: explanation.expectedBytesLength })}</dd>`}
         ${explanation.actualBytesLength === undefined
           ? nothing
-          : html`<dt>实际长度</dt><dd>${explanation.actualBytesLength} 字节</dd>`}
+          : html`<dt>${t("ed.dtActual")}</dt><dd>${t("ed.bytesSuffix", { count: explanation.actualBytesLength })}</dd>`}
         ${explanation.hints === undefined
           ? nothing
-          : html`<dt>提示</dt><dd>${this.#renderHints(explanation.hints)}</dd>`}
+          : html`<dt>${t("ed.dtHints")}</dt><dd>${this.#renderHints(explanation.hints)}</dd>`}
       </dl>
     `;
   }

@@ -20,16 +20,24 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { MemoryDataSource, RegisterRow } from "../../datasource/types.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
 import { normalizeValueHex } from "../../render/hex.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 import { crossAnnotateRegisters } from "./cross-annotation.js";
 
 /** 剪贴板写入器:resolve = 复制成功;reject = 调用方走 Q8 降级。 */
 export type ClipboardWriter = (text: string) => Promise<void>;
 
-/** 复制成功反馈文案(可见反馈,FE-RG-03)。 */
+/**
+ * 复制成功反馈文案(可见反馈,FE-RG-03)。导出常量 = zh-CN 快照(既有测试
+ * 与公开 API 面);组件渲染经 i18n 键 `reg.copied`(WP-53)。
+ */
 export const COPY_SUCCESS_TEXT = "已复制";
 
-/** Q8 降级反馈文案(navigator.clipboard 不可用 / 写入被拒)。 */
+/**
+ * Q8 降级反馈文案(navigator.clipboard 不可用 / 写入被拒)。导出常量 =
+ * zh-CN 快照;组件渲染经 i18n 键 `reg.copyFallback`。
+ */
 export const COPY_FALLBACK_TEXT = "已就绪手动复制";
 
 /** 行内复制反馈的自动消隐时长(毫秒)。 */
@@ -82,6 +90,16 @@ export class SmRegisterView extends LitElement {
 
   @state()
   private feedback: CopyFeedback | null = null;
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   #feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -158,19 +176,19 @@ export class SmRegisterView extends LitElement {
   protected override render(): TemplateResult {
     const rows = this.dataSource?.registers() ?? [];
     if (rows.length === 0) {
-      return html`<p class="empty" role="status">暂无寄存器数据(等待公开投影)</p>`;
+      return html`<p class="empty" role="status">${t("reg.empty")}</p>`;
     }
     const regions = this.dataSource?.regions() ?? [];
     const hitsByName = new Map(
       crossAnnotateRegisters(rows, regions).map((hit) => [hit.registerName, hit]),
     );
     return html`
-      <table class="registers" part="table" aria-label="寄存器">
+      <table class="registers" part="table" aria-label=${t("reg.aria")}>
         <thead>
           <tr>
-            <th scope="col">寄存器</th>
-            <th scope="col">值</th>
-            <th scope="col">特殊显示</th>
+            <th scope="col">${t("reg.colName")}</th>
+            <th scope="col">${t("reg.colValue")}</th>
+            <th scope="col">${t("reg.colSpecial")}</th>
           </tr>
         </thead>
         <tbody>
@@ -197,13 +215,13 @@ export class SmRegisterView extends LitElement {
           <button
             type="button"
             class="value-button"
-            title="点击复制 ${valueHex}"
+            title=${t("reg.copyTitle", { value: valueHex })}
             @click=${() => void this.#copyValue(row)}
           >${valueHex}</button>
           ${feedback === null
             ? nothing
             : html`<span class="copy-feedback copy-${feedback.kind}" role="status">
-                ${feedback.kind === "copied" ? COPY_SUCCESS_TEXT : COPY_FALLBACK_TEXT}
+                ${feedback.kind === "copied" ? t("reg.copied") : t("reg.copyFallback")}
               </span>`}
         </td>
         <td class="special">

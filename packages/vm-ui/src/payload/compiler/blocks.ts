@@ -18,6 +18,8 @@
  */
 import * as Blockly from "blockly";
 
+import { t, type SmMessageKey } from "../../i18n/i18n.js";
+
 /** 起始积木类型(唯一入口;FE-PB-03)。 */
 export const PAYLOAD_START_BLOCK_TYPE = "payload_start";
 
@@ -67,7 +69,64 @@ const STR = "String";
 const BOOL = "Boolean";
 
 /**
+ * 积木文案 i18n 键映射(积木 type → message / tooltip 目录键;下拉选项键)。
+ * WP-53 抽取面:`PAYLOAD_BLOCK_DEFINITIONS` 常量保持 zh-CN 快照(既有测试与
+ * 公开 API 面的事实来源),`registerPayloadBlocks()` 经 `buildPayloadBlock
+ * Definitions()` 按**注册时刻 locale** 构建(遗留登记:运行中切换不追溯已
+ * 注册画布——Blockly 定义为注册期固化机制,见决策草稿)。
+ */
+const BLOCK_MESSAGE_KEYS: Readonly<
+  Record<string, { readonly message: SmMessageKey; readonly tooltip: SmMessageKey }>
+> = {
+  [PAYLOAD_START_BLOCK_TYPE]: { message: "block.start.message", tooltip: "block.start.tooltip" },
+  [PAYLOAD_WRITE_BYTES_TYPE]: { message: "block.writeBytes.message", tooltip: "block.writeBytes.tooltip" },
+  [PAYLOAD_PUSH_TYPE]: { message: "block.push.message", tooltip: "block.push.tooltip" },
+  [PAYLOAD_POP_TYPE]: { message: "block.pop.message", tooltip: "block.pop.tooltip" },
+  [PAYLOAD_CALL_TYPE]: { message: "block.call.message", tooltip: "block.call.tooltip" },
+  [PAYLOAD_RET_TYPE]: { message: "block.ret.message", tooltip: "block.ret.tooltip" },
+  [PAYLOAD_STEP_TYPE]: { message: "block.step.message", tooltip: "block.step.tooltip" },
+  [PAYLOAD_BREAKPOINT_TYPE]: { message: "block.breakpoint.message", tooltip: "block.breakpoint.tooltip" },
+  [PAYLOAD_VAR_SET_TYPE]: { message: "block.varSet.message", tooltip: "block.varSet.tooltip" },
+  [PAYLOAD_VAR_GET_TYPE]: { message: "block.varGet.message", tooltip: "block.varGet.tooltip" },
+  [PAYLOAD_VAR_CHANGE_TYPE]: { message: "block.varChange.message", tooltip: "block.varChange.tooltip" },
+  [PAYLOAD_LIST_PUSH_TYPE]: { message: "block.listPush.message", tooltip: "block.listPush.tooltip" },
+  [PAYLOAD_LIST_GET_TYPE]: { message: "block.listGet.message", tooltip: "block.listGet.tooltip" },
+  [PAYLOAD_LIST_LENGTH_TYPE]: { message: "block.listLength.message", tooltip: "block.listLength.tooltip" },
+  [PAYLOAD_IF_TYPE]: { message: "block.if.message", tooltip: "block.if.tooltip" },
+  [PAYLOAD_REPEAT_TYPE]: { message: "block.repeat.message", tooltip: "block.repeat.tooltip" },
+  [PAYLOAD_FUNC_DEF_TYPE]: { message: "block.funcDef.message", tooltip: "block.funcDef.tooltip" },
+  [PAYLOAD_FUNC_CALL_STMT_TYPE]: { message: "block.funcCallStmt.message", tooltip: "block.funcCallStmt.tooltip" },
+  [PAYLOAD_FUNC_CALL_VALUE_TYPE]: { message: "block.funcCallValue.message", tooltip: "block.funcCallValue.tooltip" },
+  [PAYLOAD_NUM_TYPE]: { message: "block.num.message", tooltip: "block.num.tooltip" },
+  [PAYLOAD_TEXT_TYPE]: { message: "block.text.message", tooltip: "block.text.tooltip" },
+  [PAYLOAD_ARITH_TYPE]: { message: "block.arith.message", tooltip: "block.arith.tooltip" },
+  [PAYLOAD_COMPARE_TYPE]: { message: "block.compare.message", tooltip: "block.compare.tooltip" },
+  [PAYLOAD_WRITE_STRING_TYPE]: { message: "block.writeString.message", tooltip: "block.writeString.tooltip" },
+  [PAYLOAD_STRING_CONCAT_TYPE]: { message: "block.stringConcat.message", tooltip: "block.stringConcat.tooltip" },
+  [PAYLOAD_STRING_LENGTH_TYPE]: { message: "block.stringLength.message", tooltip: "block.stringLength.tooltip" },
+  [PAYLOAD_REGISTER_GET_TYPE]: { message: "block.registerGet.message", tooltip: "block.registerGet.tooltip" },
+  [PAYLOAD_MEM_READ8_TYPE]: { message: "block.memRead8.message", tooltip: "block.memRead8.tooltip" },
+  [PAYLOAD_MEM_READ_BYTE_TYPE]: { message: "block.memReadByte.message", tooltip: "block.memReadByte.tooltip" },
+};
+
+/** 工具箱分类名 i18n 键(分类 → 目录键)。 */
+const CATEGORY_NAME_KEYS: Readonly<Record<string, SmMessageKey>> = {
+  会话动作: "block.catSessionActions",
+  变量: "block.catVars",
+  列表: "block.catLists",
+  分支: "block.catBranch",
+  循环: "block.catLoop",
+  函数: "block.catFunction",
+  运算与赋值: "block.catArith",
+  字符串: "block.catString",
+  公开投影读取: "block.catProjection",
+  断点: "block.catBreakpoint",
+};
+
+/**
  * 积木 JSON 定义(FE-PB-02 八类 + 会话动作 + 起始;tooltip 中文 = FE-PB-06)。
+ * 本常量 = **zh-CN 快照**(模块加载时刻形态,与 i18n 目录一字不差;既有测试
+ * 与公开 API 面消费);本地化注册形态见 `buildPayloadBlockDefinitions()`。
  * 经 `registerPayloadBlocks()` 幂等登记。
  */
 export const PAYLOAD_BLOCK_DEFINITIONS: readonly Record<string, unknown>[] = [
@@ -401,15 +460,63 @@ export const PAYLOAD_BLOCK_DEFINITIONS: readonly Record<string, unknown>[] = [
   },
 ];
 
+/** 按当前 locale 构建积木定义(message0 / tooltip 取词;zh-CN 下与常量同形)。 */
+export function buildPayloadBlockDefinitions(): Record<string, unknown>[] {
+  return PAYLOAD_BLOCK_DEFINITIONS.map((definition) => {
+    const keys = BLOCK_MESSAGE_KEYS[String(definition.type)];
+    if (keys === undefined) {
+      return { ...definition };
+    }
+    const localized: Record<string, unknown> = {
+      ...definition,
+      message0: t(keys.message),
+      tooltip: t(keys.tooltip),
+    };
+    // 变量增减积木的下拉选项(增加 / 减少)同样取词(其余下拉为符号,非文案)。
+    if (String(definition.type) === PAYLOAD_VAR_CHANGE_TYPE) {
+      const args0 = (localized.args0 as Record<string, unknown>[]) ?? [];
+      localized.args0 = args0.map((arg) =>
+        (arg as { name?: string }).name === "OP"
+          ? {
+              ...(arg as Record<string, unknown>),
+              options: [
+                [t("block.opInc"), "inc"],
+                [t("block.opDec"), "dec"],
+              ],
+            }
+          : arg,
+      );
+    }
+    return localized;
+  });
+}
+
+/** 按当前 locale 构建工具箱分类名单(zh-CN 下与常量同形)。 */
+export function buildPayloadToolboxCategories(): PayloadToolboxCategory[] {
+  return PAYLOAD_TOOLBOX_CATEGORIES.map((category) => {
+    const key = CATEGORY_NAME_KEYS[category.name];
+    return { ...category, name: key !== undefined ? t(key) : category.name };
+  });
+}
+
+/** Blockly 工具箱定义(本地化构建形态;inject 时消费)。 */
+export function buildPayloadToolbox(): { kind: "categoryToolbox"; contents: PayloadToolboxCategory[] } {
+  return { kind: "categoryToolbox", contents: buildPayloadToolboxCategories() };
+}
+
 /** 积木类型 → 注册状态(幂等登记)。 */
 let blocksRegistered = false;
 
-/** 幂等登记全部积木定义(UI inject 前与编译器加载前都要调用)。 */
+/**
+ * 幂等登记全部积木定义(UI inject 前与编译器加载前都要调用)。
+ * 文案按**首次注册时刻 locale** 固化(Blockly 定义机制;运行中切换不追溯,
+ * 遗留登记见决策草稿)。
+ */
 export function registerPayloadBlocks(): void {
   if (blocksRegistered) {
     return;
   }
-  Blockly.defineBlocksWithJsonArray(PAYLOAD_BLOCK_DEFINITIONS as never);
+  Blockly.defineBlocksWithJsonArray(buildPayloadBlockDefinitions() as never);
   blocksRegistered = true;
 }
 

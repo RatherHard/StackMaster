@@ -16,6 +16,7 @@
  * 端序定案 = **小端**(与 WP-F4 跳转链一致:公开投影不携带端序字段,公开
  * 描述包 `vmProfile.endianness` 已冻结 "little")。
  */
+import { t } from "../../i18n/i18n.js";
 import type { MemoryDataSource } from "../../datasource/types.js";
 import { addressToHex, parseAddressHex } from "../../render/hex.js";
 import type { PayloadEvalEnvironment } from "./types.js";
@@ -67,14 +68,14 @@ export function parseNumericLiteral(text: string): bigint {
   }
   throw new PayloadEvalError(
     "type_mismatch",
-    `数字字面量必须为非负十进制或 0x 十六进制:${JSON.stringify(text)}`,
+    t("compile.errInvalidNumericLiteral", { value: JSON.stringify(text) }),
   );
 }
 
 /** 值 → 64 位数值(类型不符确定性报错)。 */
 export function valueToNumber(value: PayloadValue): bigint {
   if (typeof value !== "bigint") {
-    throw new PayloadEvalError("type_mismatch", `此处需要数值,实际为 ${describeValue(value)}`);
+    throw new PayloadEvalError("type_mismatch", t("compile.errNeedNumber", { actual: describeValue(value) }));
   }
   return value;
 }
@@ -82,7 +83,7 @@ export function valueToNumber(value: PayloadValue): bigint {
 /** 值 → 字符串(类型不符确定性报错)。 */
 export function valueToString(value: PayloadValue): string {
   if (typeof value !== "string") {
-    throw new PayloadEvalError("type_mismatch", `此处需要字符串,实际为 ${describeValue(value)}`);
+    throw new PayloadEvalError("type_mismatch", t("compile.errNeedString", { actual: describeValue(value) }));
   }
   return value;
 }
@@ -90,38 +91,44 @@ export function valueToString(value: PayloadValue): string {
 /** 值 → 布尔(类型不符确定性报错)。 */
 export function valueToBoolean(value: PayloadValue): boolean {
   if (typeof value !== "boolean") {
-    throw new PayloadEvalError("type_mismatch", `此处需要真/假条件,实际为 ${describeValue(value)}`);
+    throw new PayloadEvalError("type_mismatch", t("compile.errNeedBoolean", { actual: describeValue(value) }));
   }
   return value;
 }
 
-/** 值的中文描述(错误文案用)。 */
+/** 值的本地化描述(错误文案用)。 */
 function describeValue(value: PayloadValue): string {
   if (typeof value === "bigint") {
-    return `数值 ${value}`;
+    return t("compile.descNumber", { value: value.toString() });
   }
   if (typeof value === "string") {
-    return `字符串 "${value}"`;
+    return t("compile.descString", { value });
   }
-  return value ? "真" : "假";
+  return value ? t("compile.descTrue") : t("compile.descFalse");
 }
 
 /** 空求值环境:任何寄存器 / 内存引用确定性报错(未接公开投影时的确定性语义)。 */
 export function createEmptyEvalEnvironment(): PayloadEvalEnvironment {
   return {
     registerValue: (name) => {
-      throw new PayloadEvalError("unknown_reference", `寄存器 ${name} 不在公开投影中(当前无求值数据)`);
+      throw new PayloadEvalError(
+        "unknown_reference",
+        t("compile.errRegisterNotProjected", { name }),
+      );
     },
     byteAt: (address) => {
       throw new PayloadEvalError(
         "unknown_reference",
-        `地址 ${addressToHex(address)} 不在可见窗口内(当前无求值数据)`,
+        t("compile.errAddressNotInWindow", { address: addressToHex(address) }),
       );
     },
     readBytesLittleEndian: (address, count) => {
       throw new PayloadEvalError(
         "unknown_reference",
-        `地址 ${addressToHex(address)} 不在可见窗口内(当前无求值数据;尝试读取 ${count} 字节)`,
+        t("compile.errAddressNotInWindowCount", {
+          address: addressToHex(address),
+          count,
+        }),
       );
     },
   };
@@ -154,7 +161,7 @@ export function createPublicEvalEnvironment(dataSource: MemoryDataSource): Paylo
       if (value === undefined) {
         throw new PayloadEvalError(
           "unknown_reference",
-          `寄存器 ${name} 不在公开投影白名单中(仅 visibleRegisters 可求值)`,
+          t("compile.errRegisterNotWhitelisted", { name }),
         );
       }
       return value;
@@ -201,8 +208,12 @@ export function createPublicEvalEnvironment(dataSource: MemoryDataSource): Paylo
         throw new PayloadEvalError(
           "unknown_reference",
           covered
-            ? `地址 ${addressToHex(address + BigInt(index))} 不在已下发窗口内(求值仅限公开投影窗口)`
-            : `地址 ${addressToHex(address + BigInt(index))} 不可见(未映射或隐藏区域,I-9)`,
+            ? t("compile.errAddressNotDelivered", {
+                address: addressToHex(address + BigInt(index)),
+              })
+            : t("compile.errAddressNotVisible", {
+                address: addressToHex(address + BigInt(index)),
+              }),
         );
       }
       bytes.push(byte);

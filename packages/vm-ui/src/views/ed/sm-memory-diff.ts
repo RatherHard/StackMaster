@@ -24,11 +24,19 @@ import { customElement, property } from "lit/decorators.js";
 import type { ProjectionDelta, VisibleMemoryRegion } from "@stackmaster/protocol";
 
 import { computeByteDiff } from "../../ed/memory-diff.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
-/** 前值不可知占位文案(窗口外 / 未知区域 / 未下发偏移;I-9 同款"不伪造"纪律)。 */
+/**
+ * 前值不可知占位文案(窗口外 / 未知区域 / 未下发偏移;I-9 同款"不伪造"纪律)。
+ * 导出常量 = zh-CN 快照(既有测试与公开 API 面);渲染经 i18n 键 `ed.diffUnknownBefore`。
+ */
 export const DIFF_UNKNOWN_BEFORE_TEXT = "前值不可知";
 
-/** 截断明示文案(D-P6:标记存在 = 承载不完整,客户端走 sync 重对齐)。 */
+/**
+ * 截断明示文案(D-P6:标记存在 = 承载不完整,客户端走 sync 重对齐)。
+ * 导出常量 = zh-CN 快照;渲染经 i18n 键 `ed.diffTruncated`。
+ */
 export const DIFF_TRUNCATED_TEXT = "变更承载被截断,已按协议以 sync-projection 重新对齐";
 
 @customElement("sm-memory-diff")
@@ -41,6 +49,16 @@ export class SmMemoryDiff extends LitElement {
   /** 本动作投影增量(整体替换语义;dirtyRanges 承载动作后权威字节)。 */
   @property({ attribute: false })
   delta: ProjectionDelta | null = null;
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   static override styles = css`
     :host {
@@ -64,7 +82,7 @@ export class SmMemoryDiff extends LitElement {
     td {
       padding: 0.25rem 0.5rem;
       text-align: start;
-      border-block-end: 1px solid rgb(0 0 0 / 8%);
+      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
     }
 
     thead th {
@@ -100,27 +118,27 @@ export class SmMemoryDiff extends LitElement {
   protected override render(): TemplateResult {
     const units = computeByteDiff(this.beforeRegions, this.delta?.dirtyRanges ?? []);
     if (units.length === 0) {
-      return html`<p class="empty" role="status">本动作无可见字节变化</p>`;
+      return html`<p class="empty" role="status">${t("ed.diffEmpty")}</p>`;
     }
     const truncated = (this.delta?.dirtyRanges ?? []).some((range) => range.truncated === true);
     return html`
       <div>
-        <table part="table" aria-label="动作前后字节变化对照">
+        <table part="table" aria-label=${t("ed.diffAria")}>
           <caption>
-            内存 diff(${units.length} 字节变化;前值取自动作前已下发窗口)
+            ${t("ed.diffCaption", { count: units.length })}
           </caption>
           <thead>
             <tr>
-              <th scope="col">区域</th>
-              <th scope="col">地址</th>
-              <th scope="col">前值 → 后值</th>
+              <th scope="col">${t("ed.colRegion")}</th>
+              <th scope="col">${t("ed.colAddressHex")}</th>
+              <th scope="col">${t("ed.colBeforeAfter")}</th>
             </tr>
           </thead>
           <tbody>
             ${units.map((unit) => this.#renderUnit(unit))}
           </tbody>
         </table>
-        ${truncated ? html`<p class="truncated-note" role="note">${DIFF_TRUNCATED_TEXT}</p>` : nothing}
+        ${truncated ? html`<p class="truncated-note" role="note">${t("ed.diffTruncated")}</p>` : nothing}
       </div>
     `;
   }
@@ -132,7 +150,7 @@ export class SmMemoryDiff extends LitElement {
         <td class="mono">${unit.addressHex}</td>
         <td class="mono">
           ${unit.beforeByteHex === null
-            ? html`<span class="unknown">${DIFF_UNKNOWN_BEFORE_TEXT}</span>`
+            ? html`<span class="unknown">${t("ed.diffUnknownBefore")}</span>`
             : unit.beforeByteHex}
           → ${unit.afterByteHex}
         </td>

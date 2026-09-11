@@ -15,7 +15,9 @@ import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 import type { MemoryDataSource, VmaEntry, VmaList } from "../../datasource/types.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
 import { formatAddressHex, parseAddressHex } from "../../render/hex.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
 /** 左段地址展示宽度(与字节视图一致,32 位习惯)。 */
 const ADDRESS_MIN_DIGITS = 8;
@@ -46,6 +48,16 @@ export class SmVmaList extends LitElement {
 
   #regions: VmaEntry[] = [];
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
+
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("dataSource")) {
       this.#regions = sortRegionsByAddress(this.dataSource?.regions() ?? []);
@@ -60,14 +72,14 @@ export class SmVmaList extends LitElement {
 
   protected override render(): unknown {
     if (this.#regions.length === 0) {
-      return html`<section class="vma-list" aria-label="VMA 列表">
-        <h3 class="heading">内存区域</h3>
-        <p class="empty" role="status">暂无可见内存区域</p>
+      return html`<section class="vma-list" aria-label=${t("vma.aria")}>
+        <h3 class="heading">${t("vma.heading")}</h3>
+        <p class="empty" role="status">${t("common.noRegions")}</p>
       </section>`;
     }
     return html`
-      <section class="vma-list" aria-label="VMA 列表">
-        <h3 class="heading">内存区域</h3>
+      <section class="vma-list" aria-label=${t("vma.aria")}>
+        <h3 class="heading">${t("vma.heading")}</h3>
         <ul class="regions">
           ${this.#regions.map((region) => this.#renderRegion(region))}
         </ul>
@@ -89,9 +101,14 @@ export class SmVmaList extends LitElement {
           <span class="region-id">${region.regionId}</span>
           <span class="region-address">${formatAddressHex(region.startAddressHex, ADDRESS_MIN_DIGITS)}</span>
           <span class="region-length">${region.byteLength} B</span>
-          <span class="region-permissions" aria-label="权限">${normalizePermissions(region.permissions)}</span>
+          <span class="region-permissions" aria-label=${t("vma.permissionsAria")}
+            >${normalizePermissions(region.permissions)}</span
+          >
           <span class="region-window">
-            窗口 ${region.windowByteLength} B${region.truncated ? " · 已截断" : " · 完整"}
+            ${t("vma.windowCaption", {
+              bytes: region.windowByteLength,
+              state: region.truncated ? t("vma.truncatedSuffix") : t("vma.fullSuffix"),
+            })}
           </span>
         </button>
       </li>
@@ -107,7 +124,7 @@ export class SmVmaList extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       background: canvas;
       color: canvastext;
@@ -143,7 +160,7 @@ export class SmVmaList extends LitElement {
       gap: 0.125rem 0.75rem;
       text-align: start;
       padding: 0.375rem 0.5rem;
-      border: 1px solid rgb(0 0 0 / 10%);
+      border: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
       border-radius: 6px;
       background: transparent;
       color: inherit;
@@ -152,7 +169,7 @@ export class SmVmaList extends LitElement {
     }
 
     button.region:hover {
-      border-color: rgb(0 0 0 / 25%);
+      border-color: var(--sm-border-strong, rgb(0 0 0 / 25%));
     }
 
     button.region.selected {

@@ -19,11 +19,14 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 import type { TimelineEntry } from "../../ed/timeline.js";
+import { LocaleController, t, type SmMessageKey } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
-const KIND_LABELS: Record<TimelineEntry["kind"], string> = {
-  action: "动作",
-  checkpoint: "checkpoint",
-  submit: "提交",
+/** kind 徽标 i18n 键(渲染时刻解析,WP-53)。 */
+const KIND_LABEL_KEYS: Record<TimelineEntry["kind"], SmMessageKey> = {
+  action: "ed.kindAction",
+  checkpoint: "ed.kindCheckpoint",
+  submit: "ed.kindSubmit",
 };
 
 @customElement("sm-timeline")
@@ -35,6 +38,16 @@ export class SmTimeline extends LitElement {
   /** 当前权威 revision(宿主注入,如 client.store.revision);命中条目标注。 */
   @property({ attribute: false })
   currentRevision: number | null = null;
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   static override styles = css`
     :host {
@@ -54,7 +67,7 @@ export class SmTimeline extends LitElement {
       gap: 0.5rem;
       align-items: baseline;
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid rgb(0 0 0 / 8%);
+      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
     }
 
     .seq {
@@ -70,12 +83,12 @@ export class SmTimeline extends LitElement {
       flex: none;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: rgb(0 0 0 / 8%);
+      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
       font-size: 0.75rem;
     }
 
     .status-badge {
-      background: rgb(0 0 0 / 4%);
+      background: var(--sm-badge-bg-soft, rgb(0 0 0 / 4%));
       color: graytext;
     }
 
@@ -106,10 +119,10 @@ export class SmTimeline extends LitElement {
 
   protected override render(): TemplateResult {
     if (this.entries.length === 0) {
-      return html`<p class="empty" role="status">暂无历史记录(动作与 checkpoint 将在此累积)</p>`;
+      return html`<p class="empty" role="status">${t("ed.timelineEmpty")}</p>`;
     }
     return html`
-      <ol aria-label="会话时间线">
+      <ol aria-label=${t("ed.timelineAria")}>
         ${this.entries.map((entry) => this.#renderEntry(entry))}
       </ol>
     `;
@@ -120,13 +133,13 @@ export class SmTimeline extends LitElement {
     return html`
       <li>
         <span class="seq">${entry.seq}.</span>
-        <span class="kind-badge">${KIND_LABELS[entry.kind]}</span>
+        <span class="kind-badge">${t(KIND_LABEL_KEYS[entry.kind])}</span>
         <span class="label">${entry.label}</span>
         <span class="meta">r${entry.revision}${this.#renderAtSuffix(entry)}</span>
         ${entry.status === undefined
           ? nothing
           : html`<span class="status-badge">${entry.status}</span>`}
-        ${isCurrent ? html`<span class="current-badge">当前 revision</span>` : nothing}
+        ${isCurrent ? html`<span class="current-badge">${t("ed.currentRevisionBadge")}</span>` : nothing}
       </li>
     `;
   }

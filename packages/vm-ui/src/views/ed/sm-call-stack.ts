@@ -22,9 +22,15 @@ import { customElement, property } from "lit/decorators.js";
 
 import type { PublicCallFrame } from "@stackmaster/protocol";
 
+import { LocaleController, t } from "../../i18n/i18n.js";
 import { formatAddressHex } from "../../render/hex.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
-/** 截断明示文案(D-P3:存在性 = (可见深度, 公开常量 64) 的确定性函数)。 */
+/**
+ * 截断明示文案(D-P3:存在性 = (可见深度, 公开常量 64) 的确定性函数)。
+ * 导出常量 = zh-CN 快照(既有测试与公开 API 面);组件渲染经 i18n 键
+ * `ed.callStackTruncated`(WP-53;zh-CN 值与此常量一字不差)。
+ */
 export const CALL_STACK_TRUNCATED_TEXT = "仅显示最内 64 帧";
 
 @customElement("sm-call-stack")
@@ -32,6 +38,16 @@ export class SmCallStack extends LitElement {
   /** 调用栈摘要帧(公开投影 callStackSummary;空数组 → 空态)。 */
   @property({ attribute: false })
   frames: readonly PublicCallFrame[] = [];
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   static override styles = css`
     :host {
@@ -55,7 +71,7 @@ export class SmCallStack extends LitElement {
     td {
       padding: 0.25rem 0.5rem;
       text-align: start;
-      border-block-end: 1px solid rgb(0 0 0 / 8%);
+      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
     }
 
     thead th {
@@ -76,7 +92,7 @@ export class SmCallStack extends LitElement {
       margin-inline-start: 0.5rem;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: rgb(0 0 0 / 8%);
+      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
       font-size: 0.75rem;
     }
 
@@ -97,20 +113,20 @@ export class SmCallStack extends LitElement {
 
   protected override render(): TemplateResult {
     if (this.frames.length === 0) {
-      return html`<p class="empty" role="status">暂无调用帧(当前无活跃调用链)</p>`;
+      return html`<p class="empty" role="status">${t("ed.callStackEmpty")}</p>`;
     }
     const truncated = this.frames.some((frame) => frame.truncated === true);
     return html`
       <div>
-        <table part="table" aria-label="调用栈摘要">
+        <table part="table" aria-label=${t("ed.callStackAria")}>
           <caption>
-            调用栈(index 0 = 最内帧;帧基址不下发,由 RSP/RBP 推导)
+            ${t("ed.callStackCaption")}
           </caption>
           <thead>
             <tr>
-              <th scope="col">序号</th>
-              <th scope="col">函数</th>
-              <th scope="col">返回地址</th>
+              <th scope="col">${t("ed.colIndex")}</th>
+              <th scope="col">${t("ed.colFunction")}</th>
+              <th scope="col">${t("ed.colReturnAddress")}</th>
             </tr>
           </thead>
           <tbody>
@@ -118,7 +134,7 @@ export class SmCallStack extends LitElement {
           </tbody>
         </table>
         ${truncated
-          ? html`<p class="truncated-note" role="note">${CALL_STACK_TRUNCATED_TEXT}</p>`
+          ? html`<p class="truncated-note" role="note">${t("ed.callStackTruncated")}</p>`
           : nothing}
       </div>
     `;
@@ -129,7 +145,7 @@ export class SmCallStack extends LitElement {
       <tr>
         <th scope="row" class="index-cell">
           ${frame.index}${frame.index === 0
-            ? html`<span class="innermost">最内帧(当前函数)</span>`
+            ? html`<span class="innermost">${t("ed.innermostFrame")}</span>`
             : nothing}
         </th>
         <td>${frame.functionLabel}</td>

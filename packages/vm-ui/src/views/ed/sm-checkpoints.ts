@@ -28,6 +28,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { ActionObject, CheckpointRef } from "@stackmaster/protocol";
 
 import { validateCheckpointLabel } from "../../ed/ed-types.js";
+import { LocaleController, t } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 
 @customElement("sm-checkpoints")
 export class SmCheckpoints extends LitElement {
@@ -57,6 +59,16 @@ export class SmCheckpoints extends LitElement {
   @state()
   private pendingCheckoutId: string | null = null;
 
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
+
   static override styles = css`
     :host {
       display: block;
@@ -85,7 +97,7 @@ export class SmCheckpoints extends LitElement {
 
     button {
       padding: 0.25rem 0.75rem;
-      border: 1px solid rgb(0 0 0 / 25%);
+      border: 1px solid var(--sm-border-strong, rgb(0 0 0 / 25%));
       border-radius: 4px;
       background: none;
       color: inherit;
@@ -114,7 +126,7 @@ export class SmCheckpoints extends LitElement {
     td {
       padding: 0.25rem 0.5rem;
       text-align: start;
-      border-block-end: 1px solid rgb(0 0 0 / 8%);
+      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
     }
 
     thead th {
@@ -162,7 +174,7 @@ export class SmCheckpoints extends LitElement {
           : html`<p class="alert" role="alert">${this.validationError}</p>`}
         ${this.sessionTerminal
           ? html`<p class="terminal-note" role="note">
-              会话已终态,不能创建或切换 checkpoint(请新建会话)
+              ${t("ed.cpTerminalNote")}
             </p>`
           : nothing}
         ${this.#renderList()}
@@ -178,8 +190,8 @@ export class SmCheckpoints extends LitElement {
           type="text"
           .value=${this.labelInput}
           maxlength="128"
-          aria-label="checkpoint 标签(可选,最长 128 字符)"
-          placeholder="checkpoint 标签(可选)"
+          aria-label=${t("ed.cpInputLabel")}
+          placeholder=${t("ed.cpInputPlaceholder")}
           ?disabled=${createDisabled}
           @input=${(event: InputEvent) => {
             this.labelInput = (event.target as HTMLInputElement).value;
@@ -192,7 +204,7 @@ export class SmCheckpoints extends LitElement {
           }}
         />
         <button type="button" ?disabled=${createDisabled} @click=${() => this.#createCheckpoint()}>
-          创建 checkpoint
+          ${t("ed.cpCreate")}
         </button>
       </div>
     `;
@@ -217,17 +229,17 @@ export class SmCheckpoints extends LitElement {
 
   #renderList(): TemplateResult {
     if (this.checkpoints.length === 0) {
-      return html`<p class="empty" role="status">暂无 checkpoint(创建后将按创建顺序列出)</p>`;
+      return html`<p class="empty" role="status">${t("ed.cpEmpty")}</p>`;
     }
     return html`
-      <table part="table" aria-label="checkpoint 列表">
-        <caption>checkpoint(按创建顺序;切换会把内容回退到对应 revision)</caption>
+      <table part="table" aria-label=${t("ed.cpAria")}>
+        <caption>${t("ed.cpCaption")}</caption>
         <thead>
           <tr>
-            <th scope="col">标签</th>
-            <th scope="col">revision</th>
-            <th scope="col">checkpointId</th>
-            <th scope="col">操作</th>
+            <th scope="col">${t("ed.colLabel")}</th>
+            <th scope="col">${t("ed.colRevision")}</th>
+            <th scope="col">${t("ed.colCheckpointId")}</th>
+            <th scope="col">${t("ed.colActions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -240,7 +252,7 @@ export class SmCheckpoints extends LitElement {
   #renderRow(checkpoint: CheckpointRef): TemplateResult {
     const checkoutDisabled = this.sessionTerminal || this.sendAction === null;
     const confirming = this.pendingCheckoutId === checkpoint.checkpointId;
-    const label = checkpoint.label === undefined ? "(无标签)" : checkpoint.label;
+    const label = checkpoint.label === undefined ? t("ed.cpNoLabel") : checkpoint.label;
     return html`
       <tr>
         <td>${label}</td>
@@ -250,7 +262,7 @@ export class SmCheckpoints extends LitElement {
           ${confirming
             ? html`
                 <span class="confirm-note" role="status">
-                  确认切换到 ${label}(revision ${checkpoint.revision})?
+                  ${t("ed.cpConfirmQuestion", { label, revision: checkpoint.revision })}
                 </span>
                 <button
                   type="button"
@@ -258,21 +270,21 @@ export class SmCheckpoints extends LitElement {
                   ?disabled=${checkoutDisabled}
                   @click=${() => this.#confirmCheckout(checkpoint)}
                 >
-                  确认切换
+                  ${t("ed.cpConfirm")}
                 </button>
-                <button type="button" @click=${() => this.#cancelCheckout()}>取消</button>
+                <button type="button" @click=${() => this.#cancelCheckout()}>${t("common.cancel")}</button>
               `
             : html`
                 <button
                   type="button"
                   class="checkout-button"
-                  aria-label="切换到 checkpoint ${label}(revision ${checkpoint.revision})"
+                  aria-label=${t("ed.cpCheckoutAria", { label, revision: checkpoint.revision })}
                   ?disabled=${checkoutDisabled}
                   @click=${() => {
                     this.pendingCheckoutId = checkpoint.checkpointId;
                   }}
                 >
-                  切换
+                  ${t("ed.cpCheckout")}
                 </button>
               `}
         </td>

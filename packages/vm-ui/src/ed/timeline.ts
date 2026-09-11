@@ -18,6 +18,7 @@
  */
 import type { ActionObject, ActionResponse, CheckpointRef } from "@stackmaster/protocol";
 
+import { t } from "../i18n/i18n.js";
 import { formatAddressHex } from "../render/hex.js";
 
 /** 时间线条目类别(规约口径:动作 / checkpoint / 提交)。 */
@@ -63,7 +64,10 @@ export interface SubmitTimelineRecord {
 export function summarizeActionObject(action: ActionObject): string {
   switch (action.type) {
     case "write_bytes":
-      return `write_bytes ${formatAddressHex(action.args.addressHex)}(${action.args.bytesHex.length / 2} 字节)`;
+      return t("timeline.writeBytes", {
+        address: formatAddressHex(action.args.addressHex),
+        count: action.args.bytesHex.length / 2,
+      });
     case "push":
       return `push ${action.args.valueHex}`;
     case "call":
@@ -125,8 +129,8 @@ export function buildTimeline(
       kind: "checkpoint",
       label:
         checkpoint.label === undefined
-          ? `checkpoint(${checkpoint.checkpointId})`
-          : `checkpoint "${checkpoint.label}"`,
+          ? t("timeline.checkpointRef", { id: checkpoint.checkpointId })
+          : t("timeline.checkpointLabeled", { label: checkpoint.label }),
       revision: checkpoint.revision,
       checkpointId: checkpoint.checkpointId,
     });
@@ -135,7 +139,7 @@ export function buildTimeline(
     unsorted.push({
       seq: 0,
       kind: "submit",
-      label: `submit(${submission.submissionId})`,
+      label: t("timeline.submitRef", { id: submission.submissionId }),
       revision: submission.revision,
       ...(submission.at !== undefined ? { at: submission.at } : {}),
       submissionId: submission.submissionId,

@@ -32,6 +32,9 @@
  */
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
+
+import { LocaleController, t } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 import { SmWindowList } from "../virtual/sm-window-list.js";
 
 import {
@@ -291,10 +294,10 @@ export class SmByteView extends LitElement {
     if (resolution.status === "in-window") {
       const index = rowIndexForAddress(this.#spans, resolution.addressHex);
       if (index !== null) {
-        this.#jumpStatus = `已跳转到 ${formatAddressHex(resolution.addressHex, ADDRESS_MIN_DIGITS)}`;
+        this.#jumpStatus = t("common.jumpOk", { target: formatAddressHex(resolution.addressHex, ADDRESS_MIN_DIGITS) });
         this.#pendingScrollIndex = index;
       } else {
-        this.#jumpStatus = `${formatAddressHex(resolution.addressHex, ADDRESS_MIN_DIGITS)} 在可见窗口之外`;
+        this.#jumpStatus = t("common.jumpOutside", { target: formatAddressHex(resolution.addressHex, ADDRESS_MIN_DIGITS) });
       }
     } else if (resolution.status === "outside-window") {
       // WP-F8(FE-ST-05 调试档):数据源声明 prefetchWindow(DebugDataSource)
@@ -302,7 +305,7 @@ export class SmByteView extends LitElement {
       // 维持"窗口外"反馈现状(D3:零窗口拉取)。
       void this.#jumpOutsideWindow(resolution.addressHex);
     } else {
-      this.#jumpStatus = "无法识别的跳转目标(支持 0x 十六进制地址或十进制窗口偏移)";
+      this.#jumpStatus = t("byte.jumpUnrecognized");
     }
     this.requestUpdate();
   }
@@ -314,26 +317,26 @@ export class SmByteView extends LitElement {
     } | null;
     const display = formatAddressHex(addressHex, ADDRESS_MIN_DIGITS);
     if (prefetchable === null || typeof prefetchable.prefetchWindow !== "function") {
-      this.#jumpStatus = `${display} 在可见窗口之外(仅窗口内可达)`;
+      this.#jumpStatus = t("byte.jumpOutsidePublic", { target: display });
       this.requestUpdate();
       return;
     }
-    this.#jumpStatus = `${display} 在已缓存窗口之外,正在请求调试窗口……`;
+    this.#jumpStatus = t("byte.jumpPrefetching", { target: display });
     this.requestUpdate();
     try {
       await prefetchable.prefetchWindow(addressHex);
     } catch {
-      this.#jumpStatus = `${display} 窗口请求失败(调试通道未连接或地址不可达)`;
+      this.#jumpStatus = t("common.prefetchFailed", { target: display });
       this.requestUpdate();
       return;
     }
     this.#rebuild();
     const index = rowIndexForAddress(this.#spans, addressHex);
     if (index !== null) {
-      this.#jumpStatus = `已跳转到 ${display}`;
+      this.#jumpStatus = t("common.jumpOk", { target: display });
       this.#pendingScrollIndex = index;
     } else {
-      this.#jumpStatus = `${display} 超出可缓存范围(地址不可达)`;
+      this.#jumpStatus = t("byte.jumpOutOfRange", { target: display });
     }
     this.requestUpdate();
   }
@@ -349,17 +352,17 @@ export class SmByteView extends LitElement {
     if (!/^[0-9a-f]+$/.test(pattern) || pattern.length % 2 !== 0) {
       this.#searchHits = [];
       this.#searchSummary = null;
-      this.#searchStatus = "检索模式须为非空偶数长度十六进制(如 0102)";
+      this.#searchStatus = t("common.searchInvalidPattern");
       this.requestUpdate();
       return;
     }
     // M3 口径:检索语义 = 仅已下发窗口字节(数据源契约负责,视图只透传)。
     const hits = dataSource.search({ patternHex: pattern });
     this.#searchHits = hits.slice(0, SEARCH_HIT_DISPLAY_LIMIT);
-    this.#searchStatus = hits.length === 0 ? "窗口内无命中" : null;
+    this.#searchStatus = hits.length === 0 ? t("byte.searchNoHits") : null;
     this.#searchSummary =
       hits.length > SEARCH_HIT_DISPLAY_LIMIT
-        ? `共 ${hits.length} 处命中,显示前 ${SEARCH_HIT_DISPLAY_LIMIT} 处`
+        ? t("byte.searchSummary", { count: hits.length, limit: SEARCH_HIT_DISPLAY_LIMIT })
         : null;
     this.requestUpdate();
   }
@@ -373,7 +376,7 @@ export class SmByteView extends LitElement {
     if (index !== null) {
       this.#pendingScrollIndex = index;
     } else {
-      this.#jumpStatus = `命中 ${formatAddressHex(hit.addressHex, ADDRESS_MIN_DIGITS)} 不在当前区域窗口内`;
+      this.#jumpStatus = t("byte.hitNotInRegion", { target: formatAddressHex(hit.addressHex, ADDRESS_MIN_DIGITS) });
     }
     this.requestUpdate();
   }
@@ -381,25 +384,25 @@ export class SmByteView extends LitElement {
   // ── 渲染 ──
 
   protected override render(): unknown {
-    const heading = this.viewKind === "free" ? "自由视图" : "栈视图";
+    const heading = this.viewKind === "free" ? t("tab.free") : t("tab.stack");
     if (this.#region === null) {
       return html`
         <section class="byte-view" aria-label="${heading}">
           <header class="toolbar" part="toolbar">
             <h3 class="heading">${heading}</h3>
           </header>
-          <p class="empty" role="status">暂无可见内存区域</p>
+          <p class="empty" role="status">${t("common.noRegions")}</p>
         </section>
       `;
     }
     return html`
       <section class="byte-view" aria-label="${heading}">
         <header class="toolbar" part="toolbar">${this.#renderToolbar(heading)}</header>
-        <div class="table" role="table" aria-label="内存十六进制字节(8 字节一行,高地址在下)">
+        <div class="table" role="table" aria-label=${t("byte.tableAria")}>
           <div class="byte-row header-row" role="row">
-            <span class="row-address" role="columnheader">地址</span>
-            <span class="row-hex" role="columnheader">十六进制</span>
-            <span class="row-special" role="columnheader">特殊显示</span>
+            <span class="row-address" role="columnheader">${t("byte.colAddress")}</span>
+            <span class="row-hex" role="columnheader">${t("byte.colHex")}</span>
+            <span class="row-special" role="columnheader">${t("byte.colSpecial")}</span>
           </div>
           <sm-window-list
             class="byte-list"
@@ -408,7 +411,7 @@ export class SmByteView extends LitElement {
             .renderItem=${this.#rowRenderer}
           ></sm-window-list>
         </div>
-        ${this.#rows.length === 0 ? html`<p class="empty" role="status">窗口内暂无字节</p>` : nothing}
+        ${this.#rows.length === 0 ? html`<p class="empty" role="status">${t("byte.noRows")}</p>` : nothing}
       </section>
     `;
   }
@@ -422,8 +425,8 @@ export class SmByteView extends LitElement {
         ${this.#regions.length > 1
           ? html`
               <label class="region-label">
-                区域
-                <select class="region-select" aria-label="选择内存区域" @change=${this.#onRegionSelect}>
+                ${t("byte.regionLabel")}
+                <select class="region-select" aria-label=${t("byte.regionSelectAria")} @change=${this.#onRegionSelect}>
                   ${this.#regions.map(
                     (entry) => html`
                       <option value=${entry.regionId} ?selected=${entry.regionId === region.regionId}>
@@ -435,12 +438,12 @@ export class SmByteView extends LitElement {
               </label>
             `
           : nothing}
-        <div class="offset-controls" role="group" aria-label="8 字节对齐偏移">
-          <span class="offset-label">对齐偏移</span>
+        <div class="offset-controls" role="group" aria-label=${t("byte.offsetGroupAria")}>
+          <span class="offset-label">${t("byte.offsetLabel")}</span>
           <button
             type="button"
             class="offset-decrease"
-            aria-label="减小对齐偏移"
+            aria-label=${t("byte.offsetDecreaseAria")}
             ?disabled=${offset === 0}
             @click=${() => this.#onOffsetStep(-1)}
           >
@@ -450,7 +453,7 @@ export class SmByteView extends LitElement {
           <button
             type="button"
             class="offset-increase"
-            aria-label="增大对齐偏移"
+            aria-label=${t("byte.offsetIncreaseAria")}
             ?disabled=${offset === 7}
             @click=${() => this.#onOffsetStep(1)}
           >
@@ -458,11 +461,16 @@ export class SmByteView extends LitElement {
           </button>
         </div>
         <p class="window-caption">
-          窗口 ${formatAddressHex(region.startAddressHex, ADDRESS_MIN_DIGITS)}–${formatAddressHex(
-            this.#windowRange?.endAddressHex ?? region.startAddressHex,
-            ADDRESS_MIN_DIGITS,
-          )}
-          · ${region.windowByteLength} B / 区域 ${region.byteLength} B${region.truncated ? " · 已截断" : ""}
+          ${t("byte.windowCaption", {
+            start: formatAddressHex(region.startAddressHex, ADDRESS_MIN_DIGITS),
+            end: formatAddressHex(
+              this.#windowRange?.endAddressHex ?? region.startAddressHex,
+              ADDRESS_MIN_DIGITS,
+            ),
+            window: region.windowByteLength,
+            total: region.byteLength,
+            truncated: region.truncated ? t("byte.truncatedSuffix") : "",
+          })}
         </p>
       </div>
       <div class="toolbar-row">
@@ -470,19 +478,19 @@ export class SmByteView extends LitElement {
           <input
             class="jump-input"
             type="text"
-            aria-label="跳转地址或窗口内偏移"
-            placeholder="0x1004 或偏移(十进制)"
+            aria-label=${t("byte.jumpAria")}
+            placeholder=${t("byte.jumpPlaceholder")}
           />
-          <button type="submit">跳转</button>
+          <button type="submit">${t("common.jumpButton")}</button>
         </form>
         <form class="search-form" @submit=${this.#onSearchSubmit}>
           <input
             class="search-input"
             type="text"
-            aria-label="字节检索模式"
-            placeholder="十六进制字节(如 0102)"
+            aria-label=${t("byte.searchAria")}
+            placeholder=${t("byte.searchPlaceholder")}
           />
-          <button type="submit">检索</button>
+          <button type="submit">${t("byte.searchButton")}</button>
         </form>
       </div>
       <div class="anchor-bar">${this.#anchors.map((anchor) => this.#renderAnchor(anchor))}</div>
@@ -490,7 +498,9 @@ export class SmByteView extends LitElement {
       ${this.#searchStatus === null ? nothing : html`<p class="search-status" role="status">${this.#searchStatus}</p>`}
       ${this.#searchSummary === null
         ? nothing
-        : html`<p class="search-summary" role="status">${this.#searchSummary}(仅已下发窗口字节)</p>`}
+        : html`<p class="search-summary" role="status">
+            ${this.#searchSummary}${t("byte.searchWindowNote")}
+          </p>`}
       ${this.#searchHits.length === 0 ? nothing : this.#renderHits()}
     `;
   }
@@ -500,7 +510,10 @@ export class SmByteView extends LitElement {
       // M13 口径:明示窗口外,不渲染空白、不报错。
       return html`
         <span class="anchor-chip anchor-outside">
-          ${anchor.register} 内容不在可见窗口(${formatAddressHex(anchor.valueHex, ADDRESS_MIN_DIGITS)})
+          ${t("byte.anchorOutside", {
+            register: anchor.register,
+            value: formatAddressHex(anchor.valueHex, ADDRESS_MIN_DIGITS),
+          })}
         </span>
       `;
     }
@@ -511,10 +524,10 @@ export class SmByteView extends LitElement {
         <button
           type="button"
           class="anchor-rewind"
-          aria-label="滚动回 ${anchor.register} 锚点行"
+          aria-label=${t("byte.anchorRewindAria", { register: anchor.register })}
           @click=${() => this.#rewindToAnchor(anchor)}
         >
-          回锚 ${anchor.register}
+          ${t("byte.anchorRewind", { register: anchor.register })}
         </button>
       </span>
     `;
@@ -549,6 +562,17 @@ export class SmByteView extends LitElement {
 
   /** 行渲染器(willUpdate 在 rowDecorator 换绑时重建,驱动可视行重渲染)。 */
   #rowRenderer: (row: Row, index: number) => TemplateResult = this.#makeRowRenderer();
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    // 主题锚样式表(幂等):变量经 data-sm-theme 宿主锚继承穿透 shadow DOM。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   #makeRowRenderer(): (row: Row, index: number) => TemplateResult {
     return (row: Row, index: number): TemplateResult => {
@@ -593,7 +617,7 @@ export class SmByteView extends LitElement {
     :host {
       display: block;
       block-size: 24rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       background: canvas;
       color: canvastext;
@@ -612,7 +636,7 @@ export class SmByteView extends LitElement {
       flex-direction: column;
       gap: 0.25rem;
       padding: 0.5rem 0.75rem;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
     .toolbar-row {
@@ -679,7 +703,7 @@ export class SmByteView extends LitElement {
 
     .header-row {
       color: graytext;
-      border-block-end: 1px solid rgb(0 0 0 / 10%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
     .anchor-row {

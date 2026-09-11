@@ -24,19 +24,25 @@ import { customElement, property } from "lit/decorators.js";
 
 import type { SemanticHighlight, SemanticHighlightKind } from "@stackmaster/protocol";
 
+import { LocaleController, t, type SmMessageKey } from "../../i18n/i18n.js";
+import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
+
 /** `highlight-jump` 事件 detail(宿主接线:定位到 regionId @ addressHex)。 */
 export interface HighlightJumpDetail {
   readonly regionId: string;
   readonly addressHex: string;
 }
 
-/** kind 分组呈现序与分组标签(冻结枚举全量,不新增不遗漏)。 */
-const KIND_GROUPS: readonly { readonly kind: SemanticHighlightKind; readonly label: string }[] = [
-  { kind: "buffer_start", label: "buffer 起点" },
-  { kind: "return_address_slot", label: "返回地址槽" },
-  { kind: "saved_rbp_slot", label: "saved RBP 槽" },
-  { kind: "canary_slot", label: "canary 槽" },
-  { kind: "custom", label: "自定义标注" },
+/**
+ * kind 分组呈现序(冻结枚举全量,不新增不遗漏);分组标签经 i18n 键在渲染
+ * 时刻解析(WP-53:语言切换即生效)。
+ */
+const KIND_GROUPS: readonly { readonly kind: SemanticHighlightKind; readonly labelKey: SmMessageKey }[] = [
+  { kind: "buffer_start", labelKey: "ed.groupBufferStart" },
+  { kind: "return_address_slot", labelKey: "ed.groupReturnAddressSlot" },
+  { kind: "saved_rbp_slot", labelKey: "ed.groupSavedRbpSlot" },
+  { kind: "canary_slot", labelKey: "ed.groupCanarySlot" },
+  { kind: "custom", labelKey: "ed.groupCustom" },
 ];
 
 @customElement("sm-structure-view")
@@ -44,6 +50,17 @@ export class SmStructureView extends LitElement {
   /** 语义高亮列表(公开投影 semanticHighlights;空/缺省 → 空态)。 */
   @property({ attribute: false })
   highlights: readonly SemanticHighlight[] = [];
+
+  /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册(Lit addController);显式读点满足 lint。
+    void this.#i18n;
+    // 主题锚样式表(幂等):变量经 data-sm-theme 宿主锚继承穿透 shadow DOM。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
 
   static override styles = css`
     :host {
@@ -77,7 +94,7 @@ export class SmStructureView extends LitElement {
       inline-size: 100%;
       margin-block: 2px;
       padding: 0.25rem 0.5rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
       background: none;
       color: inherit;
@@ -95,7 +112,7 @@ export class SmStructureView extends LitElement {
       flex: none;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: rgb(0 0 0 / 8%);
+      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
       font-size: 0.75rem;
     }
 
@@ -120,22 +137,23 @@ export class SmStructureView extends LitElement {
   protected override render(): TemplateResult {
     if (this.highlights.length === 0) {
       return html`<p class="empty" role="status">
-        暂无结构标注(semanticHighlights 随初始公开投影或同步下发)
+        ${t("ed.structureEmpty")}
       </p>`;
     }
     return html`
-      <ul aria-label="内存结构教学标注">
-        ${KIND_GROUPS.map((group) => this.#renderGroup(group.kind, group.label))}
+      <ul aria-label=${t("ed.structureAria")}>
+        ${KIND_GROUPS.map((group) => this.#renderGroup(group.kind, group.labelKey))}
       </ul>
     `;
   }
 
   /** 单 kind 分组:组内条目为原生按钮(点击 → highlight-jump);空组不渲染。 */
-  #renderGroup(kind: SemanticHighlightKind, groupLabel: string): Renderable {
+  #renderGroup(kind: SemanticHighlightKind, labelKey: SmMessageKey): Renderable {
     const entries = this.highlights.filter((highlight) => highlight.kind === kind);
     if (entries.length === 0) {
       return nothing;
     }
+    const groupLabel = t(labelKey);
     return html`
       <li class="group">
         <span class="group-label">${groupLabel}</span>

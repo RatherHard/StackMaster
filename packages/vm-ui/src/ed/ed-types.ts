@@ -16,6 +16,8 @@
  */
 import type { PublicErrorCode } from "@stackmaster/protocol";
 
+import { t } from "../i18n/i18n.js";
+
 /**
  * 教学提示(对齐 challenge-schema `PublicHint`,见双包Schema语义.md hintLadder 行)。
  * revealPolicy 语义在浏览器本地执行:
@@ -43,7 +45,11 @@ export interface PublicErrorMapping {
   readonly teachingNote: string;
 }
 
-/** FE-ED-07 无匹配 teachingNote 时的默认教学文案(规约口径)。 */
+/**
+ * FE-ED-07 无匹配 teachingNote 时的默认教学文案(规约口径)。
+ * 导出常量 = zh-CN 快照(既有测试与公开 API 面);组件渲染经 i18n 键
+ * `ed.noTeachingNote`(WP-53;zh-CN 值与此常量一字不差)。
+ */
 export const DEFAULT_TEACHING_NOTE = "该错误暂无教学注解";
 
 /**
@@ -54,12 +60,12 @@ export const DEFAULT_TEACHING_NOTE = "该错误暂无教学注解";
  */
 export function validateCheckpointLabel(label: string): string | null {
   if (label.length > 128) {
-    return "标签不能超过 128 个字符";
+    return t("ed.labelTooLong");
   }
   // eslint-disable-next-line no-control-regex -- 封禁 C0/C1 控制字符本身要求正则中出现控制字符(同 protocol action-args.ts)
   const controlChars = /[\u0000-\u001F\u007F-\u009F]/;
   if (controlChars.test(label)) {
-    return "标签不允许包含控制字符";
+    return t("ed.labelControlChars");
   }
   return null;
 }
