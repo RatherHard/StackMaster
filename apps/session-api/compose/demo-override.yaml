@@ -1,0 +1,11 @@
+# 人工走查演示拓扑 override(阶段四直观验收;与 compose:app:up 叠加使用):
+#
+#   docker compose -f compose/deps.yaml -f compose/app.yaml -f compose/demo-override.yaml up -d
+#
+# 在 CSRF/凭证 Origin 白名单中登记浏览器开发壳 origin(vite dev = 5173),
+# 使「浏览器打开 plugin-dev 开发壳 → 代理同源请求」的人肉走查路径可直连。
+# 精确 origin、逗号分隔;不改变其余拓扑语义。
+services:
+  session-api:
+    environment:
+      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000,http://localhost:5173"
