@@ -30,6 +30,7 @@ import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import type { Logger } from "pino";
 
+import { AUDIT_ARCHIVE_GUC, TenantScope } from "./pg/connection.js";
 import { PersistenceError } from "./errors.js";
 import type { MinioLike } from "./minio/challenge-bundle-store.js";
 
@@ -193,6 +194,7 @@ export interface AuditArchiveJobOptions {
 /** 单批归档任务(PG 切片 → MinIO 副本 → 完整性校验 → 台账;见模块头)。 */
 export class AuditArchiveJob {
   readonly #pool: Pool;
+  readonly #scope: TenantScope;
   readonly #minio: MinioLike;
   readonly #bucket: string;
   readonly #batchSize: number;
@@ -205,6 +207,9 @@ export class AuditArchiveJob {
 
   constructor(options: AuditArchiveJobOptions) {
     this.#pool = options.pool;
+    // 归档切片为跨租户运维读面(D-API-92):行级政策经 app.audit_archive
+    // GUC 窄面承载(007 迁移;注入点 = 连接层 TenantScope,D-API-101)。
+    this.#scope = new TenantScope(options.pool);
     this.#minio = options.minio;
     this.#bucket = options.bucket;
     this.#batchSize = options.batchSize;
@@ -242,11 +247,13 @@ export class AuditArchiveJob {
     const cursorRow = cursor.rows[0];
     const cursorLastId = cursorRow !== undefined ? Number(cursorRow.last_id) : 0;
 
-    // ── 2. 批切片:游标行之后、在线保留窗口之前的行(按 id 序)──
+    // ── 2. 批切片:游标行之后、在线保留窗口之前的行(按 id 序)——跨租户
+    //    运维读面经 app.audit_archive GUC 窄面放行(行级政策,007 迁移)。──
     const horizon = new Date(this.#now() - this.#retentionDays * 86_400_000);
     let batchRows: Record<string, unknown>[];
     try {
-      const batch = await this.#pool.query(
+      const batch = await this.#scope.lifecycleQuery(
+        AUDIT_ARCHIVE_GUC,
         `SELECT id, kind, at, tenant_id, user_id, session_id, detail, created_at
          FROM audit_log
          WHERE id > $1 AND created_at <= $2

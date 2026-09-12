@@ -58,6 +58,10 @@ class ScriptedPool {
 
   async query(sql: string, values: unknown[] = []): Promise<{ rows: Record<string, unknown>[] }> {
     this.calls.push({ sql, values });
+    // 事务控制语句(归档切片经 TenantScope 事务注入,WP-65 / D-API-101)。
+    if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK" || sql.includes("set_config")) {
+      return { rows: [] };
+    }
     if (sql.includes("FROM audit_archive_batches") && sql.includes("ORDER BY")) {
       return { rows: this.cursorRows };
     }
@@ -87,6 +91,14 @@ class ScriptedPool {
       return { rows: [] };
     }
     throw new Error(`脚本未覆盖的 SQL:${sql}`);
+  }
+
+  /** client 门面(切片 SELECT 经事务注入执行;与池共享同一脚本路由)。 */
+  async connect(): Promise<{ query: ScriptedPool["query"]; release: () => void }> {
+    return {
+      query: (sql: string, values: unknown[] = []) => this.query(sql, values),
+      release: () => undefined,
+    };
   }
 }
 

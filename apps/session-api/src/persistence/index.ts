@@ -42,7 +42,16 @@ export {
   RedisRateLimitCounter,
   createRedisConnection,
 } from "./redis/redis-stores.js";
-export { createPostgresPool, closePostgresPool } from "./pg/connection.js";
+export {
+  AUDIT_ARCHIVE_GUC,
+  BOOT_RECOVERY_GUC,
+  RETENTION_PURGE_GUC,
+  TENANT_CONTEXT_GUC,
+  TenantScope,
+  closePostgresPool,
+  createPostgresPool,
+} from "./pg/connection.js";
+export type { LifecycleGuc } from "./pg/connection.js";
 export { loadMigrationsFromDir, runMigrations, createActionLogPartition } from "./pg/run-migrations.js";
 export type { Migration, MigrationRunResult } from "./pg/run-migrations.js";
 export { PostgresSessionRepository } from "./pg/session-repository.js";

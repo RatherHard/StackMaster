@@ -1107,7 +1107,11 @@ describe.skipIf(!COMPOSE_ENABLED)(
       }
       try {
         const auditTenant = `roles-${runSuffix}`;
-        // session_app:INSERT 受理(应用角色的合法写入面)。
+        // 行级租户政策(007 迁移 / D-API-101):应用角色 INSERT 受租户上下文
+        // 约束(WITH CHECK)——probe 连接以会话级 set_config 注入(测试形态;
+        // 生产为连接层 TenantScope 逐事务 SET LOCAL)。
+        await sessionApp.query(`SELECT set_config('app.tenant_id', $1, false)`, [auditTenant]);
+        // session_app:INSERT 受理(应用角色的合法写入面,行租户 = 注入租户)。
         await sessionApp.query(
           `INSERT INTO audit_log (kind, at, tenant_id, user_id) VALUES ('create_session', now(), $1, 'role-probe')`,
           [auditTenant],
@@ -1137,6 +1141,61 @@ describe.skipIf(!COMPOSE_ENABLED)(
         await expect(
           verifierRole.query(`DELETE FROM audit_log WHERE tenant_id = $1`, [`verifier-${auditTenant}`]),
         ).rejects.toThrow(/permission denied|append-only/);
+      } finally {
+        await sessionApp.end().catch(() => undefined);
+        await verifierRole.end().catch(() => undefined);
+      }
+    }, 60_000);
+
+    it("行级租户策略红灯(D-API-101):session_app 跨租户零行 / fail-closed;verifier 跨租户可读、零写越权", async (ctx) => {
+      const sessionApp = await tryConnect(withRole(IT_CONFIG.postgresUrl, "session_app", "session-app-dev"));
+      const verifierRole = await tryConnect(withRole(IT_CONFIG.postgresUrl, "verifier", "verifier-dev"));
+      if (sessionApp === null || verifierRole === null) {
+        // host 降级形态:init 服务未运行,角色不存在——如实登记(CI 完整容器拓扑实跑;
+        // 行级红灯全矩阵由 test/persistence/row-security.integration.test.ts 双拓扑承载)。
+        ctx.skip();
+        return;
+      }
+      try {
+        const probeTenant = `rls-${runSuffix}`;
+        const otherTenant = `rls-other-${runSuffix}`;
+        // 播种双租户提交行(admin 管理面连接;行级断言只经角色连接承载)。
+        const seeded = await pool!.query<{ id: string; tenant_id: string }>(
+          `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
+           SELECT t.tenant, 'sess-rls-' || t.tenant, 1, 'running', '{}'::jsonb
+           FROM (VALUES ($1::text), ($2::text)) AS t(tenant)
+           RETURNING id, tenant_id`,
+          [probeTenant, otherTenant],
+        );
+        expect(seeded.rows).toHaveLength(2);
+        // 行级第一闸:session_app 注入本租户上下文后,跨租户提交行零可见
+        // (与不存在同形态);未注入上下文 = 零可见(fail-closed)。
+        await sessionApp.query(`SELECT set_config('app.tenant_id', $1, false)`, [probeTenant]);
+        const own = await sessionApp.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM submissions WHERE tenant_id = $1`, [probeTenant],
+        );
+        expect(Number(own.rows[0]!.n)).toBe(1);
+        const cross = await sessionApp.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM submissions WHERE tenant_id = $1`, [otherTenant],
+        );
+        expect(Number(cross.rows[0]!.n)).toBe(0);
+        // verifier(信任域 4):跨租户可读(队列消费设计内,政策按角色分立)。
+        const verifierView = await verifierRole.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM submissions WHERE tenant_id = ANY($1::text[])`,
+          [[probeTenant, otherTenant]],
+        );
+        expect(Number(verifierView.rows[0]!.n)).toBe(2);
+        // verifier 零写越权:政策放行不等于授权(submissions 零 INSERT / 零 UPDATE)。
+        await expect(
+          verifierRole.query(
+            `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
+             VALUES ($1, 'sess-probe', 1, 'running', '{}'::jsonb)`,
+            [probeTenant],
+          ),
+        ).rejects.toThrow(/permission denied/i);
+        await expect(
+          verifierRole.query(`UPDATE submissions SET public_status = 'won' WHERE tenant_id = $1`, [probeTenant]),
+        ).rejects.toThrow(/permission denied/i);
       } finally {
         await sessionApp.end().catch(() => undefined);
         await verifierRole.end().catch(() => undefined);

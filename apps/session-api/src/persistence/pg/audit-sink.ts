@@ -15,15 +15,24 @@
  */
 
 import type { Pool } from "pg";
+import { TenantScope } from "./connection.js";
 import type { AuditEvent, AuditSink } from "../../auth/ports.js";
 import { PersistenceError } from "../errors.js";
 
 export class PgAuditSink implements AuditSink {
-  constructor(private readonly pool: Pool) {}
+  readonly #scope: TenantScope;
+
+  constructor(pool: Pool) {
+    // 行级租户策略第二道结构闸的注入点(007 迁移 / D-API-101):逐事务
+    // SET LOCAL app.tenant_id;audit_log_tenant_insert 政策 WITH CHECK 使
+    // 行租户与注入租户强制一致(跨租户审计发射在库层确定性拒绝)。
+    this.#scope = new TenantScope(pool);
+  }
 
   async append(event: AuditEvent): Promise<void> {
     try {
-      await this.pool.query(
+      await this.#scope.query(
+        event.actor.tenantId,
         `INSERT INTO audit_log (kind, at, tenant_id, user_id, session_id, detail)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
         [

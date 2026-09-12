@@ -376,7 +376,18 @@ export class MemorySubmissionStore implements SubmissionStore, VerdictQueryStore
     );
   }
 
-  async findVerdictBySubmissionId(submissionId: string): Promise<VerdictRecordPublic | null> {
+  async findVerdictBySubmissionId(
+    submissionId: string,
+    tenantId: string,
+  ): Promise<VerdictRecordPublic | null> {
+    // 租户绑定(查询层第二环,与行级政策双层同形,WP-65 / D-API-101):
+    // 跨租户 verdict 与"未落库"同形态(恒定 pending 防枚举)。
+    const submission = this.rows.find(
+      (row) => row.id === submissionId && row.tenantId === tenantId,
+    );
+    if (submission === undefined) {
+      return null;
+    }
     return this.verdicts.get(submissionId) ?? null;
   }
 

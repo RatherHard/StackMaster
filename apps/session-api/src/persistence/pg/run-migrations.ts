@@ -44,6 +44,11 @@ export interface MigrationRunResult {
  * 为 action_log 预建月度原生分区(运维辅助;MVP 期写入由 DEFAULT 分区兜底,
  * 归档轮转与原生分区扩展归阶段六)。注意:若 DEFAULT 分区已持有该月范围的
  * 行,PostgreSQL 会拒绝建分区——先归档再分区是运维序,本函数不做数据搬移。
+ *
+ * 行级租户策略(007 迁移 / D-API-101):父表政策不自动覆盖分区的直连访问,
+ * 新建分区经库层辅助函数 `session_api_apply_action_log_row_security` 单源
+ * 补齐(ENABLE/FORCE + 租户政策 + session_app GRANT)——分区轮转后第二道
+ * 结构闸全表域保持。
  */
 export async function createActionLogPartition(pool: Pool, month: Date): Promise<void> {
   const year = month.getUTCFullYear();
@@ -63,6 +68,8 @@ export async function createActionLogPartition(pool: Pool, month: Date): Promise
     `CREATE TABLE ${name} PARTITION OF action_log
      FOR VALUES FROM ('${start.toISOString()}') TO ('${end.toISOString()}')`,
   );
+  // 行级政策单源补齐(政策 / GRANT 字面在 007 迁移内,零第二实现)。
+  await pool.query(`SELECT session_api_apply_action_log_row_security($1)`, [name]);
 }
 
 /**

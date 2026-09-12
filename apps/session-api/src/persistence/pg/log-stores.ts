@@ -3,12 +3,14 @@
  *
  * append-only:PostgresActionLogStore 只暴露 append 与查询接口(应用层
  * 无变更面);数据库层由触发器强制拒绝 UPDATE / DELETE / TRUNCATE
- * (D-API-22,红灯反例:append-only.integration.test.ts)。
+ * (D-API-22,红灯反例:append-only.integration.test.ts);行级租户策略为
+ * 第二道结构闸(007 迁移;连接层经 TenantScope 逐事务注入,D-API-101)。
  * 落库纪律:仅已接受动作(拒绝不入账,D-W8-9);调用方(WP-4 编排装配)
  * 保证 entries 与编排器账本同源。
  */
 
 import type { Pool } from "pg";
+import { TenantScope } from "./connection.js";
 import { PersistenceError } from "../errors.js";
 import type {
   ActionLogEntryInput,
@@ -31,14 +33,20 @@ interface ActionLogRowRaw {
 }
 
 export class PostgresActionLogStore implements ActionLogStore {
-  constructor(private readonly pool: Pool) {}
+  readonly #scope: TenantScope;
+
+  constructor(pool: Pool) {
+    this.#scope = new TenantScope(pool);
+  }
 
   async append(entries: readonly ActionLogEntryInput[]): Promise<void> {
     if (entries.length === 0) {
       return;
     }
     try {
-      // 单语句多行插入:落库原子性与编排器账本批次同源。
+      // 单语句多行插入:落库原子性与编排器账本批次同源。批次同会话同源
+      // (submit 引用投影),租户上下文取批次锚租户;行级政策 WITH CHECK
+      // 使跨租户混批在库层确定性拒绝(fail-closed,结构上不可混写)。
       const values: unknown[] = [];
       const placeholders = entries
         .map((entry, index) => {
@@ -54,7 +62,8 @@ export class PostgresActionLogStore implements ActionLogStore {
           return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::jsonb, $${base + 6})`;
         })
         .join(", ");
-      await this.pool.query(
+      await this.#scope.query(
+        entries[0]!.tenantId,
         `INSERT INTO action_log
            (session_id, tenant_id, client_seq, revision_after, action, submission_ref)
          VALUES ${placeholders}`,
@@ -66,7 +75,8 @@ export class PostgresActionLogStore implements ActionLogStore {
   }
 
   async listBySession(sessionId: string, tenantId: string): Promise<StoredActionLogEntry[]> {
-    const result = await this.pool.query<ActionLogRowRaw>(
+    const result = await this.#scope.query<ActionLogRowRaw>(
+      tenantId,
       `SELECT id, session_id, client_seq, revision_after, action, submission_ref, created_at
        FROM action_log
        WHERE session_id = $1 AND tenant_id = $2
@@ -85,7 +95,8 @@ export class PostgresActionLogStore implements ActionLogStore {
   }
 
   async countBySession(sessionId: string, tenantId: string): Promise<number> {
-    const result = await this.pool.query<{ count: string }>(
+    const result = await this.#scope.query<{ count: string }>(
+      tenantId,
       `SELECT count(*)::text AS count FROM action_log WHERE session_id = $1 AND tenant_id = $2`,
       [sessionId, tenantId],
     );
@@ -104,7 +115,11 @@ interface SubmissionRowRaw {
 }
 
 export class PostgresSubmissionStore implements SubmissionStore, VerdictQueryStore {
-  constructor(private readonly pool: Pool) {}
+  readonly #scope: TenantScope;
+
+  constructor(pool: Pool) {
+    this.#scope = new TenantScope(pool);
+  }
 
   async record(input: {
     tenantId: string;
@@ -115,44 +130,47 @@ export class PostgresSubmissionStore implements SubmissionStore, VerdictQuerySto
     logDigest: string;
   }): Promise<SubmissionRecord> {
     // 入队与提交引用同锚(D-API-85):同一事务插入 submissions 行与
-    // verifier_runs pending 行(队列本体;多实例 SKIP LOCKED 认领天然安全)。
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const result = await client.query<SubmissionRowRaw>(
-        `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
-         VALUES ($1, $2, $3, $4, $5::jsonb)
-         RETURNING *`,
-        [input.tenantId, input.sessionId, input.revision, input.publicStatus, JSON.stringify(input.reference)],
-      );
-      const raw: SubmissionRowRaw | undefined = result.rows[0];
-      if (raw === undefined) {
-        throw new PersistenceError("store_unavailable", "提交引用落库失败(无返回行)");
+    // verifier_runs pending 行(队列本体;多实例 SKIP LOCKED 认领天然安全);
+    // 租户上下文经 TenantScope 事务注入(行级政策第二道闸,D-API-101)。
+    return this.#scope.transaction<SubmissionRecord>(input.tenantId, async (client) => {
+      try {
+        const result = await client.query<SubmissionRowRaw>(
+          `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
+           VALUES ($1, $2, $3, $4, $5::jsonb)
+           RETURNING *`,
+          [input.tenantId, input.sessionId, input.revision, input.publicStatus, JSON.stringify(input.reference)],
+        );
+        const raw: SubmissionRowRaw | undefined = result.rows[0];
+        if (raw === undefined) {
+          throw new PersistenceError("store_unavailable", "提交引用落库失败(无返回行)");
+        }
+        await client.query(
+          `INSERT INTO verifier_runs (tenant_id, submission_id, status, log_digest)
+           VALUES ($1, $2, 'pending', $3)`,
+          [input.tenantId, raw.id, input.logDigest],
+        );
+        return {
+          id: raw.id,
+          sessionId: raw.session_id,
+          revision: Number(raw.revision),
+          publicStatus: raw.public_status,
+          reference: raw.reference,
+          createdAt: raw.created_at.toISOString(),
+        };
+      } catch (error) {
+        // 事务回滚在 TenantScope 边界执行;此处维持既有稳定语义翻译
+        // (PersistenceError 原样透传,不二次包装)。
+        if (error instanceof PersistenceError) {
+          throw error;
+        }
+        throw new PersistenceError("store_unavailable", "提交引用落库失败", { cause: error });
       }
-      await client.query(
-        `INSERT INTO verifier_runs (tenant_id, submission_id, status, log_digest)
-         VALUES ($1, $2, 'pending', $3)`,
-        [input.tenantId, raw.id, input.logDigest],
-      );
-      await client.query("COMMIT");
-      return {
-        id: raw.id,
-        sessionId: raw.session_id,
-        revision: Number(raw.revision),
-        publicStatus: raw.public_status,
-        reference: raw.reference,
-        createdAt: raw.created_at.toISOString(),
-      };
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw new PersistenceError("store_unavailable", "提交引用落库失败", { cause: error });
-    } finally {
-      client.release();
-    }
+    });
   }
 
   async findBySession(sessionId: string, tenantId: string): Promise<SubmissionRecord[]> {
-    const result = await this.pool.query<SubmissionRowRaw>(
+    const result = await this.#scope.query<SubmissionRowRaw>(
+      tenantId,
       `SELECT * FROM submissions WHERE session_id = $1 AND tenant_id = $2 ORDER BY created_at ASC`,
       [sessionId, tenantId],
     );
@@ -175,9 +193,11 @@ export class PostgresSubmissionStore implements SubmissionStore, VerdictQuerySto
     sessionId: string,
   ): Promise<SubmissionRecord | null> {
     // 定位链第一环(D-API-83):tenantId 与 sessionId 双条件强制(查询层
-    // 租户校验,D-API-20);任一环不符 = 空集(与不存在同形,防枚举)。
+    // 租户校验,D-API-20),任一环不符 = 空集(与不存在同形,防枚举);
+    // 行级政策(submissions_tenant_isolation)为同形第二道闸。
     try {
-      const result = await this.pool.query<SubmissionRowRaw>(
+      const result = await this.#scope.query<SubmissionRowRaw>(
+        tenantId,
         `SELECT * FROM submissions
          WHERE id = $1::uuid AND tenant_id = $2 AND session_id = $3`,
         [submissionId, tenantId, sessionId],
@@ -201,13 +221,19 @@ export class PostgresSubmissionStore implements SubmissionStore, VerdictQuerySto
     }
   }
 
-  async findVerdictBySubmissionId(submissionId: string): Promise<VerdictRecordPublic | null> {
+  async findVerdictBySubmissionId(
+    submissionId: string,
+    tenantId: string,
+  ): Promise<VerdictRecordPublic | null> {
     // 定位链第二环(D-API-96):只取 11 值 verdict 与落库时刻,detail 列
-    // 零读取(呈现面结构性无明细表达位)。
+    // 零读取(呈现面结构性无明细表达位)。租户绑定(查询层 WHERE + 行级
+    // 政策双层):跨租户 verdict 与"未落库"同形态(恒定 pending 防枚举,
+    // WP-65 微扩 tenantId 形参,D-API-101)。
     try {
-      const result = await this.pool.query<{ verdict: string; created_at: Date }>(
-        `SELECT verdict, created_at FROM verdicts WHERE submission_id = $1::uuid`,
-        [submissionId],
+      const result = await this.#scope.query<{ verdict: string; created_at: Date }>(
+        tenantId,
+        `SELECT verdict, created_at FROM verdicts WHERE submission_id = $1::uuid AND tenant_id = $2`,
+        [submissionId, tenantId],
       );
       const raw = result.rows[0];
       if (raw === undefined) {

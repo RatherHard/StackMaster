@@ -1,10 +1,12 @@
 /**
  * PostgreSQL 会话仓储(sessions 表;WP-3)。
- * 一切查询强制 tenantId 过滤(查询层租户校验;行级策略归阶段六完善)。
+ * 一切查询强制 tenantId 过滤(查询层租户校验第一层;行级租户策略为第二道
+ * 结构闸,连接层经 TenantScope 逐事务 SET LOCAL 注入,D-API-101)。
  * 跨租户查询与"会话不存在"同形态返回 null(防枚举)。
  */
 
 import type { Pool } from "pg";
+import { BOOT_RECOVERY_GUC, RETENTION_PURGE_GUC, TenantScope } from "./connection.js";
 import { PersistenceError } from "../errors.js";
 import type {
   CreateSessionRowInput,
@@ -44,11 +46,16 @@ function mapRow(raw: SessionRowRaw): SessionRow {
 }
 
 export class PostgresSessionRepository implements SessionRepository {
-  constructor(private readonly pool: Pool) {}
+  readonly #scope: TenantScope;
+
+  constructor(pool: Pool) {
+    this.#scope = new TenantScope(pool);
+  }
 
   async insertSession(input: CreateSessionRowInput): Promise<SessionRow> {
     try {
-      const result = await this.pool.query<SessionRowRaw>(
+      const result = await this.#scope.query<SessionRowRaw>(
+        input.tenantId,
         `INSERT INTO sessions
            (session_id, tenant_id, user_id, challenge_id, challenge_version, phase, seed_strategy)
          VALUES ($1, $2, $3, $4, $5, 'active', $6)
@@ -69,8 +76,9 @@ export class PostgresSessionRepository implements SessionRepository {
   }
 
   async findSession(sessionId: string, tenantId: string): Promise<SessionRow | null> {
-    // 租户过滤在 WHERE 强制:跨租户定位 = 查不到(与不存在同形态)。
-    const result = await this.pool.query<SessionRowRaw>(
+    // 租户过滤在 WHERE 强制(第一层);跨租户定位 = 查不到(与不存在同形态)。
+    const result = await this.#scope.query<SessionRowRaw>(
+      tenantId,
       `SELECT * FROM sessions WHERE session_id = $1 AND tenant_id = $2`,
       [sessionId, tenantId],
     );
@@ -79,23 +87,30 @@ export class PostgresSessionRepository implements SessionRepository {
   }
 
   async listSessionsByTenant(tenantId: string): Promise<SessionRow[]> {
-    const result = await this.pool.query<SessionRowRaw>(
+    const result = await this.#scope.query<SessionRowRaw>(
+      tenantId,
       `SELECT * FROM sessions WHERE tenant_id = $1 ORDER BY created_at ASC`,
       [tenantId],
     );
     return result.rows.map(mapRow);
   }
 
-  /** 重启恢复枚举(D-API-63):active 行,按创建序恢复(快照锚序与之一致)。 */
+  /**
+   * 重启恢复枚举(D-API-63):active 行,按创建序恢复(快照锚序与之一致)。
+   * 查询层租户过滤的唯一读例外(进程生命周期操作)——行级政策经
+   * app.boot_recovery GUC 同构承载(007 迁移窄面政策行:仅 SELECT 放行)。
+   */
   async listActiveSessions(): Promise<SessionRow[]> {
-    const result = await this.pool.query<SessionRowRaw>(
+    const result = await this.#scope.lifecycleQuery<SessionRowRaw>(
+      BOOT_RECOVERY_GUC,
       `SELECT * FROM sessions WHERE phase = 'active' ORDER BY created_at ASC`,
     );
     return result.rows.map(mapRow);
   }
 
   async updateSessionPhase(sessionId: string, tenantId: string, phase: SessionPhaseRow): Promise<void> {
-    const result = await this.pool.query(
+    const result = await this.#scope.query(
+      tenantId,
       `UPDATE sessions SET phase = $3, updated_at = now()
        WHERE session_id = $1 AND tenant_id = $2`,
       [sessionId, tenantId, phase],
@@ -111,7 +126,8 @@ export class PostgresSessionRepository implements SessionRepository {
     snapshotId: string,
     latestRevision: number,
   ): Promise<void> {
-    const result = await this.pool.query(
+    const result = await this.#scope.query(
+      tenantId,
       `UPDATE sessions
        SET latest_snapshot_id = $3, latest_revision = $4, updated_at = now()
        WHERE session_id = $1 AND tenant_id = $2`,
@@ -122,15 +138,34 @@ export class PostgresSessionRepository implements SessionRepository {
     }
   }
 
-  /** 终态会话保留窗口清理(D-API-55):只清除 closed / crashed 且过期的行。 */
+  /**
+   * 终态会话保留窗口清理(D-API-55):只清除 closed / crashed 且过期的行。
+   * 行级政策形态(007 / D-API-101):RLS 下 DELETE 永不跨租户(PG 对 DELETE
+   * 施加 SELECT 可见 + DELETE 政策双重谓词;零跨租户 DELETE 政策行)——
+   * 清理为两段式:①app.retention_purge GUC 下枚举待清理租户(唯一跨租户
+   * 读面,政策行 *_retention_tenant_scan);②逐租户删除(租户上下文注入,
+   * sessions_tenant_isolation 承载)。枚举与删除间的到达行由下一清理周期
+   * 收敛(保留期语义容忍)。
+   */
   async purgeTerminalSessionsBefore(cutoffIso: string): Promise<number> {
     try {
-      const result = await this.pool.query(
-        `DELETE FROM sessions
+      const tenants = await this.#scope.lifecycleQuery<{ tenant_id: string }>(
+        RETENTION_PURGE_GUC,
+        `SELECT DISTINCT tenant_id FROM sessions
          WHERE phase IN ('closed', 'crashed') AND updated_at <= $1`,
         [cutoffIso],
       );
-      return result.rowCount ?? 0;
+      let purged = 0;
+      for (const row of tenants.rows) {
+        const result = await this.#scope.query(
+          row.tenant_id,
+          `DELETE FROM sessions
+           WHERE phase IN ('closed', 'crashed') AND updated_at <= $1 AND tenant_id = $2`,
+          [cutoffIso, row.tenant_id],
+        );
+        purged += result.rowCount ?? 0;
+      }
+      return purged;
     } catch (error) {
       throw new PersistenceError("store_unavailable", "终态会话清理失败", { cause: error });
     }

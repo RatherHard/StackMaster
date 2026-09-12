@@ -28,6 +28,9 @@ const PUBLIC_DESCRIPTOR = Buffer.from(
 
 describe.skipIf(!IT_ENABLED)("公开描述包下发通道端口(真实 PG / MinIO;SESSION_API_IT 门控)", () => {
   const ids = uniqueIds("descriptor");
+  // 每次运行唯一内容版本(版本不可变约束对持久卷残留数据免疫;challengeId
+  // 维持固定形态,公开面读取断言按运行内登记行为准)。
+  const contentVersion = `1.0.${ids.sessionId.slice(-6)}`;
   let bundles: MinioChallengeBundleStore;
   let registry: PostgresChallengeRegistry;
   let pool: Pool;
@@ -57,22 +60,22 @@ describe.skipIf(!IT_ENABLED)("公开描述包下发通道端口(真实 PG / MinI
     await registry.upsertChallenge({ challengeId: "ch-it-descriptor", tenantId: ids.tenantId });
     await registry.insertChallengeVersion({
       challengeId: "ch-it-descriptor",
-      contentVersion: "1.0.0",
+      contentVersion,
       tenantId: ids.tenantId,
       vmProfileVersion: "1.0.0",
       privateBundleSha256: "00",
       publicDescriptorSha256: "00",
-      privateBundleObject: "ch-it-descriptor/1.0.0/bundle.json",
-      publicDescriptorObject: "ch-it-descriptor/1.0.0/descriptor.json",
+      privateBundleObject: `ch-it-descriptor/${contentVersion}/bundle.json`,
+      publicDescriptorObject: `ch-it-descriptor/${contentVersion}/descriptor.json`,
       signature: "it-signature",
       signerKeyId: "it-key",
     });
 
     // 公开面读取:无租户条件,异租户前缀的登记行直接可达。
-    const row = await registry.findPublishedChallengeVersion("ch-it-descriptor", "1.0.0");
+    const row = await registry.findPublishedChallengeVersion("ch-it-descriptor", contentVersion);
     expect(row).not.toBeNull();
     expect(row?.tenantId).toBe(ids.tenantId);
-    expect(row?.publicDescriptorObject).toBe("ch-it-descriptor/1.0.0/descriptor.json");
+    expect(row?.publicDescriptorObject).toBe(`ch-it-descriptor/${contentVersion}/descriptor.json`);
 
     // 未登记版本:确定性 null(路由层翻译为 404 同形)。
     expect(await registry.findPublishedChallengeVersion("ch-it-descriptor", "9.9.9")).toBeNull();

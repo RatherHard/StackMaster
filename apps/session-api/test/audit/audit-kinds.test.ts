@@ -65,24 +65,47 @@ describe("审计 kind 十值封闭集合(Q5 定案冻结,D-API-90)", () => {
   });
 });
 
-/** 捕获参数的假池(PgAuditSink 参数映射与错误翻译的单元形态)。 */
+/** 捕获参数的假池(PgAuditSink 参数映射与错误翻译的单元形态)。
+ *  WP-65(D-API-101):落库经 TenantScope 事务注入(BEGIN → set_config →
+ *  语句 → COMMIT)——假池以 connect() 派生同捕获面的 client 门面,调用序
+ *  断言锚定注入先于落库语句。 */
 class CapturingPool {
   readonly calls: { sql: string; values: unknown[] }[] = [];
-  readonly results: { rows?: unknown[]; error?: Error }[] = [];
+  readonly errors: { match: RegExp; error: Error }[] = [];
 
-  pushError(error: Error): void {
-    this.results.push({ error });
+  /** 注入查询错误(命中 match 的语句抛出;缺省 = 下一条 INSERT)。 */
+  pushError(error: Error, match: RegExp = /INSERT INTO audit_log/): void {
+    this.errors.push({ match, error });
   }
 
-  async query(sql: string, values: unknown[] = []): Promise<{ rows: unknown[] }> {
+  query(sql: string, values: unknown[] = []): Promise<{ rows: unknown[] }> {
     this.calls.push({ sql, values });
-    const result = this.results.shift();
-    if (result?.error !== undefined) {
-      throw result.error;
+    const hit = this.errors.findIndex((entry) => entry.match.test(sql));
+    if (hit >= 0) {
+      const [, entry] = this.errors.splice(hit, 1);
+      throw entry!.error;
     }
-    return { rows: result?.rows ?? [] };
+    return Promise.resolve({ rows: [] });
+  }
+
+  connect(): Promise<CapturingClient> {
+    return Promise.resolve(new CapturingClient(this));
   }
 }
+
+/** 假池 client 门面(与池共享同一捕获面;release 为 no-op)。 */
+class CapturingClient {
+  constructor(private readonly pool: CapturingPool) {}
+
+  query(sql: string, values: unknown[] = []): Promise<{ rows: unknown[] }> {
+    return this.pool.query(sql, values);
+  }
+
+  release(): void {}
+}
+
+/** 事务注入序(BEGIN → set_config → 业务语句)在 calls 中的业务语句下标。 */
+const INSERT_CALL_INDEX = 2;
 
 describe("PgAuditSink(append-only 端口语义;fail-closed,D-API-91)", () => {
   const baseEvent: AuditEvent = {
@@ -93,12 +116,19 @@ describe("PgAuditSink(append-only 端口语义;fail-closed,D-API-91)", () => {
     detail: { challengeVersion: "1.0.0" },
   };
 
-  it("append 落库参数映射:kind / at / actor / sessionId / detail(JSON 文本)", async () => {
+  it("append 落库参数映射:租户上下文注入 + kind / at / actor / sessionId / detail(JSON 文本)", async () => {
     const pool = new CapturingPool();
     await new PgAuditSink(pool as unknown as import("pg").Pool).append(baseEvent);
-    expect(pool.calls).toHaveLength(1);
-    const { sql, values } = pool.calls[0]!;
-    expect(sql).toMatch(/INSERT INTO audit_log/);
+    // 调用序:BEGIN → set_config(app.tenant_id,is_local)→ INSERT → COMMIT
+    // (连接层注入先于落库语句,行级政策谓词读取时机保证;D-API-101)。
+    expect(pool.calls.map((call) => call.sql.replace(/\s+/g, " "))).toEqual([
+      "BEGIN",
+      "SELECT set_config('app.tenant_id', $1, true)",
+      expect.stringMatching(/INSERT INTO audit_log/),
+      "COMMIT",
+    ]);
+    expect(pool.calls[1]!.values).toEqual(["tenant-a"]);
+    const { values } = pool.calls[INSERT_CALL_INDEX]!;
     expect(values[0]).toBe("create_session");
     expect(values[1]).toEqual(new Date(baseEvent.at));
     expect(values[2]).toBe("tenant-a");
@@ -116,8 +146,8 @@ describe("PgAuditSink(append-only 端口语义;fail-closed,D-API-91)", () => {
       detail: { outcome: "rejected", reason: "signature" },
     };
     await new PgAuditSink(pool as unknown as import("pg").Pool).append(event);
-    expect(pool.calls[0]!.values[4]).toBeNull();
-    expect(pool.calls[0]!.values[5]).toBe(JSON.stringify({ outcome: "rejected", reason: "signature" }));
+    expect(pool.calls[INSERT_CALL_INDEX]!.values[4]).toBeNull();
+    expect(pool.calls[INSERT_CALL_INDEX]!.values[5]).toBe(JSON.stringify({ outcome: "rejected", reason: "signature" }));
   });
 
   it("落库失败 fail-closed:抛 PersistenceError(store_unavailable),错误面零载荷细节", async () => {
@@ -137,6 +167,8 @@ describe("PgAuditSink(append-only 端口语义;fail-closed,D-API-91)", () => {
     expect(persistenceError.message).not.toContain("tenant-a");
     expect(persistenceError.message).not.toContain("sess-abc");
     expect(persistenceError.message).not.toContain("challengeVersion");
+    // 注入面收口:INSERT 失败 → ROLLBACK(事务回滚,fail-closed)。
+    expect(pool.calls.at(-1)!.sql).toBe("ROLLBACK");
   });
 
   it("端口形状零更新 / 零删除:append 之外无任何变更方法(append-only 结构强制)", () => {

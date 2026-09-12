@@ -121,8 +121,12 @@ export function buildVerdictRoutes(deps: VerdictRouteDeps): FastifyPluginAsync {
             // 跨租户 / 跨会话 / 不存在同形态(防枚举)。
             return notFound(reply);
           }
-          // 4. 裁决行读取(未落库 = null → 恒定 pending,fail-closed)。
-          const verdict = await deps.verdicts.findVerdictBySubmissionId(submissionId);
+          // 4. 裁决行读取(定位链第二环,租户绑定;未落库 = null → 恒定
+          //    pending,fail-closed;跨租户与未落库同形态,WP-65 双层)。
+          const verdict = await deps.verdicts.findVerdictBySubmissionId(
+            submissionId,
+            auth.claims.tenantId,
+          );
           const payload = verdict === null
             ? { submissionId, revision: submission.revision, status: "pending" as const }
             : {

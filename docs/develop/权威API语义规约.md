@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**);**阶段六 WP-64 审计面完善与归档 D-API-90~D-API-93 2026-09-12 增补(Q5 kind 集合定案 = D-API-59 开口收口、AuditSink PG 落库 = D-API-33 留白收口、归档对象存储、REVOKE 角色治理 = D-API-22 阶段六落地面——既有 D-API-1~89 条目语义零改动,D-API-59 / D-API-33 仅增收口指向)**;**阶段六 WP-62 隐藏测试裁决汇总与 verifier 审计发射 D-API-94~D-API-96 2026-09-12 增补(汇总语义 / 审计发射面 / verdicts 明细列——既有 D-API-1~93 条目语义零改动,D-API-90 仅增发射实现指向)**;**阶段六 WP-63 正式裁决呈现实现面(vm-ui 增量)与 ZR-T4 收口 D-API-97~D-API-100 2026-09-12 增补(呈现路由实现落位 = D-API-83 兑现、重询限流与 Cookie Path 调宽兑现、vm-ui 呈现增量与重询节奏、ZR-T4 verifier 级复锚——既有 D-API-1~96 条目语义零改动,既有契约面(含 `VerdictQueryResponse`)零改动)** |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61);2026-09-12 增补 D-API-90~D-API-93(阶段六 WP-64);2026-09-12 增补 D-API-94~D-API-96(阶段六 WP-62);2026-09-12 增补 D-API-97~D-API-100(阶段六 WP-63) |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**);**阶段六 WP-64 审计面完善与归档 D-API-90~D-API-93 2026-09-12 增补(Q5 kind 集合定案 = D-API-59 开口收口、AuditSink PG 落库 = D-API-33 留白收口、归档对象存储、REVOKE 角色治理 = D-API-22 阶段六落地面——既有 D-API-1~89 条目语义零改动,D-API-59 / D-API-33 仅增收口指向)**;**阶段六 WP-62 隐藏测试裁决汇总与 verifier 审计发射 D-API-94~D-API-96 2026-09-12 增补(汇总语义 / 审计发射面 / verdicts 明细列——既有 D-API-1~93 条目语义零改动,D-API-90 仅增发射实现指向)**;**阶段六 WP-63 正式裁决呈现实现面(vm-ui 增量)与 ZR-T4 收口 D-API-97~D-API-100 2026-09-12 增补(呈现路由实现落位 = D-API-83 兑现、重询限流与 Cookie Path 调宽兑现、vm-ui 呈现增量与重询节奏、ZR-T4 verifier 级复锚——既有 D-API-1~96 条目语义零改动,既有契约面(含 `VerdictQueryResponse`)零改动)**;**阶段六 WP-65 全面租户隔离与限流租户预算复核 D-API-101~D-API-104 2026-09-12 增补(PG 行级租户策略全表域启用与连接层租户上下文注入 = D-API-20"行级策略归阶段六完善"收口、Q6 限流七键 + 裁决重询键逐键复核定案(数值维持即定案)、Redis 键域 T1 边界复核登记(不实现)、/metrics 生产暴露面收敛 = D-API-70 移交项收口——既有 D-API-1~100 条目语义零改动,D-API-20 仅增收口指向,限流 / 配额数值(D-API-50 / 54 / 58 / 86)零改动)** |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61);2026-09-12 增补 D-API-90~D-API-93(阶段六 WP-64);2026-09-12 增补 D-API-94~D-API-96(阶段六 WP-62);2026-09-12 增补 D-API-97~D-API-100(阶段六 WP-63);2026-09-12 增补 D-API-101~D-API-104(阶段六 WP-65) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -164,7 +164,7 @@ WP-2 交付三个端口 + 内存默认实现(`apps/session-api/src/auth/`):`Toke
 
 ### D-API-20 PostgreSQL 表域与查询层租户校验(阶段三 WP-3)
 
-表域按计划书 5.7 落地(`apps/session-api/migrations/` 顺序 SQL + 最小 runner `runMigrations`:记录表 `_session_api_migrations` + 会话级咨询锁 + 逐迁移事务,重复执行幂等):题目域 `challenges` / `challenge_versions`(版本链、双包 SHA-256 摘要与 Ed25519 登记签名、对象存储对象名;版本不可变,重复登记确定性拒绝)、会话域 `sessions`(sessionId / tenantId / userId / challengeId / challengeVersion / phase / seed 策略元数据 / 快照锚)与 `checkpoints`(COW 快照密文 blob,origin ∈ {explicit_checkpoint, auto_periodic, session_close})、动作域 `action_log`(append-only、PARTITION BY RANGE (created_at),DEFAULT 分区兜底,月度分区经 `createActionLogPartition` 预建)、裁决域 `submissions`(内部裁决引用)+ `verdicts` / `verifier_runs`(阶段六写入,本阶段零写入)。全部表带租户作用域列;**查询层租户校验强制**:一切按会话定位的查询 WHERE 强制 `tenant_id`(跨租户与"不存在"同形态返回空,防枚举),行级策略归阶段六完善。`checkpoints` 的 DELETE 仅由保留期清理(`purgeExpired`)sanction。
+表域按计划书 5.7 落地(`apps/session-api/migrations/` 顺序 SQL + 最小 runner `runMigrations`:记录表 `_session_api_migrations` + 会话级咨询锁 + 逐迁移事务,重复执行幂等):题目域 `challenges` / `challenge_versions`(版本链、双包 SHA-256 摘要与 Ed25519 登记签名、对象存储对象名;版本不可变,重复登记确定性拒绝)、会话域 `sessions`(sessionId / tenantId / userId / challengeId / challengeVersion / phase / seed 策略元数据 / 快照锚)与 `checkpoints`(COW 快照密文 blob,origin ∈ {explicit_checkpoint, auto_periodic, session_close})、动作域 `action_log`(append-only、PARTITION BY RANGE (created_at),DEFAULT 分区兜底,月度分区经 `createActionLogPartition` 预建)、裁决域 `submissions`(内部裁决引用)+ `verdicts` / `verifier_runs`(阶段六写入,本阶段零写入)。全部表带租户作用域列;**查询层租户校验强制**:一切按会话定位的查询 WHERE 强制 `tenant_id`(跨租户与"不存在"同形态返回空,防枚举),行级策略归阶段六完善。`checkpoints` 的 DELETE 仅由保留期清理(`purgeExpired`)sanction。(**阶段六收口(2026-09-12,WP-65)**:"行级策略归阶段六完善"由 **D-API-101** 收口——PG RLS 全表域启用(九表 + DEFAULT 分区,ENABLE + FORCE,政策按角色分立)+ 连接层 `TenantScope` 逐事务 SET LOCAL 租户上下文注入;查询层校验原样保留为第一层,双层并存不互替。)
 
 ### D-API-21 快照加密层级:应用层整包加密 AES-256-GCM(阶段三 WP-3;D-W8-11 收口)
 
@@ -897,6 +897,87 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 - **威胁模型面(D-API-62 编排器侧矩阵的裁决面延伸)**:客户端"伪造 won / 成功"在嵌入协议内**无承载通道**(V-9:信封字段集合冻结,伪造即 V-4 拒绝);可能到达服务端的成功标志唯一落点 = 提交行 `public_status`。复锚形式(compose 全拓扑集成,`test/compose/compose-full-chain.integration.test.ts`):同一规范化动作日志引用落两行 submissions——诚实行(public_status = 交互真实值)与伪造行(`public_status = 'won'`,同 reference 同 `log_digest`)——verifier 独立重放裁决:两行 verdict **逐字面一致**(且 verdicts 单行幂等)。verifier 管线对 `public_status` 零读取(裁决唯一输入 = 规范化动作日志引用),伪造成功标志不改成绩结构性成立;
 - **映射文档回填**:《秘密零驻留CI检查项映射》ZR-T4 行状态 🚧 → ✅(2026-09-12,阶段六 WP-63),证据指向本条 + compose 用例;《数据分类与秘密零驻留清单》§9.4 ZR-T4 行机检方法补登记落点;
 - **呈现路由红灯矩阵归属(D-API-86 预留面收口)**:rig 级 18 用例(`test/routes/verdict-routes.test.ts`:401 统一形态 / 过期 / 参数字符集 / 不存在 / 跨租户 / 跨会话 404 同形 / pending 三字段与字节确定 / verdicted 五字段 / 非成绩方向同构 / 429 逐字节 / 计量域隔离 / Cookie Path=/ / 11 值外字面 500 兜底)+ compose 拓扑实跑 4 用例(全链路演示 / 404 矩阵 / 429 逐字节 / ZR-T4 复锚)——D-API-86 "路由实现期红灯归 WP-63" 兑现。
+
+## 三·十八、全面租户隔离与限流租户预算复核(阶段六 WP-65;D-API-101 ~ D-API-104)
+
+> 本节为 WP-65「全面租户隔离与限流租户预算复核」的定案记录,对应阶段六任务分解 §二 WP-65 四条目与 §五退出条件 5。硬门槛继承(§一):**行级策略是查询层校验之外的第二道结构闸**——跨租户与"不存在"同形态;双层并存、不互替、零查询层回退。既有契约面零改动:12 动作、16 错误码、嵌入协议 v1、会话 WSS 通道、`VerdictQueryResponse`、引擎进程协议全部原样;限流 / 配额默认值(D-API-50 / 54 / 58 / 86)经 Q6 逐键复核**原样维持**(数值维持也是定案,证据登记见 D-API-102)。既有 D-API-1~100 条目语义零改动;D-API-20 增收口指向。
+
+### D-API-101 PG 行级租户策略(RLS)全表域启用与连接层租户上下文注入(D-API-20 收口;阶段六 WP-65)
+
+D-API-20 登记的"行级策略归阶段六完善"开口由本条收口。落地面 = 迁移 `007_row_level_security.sql` + 连接层 `TenantScope`(`src/persistence/pg/connection.ts`)+ 存储适配器逐调用注入 + compose 角色治理 init 同步。
+
+- **政策矩阵(全表域 ENABLE + FORCE ROW LEVEL SECURITY)**:租户作用域九表(题目域 `challenges` / `challenge_versions`,会话域 `sessions` / `checkpoints`,动作域 `action_log` + DEFAULT 分区,裁决域 `submissions` / `verdicts` / `verifier_runs`,审计域 `audit_log`)全部 `ENABLE` + `FORCE`(表属主同受政策约束);政策按角色分立:
+
+| 表 | session_app 政策(应用连接角色,D-API-93) | verifier 政策(信任域 4,D-API-87) |
+|---|---|---|
+| sessions | `tenant_isolation`(ALL,租户绑定 USING + WITH CHECK)+ `boot_recovery_read`(SELECT,GUC)+ `retention_tenant_scan`(SELECT,GUC) | —(无授权面) |
+| checkpoints | 同 sessions 三行形态 | — |
+| action_log(+DEFAULT 分区) | `tenant_isolation`(ALL,租户绑定) | — |
+| submissions | `tenant_isolation`(ALL,租户绑定) | `verifier_read`(SELECT,USING true) |
+| verifier_runs | `tenant_isolation`(ALL,租户绑定) | `verifier_trust_domain`(ALL,USING/WITH CHECK true) |
+| verdicts | `tenant_isolation`(ALL,租户绑定) | `verifier_trust_domain`(ALL,USING/WITH CHECK true) |
+| challenges | `registry_read`(SELECT,USING true)+ `tenant_write`(ALL,租户绑定) | `verifier_read`(SELECT,USING true) |
+| challenge_versions | 同 challenges 两行形态 | `verifier_read`(SELECT,USING true) |
+| audit_log | `tenant_insert`(INSERT,WITH CHECK 租户绑定)+ `archive_read`(SELECT,GUC) | `verifier_insert`(INSERT,WITH CHECK true) |
+
+- **租户绑定谓词与注入形态(GUC 契约)**:`tenant_id = current_setting('app.tenant_id', true)`——`is_missing` 形态使 GUC 缺失返回 NULL、谓词恒假、查询零行(**fail-closed:未声明租户 = 与空库同形态**)。注入点 = 连接层 `TenantScope`:每个租户作用域存储调用在显式事务内先 `SELECT set_config('app.tenant_id', $1, true)` 再执行语句(`BEGIN → set_config → 语句 → COMMIT`;多语句面如 D-API-85 提交入队同锚事务由 `TenantScope.transaction` 承载同一注入)。**形态取舍(登记)**:SET LOCAL 仅事务内生效,存储层原为 `Pool.query` 直连形态——"每查询会话级 SET"被否决:实测 node-postgres 池对**出错的连接做丢弃重建**(`pg.Pool` 在查询异常后不复用该连接),会话级 GUC 随之蒸发,探测与常规路径的会话态不可靠且构成 fail-open 面;逐事务包装在 COMMIT 后由 SET LOCAL 语义自动归零,连接复用零租户残留。代价 = 每存储调用 +3 次本机往返,量化进 D-API-102 的 k6 前后对比("RLS 性能成本"风险行回填);
+- **进程生命周期例外(专用 GUC 承载,无 BYPASSRLS、无超级用户应用连接)**:三个跨租户例外均为"进程生命周期操作而非租户作用域数据访问"(D-API-63 定性),各自以独立 GUC 承载、逐表逐命令窄面政策行成文:`app.boot_recovery`(启动恢复枚举,D-API-63 查询层例外的行级同构;仅 SELECT 放行)/ `app.retention_purge`(保留期清理,D-API-55)/ `app.audit_archive`(审计归档切片读,D-API-92)。注入面 = `TenantScope.lifecycleQuery`(仅设该 GUC,`app.tenant_id` 保持缺失);生命周期 GUC 均经 SET LOCAL 仅在对应事务内生效,常驻会话态零残留;
+- **保留期清理两段式(实现期发现)**:PG 对 DELETE 施加"SELECT 可见(政策按命令 OR、跨命令 AND)+ DELETE 政策"双重谓词——窄面 `FOR DELETE` 例外政策行会因 SELECT 侧租户谓词恒假而**永远删不到跨租户行**,且"跨租户 DELETE 政策行"本身连带打开读面。定案形态:**RLS 下 DELETE 永不跨租户(零跨租户 DELETE 政策行)**——清理 = ①`app.retention_purge` 下枚举待清理租户(`*_retention_tenant_scan` SELECT 政策行,唯一跨租户读面)→ ②逐租户删除(租户上下文注入,`*_tenant_isolation` 承载);`purgeTerminalSessionsBefore` / `purgeExpired` 两段实现,枚举与删除间到达的行由下一清理周期收敛(保留期语义容忍);
+- **verifier 角色政策论证(信任域 4 队列消费建模)**:verifier 对裁决域的跨租户读取与租户维度落库(认领 pending run / 推进状态机 / verdicts 幂等落库 / 审计发射)是 D-API-85 / 87 / 95 设计内的访问面——政策按角色分立为 `TO verifier USING (true)`(放行政策),**非 BYPASSRLS 旁路角色**(`rolbypassrls = false`,RLS 强制保持:政策不存在即零行,结构性防"静默新增未建模访问路径");政策放行 ≠ 授权,写越权仍由 GRANT 面(D-API-93)维持——红灯矩阵双向断言(跨租户可读 + 零写越权);
+- **注册表公开读面(逐表论证)**:`challenges` / `challenge_versions` 的 SELECT 对 session_app 全放行——公开描述包下发(D-API-76)为无凭证公开面,登记行内容 = 全局公开登记值(双包 SHA-256 摘要 / 对象名 / Ed25519 签名,公开内容定位符,清单 §6 公开分类),即查询层既有第二处跨租户读例外的行级同构;写面(INSERT / UPDATE)以 WITH CHECK 租户绑定。副作用 = fail-closed 强化:跨租户 challengeId 冲突(`upsertChallenge` ON CONFLICT DO UPDATE)在 RLS 下因冲突行不可见而确定性报错,不再静默改写他租户登记行标题;
+- **零租户维度表(不启用 RLS,逐表论证)**:`audit_archive_batches`(归档台账,D-API-92)与 `_session_api_migrations`(迁移记账)为服务级台账,无租户谓词可表达(行集合 = 批 / 迁移事实,零租户维度);访问面由 GRANT 治理(D-API-93)承载。除此二表外全表域启用,`pg_class.relrowsecurity` / `relforcerowsecurity` 机检断言入红灯矩阵;
+- **action_log 分区政策单源**:父表政策不自动覆盖分区的直连访问——DEFAULT 分区同步启用(RLS + 政策 + GRANT),经库层辅助函数 `session_api_apply_action_log_row_security(partition_name)` 单源承载;`createActionLogPartition`(run-migrations)建新分区后调用同一函数,分区轮转后第二道结构闸全表域保持(零第二政策实现);
+- **verdict 定位链第二环租户绑定(端口微扩)**:`VerdictQueryStore.findVerdictBySubmissionId(submissionId)` 微扩为 `(submissionId, tenantId)`(memory / PG 双实现同构,呈现路由传凭证锚租户)——查询层第二环 WHERE 租户强制 + 行级政策 `verdicts_tenant_isolation` 双层同形,跨租户裁决读取与"未落库"同形态(恒定 pending 防枚举);呈现载荷五字段上限面(D-API-83 / 96)零改动;
+- **双层红灯矩阵(证据面)**:`test/persistence/row-security.integration.test.ts`(19 用例,IT 门控,双拓扑可跑——host 拓扑由套件幂等执行角色治理 init 确保角色在场)+ compose 套件行级红灯用例(容器拓扑;host 角色缺席时如实跳过,CI 完整拓扑实跑):结构闸机检(九表 + 分区 `relrowsecurity` / `relforcerowsecurity` 全真;两角色 `rolbypassrls` / `rolsuper` 全 false)、session_app 直连跨租户 SELECT / UPDATE / DELETE 零行(与不存在同形态)、跨租户 INSERT WITH CHECK 拒、SET LOCAL 缺失零行(fail-closed)、三生命周期例外"生效 + 不外溢"窄面断言、注册表公开读面 + 写面租户绑定、verifier 跨租户可读 / 零写越权双向断言、**生产仓储(连接层注入)在强制 RLS 下**同租户读写 / 跨租户同形不存在 / 启动恢复枚举 / 保留期清理端到端(scratch 库隔离实跑)。实跑形态登记(沿 WP-62 / 63 先例):本机 Docker registry 间歇不可达(基础镜像元数据拉取 EOF,已探测)——容器镜像未重建,host 混合拓扑实跑(IT 107 + compose 22 全绿,角色治理 init 幂等执行使角色在 host 拓扑亦在场,行级矩阵双形态实跑);CI compose-integration job 始终完整容器拓扑复跑(容器拓扑内 verifier 以独立角色连接,RLS 强制下裁决管线端到端);
+- **降级与生产连线义务(沿 D-API-93 登记)**:compose dev / CI 容器拓扑的应用连接仍为管理面凭证(超级用户,RLS 旁路)——角色治理降级如实登记,CI 始终完整容器拓扑;生产部署义务:应用连接(`SESSION_API_POSTGRES_URL`)必须使用 `session_app` 最小授权角色(RLS 即在该形态下强制生效),不得使用表属主;迁移以专用迁移角色(属主)执行。红灯矩阵以角色直连 PG 承载,**不依赖**应用连接是否已切换角色——行级强制在两种连接形态下均有证据。
+
+### D-API-102 限流与配额默认值复核定案(Q6):七键 + 裁决重询键逐键证据,数值维持(阶段六 WP-65)
+
+**裁决原则**:数值维持也是定案(证据登记形态)——每一键给出复核证据与"维持"结论,零数值改动(D-API-50 / 54 / 58 / 86 原样);任何后续调整走 WP-1 §1.3 + 本表增补。
+
+| 键 | 默认 / 天花板 | 复核证据 | 定案 |
+|---|---|---|---|
+| `SESSION_API_RATE_LIMIT_REQUESTS_PER_MINUTE` | 120 / 100000 | k6 场景以每迭代唯一用户刻意规避护栏(D-API-73 纪律,零削顶压测);护栏触顶呈现由 13.3 用例限流 429 逐字节 + rig 红灯承载;120/min 用户级与裁决重询 30/min 无结构性冲突 | **维持** |
+| `SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT` | 8 / 10000 | k6 concurrent-sessions 峰值 6 VU 压预算内(D-API-73);预算"早期快检 + 精确执行面"双层与并发创建不超卖由 D-API-52 测试矩阵承载;与容器形态资源预算的对齐 = **登记判据面**(见下),量化接线归 WP-66 交付时回填 | **维持** |
+| `SESSION_API_SUBMISSIONS_PER_MINUTE` | 30 / 100000 | submit 专属闸先于编排入口(防重放材料生成挤占);教学规模提交节奏(每会话终态提交 + 非成绩方向显式重提)远低于 30/min;维持 | **维持** |
+| `SESSION_API_MAX_CHECKPOINTS_PER_SESSION` | 256 = 协议上限 | 配额 ≤ 协议 `MAX_CHECKPOINTS_PER_SESSION` 锚(D-API-54)不变;维持 | **维持** |
+| `SESSION_API_SNAPSHOT_BYTE_BUDGET` | 1 MiB / 64 MiB | 快照信封规范化 JSON 计量口径 + 粘性超限标记(D-API-54)行为不变;k6 / IT 全绿佐证预算内快照零拒绝;维持 | **维持** |
+| `SESSION_API_TENANT_STORAGE_QUOTA_BYTES` | 256 MiB / 1 TiB | T0 计量形态(`listSessionsByTenant` × `listBySession` 组合查询)复核维持;"反规范化计数列"演进登记 T2(多实例聚合与 T1 容器池接线时再评估,D-API-54 原裁决) | **维持** |
+| `SESSION_API_TERMINAL_SESSION_RETENTION_DAYS` | 30 / 3650 | 保留期清理两段式(RLS 形态,D-API-101)行为不变;副本形态在线不删行(D-API-92);维持 | **维持** |
+| `SESSION_API_VERDICT_QUERIES_PER_MINUTE`(D-API-86) | 30 / 100000 | **与前端轮询节奏对齐复核**:vm-ui `VerdictPoller` 恒定 2500 ms 间隔(D-API-99)⇒ 每用户稳态重询 24/min < 30/min 预算,余量容忍首询即发与退避重试(连续 5 次失败停询,零重试风暴);429 冻结形态逐字节由 compose 实跑用例承载;维持 | **维持** |
+
+**RLS 性能成本(风险表回填;k6 前后对比归档)**:同拓扑同库双采(host 混合拓扑 + 本机 vm-worker release;前值 = 注入前 HEAD 构建 `k6/results/2026-09-12T130117550Z`,现值 = 注入 + RLS 构建 `k6/results/2026-09-12T134452996Z`;三场景逐场景 JSON + /metrics 快照 + summary.md 归档):
+
+| 指标 | 前值(查询层单层) | 现值(查询层 + RLS + 注入) | Δ |
+|---|---|---|---|
+| `wss_action_rtt_ms` med / avg / p95 | 3 / 3.25 / 5 | 3 / 3.48 / 6 | med 零变化;avg +0.23 ms;p95 +1 ms |
+| `rest lifecycle_cycle_ms` med / avg / p95 | 61 / 61.5 / 67.6 | 72 / 72.3 / 80 | med +11 ms(≈ +18%) |
+| `lifecycle_cycles_completed` / `wss_actions_confirmed` | 230 / 896 | 220 / 864 | 吞吐 ≈ −4% |
+
+结论:动作通道(高频教学面)中位 RTT **零变化**;REST 生命周期环 +11 ms——每存储调用 +3 次注入往返(TenantScope 逐事务形态,D-API-101)在 host 拓扑(Windows + Docker Desktop PG 端口转发)下被逐往返放大;吞吐损耗 ≈ 4%。教学规模(T1)预算内,双层结构闸价值(查询层缺陷 / 直连 SQL / 注入面下零跨租户泄露)优先于该量级成本,全表域启用维持;"按表域分级启用(裁决域优先)"保留为 T2 容量触发条件下的优化选项(触发 = 生产形态实测超预算,预案登记)。观测注记:两轮 `server_live_sessions` 采样均高于场景 VU 峰值且前/后一致(同轮早前场景的在途会话在采样窗内尚未回收;运行结束零 active 残留,DB 相位全 closed)——拓扑观测形态而非回归信号,并发预算权威证据 = D-API-52 执行面测试矩阵与 429 冻结形态。
+
+**并发会话预算 × 容器形态资源预算对齐(登记判据面,WP-66 回填接口)**:T0 每会话单 worker 进程(ADR-3)下,租户并发预算 = worker 进程数上限(`session_api_worker_processes` 与 `session_api_live_sessions` 同源同值,D-API-72)——内存 / 句柄预算可直接线性推导(8 并发 ≈ 8 × 单进程上限);WP-66 容器池交付时,以本键为**单一真源**接线"每租户容器并发上限",并把容器冷启动 / 镜像 / cgroup 预算的量化判据回填本表(边界裁决 1:启用前置 = MVP 验收通过)。
+
+### D-API-103 Redis 键域 T1 边界复核登记(不实现;阶段六 WP-65)
+
+对幂等 / route / rate / token 四键域的多实例演进边界复核(D-API-24 / 36 / 49 / 50 原裁决逐条确认),**纯文档节,零代码、零键域改动**:
+
+| 键域 | 分级(D-API-24) | T0 消费形态(D-API-36 / 49 / 50) | T1 边界复核结论 |
+|---|---|---|---|
+| `idem:{sessionId}:{key}` | 可降级进程内(粘性) | Redis Lua 比较并登记 + 进程内降级 | 跨实例共享窗口 = T1 多实例编排器的组成部分;单实例形态零改动维持;**T2 触发条件重申**:多实例编排器引入时,窗口共享使重放幂等跨实例一致(降级路径语义同构已就绪) |
+| `token:{jti}` | fail-closed | GETDEL 原子单次消费 | 单次消费语义与实例数无关(GETDEL 原子性);多实例下天然共享(同一 Redis);零演进面 |
+| `route:{sessionId}` | fail-closed | bind / 续期 / release,不拒投递(T0 单实例无歧义) | **T1 生效点确认**:多实例投递定位以属主绑定仲裁,fail-closed 完整语义(路由不一致即拒绝投递)在 T1 接线时生效——T0 形态(D-API-49)复核维持 |
+| `rate:{tenant}:{user}(:submit / :verdict)` | fail-closed | 固定窗口 60 s 计数器 | 键已按 (tenant, user, 维度) 编码,多实例下天然共享聚合(单 Redis);WSS 帧频率闸维持进程内令牌桶(逐帧 Redis 往返在教学规模不成比例,D-API-50 原裁决维持) |
+
+T2 触发条件重申(边界裁决 4):多实例编排器 / WSS 网关分离进入时,Redis 键域为本承载面、Redis Streams 禁(裁决队列以 PG 轮询承载,D-API-85;LISTEN/NOTIFY 留 T2 登记);本阶段零实现、零键域演进。
+
+### D-API-104 `/metrics` 生产暴露面收敛(D-API-70 部署面移交项收口;阶段六 WP-65)
+
+D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更"——本条为该移交项的收口:**零代码改动为基线**(`/metrics` 端点形态、指标族、标签纪律、白名单机检全部原样)。
+
+- **compose 拓扑端口发布面盘点(现状登记)**:session-api 发布 `13000:3000`、verifier 发布 `13100:3100`——两服务的 `/metrics` 与 `/healthz` / `/readyz` 同端口同族(未认证 GET;D-API-70 / D-API-89 纪律),dev / CI 拓扑按现状发布:k6 采样(`concurrent-sessions` 经 `GET /metrics` 观测,D-API-73)、compose 机检与运维探活依赖该发布面;
+- **生产部署面选项(成文登记,随部署执行)**:①**内网段形态**(基线推荐)——应用端口不发布到公网宿主,`/metrics` 仅内网可达(Prom 抓取器与探针同内网;K8s Service / compose 无 ports 发布即达成);②**反代准入形态**——公网入口反代对 `/metrics`(及 `/healthz` / `/readyz`)路径做准入控制(allowlist / 基本认证 / 来源 IP 白名单),应用侧零改动;③**独立端口形态**——管理面端口单独暴露指标族(需要反向代理改写或应用侧多监听器,后者 = 端点语义外的装配演进,非本阶段);三选项均不触碰 D-API-70 的"同端口运维路由 + 未挂载即 404"端点语义;
+- **纪律确认**:`/metrics` 指标名 ⊆ 白名单(`METRIC_FAMILIES`)、标签有界域(D-API-71)、秘密语料零命中机检——生产暴露面收敛不引入新的公开载荷面(指标 = 聚合数值 + 有界枚举)。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 

@@ -144,11 +144,14 @@ describe.skipIf(!IT_ENABLED)("审计 PG 落库与归档(容器门控;D-API-90 ~ 
     expect(Number(counted.rows[0]!.count)).toBe(5);
 
     // 2. 归档:时钟前推 40 天(窗口 = now - 30 天 → 覆盖刚落库行)。
+    //    批上限取大值(compose 套件同形态):台账为全局游标,持久卷可能
+    //    累积超小批容量的待归档行(压测 / 多套件运行),切片须覆盖到本运行
+    //    刚落库的行。
     const job = new AuditArchiveJob({
       pool,
       minio,
       bucket,
-      batchSize: 100,
+      batchSize: 100000,
       retentionDays: 30,
       now: () => Date.now() + 40 * 86_400_000,
     });

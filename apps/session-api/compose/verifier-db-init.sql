@@ -1,10 +1,17 @@
--- verifier 独立 PG 角色治理(WP-61;信任域 4,与 session-api 不共享凭证)。
+-- verifier 独立 PG 角色治理(WP-61;信任域 4,与 session-api 不共享凭证;
+-- WP-65 行级租户政策形态说明,D-API-101)。
 --
 -- 最小授权面(D-API-87;与 004 / 005 迁移的裁决域结构配套):
 --   submissions / challenge_versions / challenges  —— 只读(裁决引用与登记摘要);
 --   verifier_runs                                  —— SELECT / INSERT / UPDATE(认领与状态机);
 --   verdicts                                       —— SELECT / INSERT(幂等落库,无更新面)。
--- 无 DELETE / 无 DDL / 无其余表域授权——行级策略(RLS)归 WP-65 全表域启用。
+-- 无 DELETE / 无 DDL / 无其余表域授权。
+--
+-- 行级租户政策(007 迁移 / D-API-101):RLS 对本角色强制(ENABLE + FORCE,
+-- rolbypassrls = false——非旁路角色),政策按角色分立 = TO verifier USING (true)
+-- 的信任域 4 放行政策:裁决队列消费的跨租户读取与租户维度落库是设计内访问
+-- 面(verifier 不注入 app.tenant_id);政策放行不等于授权,写越权仍由本脚本
+-- 的 GRANT 面维持(政策与授权双层正交)。
 --
 -- 幂等形态:角色与授权均可重复执行(compose 一次性 init 服务在既有卷上
 -- 重复运行安全)。执行前置:session-api 已完成迁移(004 / 005 已应用)。

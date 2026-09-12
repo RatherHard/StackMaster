@@ -4,7 +4,8 @@
  * 行内只有双包 SHA-256 摘要与签名;包本体在对象存储(私有桶服务端专用)。
  */
 
-import type { Pool } from "pg";
+import type { Pool, QueryResult, QueryResultRow } from "pg";
+import { TenantScope } from "./connection.js";
 import { PersistenceError } from "../errors.js";
 import type {
   ChallengeRegistry,
@@ -43,10 +44,20 @@ function mapRow(raw: VersionRowRaw): ChallengeVersionRow {
 }
 
 export class PostgresChallengeRegistry implements ChallengeRegistry {
-  constructor(private readonly pool: Pool) {}
+  readonly #pool: Pool;
+  readonly #scope: TenantScope;
+
+  constructor(pool: Pool) {
+    // 行级租户策略第二道结构闸的注入点(007 迁移 / D-API-101):注册表
+    // 读面全局公开(D-API-76 政策 SELECT 放行),写面经 SET LOCAL 注入
+    // 租户上下文(WITH CHECK 租户绑定)。
+    this.#pool = pool;
+    this.#scope = new TenantScope(pool);
+  }
 
   async upsertChallenge(input: { challengeId: string; tenantId: string; title?: string }): Promise<void> {
-    await this.pool.query(
+    await this.#scope.query(
+      input.tenantId,
       `INSERT INTO challenges (challenge_id, tenant_id, title)
        VALUES ($1, $2, $3)
        ON CONFLICT (challenge_id) DO UPDATE SET updated_at = now()`,
@@ -56,7 +67,8 @@ export class PostgresChallengeRegistry implements ChallengeRegistry {
 
   async insertChallengeVersion(input: ChallengeVersionInput): Promise<void> {
     try {
-      await this.pool.query(
+      await this.#scope.query(
+        input.tenantId,
         `INSERT INTO challenge_versions (
            tenant_id, challenge_id, content_version, vm_profile_version,
            private_bundle_sha256, public_descriptor_sha256,
@@ -88,7 +100,8 @@ export class PostgresChallengeRegistry implements ChallengeRegistry {
   }
 
   async findChallengeVersion(challengeId: string, version: string, tenantId: string): Promise<ChallengeVersionRow | null> {
-    const result = await this.pool.query<VersionRowRaw>(
+    const result = await this.#scope.query<VersionRowRaw>(
+      tenantId,
       `SELECT * FROM challenge_versions
        WHERE challenge_id = $1 AND content_version = $2 AND tenant_id = $3`,
       [challengeId, version, tenantId],
@@ -98,7 +111,8 @@ export class PostgresChallengeRegistry implements ChallengeRegistry {
   }
 
   async listChallengeVersions(challengeId: string, tenantId: string): Promise<ChallengeVersionRow[]> {
-    const result = await this.pool.query<VersionRowRaw>(
+    const result = await this.#scope.query<VersionRowRaw>(
+      tenantId,
       `SELECT * FROM challenge_versions
        WHERE challenge_id = $1 AND tenant_id = $2
        ORDER BY registered_at ASC`,
@@ -110,12 +124,15 @@ export class PostgresChallengeRegistry implements ChallengeRegistry {
   /**
    * 公开面版本行读取(阶段五 WP-50,D-API-76):无租户过滤(公开描述包是
    * 公开内容,查询层租户过滤的第二处跨租户例外,先例 D-API-63;
-   * (challenge_id, content_version) 为主键,结果唯一)。故障翻译与既有
-   * 写路径同形(store_unavailable)。
+   * (challenge_id, content_version) 为主键,结果唯一)。行级政策形态同构:
+   * 注册表读面 = 全局公开登记值(SELECT 政策全放行,007 迁移),无需租户
+   * 上下文。故障翻译与既有写路径同形(store_unavailable)。
    */
   async findPublishedChallengeVersion(challengeId: string, version: string): Promise<ChallengeVersionRow | null> {
     try {
-      const result = await this.pool.query<VersionRowRaw>(
+      // 公开读面经池直连(不注入租户上下文;政策不依赖 GUC)。连接复用
+      // 零租户态残留:SET LOCAL 仅注入事务内生效(COMMIT 即归零)。
+      const result = await this.#scopeRaw<VersionRowRaw>(
         `SELECT * FROM challenge_versions
          WHERE challenge_id = $1 AND content_version = $2`,
         [challengeId, version],
@@ -125,5 +142,12 @@ export class PostgresChallengeRegistry implements ChallengeRegistry {
     } catch (error) {
       throw new PersistenceError("store_unavailable", "题目版本读取失败", { cause: error });
     }
+  }
+
+  async #scopeRaw<Row extends QueryResultRow>(
+    text: string,
+    values: readonly unknown[],
+  ): Promise<QueryResult<Row>> {
+    return this.#pool.query<Row>(text, [...values]);
   }
 }

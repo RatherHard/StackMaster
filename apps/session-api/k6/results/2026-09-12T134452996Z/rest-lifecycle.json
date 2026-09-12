@@ -1,0 +1,122 @@
+{
+  "scenario": "rest-lifecycle",
+  "endedAt": "2026-09-12T13:45:56.791Z",
+  "testRunDurationMs": 30026.356988,
+  "metrics": {
+    "lifecycle_cycles_completed": {
+      "count": 220,
+      "rate": 7.327
+    },
+    "http_req_failed": {
+      "rate": 0,
+      "passes": 0,
+      "fails": 1320
+    },
+    "http_req_connecting": {
+      "min": 0,
+      "med": 0,
+      "max": 1.187,
+      "p(90)": 0,
+      "p(95)": 0,
+      "avg": 0.002
+    },
+    "http_req_duration{expected_response:true}": {
+      "min": 1.562,
+      "med": 4.665,
+      "max": 54.81,
+      "p(90)": 46.179,
+      "p(95)": 48.944,
+      "avg": 11.959
+    },
+    "http_req_tls_handshaking": {
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0
+    },
+    "vus": {
+      "min": 2,
+      "max": 2,
+      "value": 2
+    },
+    "vus_max": {
+      "value": 2,
+      "min": 2,
+      "max": 2
+    },
+    "iteration_duration": {
+      "avg": 272.92,
+      "min": 260.546,
+      "med": 272.579,
+      "max": 304.999,
+      "p(90)": 278.285,
+      "p(95)": 280.785
+    },
+    "http_req_sending": {
+      "max": 0.127,
+      "p(90)": 0.021,
+      "p(95)": 0.025,
+      "avg": 0.011,
+      "min": 0.004,
+      "med": 0.008
+    },
+    "http_req_receiving": {
+      "p(90)": 0.096,
+      "p(95)": 0.153,
+      "avg": 0.062,
+      "min": 0.008,
+      "med": 0.048,
+      "max": 0.892
+    },
+    "data_sent": {
+      "count": 963517,
+      "rate": 32089.041
+    },
+    "data_received": {
+      "count": 2307119,
+      "rate": 76836.461
+    },
+    "http_req_blocked": {
+      "med": 0.002,
+      "max": 2.419,
+      "p(90)": 0.004,
+      "p(95)": 0.004,
+      "avg": 0.006,
+      "min": 0.001
+    },
+    "http_reqs": {
+      "count": 1320,
+      "rate": 43.961
+    },
+    "lifecycle_cycle_ms": {
+      "avg": 72.295,
+      "min": 60,
+      "med": 72,
+      "max": 105,
+      "p(90)": 78,
+      "p(95)": 80
+    },
+    "http_req_waiting": {
+      "avg": 11.886,
+      "min": 1.524,
+      "med": 4.593,
+      "max": 54.726,
+      "p(90)": 46.085,
+      "p(95)": 48.863
+    },
+    "iterations": {
+      "count": 220,
+      "rate": 7.327
+    },
+    "http_req_duration": {
+      "p(90)": 46.179,
+      "p(95)": 48.944,
+      "avg": 11.959,
+      "min": 1.562,
+      "med": 4.665,
+      "max": 54.81
+    }
+  }
+}

@@ -226,11 +226,15 @@ export interface VerdictQueryStore {
     sessionId: string,
   ): Promise<SubmissionRecord | null>;
   /**
-   * 定位链第二环:`verdicts` 行按 submission_id 读取;未落库返回 null
-   * (查询面恒 pending,D-API-84 fail-closed 方向——run failed / 队列积压
-   * 均呈现 pending,绝不以判负兜底)。
+   * 定位链第二环:`verdicts` 行按 (submissionId, tenantId) 双条件读取
+   * (租户绑定 = 查询层第二环 + 行级政策双层同形,WP-65 微扩 D-API-101);
+   * 任一环不符 / 未落库返回 null(查询面恒 pending,D-API-84 fail-closed
+   * 方向——run failed / 队列积压均呈现 pending,绝不以判负兜底)。
    */
-  findVerdictBySubmissionId(submissionId: string): Promise<VerdictRecordPublic | null>;
+  findVerdictBySubmissionId(
+    submissionId: string,
+    tenantId: string,
+  ): Promise<VerdictRecordPublic | null>;
 }
 
 // ── 题目域:对象存储 + 注册表 ─────────────────────────────────────────────
