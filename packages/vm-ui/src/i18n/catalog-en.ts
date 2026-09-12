@@ -87,6 +87,13 @@ export const en: Record<SmMessageKey, string> = {
   "menu.factAlignment": "alignment {count} B",
   "menu.factExpected": "expected {count} B",
   "menu.factActual": "actual {count} B",
+  // Submit entry (phase 6 WP-63, D-API-84: formal verdict presentation channel;
+  // submit → pending → verdicted)
+  "menu.submit": "Submit",
+  "menu.submitTitleDefault": "Submit the action log and await the formal verdict (produced by an independent server-side replay)",
+  "menu.submitTitleNoSession": "No session yet: cannot submit",
+  "menu.submitTitleDisconnected": "Action channel disconnected: submit after reconnecting",
+  "menu.submitTitleTerminal": "The session has ended: start a new session to submit",
 
   // ── workspace ─────────────────────────────────────────────────────────────
   "workspace.teachingPanel": "Teaching panel (hints / error explanations)",
@@ -111,6 +118,19 @@ export const en: Record<SmMessageKey, string> = {
   "workspace.challengeCanaryOn": "enabled",
   "workspace.challengeCanaryOff": "disabled",
   "workspace.challengeDtEncodingTable": "Encoding table",
+
+  // ── verdict (formal verdict presentation, phase 6 WP-63; D-API-84: verdict
+  // unavailable ≠ failed) ──
+  "verdict.heading": "Formal verdict",
+  "verdict.pending": "Submitted · verdict in progress",
+  "verdict.pendingNote": "The formal verdict is produced by an independent server-side replay of the submission; it does not mean pass or fail yet.",
+  "verdict.scorePassed": "Submission passed ({verdict})",
+  "verdict.scoreFailed": "Submission did not pass ({verdict})",
+  "verdict.nonScore": "This submission produced no score ({verdict})",
+  "verdict.nonScoreNote": "This verdict is final and will not be retried automatically; submit again for a new verdict (the original submission and verdict are unchanged).",
+  "verdict.resubmit": "Submit again",
+  "verdict.unavailable": "Verdict temporarily unavailable",
+  "verdict.unavailableNote": "Verdict queries are temporarily failing; the session is unaffected and is not marked as failed.",
 
   // ── debug ─────────────────────────────────────────────────────────────────
   "debug.pausedStep": "Paused after a single step",

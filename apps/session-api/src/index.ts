@@ -27,6 +27,7 @@ async function main(): Promise<void> {
     authPlugin: runtime.authPlugin,
     sessionRoutes: runtime.sessionRoutes,
     descriptorRoutes: runtime.descriptorRoutes,
+    verdictRoutes: runtime.verdictRoutes,
     wssChannel: runtime.wssChannel,
     metricsPlugin: runtime.metricsPlugin,
     readinessProbes: runtime.readinessProbes,

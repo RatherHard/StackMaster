@@ -84,6 +84,8 @@ describe("配置加载与启动校验(fail-closed)", () => {
       auditArchiveBatch: 10000,
       auditRetentionDays: 30,
       auditBucket: "audit-archive",
+      // 阶段六 WP-63 裁决重询限流(D-API-84 / D-API-86)默认值。
+      verdictQueriesPerMinute: 30,
     });
   });
 

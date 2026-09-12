@@ -101,6 +101,44 @@ describe("<sm-workspace-menu> 运行项禁用矩阵(FE-WS-04a / FE-WS-05)", () =
     element.remove();
   });
 
+  it("提交按钮:已连接 + 运行中可点,点击发出 submit 动作(阶段六 WP-63)", async () => {
+    const element = await mountMenu();
+    element.hasSession = true;
+    element.connectionStatus = "connected";
+    element.projectionStatus = "paused";
+    await element.updateComplete;
+
+    const submit = menuOf(element).querySelector("button.submit-button") as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    const actions: unknown[] = [];
+    element.addEventListener("workspace-menu-action", (event) => {
+      actions.push((event as CustomEvent).detail.action);
+    });
+    submit.click();
+    expect(actions).toEqual([{ action: "submit" }]);
+    element.remove();
+  });
+
+  it("提交按钮禁用矩阵:无会话 / 断线 / 终态禁用,终态标题引导新建会话", async () => {
+    const element = await mountMenu();
+    element.hasSession = false;
+    await element.updateComplete;
+    expect((menuOf(element).querySelector("button.submit-button") as HTMLButtonElement).disabled).toBe(true);
+
+    element.hasSession = true;
+    element.connectionStatus = "reconnecting";
+    await element.updateComplete;
+    expect((menuOf(element).querySelector("button.submit-button") as HTMLButtonElement).disabled).toBe(true);
+
+    element.connectionStatus = "connected";
+    element.projectionStatus = "won";
+    await element.updateComplete;
+    const submit = menuOf(element).querySelector("button.submit-button") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute("title")).toContain("测试环境已结束");
+    element.remove();
+  });
+
   it("终态引导的新建会话按钮发出 new-session 动作(close+create 流程归宿主)", async () => {
     const element = await mountMenu();
     element.hasSession = true;

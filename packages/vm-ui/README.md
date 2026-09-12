@@ -62,9 +62,11 @@ src/
 │       │                           窗口内字节;UTF-8 字符串定案;64 位回绕)
 │       └── types.ts                PayloadProgram / PayloadStep / 编译错误码
 ├── client/                         WP-F2:会话客户端面
-│   ├── session-client.ts           SessionClient——REST 5 命令、认证 WSS、
-│   │                               动作账本(clientSeq/baseRevision/idempotencyKey)、
+│   ├── session-client.ts           SessionClient——REST 5 命令 + 裁决查询(WP-63)、
+│   │                               认证 WSS、动作账本(clientSeq/baseRevision/idempotencyKey)、
 │   │                               断线重连(指数退避 + sync 对齐)、rAF 合帧
+│   ├── verdict-poller.ts           VerdictPoller——正式裁决重询状态机(WP-63:
+│   │                               pending/verdicted/unavailable 呈现;确定性间隔 + 退避)
 │   ├── projection-store.ts         ProjectionStore——最近公开投影 + ProjectionDelta
 │   │                               增量应用 + 订阅 API(rAF 批量通知视图)
 │   ├── transport.ts                可注入传输面(WsLikeSocket / fetch / rAF / 定时器)
@@ -160,6 +162,11 @@ interface MemoryDataSource {          // UI 组件只依赖此接口
   `/sessions/submissions`、`/sessions/close`;请求体 = 冻结
   `SessionCommandRequest` 信封;一律 `credentials: "include"`
   (会话凭证 Cookie 交付,D-API-12;响应体零凭证字段)。
+- **裁决呈现通道**(阶段六 WP-63,D-API-83):`GET /verdicts/:submissionId`
+  (`SessionClient.queryVerdict`,Cookie 凭证同模型;响应体过冻结
+  `VerdictQueryResponseSchema` 自检)——重询由 `VerdictPoller` 驱动
+  (确定性间隔 + 失败退避 + verdicted 即停 + 断线暂停重连恢复;呈现与
+  「已提交」态语义见 D-API-99);裁决数据不经嵌入协议帧(V-9 不破)。
 - **认证 WSS**:`GET /sessions/channel` 升级即 Cookie 认证;客户端→服务端仅
   `action` 帧。**连接级版本锚定**(D-API-2)由首帧 `protocolVersion` 承载——
   本客户端所有帧恒携带 `SESSION_ACTION_PROTOCOL_VERSION`(照 WssFrame 信封

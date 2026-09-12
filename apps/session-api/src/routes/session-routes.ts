@@ -36,6 +36,7 @@ import {
   consumeEmbedToken,
   issueSessionCredential,
   setSessionCredentialCookie,
+  SESSION_CREDENTIAL_COOKIE_PATH,
   buildCredentialPreHandler,
   type AuditSink,
   type CredentialRevocationStore,
@@ -101,6 +102,12 @@ export interface SessionRouteDeps {
    * 固定窗口;缺省未注入 = 放行)。
    */
   readonly submitRateGate?: (tenantId: string, userId: string) => Promise<void>;
+  /**
+   * 会话凭证 Cookie Path(D-API-12 预留装配参数;D-API-83 调宽登记):生产
+   * 装配传 `/`(覆盖 `/sessions` 与 `/verdicts` 两族;HttpOnly / Secure /
+   * SameSite=Strict 属性零改动);缺省维持精确 `/sessions`(既有装配零影响)。
+   */
+  readonly credentialCookiePath?: string;
   readonly now?: () => number;
 }
 
@@ -281,7 +288,8 @@ export function buildSessionRoutes(deps: SessionRouteDeps): FastifyPluginAsync {
         throw error;
       }
 
-      // 4. 会话凭证签发 + Cookie 交付(响应体零凭证字段,D-API-3 / 12)。
+      // 4. 会话凭证签发 + Cookie 交付(响应体零凭证字段,D-API-3 / 12;
+      //    Path 按 D-API-83 调宽登记由装配参数承载)。
       const issued = await issueSessionCredential(
         { signer: deps.signer, audit: deps.audit, ttlSeconds: deps.config.sessionCredentialTtlSeconds, now },
         {
@@ -292,7 +300,13 @@ export function buildSessionRoutes(deps: SessionRouteDeps): FastifyPluginAsync {
           challengeVersion: identity.challengeVersion,
         },
       );
-      setSessionCredentialCookie(reply, issued.token, issued.ttlSeconds, deps.config.nodeEnv);
+      setSessionCredentialCookie(
+        reply,
+        issued.token,
+        issued.ttlSeconds,
+        deps.config.nodeEnv,
+        deps.credentialCookiePath ?? SESSION_CREDENTIAL_COOKIE_PATH,
+      );
 
       // 5. 冻结响应(create_session 分支;投影 revision 耦合由 Schema 复验)。
       return reply.code(201).send(SessionCommandResponseSchema.parse({

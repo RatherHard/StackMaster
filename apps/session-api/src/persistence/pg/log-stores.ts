@@ -16,6 +16,8 @@ import type {
   StoredActionLogEntry,
   SubmissionRecord,
   SubmissionStore,
+  VerdictQueryStore,
+  VerdictRecordPublic,
 } from "../ports.js";
 
 interface ActionLogRowRaw {
@@ -101,7 +103,7 @@ interface SubmissionRowRaw {
   created_at: Date;
 }
 
-export class PostgresSubmissionStore implements SubmissionStore {
+export class PostgresSubmissionStore implements SubmissionStore, VerdictQueryStore {
   constructor(private readonly pool: Pool) {}
 
   async record(input: {
@@ -163,5 +165,60 @@ export class PostgresSubmissionStore implements SubmissionStore {
       reference: raw.reference,
       createdAt: raw.created_at.toISOString(),
     }));
+  }
+
+  // ── 裁决呈现面读取(阶段六 WP-63,D-API-83;只读,零写入面)──────────────
+
+  async findSubmissionForVerdict(
+    submissionId: string,
+    tenantId: string,
+    sessionId: string,
+  ): Promise<SubmissionRecord | null> {
+    // 定位链第一环(D-API-83):tenantId 与 sessionId 双条件强制(查询层
+    // 租户校验,D-API-20);任一环不符 = 空集(与不存在同形,防枚举)。
+    try {
+      const result = await this.pool.query<SubmissionRowRaw>(
+        `SELECT * FROM submissions
+         WHERE id = $1::uuid AND tenant_id = $2 AND session_id = $3`,
+        [submissionId, tenantId, sessionId],
+      );
+      const raw = result.rows[0];
+      if (raw === undefined) {
+        return null;
+      }
+      return {
+        id: raw.id,
+        sessionId: raw.session_id,
+        revision: Number(raw.revision),
+        publicStatus: raw.public_status,
+        reference: raw.reference,
+        createdAt: raw.created_at.toISOString(),
+      };
+    } catch (error) {
+      // 非法 UUID 字面等输入形态问题在路由字符集闸已被拒;到达此处的查询
+      // 失败 = 存储不可用面(fail-closed 呈现 503,不静默降级)。
+      throw new PersistenceError("store_unavailable", "裁决查询定位失败", { cause: error });
+    }
+  }
+
+  async findVerdictBySubmissionId(submissionId: string): Promise<VerdictRecordPublic | null> {
+    // 定位链第二环(D-API-96):只取 11 值 verdict 与落库时刻,detail 列
+    // 零读取(呈现面结构性无明细表达位)。
+    try {
+      const result = await this.pool.query<{ verdict: string; created_at: Date }>(
+        `SELECT verdict, created_at FROM verdicts WHERE submission_id = $1::uuid`,
+        [submissionId],
+      );
+      const raw = result.rows[0];
+      if (raw === undefined) {
+        return null;
+      }
+      return {
+        verdict: raw.verdict,
+        decidedAtEpochSeconds: Math.floor(raw.created_at.getTime() / 1000),
+      };
+    } catch (error) {
+      throw new PersistenceError("store_unavailable", "裁决查询读取失败", { cause: error });
+    }
   }
 }

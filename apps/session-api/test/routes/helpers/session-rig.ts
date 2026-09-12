@@ -62,9 +62,9 @@ import {
   SnapshotCipher,
   SnapshotPersistence,
   sha256Hex,
-  type SubmissionStore,
 } from "../../../src/persistence/index.js";
 import { buildDescriptorRoutes } from "../../../src/routes/descriptor-routes.js";
+import { buildVerdictRoutes } from "../../../src/routes/verdict-routes.js";
 import type { Logger } from "pino";
 import { createLogCapture, type LogCapture } from "../../helpers/log-capture.js";
 import { OutboundFrameRecorder } from "../../wss/helpers/outbound-frame-recorder.js";
@@ -183,7 +183,8 @@ export interface SessionTestRig {
   /** 题目双包对象存储(内存实现;调试变体 provider 的公开描述包读取源)。 */
   readonly bundles: MemoryChallengeBundleStore;
   readonly snapshots: MemorySnapshotStore;
-  readonly submissions: SubmissionStore;
+  /** 提交引用 + 裁决呈现面读取端口(内存同构;recordVerdict 为测试驱动面)。 */
+  readonly submissions: MemorySubmissionStore;
   /** 幂等窗口(WP-5 动作通道前置守卫的内存后端;与生产同接口)。 */
   readonly idempotencyWindow: MemoryIdempotencyWindow;
   /** 动作日志存储(append-only 端口的内存实现;submit 增量落库已接线,D-API-56)。 */
@@ -317,6 +318,11 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     counter: rateLimitCounter,
     limitPerWindow: config.submissionsPerMinute,
   });
+  // 裁决重询频率闸(阶段六 WP-63,D-API-84):与 runtime.ts 同一拓扑。
+  const verdictRateGate = new FixedWindowRateGate({
+    counter: rateLimitCounter,
+    limitPerWindow: config.verdictQueriesPerMinute,
+  });
   const createSessionGuard = new RateLimitedCreateSessionGuard({
     rateGate: requestRateGate,
     liveCountByTenant: (tenantId) => manager.liveCountByTenant(tenantId),
@@ -425,6 +431,19 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         requestRateGate.acquireOrThrow(`rate:${tenantId}:${userId}`, "request_rate"),
       submitRateGate: (tenantId, userId) =>
         submitRateGate.acquireOrThrow(`rate:${tenantId}:${userId}:submit`, "submission_rate"),
+      // Cookie Path 调宽(D-API-83):与生产 runtime.ts 同一装配拓扑。
+      credentialCookiePath: "/",
+      ...(now === undefined ? {} : { now }),
+    }),
+    // 裁决呈现路由(阶段六 WP-63,D-API-83):与 runtime.ts 同一装配拓扑
+    // (内存 submissions 承载 VerdictQueryStore 端口 + 裁决重询频率闸)。
+    verdictRoutes: buildVerdictRoutes({
+      signer,
+      revocationStore,
+      allowedOrigins: config.allowedOrigins,
+      verdicts: submissions,
+      verdictRateGate: (tenantId, userId) =>
+        verdictRateGate.acquireOrThrow(`rate:${tenantId}:${userId}:verdict`, "verdict_query_rate"),
       ...(now === undefined ? {} : { now }),
     }),
     // 公开描述包下发路由(阶段五 WP-50,D-API-76):与 runtime.ts 同一

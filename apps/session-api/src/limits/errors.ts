@@ -12,7 +12,12 @@
  */
 
 /** 频率维度(触顶呈现同形:429 + 冻结形态;维度只进受控日志)。 */
-export type RateLimitDimension = "request_rate" | "submission_rate" | "session_action_rate";
+export type RateLimitDimension =
+  | "request_rate"
+  | "submission_rate"
+  | "session_action_rate"
+  /** 裁决重询频率(阶段六 WP-63,D-API-84;rate:{tenant}:{user}:verdict)。 */
+  | "verdict_query_rate";
 
 /** 每租户 / 每用户请求频率或提交频率触顶(固定窗口计数;D-API-50)。 */
 export class RateLimitExceeded extends Error {

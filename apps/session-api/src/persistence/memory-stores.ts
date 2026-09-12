@@ -31,6 +31,8 @@ import type {
   StoredActionLogEntry,
   SubmissionRecord,
   SubmissionStore,
+  VerdictQueryStore,
+  VerdictRecordPublic,
 } from "./ports.js";
 
 /** 时钟注入(毫秒纪元;TTL 语义测试用假时钟驱动)。 */
@@ -304,7 +306,7 @@ export class MemoryActionLogStore implements ActionLogStore {
   }
 }
 
-export class MemorySubmissionStore implements SubmissionStore {
+export class MemorySubmissionStore implements SubmissionStore, VerdictQueryStore {
   private readonly rows: (SubmissionRecord & { tenantId: string })[] = [];
   /** 入队的裁决 run(pending 行即队列本体;D-API-85 的内存同构形态)。 */
   readonly verifierRuns: {
@@ -315,6 +317,8 @@ export class MemorySubmissionStore implements SubmissionStore {
     logDigest: string | null;
     createdAt: string;
   }[] = [];
+  /** 裁决行(verdicts 表的内存同构;测试驱动面模拟 verifier 落库)。 */
+  private readonly verdicts = new Map<string, VerdictRecordPublic>();
 
   constructor(private readonly now: Clock = Date.now) {}
 
@@ -358,6 +362,32 @@ export class MemorySubmissionStore implements SubmissionStore {
         reference: row.reference,
         createdAt: row.createdAt,
       }));
+  }
+
+  async findSubmissionForVerdict(
+    submissionId: string,
+    tenantId: string,
+    sessionId: string,
+  ): Promise<SubmissionRecord | null> {
+    return (
+      this.rows.find(
+        (row) => row.id === submissionId && row.tenantId === tenantId && row.sessionId === sessionId,
+      ) ?? null
+    );
+  }
+
+  async findVerdictBySubmissionId(submissionId: string): Promise<VerdictRecordPublic | null> {
+    return this.verdicts.get(submissionId) ?? null;
+  }
+
+  /**
+   * 裁决落库(测试驱动面:模拟信任域 4 verifier 的 verdicts 写入;生产 PG
+   * 由 verifier 经其独立连接落库,session-api 零写入面——本方法不入任何
+   * 生产装配路径)。同 submission 重复落库覆盖(内存实现;生产由
+   * verdicts.submission_id 唯一索引承载裁决幂等,D-API-85)。
+   */
+  async recordVerdict(submissionId: string, verdict: string, decidedAtEpochSeconds: number): Promise<void> {
+    this.verdicts.set(submissionId, { verdict, decidedAtEpochSeconds });
   }
 }
 

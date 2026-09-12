@@ -39,6 +39,7 @@ import {
   PublicErrorSchema,
   SESSION_ACTION_PROTOCOL_VERSION,
   SessionCommandResponseSchema,
+  VerdictQueryResponseSchema,
   WssFrameSchema,
   type ActionObject,
   type ActionRequest,
@@ -47,6 +48,7 @@ import {
   type PublicStateProjection,
   type SessionCommandRequest,
   type SessionCommandResponse,
+  type VerdictQueryResponse,
   type WssFrame,
 } from "@stackmaster/protocol";
 
@@ -365,6 +367,44 @@ export class SessionClient {
     // 会话已终态:主动断开通道(重连只会得到 session_terminal 拒绝)。
     this.disconnect();
     return response;
+  }
+
+  /**
+   * GET /verdicts/:submissionId — 正式裁决查询(阶段六 WP-63,D-API-83;
+   * 插件 ↔ session-api 直连 HTTP,凭证 Cookie 呈递,宿主 postMessage 零
+   * 权威语义不破——裁决数据不经嵌入协议帧)。非 2xx = 冻结 PublicError
+   * (404 同形 / 429 重询限流,D-API-84);响应体过冻结
+   * `VerdictQueryResponseSchema` 自检(漂移即契约漂移错误)。
+   */
+  async queryVerdict(submissionId: string): Promise<VerdictQueryResponse> {
+    let httpResponse: Awaited<ReturnType<typeof fetch>>;
+    try {
+      httpResponse = await this.#fetch(
+        `${this.#restUrl(REST_PATHS.verdicts)}/${encodeURIComponent(submissionId)}`,
+        { method: "GET", credentials: "include" },
+      );
+    } catch (error) {
+      throw new SessionClientError("rest_failed", "裁决查询网络失败:/verdicts", { cause: error });
+    }
+    if (!httpResponse.ok) {
+      const publicError = await parsePublicErrorBody(httpResponse);
+      const commandError = new SessionCommandError(httpResponse.status, publicError);
+      for (const listener of [...this.#commandErrorListeners]) {
+        listener(commandError);
+      }
+      throw commandError;
+    }
+    let body: unknown;
+    try {
+      body = await httpResponse.json();
+    } catch (error) {
+      throw contractDrift("裁决查询响应非 JSON:/verdicts", error);
+    }
+    const parsed = VerdictQueryResponseSchema.safeParse(body);
+    if (!parsed.success) {
+      throw contractDrift("裁决查询响应契约漂移:/verdicts");
+    }
+    return parsed.data;
   }
 
   // ── 认证 WSS 通道 ────────────────────────────────────────────────────────
@@ -799,6 +839,8 @@ const REST_PATHS = {
   checkpoints: "/sessions/checkpoints",
   submissions: "/sessions/submissions",
   close: "/sessions/close",
+  /** 裁决呈现通道(阶段六 WP-63,D-API-83;GET /verdicts/:submissionId)。 */
+  verdicts: "/verdicts",
 } as const;
 
 // ── 帮助函数 ────────────────────────────────────────────────────────────────

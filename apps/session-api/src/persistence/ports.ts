@@ -195,6 +195,44 @@ export interface SubmissionStore {
   findBySession(sessionId: string, tenantId: string): Promise<SubmissionRecord[]>;
 }
 
+// ── 裁决域读取(阶段六 WP-63,D-API-83 / D-API-96)────────────────────────
+
+/**
+ * 裁决呈现面行(公开上限面;D-API-96 纪律的结构化落实):本端口**不暴露**
+ * `verdicts.detail` 明细列——呈现链路只取 11 值 verdict 与裁决落库时刻,
+ * detail 整体 SERVER_ONLY,零浏览器可达面(结构性无表达位)。
+ */
+export interface VerdictRecordPublic {
+  /** 11 值结果类型字面(verifier 落库面;字面合法性由响应面自检兜底)。 */
+  readonly verdict: string;
+  /** 裁决落库时刻(Unix epoch 秒;verdicts.created_at 的秒级投影)。 */
+  readonly decidedAtEpochSeconds: number;
+}
+
+/**
+ * 裁决呈现面读取端口(阶段六 WP-63,D-API-83:呈现链路 = session-api 读
+ * 裁决域,verifier 零查询面):只读,零写入面(裁决唯一出处 = 信任域 4
+ * verifier,硬门槛——本端口不存在任何使 session-api 产生 / 改写裁决的方法)。
+ */
+export interface VerdictQueryStore {
+  /**
+   * 定位链第一环:`submissions` 行按 (submissionId, tenantId, sessionId)
+   * 三条件定位——租户与凭证据点(sessionId)双强制(查询层租户校验,
+   * D-API-20),任一环不符 = null(与不存在同形,防枚举)。
+   */
+  findSubmissionForVerdict(
+    submissionId: string,
+    tenantId: string,
+    sessionId: string,
+  ): Promise<SubmissionRecord | null>;
+  /**
+   * 定位链第二环:`verdicts` 行按 submission_id 读取;未落库返回 null
+   * (查询面恒 pending,D-API-84 fail-closed 方向——run failed / 队列积压
+   * 均呈现 pending,绝不以判负兜底)。
+   */
+  findVerdictBySubmissionId(submissionId: string): Promise<VerdictRecordPublic | null>;
+}
+
 // ── 题目域:对象存储 + 注册表 ─────────────────────────────────────────────
 
 /**

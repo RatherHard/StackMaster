@@ -8,11 +8,13 @@
  *  - host(本机 Windows 降级形态):依赖服务(deps.yaml)+ session-api 宿主
  *    进程 + 本机 worker 二进制;链路语义与容器形态一致。
  *
- * 链路(边界声明:verifier 裁决闭环归阶段六——submit 到内部裁决引用 +
- * 动作日志完整可取回为止):
+ * 链路(阶段三 WP-7:submit 到内部裁决引用 + 动作日志完整可取回;阶段六
+ * WP-61 / WP-62:verifier 裁决闭环与汇总落库;阶段六 WP-63:裁决呈现路由
+ * `GET /verdicts/:submissionId` 全链路演示 + 404 / 429 红灯矩阵 + ZR-T4
+ * verifier 级复锚,D-API-83 / 84 / 97 ~ 100):
  *   POST /auth/embed-tokens(完整 token 链路)→ create_session → WSS 动作 →
  *   增量下发 → 断线重连 → sync-projection → checkpoint / undo / checkout →
- *   submit(裁决引用与动作日志落库可取回)。
+ *   submit → GET /verdicts/:submissionId(pending → verdicted 呈现)。
  *
  * 机检:全部 HTTP 响应体 + WSS 入站帧经 scanCrossDomainPayloads 零命中
  * (ZR-B9 / B10 / B5 / B4 / B1 / B6 的通道录制面,与 rig 级审计同源)。
@@ -55,6 +57,7 @@ import {
 import { WssChannelClient } from "./helpers/ws-client.js";
 import {
   BASE_HOST,
+  BASE_URL,
   BASE_PORT,
   COMPOSE_ENABLED,
   HOST_BACKEND_TOKEN,
@@ -729,6 +732,226 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(states.statuses.filter((status) => status === "failed").length).toBeGreaterThanOrEqual(1);
       expect(await pollVerdict(submissionId, 0)).toBeNull();
     }, 150_000);
+
+    // ── 阶段六 WP-63:裁决呈现路由、全链路演示与 ZR-T4 verifier 级复锚──────
+    // (D-API-83 / D-API-84 / D-API-97;呈现链路 = session-api 读裁决域)
+
+    /** GET 请求录制面(与 postJson 同 recorder;响应体进跨域机检语料)。 */
+    async function getJson(
+      recorder: TrafficRecorder,
+      path: string,
+      cookie?: string,
+    ): Promise<{ status: number; body: unknown; bodyText: string }> {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: "GET",
+        headers: cookie === undefined ? {} : { cookie },
+      });
+      const bodyText = await response.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(bodyText) as unknown;
+      } catch {
+        parsed = bodyText;
+      }
+      recorder.recordHttp(parsed);
+      return { status: response.status, body: parsed, bodyText };
+    }
+
+    let verdictSession: { sessionId: string; cookie: string } | null = null;
+
+    it("裁决呈现全链路演示:submit → GET pending(恒定三字段)→ GET verdicted(五字段契约)", async () => {
+      // 1. 新会话 + REST submit(浏览器面同形:Cookie 呈递,Path=/ 覆盖两族)。
+      const embedSessionIdW = embedSessionId();
+      const embedW = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId, userId, challengeId, challengeVersion: contentVersion,
+        embedSessionId: embedSessionIdW,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      const tokenW = (embedW.body as { embedToken: string }).embedToken;
+      const createdW = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdW, embedToken: tokenW },
+      });
+      expect(createdW.status).toBe(201);
+      const cookieW = credentialFromSetCookie(createdW.setCookie);
+      const sessionIdW = (createdW.body as { payload: { sessionId: string } }).payload.sessionId;
+      verdictSession = { sessionId: sessionIdW, cookie: cookieW };
+
+      const submitted = await postJson(recorder, "/sessions/submissions", {
+        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdW },
+      }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieW}` });
+      expect(submitted.status).toBe(200);
+      const { submissionId, revision } = (submitted.body as { payload: { submissionId: string; revision: number } }).payload;
+
+      // 2. submit 后首次查询 = 恒定三字段 pending(零进度 / 零队列位置)。
+      const first = await getJson(recorder, `/verdicts/${submissionId}`, `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieW}`);
+      expect(first.status).toBe(200);
+      const pendingBody = { submissionId, revision, status: "pending" };
+      expect(first.bodyText).toBe(JSON.stringify(pendingBody));
+      // 未决期内重复重询字节确定(I-4)。
+      const second = await getJson(recorder, `/verdicts/${submissionId}`, `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieW}`);
+      expect(second.bodyText).toBe(first.bodyText);
+
+      // 3. 轮询至 verdicted(确定性间隔;429 冻结形态按退避等待——客户端
+      //    镜像重询节奏,零重试风暴)。
+      const deadline = Date.now() + 120_000;
+      let final: { status: number; body: unknown; bodyText: string } | null = null;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
+        const attempt = await getJson(recorder, `/verdicts/${submissionId}`, `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieW}`);
+        if (attempt.status === 429) {
+          await new Promise((resolve) => setTimeout(resolve, 5_000));
+          continue;
+        }
+        expect(attempt.status).toBe(200);
+        const payload = attempt.body as { status: string; verdict?: string };
+        if (payload.status === "verdicted") {
+          final = attempt;
+          break;
+        }
+        expect(payload).toEqual(pendingBody);
+      }
+      expect(final).not.toBeNull();
+      const verdicted = final!.body as {
+        submissionId: string; revision: number; status: string; verdict: string; decidedAt: number;
+      };
+      // 五字段契约形态(D-API-83):11 值字面 + epoch 秒落库时刻。
+      expect(Object.keys(verdicted).sort()).toEqual(["decidedAt", "revision", "status", "submissionId", "verdict"]);
+      expect(verdicted.submissionId).toBe(submissionId);
+      expect(verdicted.revision).toBe(revision);
+      expect(verdicted.verdict).toBe("wrong_answer");
+      expect(Number.isInteger(verdicted.decidedAt)).toBe(true);
+      expect(verdicted.decidedAt).toBeGreaterThan(0);
+      // 载荷机检(ZR-B9 / B2 语料延伸到呈现响应面,D-API-61 录制面;
+      // 全捕获扫描的专项复核:裁决载荷零命中)。
+      const verdictHits = scanCrossDomainPayloads([final!.body]);
+      const hitsText = formatCrossDomainHits(verdictHits).join("\n");
+      expect(verdictHits, `裁决载荷机检命中:\n${hitsText}`).toEqual([]);
+    }, 150_000);
+
+    it("呈现路由 404 同形矩阵:不存在 / 跨会话 / 参数字符集违规同形(容器拓扑实跑)", async () => {
+      const cookieW = `${SESSION_CREDENTIAL_COOKIE_NAME}=${verdictSession!.cookie}`;
+      // 不存在。
+      const missing = await getJson(recorder, "/verdicts/00000000-0000-4000-8000-000000000000", cookieW);
+      expect(missing.status).toBe(404);
+      expect(missing.bodyText).toBe(JSON.stringify({ code: "invalid_input_format", message: "resource not found" }));
+      // 参数字符集违规(路径穿越形态)与不存在同响应(防枚举)。
+      const malformed = await getJson(recorder, "/verdicts/not-a%2Fuuid", cookieW);
+      expect(malformed.status).toBe(404);
+      expect(malformed.bodyText).toBe(missing.bodyText);
+
+      // 跨会话:同租户另一会话的提交行,用本会话凭证查询 → 404 同形。
+      const embedSessionIdX = embedSessionId();
+      const embedX = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId, userId, challengeId, challengeVersion: contentVersion,
+        embedSessionId: embedSessionIdX,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      const tokenX = (embedX.body as { embedToken: string }).embedToken;
+      const createdX = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdX, embedToken: tokenX },
+      });
+      const sessionIdX = (createdX.body as { payload: { sessionId: string } }).payload.sessionId;
+      const cookieX = credentialFromSetCookie(createdX.setCookie);
+      const submittedX = await postJson(recorder, "/sessions/submissions", {
+        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdX },
+      }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieX}` });
+      const submissionIdX = (submittedX.body as { payload: { submissionId: string } }).payload.submissionId;
+
+      const cross = await getJson(recorder, `/verdicts/${submissionIdX}`, cookieW);
+      expect(cross.status).toBe(404);
+      expect(cross.bodyText).toBe(missing.bodyText);
+      // 归属凭证查询同一提交行 → 200(定位链正向)。
+      const own = await getJson(recorder, `/verdicts/${submissionIdX}`, `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieX}`);
+      expect(own.status).toBe(200);
+      expect((own.body as { status: string }).status).toBe("pending");
+    }, 60_000);
+
+    it("重询限流:窗口内触顶 → 429 冻结形态逐字节(D-API-84;独立用户计量域)", async () => {
+      // 独立 user 维度(rate:{tenant}:{user}:verdict),不挤占其他用例预算。
+      const rlUser = "user-compose-rl";
+      const embedSessionIdRl = embedSessionId();
+      const embedRl = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId, userId: rlUser, challengeId, challengeVersion: contentVersion,
+        embedSessionId: embedSessionIdRl,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      const tokenRl = (embedRl.body as { embedToken: string }).embedToken;
+      const createdRl = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdRl, embedToken: tokenRl },
+      });
+      const cookieRl = credentialFromSetCookie(createdRl.setCookie);
+
+      // 触顶前 30 次放行(查询不存在的 id = 404,同样计量);第 31 次 429。
+      let firstReject: { status: number; bodyText: string } | null = null;
+      for (let index = 0; index < 31; index += 1) {
+        const attempt = await getJson(
+          recorder,
+          "/verdicts/11111111-1111-4000-8000-111111111111",
+          `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieRl}`,
+        );
+        if (attempt.status === 429) {
+          firstReject = attempt;
+          break;
+        }
+        expect([200, 404]).toContain(attempt.status);
+      }
+      expect(firstReject).not.toBeNull();
+      expect(firstReject!.status).toBe(429);
+      expect(firstReject!.bodyText).toBe(JSON.stringify({ code: "budget_exhausted", message: "rate limit exceeded" }));
+      // 计数不回退:窗口内继续触顶(确定性同形,I-4)。
+      const again = await getJson(
+        recorder,
+        "/verdicts/11111111-1111-4000-8000-111111111111",
+        `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieRl}`,
+      );
+      expect(again.status).toBe(429);
+      expect(again.bodyText).toBe(firstReject!.bodyText);
+    }, 60_000);
+
+    it("ZR-T4 verifier 级复锚:伪造 won 成功标志,verifier 独立重放裁决与未伪造会话一致", async () => {
+      // 诚实会话(firstSubmissionId,交互期未伪造)的引用与裁决;伪造 =
+      // 提交行 public_status = 'won'(客户端成功标志;D-API-62 篡改矩阵
+      // 延伸到裁决面)。verifier 唯一输入 = 规范化动作日志引用,公开状态
+      // 零参与——同日志 ⇒ 同裁决,伪造成功标志不改成绩。
+      const honest = await pool!.query<{ reference: unknown; verdict: string; log_digest: string | null; public_status: string }>(
+        `SELECT s.reference, v.verdict, r.log_digest, s.public_status
+         FROM submissions s
+         JOIN verdicts v ON v.submission_id = s.id
+         LEFT JOIN LATERAL (
+           SELECT log_digest FROM verifier_runs
+           WHERE submission_id = s.id ORDER BY created_at DESC LIMIT 1
+         ) r ON TRUE
+         WHERE s.id = $1`,
+        [firstSubmissionId!],
+      );
+      expect(honest.rows[0]).toBeDefined();
+      const honestRow = honest.rows[0]!;
+
+      const forged = await pool!.query<{ id: string }>(
+        `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
+         SELECT tenant_id, session_id || '-zrt4-forged', revision, 'won', reference
+         FROM submissions WHERE id = $1 RETURNING id`,
+        [firstSubmissionId!],
+      );
+      const forgedId = forged.rows[0]!.id;
+      await pool!.query(
+        `INSERT INTO verifier_runs (tenant_id, submission_id, status, log_digest)
+         VALUES ($1, $2, 'pending', $3)`,
+        [tenantId, forgedId, honestRow.log_digest],
+      );
+      // 独立 verify 进程对同一日志重放:裁决与未伪造会话一致(ZR-T4)。
+      const forgedVerdict = await pollVerdict(forgedId, 90_000);
+      expect(forgedVerdict).toBe(honestRow.verdict);
+      // 幂等复查:单一 verdicts 行(005 唯一索引)。
+      const count = await pool!.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM verdicts WHERE submission_id = $1`,
+        [forgedId],
+      );
+      expect(Number(count.rows[0]!.count)).toBe(1);
+    }, 120_000);
 
     // ── 阶段六 WP-64:审计落库、归档往返与角色治理(D-API-90 ~ 93)──────────
 

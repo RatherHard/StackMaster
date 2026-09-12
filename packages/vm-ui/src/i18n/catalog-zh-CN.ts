@@ -88,6 +88,12 @@ export const zhCN = {
   "menu.factAlignment": "对齐 {count} B",
   "menu.factExpected": "期望 {count} B",
   "menu.factActual": "实际 {count} B",
+  // 提交入口(阶段六 WP-63,D-API-84:正式裁决呈现通道;submit → pending → verdicted)
+  "menu.submit": "提交",
+  "menu.submitTitleDefault": "提交动作日志,等待正式裁决(由服务端独立重放产生)",
+  "menu.submitTitleNoSession": "尚未创建会话,不能提交",
+  "menu.submitTitleDisconnected": "动作通道未连接,等待重连后提交",
+  "menu.submitTitleTerminal": "测试环境已结束,请新建会话后再提交",
 
   // ── workspace(<sm-workspace> 工作区容器)─────────────────────────────────
   "workspace.teachingPanel": "教学面板(提示 / 错误解释)",
@@ -110,6 +116,18 @@ export const zhCN = {
   "workspace.challengeCanaryOn": "已启用",
   "workspace.challengeCanaryOff": "未启用",
   "workspace.challengeDtEncodingTable": "编码表",
+
+  // ── verdict(正式裁决呈现,阶段六 WP-63;D-API-84:裁决不可用 ≠ 判负)──
+  "verdict.heading": "正式裁决",
+  "verdict.pending": "已提交 · 裁决进行中",
+  "verdict.pendingNote": "正式裁决由服务端对提交内容独立重放产生;此时不代表通过或失败。",
+  "verdict.scorePassed": "本次提交通过({verdict})",
+  "verdict.scoreFailed": "本次提交未通过({verdict})",
+  "verdict.nonScore": "本次提交未产生成绩({verdict})",
+  "verdict.nonScoreNote": "该裁决已产生且不会自动重试;可重新提交生成新裁决(原提交与原裁决不变)。",
+  "verdict.resubmit": "重新提交",
+  "verdict.unavailable": "裁决暂不可用",
+  "verdict.unavailableNote": "裁决查询暂时失败;会话不受影响,也不会因此判负。",
 
   // ── debug(调试模式共享文案:暂停原因 / 通道状态)──────────────────────────
   "debug.pausedStep": "单步暂停",

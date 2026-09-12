@@ -161,6 +161,15 @@ export const AUDIT_RETENTION_DAYS_CEILING = 3650;
 export const DEFAULT_AUDIT_BUCKET = "audit-archive";
 
 /**
+ * 阶段六 WP-63 裁决重询限流(D-API-84 / D-API-86):与既有频率类同形——
+ * 常量默认值 + 配置天花板双闸。数值复核归 WP-65(Q6,k6 证据驱动)。
+ */
+/** 裁决查询频率默认值(次/分钟;rate:{tenant}:{user}:verdict 固定窗口 60 s)。 */
+export const DEFAULT_VERDICT_QUERIES_PER_MINUTE = 30;
+/** 裁决查询频率天花板(次/分钟)。 */
+export const VERDICT_QUERIES_PER_MINUTE_CEILING = 100000;
+
+/**
  * 必备环境变量登记表(缺失即拒绝启动)。
  *
  * WP-1 骨架期无必备密钥;WP-2 登记凭证签名密钥、WP-3 登记存储端点时逐项
@@ -233,6 +242,8 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_AUDIT_ARCHIVE_BATCH",
   "SESSION_API_AUDIT_RETENTION_DAYS",
   "SESSION_API_AUDIT_BUCKET",
+  // ── 阶段六 WP-63 裁决重询限流(2026-09-12;D-API-84 / D-API-86)──
+  "SESSION_API_VERDICT_QUERIES_PER_MINUTE",
 ];
 
 const envSchema = z.object({
@@ -452,6 +463,13 @@ const envSchema = z.object({
     .max(AUDIT_RETENTION_DAYS_CEILING)
     .default(DEFAULT_AUDIT_RETENTION_DAYS),
   SESSION_API_AUDIT_BUCKET: z.string().min(3).max(63).default(DEFAULT_AUDIT_BUCKET),
+  // ── 阶段六 WP-63 裁决重询限流(D-API-84 / D-API-86):默认值 + 天花板双闸 ──
+  SESSION_API_VERDICT_QUERIES_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(VERDICT_QUERIES_PER_MINUTE_CEILING)
+    .default(DEFAULT_VERDICT_QUERIES_PER_MINUTE),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -550,6 +568,9 @@ export interface SessionApiConfig {
   readonly auditRetentionDays: number;
   /** 审计归档桶(独立桶;缺省 audit-archive)。 */
   readonly auditBucket: string;
+  // ── 阶段六 WP-63 裁决重询限流(D-API-84 / D-API-86)──
+  /** 裁决查询频率(次/分钟;rate:{tenant}:{user}:verdict 固定窗口 60 s)。 */
+  readonly verdictQueriesPerMinute: number;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -694,6 +715,7 @@ export function loadSessionApiConfig(
     auditArchiveBatch: raw.SESSION_API_AUDIT_ARCHIVE_BATCH,
     auditRetentionDays: raw.SESSION_API_AUDIT_RETENTION_DAYS,
     auditBucket: raw.SESSION_API_AUDIT_BUCKET,
+    verdictQueriesPerMinute: raw.SESSION_API_VERDICT_QUERIES_PER_MINUTE,
   };
 }
 

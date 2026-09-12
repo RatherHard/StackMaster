@@ -74,6 +74,7 @@ import {
 } from "../persistence/index.js";
 import { buildSessionRoutes } from "../routes/session-routes.js";
 import { buildDescriptorRoutes } from "../routes/descriptor-routes.js";
+import { buildVerdictRoutes } from "../routes/verdict-routes.js";
 import { createSessionAuthContext } from "../auth/auth-context.js";
 import { LiveSessionManager } from "../sessions/session-manager.js";
 import { SessionMetrics, buildMetricsPlugin } from "../metrics/index.js";
@@ -217,6 +218,8 @@ export interface SessionApiRuntime {
   readonly sessionRoutes: FastifyPluginAsync;
   /** 公开描述包下发路由(GET /descriptors/:challengeId/:version;阶段五 WP-50,D-API-76)。 */
   readonly descriptorRoutes: FastifyPluginAsync;
+  /** 裁决呈现路由(GET /verdicts/:submissionId;阶段六 WP-63,D-API-83)。 */
+  readonly verdictRoutes: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5,D-API-40)。 */
   readonly wssChannel: FastifyPluginAsync;
   /**
@@ -417,6 +420,12 @@ export async function buildSessionApiRuntime(
     counter: rateLimitCounter,
     limitPerWindow: config.submissionsPerMinute,
   });
+  // 裁决重询频率闸(阶段六 WP-63,D-API-84 / D-API-86):
+  // rate:{tenant}:{user}:verdict 维度子键固定窗口(默认 30/min,天花板 100000)。
+  const verdictRateGate = new FixedWindowRateGate({
+    counter: rateLimitCounter,
+    limitPerWindow: config.verdictQueriesPerMinute,
+  });
   const createSessionGuard = new RateLimitedCreateSessionGuard({
     rateGate: requestRateGate,
     liveCountByTenant: (tenantId) => manager.liveCountByTenant(tenantId),
@@ -448,6 +457,21 @@ export async function buildSessionApiRuntime(
       requestRateGate.acquireOrThrow(`rate:${tenantId}:${userId}`, "request_rate"),
     submitRateGate: (tenantId, userId) =>
       submitRateGate.acquireOrThrow(`rate:${tenantId}:${userId}:submit`, "submission_rate"),
+    // Cookie Path 调宽(D-API-83):覆盖 /sessions 与 /verdicts 两族;其余
+    // Cookie 属性(HttpOnly / Secure / SameSite=Strict)零改动。
+    credentialCookiePath: "/",
+  });
+
+  // ── 8.2 裁决呈现路由(阶段六 WP-63,D-API-83):session-api 读裁决域
+  //    (只读端口,零裁决写入面——裁决唯一出处 = 信任域 4 verifier);
+  //    会话凭证同模型认证 + 归属校验 + 重询限流 + pending/verdicted 两态。──
+  const verdictRoutes = buildVerdictRoutes({
+    signer,
+    revocationStore,
+    allowedOrigins: config.allowedOrigins,
+    verdicts: submissions,
+    verdictRateGate: (tenantId, userId) =>
+      verdictRateGate.acquireOrThrow(`rate:${tenantId}:${userId}:verdict`, "verdict_query_rate"),
   });
 
   // ── 8.5 公开描述包下发路由(阶段五 WP-50,D-API-76):无凭证 GET(公开
@@ -580,6 +604,7 @@ export async function buildSessionApiRuntime(
     authPlugin,
     sessionRoutes,
     descriptorRoutes,
+    verdictRoutes,
     wssChannel: wssChannelAssembly.plugin,
     wssRegistry: wssChannelAssembly.registry,
     debugChannel: debugChannelPlugin,

@@ -7,6 +7,8 @@
  *  - **指令步进**(FE-WS-04a)= `step` 动作;**积木步进**(FE-WS-04b,WP-F6)
  *    = `payload-step` 动作——仅 payload 标签页激活时可用,语义(编译 + 推进
  *    一个原子动作)由 payload 标签页承载;
+ *  - **提交**(阶段六 WP-63,D-API-84)= `submit` 动作:正式裁决呈现入口
+ *    (submit → pending → verdicted;禁用矩阵与 step 同形);
  *  - **重启测试环境**(FE-WS-05,Q5 / M11 口径):运行中可点 = `reset` 动作;
  *    **终态(won/failed)禁用**并呈现引导"测试环境已结束,请新建会话";
  *  - **运行到断点**(FE-WS-04c,WP-F8):调试模式原生暂停点——由宿主经
@@ -46,6 +48,11 @@ export type WorkspaceMenuAction =
   | { readonly action: "reset" }
   | { readonly action: "reconnect" }
   | { readonly action: "new-session" }
+  /**
+   * 提交(阶段六 WP-63,D-API-84):正式裁决呈现入口——submit 受理后由宿主
+   * 启动裁决重询(pending 确定性呈现 → verdicted 呈现 11 值结果类型)。
+   */
+  | { readonly action: "submit" }
   /** 积木步进(FE-WS-04b,WP-F6):payload 程序推进一步(一个原子动作)并暂停。 */
   | { readonly action: "payload-step" }
   /** 运行到断点(FE-WS-04c,WP-F8):调试通道 debug_run_to_breakpoint(断点 = 当前集合)。 */
@@ -347,6 +354,15 @@ export class SmWorkspaceMenu extends LitElement {
             : nothing}
           <button
             type="button"
+            class="submit-button"
+            ?disabled=${this.#submitDisabled}
+            title=${this.#submitDisabledTitle}
+            @click=${() => this.#emit({ action: "submit" })}
+          >
+            ${t("menu.submit")}
+          </button>
+          <button
+            type="button"
             class="reset-button"
             ?disabled=${this.#resetDisabled}
             title=${this.#resetDisabledTitle}
@@ -560,6 +576,25 @@ export class SmWorkspaceMenu extends LitElement {
       return t("menu.resetTitleDisconnected");
     }
     return t("menu.resetTitleDefault");
+  }
+
+  // 提交(阶段六 WP-63):禁用矩阵与 step / reset 同形(会话可操作且未终态);
+  // 终态会话的提交必被 session_terminal 拒绝,提前禁用 + 引导文案。
+  get #submitDisabled(): boolean {
+    return !this.#sessionActionable || this.#isTerminal;
+  }
+
+  get #submitDisabledTitle(): string {
+    if (this.#isTerminal) {
+      return t("menu.submitTitleTerminal");
+    }
+    if (!this.hasSession) {
+      return t("menu.submitTitleNoSession");
+    }
+    if (this.connectionStatus !== "connected") {
+      return t("menu.submitTitleDisconnected");
+    }
+    return t("menu.submitTitleDefault");
   }
 
   #emit(action: WorkspaceMenuAction): void {

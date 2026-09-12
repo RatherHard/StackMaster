@@ -21,7 +21,12 @@
  *  - **菜单动作**:`step`(FE-WS-04a)/ `reset`(FE-WS-05,Q5/M11 终态禁用
  *    + 新建引导)/ 手动重连(connection-replaced);拒绝动作呈现
  *    userVisibleError(含 explanation);断线横幅呈现"最近一次公开投影 +
- *    重连中"(零本地 VM 降级)。
+ *    重连中"(零本地 VM 降级);
+ *  - **正式裁决呈现**(阶段六 WP-63,D-API-83 / 84):`submit` 动作受理后
+ *    启动裁决重询(pending 确定性呈现 → verdicted 11 值结果类型呈现;非成绩
+ *    方向显式重提入口、不自动重试;裁决不可用 ≠ 判负——unavailable 降级
+ *    明示,不中断会话);重询经插件 ↔ session-api 直连 HTTP,宿主
+ *    postMessage 零权威语义不破(V-9,裁决数据不经嵌入协议帧)。
  *
  * 纪律(CLAUDE.md 第十章):浏览器只保存公开投影与 UI 状态;动画只用
  * transform / opacity(拖拽反馈 = opacity);语义化 DOM。
@@ -38,6 +43,8 @@ import type {
   VisibleMemoryRegion,
 } from "@stackmaster/protocol";
 
+import { SessionCommandError } from "../client/session-errors.js";
+
 import {
   type ConnectionStatus,
   type ConnectionStatusEvent,
@@ -45,6 +52,7 @@ import {
   type SessionClient,
 } from "../client/session-client.js";
 import { SessionClientError } from "../client/session-errors.js";
+import { VerdictPoller, type VerdictPresentation } from "../client/verdict-poller.js";
 import {
   createDebugDataSource,
   DebugDataSource,
@@ -99,6 +107,21 @@ import { WorkspaceLayoutModel, type MoveTarget, type WorkspaceLayoutSnapshot } f
 
 /** 拖拽启动的位移阈值(px):超过才算拖拽(否则视为激活点击)。 */
 const DRAG_THRESHOLD_PX = 3;
+
+/**
+ * 成绩方向裁决集(11 值结果类型的呈现分向;非成绩方向 = engine_error /
+ * challenge_invalid / replay_mismatch / cancelled——已产生的裁决,呈现
+ * 「本次提交未产生成绩」+ 显式重新提交入口,不自动重试,D-API-84)。
+ */
+const SCORE_VERDICTS: ReadonlySet<string> = new Set([
+  "success",
+  "wrong_answer",
+  "invalid_action",
+  "program_crash",
+  "memory_fault",
+  "resource_limit",
+  "timeout",
+]);
 
 /** 工作区模式(FE-WS-06):解题(公开投影)与调试(调试通道)双档。 */
 export type WorkspaceMode = "solve" | "debug";
@@ -191,6 +214,14 @@ export class SmWorkspace extends LitElement {
   debugDataSourceFactory: DebugDataSourceFactory | null = null;
 
   /**
+   * 裁决重询状态机工厂(测试接缝,阶段六 WP-63):缺省 = 组合根装配
+   * `new VerdictPoller({ sink: client })`(确定性间隔 + 失败退避 + 断线
+   * 暂停重连);测试注入可编排定时器的替身工厂。
+   */
+  @property({ attribute: false })
+  verdictPollerFactory: ((client: SessionClient) => VerdictPoller) | null = null;
+
+  /**
    * 主题属性(WP-53 / Q6 独立使用形态便捷注入面):`light` / `dark` / `auto`
    * (auto = 跟随系统 prefers-color-scheme,CSS media 承担)。设值即转写为
    * 自身 `data-sm-theme`(最近锚优先——显式属性胜过祖先锚);缺省 null =
@@ -225,6 +256,14 @@ export class SmWorkspace extends LitElement {
   #debugChangeDisposer: (() => void) | null = null;
   /** 调试交互反馈(暂停原因 / attach / 通道错误;菜单下方状态行)。 */
   #debugFeedback: string | null = null;
+
+  // ── 正式裁决呈现(阶段六 WP-63;D-API-83 / D-API-84)──
+  /**
+   * 裁决重询状态机(submit 后跟随 submissionId;verdicted 即停、断线暂停
+   * 重连恢复、连续失败触顶 → unavailable 停询)。呈现 = 菜单下方裁决横幅。
+   */
+  #verdictPoller: VerdictPoller | null = null;
+  #verdict: VerdictPresentation = { kind: "idle" };
 
   // ── 动作账本与教学组件状态(ED 挂接,公开投影 + UI 状态)──
   /** 动作账本(onActionResponse 流 × 发送侧 FIFO 配对;时间线数据源)。 */
@@ -468,6 +507,42 @@ export class SmWorkspace extends LitElement {
       padding: 0.25rem 0.75rem 0.5rem;
       color: graytext;
     }
+
+    /* 正式裁决横幅(阶段六 WP-63;零视觉重设计:复用横幅式样的取简变体)。 */
+    .verdict-banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.25rem 0.75rem;
+      margin: 0;
+      padding: 0.375rem 0.75rem;
+      background: color-mix(in srgb, field 92%, highlight 8%);
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      font-size: 0.75rem;
+    }
+
+    .verdict-banner strong {
+      color: canvastext;
+    }
+
+    .verdict-banner .verdict-state {
+      color: canvastext;
+      font-weight: 600;
+    }
+
+    .verdict-banner.unavailable {
+      background: color-mix(in srgb, mark 8%, canvas);
+    }
+
+    .verdict-banner button {
+      padding: 0.125rem 0.5rem;
+      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
+      border-radius: 6px;
+      background: canvas;
+      color: canvastext;
+      font: inherit;
+      cursor: pointer;
+    }
   `;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -509,6 +584,18 @@ export class SmWorkspace extends LitElement {
     if (this.client !== null && this.#listenerDisposers.length === 0) {
       this.#attachClientListeners();
     }
+    if (this.client !== null && this.#verdictPoller === null) {
+      // 重连装配(disconnectedCallback 已释放重询;呈现状态回到 idle——
+      // 裁决呈现随会话生命周期,重新提交即重新跟随)。
+      const verdictPoller = this.verdictPollerFactory !== null
+        ? this.verdictPollerFactory(this.client)
+        : new VerdictPoller({ sink: this.client });
+      verdictPoller.onChange((presentation) => {
+        this.#verdict = presentation;
+        this.requestUpdate();
+      });
+      this.#verdictPoller = verdictPoller;
+    }
   }
 
   /** 独立使用形态:theme 属性 → 自身 data-sm-theme(最近锚优先,确定性)。 */
@@ -528,6 +615,9 @@ export class SmWorkspace extends LitElement {
     this.renderRoot.removeEventListener("pointerup", this.#onPointerUp as EventListener);
     this.renderRoot.removeEventListener("pointercancel", this.#onPointerCancel as EventListener);
     this.#detachClientListeners();
+    // 裁决重询随元素移除终止(停定时器;重连装配由 client 换绑路径重建)。
+    this.#verdictPoller?.dispose();
+    this.#verdictPoller = null;
     super.disconnectedCallback();
   }
 
@@ -618,6 +708,10 @@ export class SmWorkspace extends LitElement {
     this.#beforeRegions = undefined;
     this.#lastDelta = null;
     this.#lastRegionsSnapshot = undefined;
+    // 裁决重询随会话作废(裁决以 submissionId 为界;新会话 = 新提交域)。
+    this.#verdictPoller?.dispose();
+    this.#verdictPoller = null;
+    this.#verdict = { kind: "idle" };
     const client = this.client;
     if (client === null) {
       this.#syncConnectionFrom("disconnected", null, 0, null);
@@ -626,6 +720,15 @@ export class SmWorkspace extends LitElement {
       this.dataSource = null;
       return;
     }
+    // 裁决重询状态机(组合根装配;工厂测试接缝):呈现变更即重渲染(D-API-83 / 84)。
+    const verdictPoller = this.verdictPollerFactory !== null
+      ? this.verdictPollerFactory(client)
+      : new VerdictPoller({ sink: client });
+    verdictPoller.onChange((presentation) => {
+      this.#verdict = presentation;
+      this.requestUpdate();
+    });
+    this.#verdictPoller = verdictPoller;
     // 组合根装配(README):数据源 = client.store 的公开档包装(解题模式)。
     this.dataSource = new ProjectionDataSource(client.store);
     this.#lastRegionsSnapshot = client.store.snapshot?.visibleRegions;
@@ -935,6 +1038,11 @@ export class SmWorkspace extends LitElement {
         // FE-WS-05(Q5/M11):运行中 = reset;终态菜单已禁用(引导新建)。
         this.#submitAction({ type: "reset", args: {} });
         break;
+      case "submit":
+        // 阶段六 WP-63(D-API-84):submit → 裁决重询(pending 确定性呈现 →
+        // verdicted 11 值结果呈现;非成绩方向显式重提入口也经此处)。
+        void this.#submitForVerdict();
+        break;
       case "run-to-breakpoint":
         // FE-WS-04c(F8):运行到断点 = 调试通道 debug_run_to_breakpoint,
         // 断点集合 = 当前集合(菜单仅调试模式且集合非空时可用;防御性 no-op 兜底)。
@@ -975,6 +1083,105 @@ export class SmWorkspace extends LitElement {
     if (typeof stepOnce === "function") {
       stepOnce.call(content);
     }
+  }
+
+  // ── 正式裁决呈现(阶段六 WP-63;D-API-83 / D-API-84)──────────────────────
+
+  /**
+   * submit 受理后启动裁决重询(显式重提入口同路:新 submit → 新
+   * submissionId → 新 pending;旧 submission 与旧裁决不动)。被拒(限流 /
+   * 终态 / 存储不可用)呈现为既有错误条(冻结 PublicError,零新增呈现面)。
+   */
+  async #submitForVerdict(): Promise<void> {
+    const client = this.client;
+    if (client === null) {
+      return;
+    }
+    try {
+      const response = await client.submit();
+      this.#verdictPoller?.follow(response.payload.submissionId);
+    } catch (error) {
+      if (error instanceof SessionCommandError) {
+        this.#lastError = error.publicError;
+        this.requestUpdate();
+        return;
+      }
+      this.#lastError = {
+        code: "internal_error",
+        message: error instanceof SessionClientError ? error.message : t("workspace.actionSubmitFailed"),
+      };
+      this.requestUpdate();
+    }
+  }
+
+  #renderVerdictBanner(): unknown {
+    const verdict = this.#verdict;
+    if (verdict.kind === "idle") {
+      return nothing;
+    }
+    if (verdict.kind === "pending") {
+      return html`
+        <p
+          class="verdict-banner"
+          role="status"
+          data-testid="sm-verdict"
+          data-verdict-state="pending"
+        >
+          <strong>${t("verdict.heading")}</strong>
+          <span class="verdict-state">${t("verdict.pending")}</span>
+          <span>${t("verdict.pendingNote")}</span>
+        </p>
+      `;
+    }
+    if (verdict.kind === "verdicted") {
+      const result = verdict.verdict;
+      // 成绩方向(success / 6 个失败方向)与非成绩方向(engine_error /
+      // challenge_invalid / replay_mismatch / cancelled)同构呈现——11 值字面
+      // 为唯一公开承载,零部分匹配信息;非成绩方向附显式重新提交入口
+      // (不自动重试,D-API-84)。裁决不可用 ≠ 判负:pending / unavailable
+      // 态零成绩语义。
+      const score = SCORE_VERDICTS.has(result);
+      return html`
+        <p
+          class="verdict-banner verdicted"
+          role="status"
+          data-testid="sm-verdict"
+          data-verdict-state="verdicted"
+          data-verdict-result=${result}
+        >
+          <strong>${t("verdict.heading")}</strong>
+          <span class="verdict-state">
+            ${result === "success"
+              ? t("verdict.scorePassed", { verdict: result })
+              : score
+                ? t("verdict.scoreFailed", { verdict: result })
+                : t("verdict.nonScore", { verdict: result })}
+          </span>
+          ${score
+            ? nothing
+            : html`
+                <span>${t("verdict.nonScoreNote")}</span>
+                <button type="button" class="verdict-resubmit" @click=${() => void this.#submitForVerdict()}>
+                  ${t("verdict.resubmit")}
+                </button>
+              `}
+        </p>
+      `;
+    }
+    // unavailable(重询连续失败触顶;降级明示,复用 pwn-degraded 语义锚
+    // 纪律——确定性 testid + 原因属性;不中断会话、不判负)。
+    return html`
+      <p
+        class="verdict-banner unavailable"
+        role="status"
+        data-testid="sm-verdict"
+        data-verdict-state="unavailable"
+        data-pwn-reason="verdict-unavailable"
+      >
+        <strong>${t("verdict.unavailable")}</strong>
+        <span>${t("verdict.unavailableNote")}</span>
+      </p>
+    `;
   }
 
   // ── ED 组件挂接(F9 契约面 × F8 组合根)──────────────────────────────────
@@ -1299,6 +1506,7 @@ export class SmWorkspace extends LitElement {
         .lastError=${this.#lastError}
         @workspace-menu-action=${this.#onMenuAction}
       ></sm-workspace-menu>
+      ${this.#renderVerdictBanner()}
       ${this.#renderDebugFeedback()}
       ${this.#renderChallengePanel()}
       <details class="teaching-panel" part="teaching-panel">
