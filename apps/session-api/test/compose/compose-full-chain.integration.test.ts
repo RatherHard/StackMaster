@@ -20,7 +20,7 @@
  * revision 自快照续算 + 同输入恒同响应(I-4,与未重启孪生会话对齐)。
  */
 
-import { generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import type { ActionResponse, WssFrame } from "@stackmaster/protocol";
@@ -33,9 +33,13 @@ import {
 } from "./helpers/lifecycle-challenge.js";
 
 import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../src/auth/cookie.js";
+import { DEFAULT_AUDIT_BUCKET } from "../../src/config.js";
+import { AUDIT_EVENT_KINDS } from "../../src/auth/ports.js";
 import {
+  AuditArchiveJob,
   ChallengeRegistrar,
   MinioChallengeBundleStore,
+  PgAuditSink,
   PostgresActionLogStore,
   PostgresChallengeRegistry,
   PostgresSubmissionStore,
@@ -667,5 +671,204 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(states.statuses.filter((status) => status === "failed").length).toBeGreaterThanOrEqual(1);
       expect(await pollVerdict(submissionId, 0)).toBeNull();
     }, 150_000);
+
+    // ── 阶段六 WP-64:审计落库、归档往返与角色治理(D-API-90 ~ 93)──────────
+
+    /** 按角色派生 PG 连接串(替换 userinfo;主机 / 端口 / 库不变)。 */
+    function withRole(url: string, user: string, password: string): string {
+      const parsed = new URL(url);
+      parsed.username = user;
+      parsed.password = password;
+      return parsed.toString();
+    }
+
+    /** 尝试以给定角色连接;失败(角色不存在 / 凭据不符)返回 null。 */
+    async function tryConnect(url: string): Promise<Pool | null> {
+      try {
+        return await createPostgresPool(url, 1);
+      } catch {
+        return null;
+      }
+    }
+
+    it("审计 PG 落库(真实进程):create_session 链路的审计事件经 PgAuditSink 入 audit_log", async () => {
+      const auditEmbedSessionId = embedSessionId();
+      const auditIssuance = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId, userId, challengeId, challengeVersion: contentVersion,
+        embedSessionId: auditEmbedSessionId,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      expect(auditIssuance.status).toBe(201);
+      const auditToken = (auditIssuance.body as { embedToken: string }).embedToken;
+      const auditCreated = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: auditEmbedSessionId, embedToken: auditToken },
+      });
+      expect(auditCreated.status).toBe(201);
+      const auditSessionId = (auditCreated.body as { payload: { sessionId: string } }).payload.sessionId;
+
+      // 审计行在 PG(生产装配 = PgAuditSink,D-API-91;kind ⊆ 十值封闭集合)。
+      // embed_token_consumed 在会话存在之前发生(嵌入协议 §六消费序),事件本就
+      // 无 sessionId——以 tenant + detail.embedSessionId(每运行唯一)定位。
+      const consumed = await pool!.query<{ kind: string }>(
+        `SELECT kind FROM audit_log
+         WHERE tenant_id = $1 AND kind = 'embed_token_consumed' AND detail->>'embedSessionId' = $2`,
+        [tenantId, auditEmbedSessionId],
+      );
+      expect(consumed.rows.map((row) => row.kind)).toEqual(["embed_token_consumed"]);
+      const rows = await pool!.query<{ kind: string }>(
+        `SELECT kind FROM audit_log WHERE session_id = $1 ORDER BY id`,
+        [auditSessionId],
+      );
+      const kinds = rows.rows.map((row) => row.kind);
+      expect(kinds).toContain("session_credential_issued");
+      expect(kinds).toContain("create_session");
+      for (const kind of [...kinds, "embed_token_consumed"]) {
+        expect(AUDIT_EVENT_KINDS).toContain(kind);
+      }
+    }, 60_000);
+
+    it("审计归档往返(落库 → 归档 → 校验):SHA-256 清单复算一致;批 ID 幂等零双份(D-API-92)", async () => {
+      // 1. 落库:专用租户经 PgAuditSink(与真实进程同一实现)直落 4 行。
+      const auditTenant = `audit-${runSuffix}`;
+      const auditSink = new PgAuditSink(pool!);
+      for (let index = 0; index < 4; index += 1) {
+        await auditSink.append({
+          kind: index % 2 === 0 ? "create_session" : "submit",
+          at: Date.now(),
+          actor: { tenantId: auditTenant, userId: "user-audit" },
+          sessionId: `sess-audit-${index}`,
+          detail: { sequence: index },
+        });
+      }
+      const dbRows = await pool!.query<{ kind: string; session_id: string | null; detail: unknown }>(
+        `SELECT kind, session_id, detail FROM audit_log WHERE tenant_id = $1 ORDER BY id`,
+        [auditTenant],
+      );
+      expect(dbRows.rows).toHaveLength(4);
+
+      // 2. 归档:时钟前推 40 天(窗口 = now - 30 天 → 覆盖刚落库行);数据 + 清单双对象。
+      const archiveMinio = await createMinioClient({
+        endpoint: IT_CONFIG.minioEndpoint,
+        port: IT_CONFIG.minioPort,
+        accessKey: IT_CONFIG.minioAccessKey,
+        secretKey: IT_CONFIG.minioSecretKey,
+      });
+      const job = new AuditArchiveJob({
+        pool: pool!,
+        minio: archiveMinio,
+        bucket: DEFAULT_AUDIT_BUCKET,
+        batchSize: 100000,
+        retentionDays: 30,
+        now: () => Date.now() + 40 * 86_400_000,
+      });
+      const first = await job.runOnce();
+      expect(first.status).toBe("completed");
+      const batch = first as {
+        batchId: string;
+        rowCount: number;
+        dataObjectName: string;
+        manifestObjectName: string;
+        dataSha256: string;
+      };
+      expect(batch.rowCount).toBeGreaterThanOrEqual(4);
+
+      // 3. 校验:数据对象字节 SHA-256 复算 = 清单摘要 = 台账摘要;本租户 4 行
+      //    全部在归档行内(事件同构投影,落库内容零失真)。
+      const dataBytes = Buffer.from(await collectStream(
+        await archiveMinio.getObject(DEFAULT_AUDIT_BUCKET, batch.dataObjectName),
+      ));
+      expect(createHash("sha256").update(dataBytes).digest("hex")).toBe(batch.dataSha256);
+      const manifest = JSON.parse(Buffer.from(await collectStream(
+        await archiveMinio.getObject(DEFAULT_AUDIT_BUCKET, batch.manifestObjectName),
+      )).toString("utf8")) as { dataSha256: string; batchId: string; rowCount: number };
+      expect(manifest.dataSha256).toBe(batch.dataSha256);
+      expect(manifest.batchId).toBe(batch.batchId);
+      const ledgerRow = await pool!.query<{ data_sha256: string }>(
+        `SELECT data_sha256 FROM audit_archive_batches WHERE batch_id = $1`,
+        [batch.batchId],
+      );
+      expect(ledgerRow.rows[0]!.data_sha256).toBe(batch.dataSha256);
+      const archivedLines = dataBytes.toString("utf8").split("\n")
+        .map((line) => JSON.parse(line) as {
+          actor: { tenantId: string; userId: string };
+          kind: string;
+          sessionId: string | null;
+          detail: unknown;
+        })
+        .filter((row) => row.actor.tenantId === auditTenant);
+      expect(archivedLines).toHaveLength(4);
+      expect(archivedLines.map((row) => row.kind)).toEqual(dbRows.rows.map((row) => row.kind));
+      expect(archivedLines.map((row) => row.sessionId)).toEqual(dbRows.rows.map((row) => row.session_id));
+      expect(archivedLines.map((row) => row.detail)).toEqual(dbRows.rows.map((row) => row.detail));
+
+      // 4. 批 ID 幂等:游标已推进 → 重跑 idle;本批对象字节与台账行零变化
+      //    (重复归档不产生双份)。
+      expect(await job.runOnce()).toEqual({ status: "idle" });
+      const objectAgain = await archiveMinio.getObject(DEFAULT_AUDIT_BUCKET, batch.dataObjectName);
+      expect(
+        createHash("sha256").update(Buffer.from(await collectStream(objectAgain))).digest("hex"),
+      ).toBe(batch.dataSha256);
+      const ledgerCount = await pool!.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM audit_archive_batches WHERE batch_id = $1`,
+        [batch.batchId],
+      );
+      expect(Number(ledgerCount.rows[0]!.count)).toBe(1);
+    }, 120_000);
+
+    it("角色治理红灯(D-API-93):session_app 对 audit_log 零 UPDATE/DELETE、禁触发器被拒;verifier 仅 INSERT 预留", async (ctx) => {
+      const sessionApp = await tryConnect(withRole(IT_CONFIG.postgresUrl, "session_app", "session-app-dev"));
+      const verifierRole = await tryConnect(withRole(IT_CONFIG.postgresUrl, "verifier", "verifier-dev"));
+      if (sessionApp === null || verifierRole === null) {
+        // host 降级形态:init 服务未运行,角色不存在——如实登记(CI 完整容器拓扑实跑)。
+        ctx.skip();
+        return;
+      }
+      try {
+        const auditTenant = `roles-${runSuffix}`;
+        // session_app:INSERT 受理(应用角色的合法写入面)。
+        await sessionApp.query(
+          `INSERT INTO audit_log (kind, at, tenant_id, user_id) VALUES ('create_session', now(), $1, 'role-probe')`,
+          [auditTenant],
+        );
+        // UPDATE / DELETE 被 REVOKE 拒(权限层);即便绕过权限亦被库层触发器拒(双层)。
+        await expect(
+          sessionApp.query(`UPDATE audit_log SET user_id = 'tampered' WHERE tenant_id = $1`, [auditTenant]),
+        ).rejects.toThrow(/permission denied|append-only/);
+        await expect(
+          sessionApp.query(`DELETE FROM audit_log WHERE tenant_id = $1`, [auditTenant]),
+        ).rejects.toThrow(/permission denied|append-only/);
+        // 触发器禁用路径被拒(非属主角色不可 DISABLE TRIGGER;第二层治理第三红灯)。
+        await expect(
+          sessionApp.query(`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`),
+        ).rejects.toThrow(/must be owner of table|permission denied/);
+
+        // verifier:审计发射面预留(WP-62,D-API-90/93)——INSERT(verdict_completed)
+        // 受理;UPDATE / DELETE 拒;DISABLE TRIGGER 拒。
+        await verifierRole.query(
+          `INSERT INTO audit_log (kind, at, tenant_id, user_id, detail)
+           VALUES ('verdict_completed', now(), $1, 'verifier', $2::jsonb)`,
+          [`verifier-${auditTenant}`, JSON.stringify({ submissionId: "sub-role-probe", verdict: "success" })],
+        );
+        await expect(
+          verifierRole.query(`UPDATE audit_log SET user_id = 'x' WHERE tenant_id = $1`, [`verifier-${auditTenant}`]),
+        ).rejects.toThrow(/permission denied|append-only/);
+        await expect(
+          verifierRole.query(`DELETE FROM audit_log WHERE tenant_id = $1`, [`verifier-${auditTenant}`]),
+        ).rejects.toThrow(/permission denied|append-only/);
+      } finally {
+        await sessionApp.end().catch(() => undefined);
+        await verifierRole.end().catch(() => undefined);
+      }
+    }, 60_000);
   },
 );
+
+/** 读取流字节(归档对象校验用)。 */
+async function collectStream(stream: NodeJS.ReadableStream): Promise<Uint8Array> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}

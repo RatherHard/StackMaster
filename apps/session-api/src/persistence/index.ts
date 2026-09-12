@@ -49,6 +49,23 @@ export { PostgresSessionRepository } from "./pg/session-repository.js";
 export { PostgresSnapshotStore } from "./pg/snapshot-store.js";
 export { PostgresActionLogStore, PostgresSubmissionStore } from "./pg/log-stores.js";
 export { PostgresChallengeRegistry } from "./pg/challenge-registry.js";
+export { PgAuditSink } from "./pg/audit-sink.js";
+export {
+  AUDIT_ARCHIVE_FORMAT,
+  AUDIT_ARCHIVE_MANIFEST_FORMAT,
+  AUDIT_ARCHIVE_OBJECT_PREFIX,
+  AuditArchiveJob,
+  buildAuditArchiveManifest,
+  deriveAuditArchiveBatchId,
+  serializeAuditArchiveRows,
+} from "./audit-archive.js";
+export type {
+  AuditArchiveJobOptions,
+  AuditArchiveManifest,
+  AuditArchiveOutcome,
+  AuditArchiveRunResult,
+  ArchivedAuditRow,
+} from "./audit-archive.js";
 export { MinioChallengeBundleStore, createMinioClient } from "./minio/challenge-bundle-store.js";
 export type { MinioLike, MinioBundleStoreOptions } from "./minio/challenge-bundle-store.js";
 export {

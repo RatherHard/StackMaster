@@ -79,6 +79,11 @@ describe("配置加载与启动校验(fail-closed)", () => {
       terminalSessionRetentionDays: 30,
       // 阶段五 WP-50 公开描述包下发通道(D-API-76)默认值。
       maxDescriptorBytes: 262144,
+      // 阶段六 WP-64 审计归档面(D-API-92)默认值。
+      auditArchiveIntervalSeconds: 3600,
+      auditArchiveBatch: 10000,
+      auditRetentionDays: 30,
+      auditBucket: "audit-archive",
     });
   });
 
@@ -113,6 +118,11 @@ describe("配置加载与启动校验(fail-closed)", () => {
       SESSION_API_SNAPSHOT_BYTE_BUDGET: "524288",
       SESSION_API_TENANT_STORAGE_QUOTA_BYTES: "104857600",
       SESSION_API_TERMINAL_SESSION_RETENTION_DAYS: "7",
+      // 阶段六 WP-64 审计归档面配置键生效(D-API-92)。
+      SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS: "600",
+      SESSION_API_AUDIT_ARCHIVE_BATCH: "500",
+      SESSION_API_AUDIT_RETENTION_DAYS: "90",
+      SESSION_API_AUDIT_BUCKET: "audit-archive-prod",
     });
     expect(config.nodeEnv).toBe("production");
     expect(config.host).toBe("0.0.0.0");
@@ -145,6 +155,11 @@ describe("配置加载与启动校验(fail-closed)", () => {
     expect(config.snapshotByteBudget).toBe(524288);
     expect(config.tenantStorageQuotaBytes).toBe(104857600);
     expect(config.terminalSessionRetentionDays).toBe(7);
+    // 阶段六 WP-64 审计归档面:字符串数字强制转换(D-API-92)。
+    expect(config.auditArchiveIntervalSeconds).toBe(600);
+    expect(config.auditArchiveBatch).toBe(500);
+    expect(config.auditRetentionDays).toBe(90);
+    expect(config.auditBucket).toBe("audit-archive-prod");
   });
 
   it("空字符串环境变量按未提供处理(容器编排占位形态),走默认值", () => {
@@ -188,6 +203,12 @@ describe("配置加载与启动校验(fail-closed)", () => {
       ["并发会话预算为 0", { SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT: "0" }, "SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT"],
       ["checkpoint 配额超过协议上限", { SESSION_API_MAX_CHECKPOINTS_PER_SESSION: "257" }, "SESSION_API_MAX_CHECKPOINTS_PER_SESSION"],
       ["租户存储配额超过天花板", { SESSION_API_TENANT_STORAGE_QUOTA_BYTES: "1099511627777" }, "SESSION_API_TENANT_STORAGE_QUOTA_BYTES"],
+      // 阶段六 WP-64 审计归档面:默认值 + 天花板双闸(D-API-92)。
+      ["审计归档节拍超过天花板", { SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS: "604801" }, "SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS"],
+      ["审计归档节拍为 0", { SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS: "0" }, "SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS"],
+      ["审计归档批为 0", { SESSION_API_AUDIT_ARCHIVE_BATCH: "0" }, "SESSION_API_AUDIT_ARCHIVE_BATCH"],
+      ["审计在线保留窗口超过天花板", { SESSION_API_AUDIT_RETENTION_DAYS: "3651" }, "SESSION_API_AUDIT_RETENTION_DAYS"],
+      ["审计桶名过短", { SESSION_API_AUDIT_BUCKET: "ab" }, "SESSION_API_AUDIT_BUCKET"],
     ];
     for (const [name, env, field] of cases) {
       it(`${name}被拒绝启动`, () => {

@@ -35,15 +35,17 @@ import type { SessionApiConfig } from "../config.js";
 import {
   buildAuthPlugin,
   createTokenSigner,
-  InMemoryAuditSink,
   type TokenSigner,
 } from "../auth/index.js";
+import type { AuditSink } from "../auth/ports.js";
 import {
   AutoSnapshotPolicy,
+  AuditArchiveJob,
   createMinioClient,
   createPostgresPool,
   createRedisConnection,
   loadMigrationsFromDir,
+  PgAuditSink,
   PostgresActionLogStore,
   PostgresChallengeRegistry,
   PostgresSessionRepository,
@@ -203,7 +205,14 @@ export interface SessionApiRuntime {
   readonly terminalCleaner: TerminalSessionCleaner;
   readonly manager: LiveSessionManager;
   readonly signer: TokenSigner;
-  readonly audit: InMemoryAuditSink;
+  /**
+   * 审计落库面(WP-64,D-API-91):生产装配 = PgAuditSink(append-only 端口
+   * 零改动;落库失败 fail-closed 不静默);测试装配以内存实现注入(D-API-18 ③
+   * 边界:InMemory 仅供测试与未接线期,不得用于生产常驻)。
+   */
+  readonly audit: AuditSink;
+  /** 审计归档任务(WP-64,D-API-92;进程内定时面,可调用入口供运维 / 测试)。 */
+  readonly auditArchive: AuditArchiveJob;
   readonly authPlugin: FastifyPluginAsync;
   readonly sessionRoutes: FastifyPluginAsync;
   /** 公开描述包下发路由(GET /descriptors/:challengeId/:version;阶段五 WP-50,D-API-76)。 */
@@ -306,15 +315,39 @@ export async function buildSessionApiRuntime(
   });
   const autoSnapshot = new AutoSnapshotPolicy({ everyNRevisions: config.autoSnapshotEveryRevisions });
 
-  // ── 5. 认证栈(签名器单实例;审计为内存实现——PG 落库归阶段六审计面)──
+  // ── 5. 认证栈(签名器单实例;审计落库 = PgAuditSink,WP-64 收口 D-API-33
+  //    已知留白——append-only 端口语义零改动,落库失败 fail-closed 不静默)──
   const signer = await createTokenSigner(config.signingKey);
-  const audit = new InMemoryAuditSink();
+  const audit = new PgAuditSink(pool);
   const authPlugin = buildAuthPlugin({ config, signer, issuanceStore, revocationStore, audit });
 
   // ── 6. 在途会话管理器(WP-6 执行面:并发预算 / 配额 / action_log 落库)──
   // 指标面(WP-8,D-API-70):五指标族 + /metrics 插件在此创建并注入 manager。
   const metrics = new SessionMetrics();
   const metricsPlugin = buildMetricsPlugin(metrics);
+
+  // ── 6.2 审计归档任务(WP-64,D-API-92):进程内定时面(运维事件账不上审计
+  //    ——运行事实走受控日志 + /metrics 计数器 session_api_audit_archive_batches_total);
+  //    归档为副本形态(在线表不删行,T2 演进登记);首拍立即执行,其后按
+  //    SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS 节拍;停机步骤 stop-audit-archive。
+  const auditArchive = new AuditArchiveJob({
+    pool,
+    minio,
+    bucket: config.auditBucket,
+    batchSize: config.auditArchiveBatch,
+    retentionDays: config.auditRetentionDays,
+    intervalSeconds: config.auditArchiveIntervalSeconds,
+    metrics,
+    logger,
+  });
+  try {
+    await auditArchive.ensureBucket();
+  } catch (error) {
+    (redis as unknown as { disconnect(): void }).disconnect();
+    await pool.end().catch(() => undefined);
+    throw error;
+  }
+  auditArchive.start();
 
   // ── 6.1 调试实例编排器(阶段四 WP-41,ADR-DC1):变体供给 = WP-42 生产
   //    路径(双包 → challenge-compiler 装载管线 → buildDebugVariantBundle,
@@ -506,6 +539,12 @@ export async function buildSessionApiRuntime(
       },
     },
     {
+      name: "stop-audit-archive",
+      run: async () => {
+        auditArchive.stop();
+      },
+    },
+    {
       name: "close-postgres",
       run: async () => {
         await pool.end();
@@ -537,6 +576,7 @@ export async function buildSessionApiRuntime(
     manager,
     signer,
     audit,
+    auditArchive,
     authPlugin,
     sessionRoutes,
     descriptorRoutes,

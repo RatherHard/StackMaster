@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**) |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61) |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**);**阶段六 WP-64 审计面完善与归档 D-API-90~D-API-93 2026-09-12 增补(Q5 kind 集合定案 = D-API-59 开口收口、AuditSink PG 落库 = D-API-33 留白收口、归档对象存储、REVOKE 角色治理 = D-API-22 阶段六落地面——既有 D-API-1~89 条目语义零改动,D-API-59 / D-API-33 仅增收口指向)** |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61);2026-09-12 增补 D-API-90~D-API-93(阶段六 WP-64) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -253,7 +253,7 @@ WP-2 三端口的存储适配以**薄适配器**把 WP-3 `KeyValueStore` 原语�
 
 - `TokenIssuanceStore`:键域 `token:{jti}`(与 WP-2 端口语义同键名;jti 为服务端签发 UUID,仍经 `encodeURIComponent` 编码保形——与幂等键同一防键分隔符注入纪律,编码对 UUID 恒等)。`consume` 的**原子单次消费**由 `deleteIfPresent`(Redis `GETDEL`)仲裁:先 GET 取载荷、再以 GETDEL 结果为成功仲裁,并发下至多一方拿到记录,其余一律 null——语义与"GETDEL 单命令取删"等价,未签发 / 已消费 / 已吊销 / 记录过期四态同形(D-API-14 / D-API-18);载荷 JSON 形态在消费侧做最小形状校验,损坏按"无有效记录"处理(fail-closed);
 - `CredentialRevocationStore`:键域 `cred-revoked:{jti}`(存在即拒绝;TTL 由调用方按凭证剩余有效期给出);
-- `AuditSink`:**维持进程内内存实现**(append-only 深冻结)——`audit_log` 表域与归档归阶段六(D-API-20 预留面不含审计表),内存实现的"不得用于生产常驻"边界在此登记为已知留白,替换实现须保持 append-only 端口语义(D-API-18 ②)。
+- `AuditSink`:**维持进程内内存实现**(append-only 深冻结)——`audit_log` 表域与归档归阶段六(D-API-20 预留面不含审计表),内存实现的"不得用于生产常驻"边界在此登记为已知留白,替换实现须保持 append-only 端口语义(D-API-18 ②)。(**阶段六收口(2026-09-12,WP-64)**:留白由 **D-API-91** 收口——生产装配切至 `PgAuditSink`,`audit_log` 表 + 库层 append-only 触发器落位;内存实现保留为测试形态。)
 
 ### D-API-34 readiness 端点:GET /readyz,探针注入,失败面统一(阶段三 WP-4;D-API-9 预留的落地)
 
@@ -446,9 +446,11 @@ D-API-35 固定的 `CreateSessionGuard.beforeCreate(request, identity)` 接入�
 
 七键均过配置三道闸(未知保留键 / 取值天花板,fail-closed;D-API-9)。
 
-### D-API-59 审计面边界:kind 集合不因 WP-6 接线扩张(阶段三 WP-6)
+### D-API-59 审计面边界:kind 集合不因 WP-6 接线扩张(阶段三 WP-6;**阶段六 WP-64 已收口 → D-API-90**)
 
 审计 kind 七值封闭集合(D-API-18)在 WP-6 保持不变:①断线保持到期回收复用 `session_force_closed`(回收即服务端强制终止语义),detail 携带 `{reason:"disconnect_keepalive_expiry"}`;②快照字节预算超限、action_log 落库失败等"非终止性配额 / 持久化事件"只进受控日志,不新增审计种类——审计面是安全事件账(强制终止、凭证链路、提交),不是运维事件账;新增种类的需求归阶段六审计面(完整审计覆盖与归档)统一论证。理由:kind 集合是审计消费方的封闭契约,实现期逐次扩张会使集合退化为事件日志,丧失"审计事件 = 需要不可抵赖账目的安全事实"的边界。
+
+**阶段六收口(2026-09-12,WP-64)**:本条登记的"阶段六开口"由 **D-API-90** 收口——裁决域事件经统一论证一次定案入账(kind 集合七值 → 十值封闭集合,归档动作确认排除在审计外),集合冻结不逐次漂移;本条的"安全事件账 vs 运维事件账"边界裁决原样成立并被 D-API-90 继承。
 
 ## 三·八、跨域载荷机检与 Compose 集成(阶段三 WP-7;D-API-60 ~ D-API-66)
 
@@ -761,6 +763,63 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 - **compose 独立服务(信任域 4)**:`verifier` 服务 + 两个一次性角色治理 init 服务(`verifier-db-init`:独立 PG 角色 `verifier` 最小授权——submissions / challenge_versions / challenges 只读,verifier_runs SELECT/INSERT/UPDATE,verdicts SELECT/INSERT,零 DELETE / 零 DDL;`verifier-minio-init`:独立 MinIO 用户,`s3:GetObject` on `private-bundles/*` 与 `public-descriptors/*` 双桶策略(公开描述包为公开产物,零秘密面))——与 session-api 凭证不共享;**独立网络域 `verifier-net`**(postgres / minio 双宿,session-api 不入该网络;verifier 与编排器经 PG 单向解耦);镜像同一性保证引擎同锁(D-API-87)。host 降级形态以依赖服务管理面凭证运行(角色治理降级如实登记,CI 始终完整容器拓扑);
 - **CI compose-integration 拓扑扩展**:全拓扑 = PostgreSQL + Redis + MinIO + session-api + vm-worker + verifier(+ 2 init);裁决闭环集成测试 = submit → 队列 → 独立重放 → verdicts 落库全链路 + 队列跨 verifier 重启持久(停机提交 → 重启落库)+ 篡改矩阵(log_digest 复算不符 / 双包哈希不符 ⇒ run failed 零 verdicts;六记录项缺项 ⇒ `challenge_invalid`)+ 幂等(同一 submission 单一 verdicts 行);
 - **指标面(最小集,`verifier_` 命名空间,标签零秘密零标识符)**:`verifier_queue_depth`(gauge,pending run 数;D-API-72 队列深度语义延伸,T2 规模化判据输入)、`verifier_runs_total{outcome}`(outcome ∈ {completed, failed})、`verifier_verdicts_total{verdict}`(verdict ∈ 11 值冻结枚举,有界域)、`verifier_verify_duration_seconds`(histogram);指标名白名单机检沿 D-API-71(`METRIC_FAMILIES`)。
+
+## 三·十五、审计面完善与归档(阶段六 WP-64;D-API-90 ~ D-API-93)
+
+> 本节为 WP-64「审计面完善与归档」的定案记录,对应阶段六任务分解 §六 Q5 与退出条件 4(`audit_log` PG 落库 append-only 库层强制、kind 集合阶段六定案、归档对象存储往返、REVOKE 角色治理)。硬门槛继承:审计是**安全事件账不是运维事件账**;append-only 端口语义 + 库层强制;kind 集合扩展统一论证一次定案,不逐次漂移。既有契约面零改动:12 动作、16 错误码、嵌入协议 v1、会话 WSS 通道、`VerdictQueryResponse` 全部原样;session-api 现有审计事件的 kind 与 detail 形态零改动(沿七既有值)。
+
+### D-API-90 审计 kind 集合定案(Q5):七值 → 十值封闭集合一次定案冻结(D-API-59 开口收口;阶段六 WP-64)
+
+**现七值确认**(D-API-18 冻结集合,实现面 `apps/session-api/src/auth/ports.ts` 的 `AUDIT_EVENT_KINDS`,逐值原样):`embed_token_issued` / `embed_token_consumed` / `embed_token_revoked` / `session_credential_issued` / `create_session` / `submit` / `session_force_closed`。
+
+**裁决域四候选逐项裁决**(阶段六任务分解 §六 Q5;安全事件账 vs 运维事件账边界为唯一判据):
+
+| 候选 | 裁决 | 论证 |
+|---|---|---|
+| 裁决完成(`verdict_completed`) | **入账** | 成绩终态是审计重放与争议复核的必要要素——"该 submission 于何时刻被判为何值"是需要不可抵赖账目的安全事实;detail 携带 submissionId 与 11 值 verdict 字面(11 值为冻结有界域,零部分匹配信息,清单 §9.3 纪律);`challenge_invalid` / `replay_mismatch` / `engine_error` / `cancelled` 等非成绩方向是有效裁决(D-API-85),同以本值承载、detail 带 verdict 字面区分 |
+| 重放失败 / run failed(`verdict_replay_failed`) | **入账** | run 未产生任何裁决(重放执行面故障 / 重试耗尽)是裁决链路的安全状态(D-API-85 failed 语义;"失败细节只进受控日志与审计"在此兑现审计半边) |
+| 拒裁(`verdict_rejected`) | **入账** | 输入完整性 / 授权完整性 / 形态完备性事实导致裁决请求被拒(log_digest 复算不符、双包哈希与登记不符、对象取回越权、bundle lock 不一致、六记录项缺项等拒裁方向)是防篡改账目的核心面;run 状态机映射(failed vs completed + verdict)沿 D-API-87 主从关系,审计 kind 记录的是**拒裁安全事实**而非 run 状态,detail 携带拒裁方向码 |
+| 归档动作(archive 批完成) | **排除** | 运维事件账,不上审计(D-API-59 原裁决"审计面是安全事件账不是运维事件账"的直接适用);运行事实走受控日志 + `/metrics` 计数器 `session_api_audit_archive_batches_total`(D-API-92) |
+
+**集合冻结机制(双锚)**:①TS 侧 `AUDIT_EVENT_KINDS` 十值常量(封闭联合类型,机检断言锚 `test/audit/audit-kinds.test.ts`:逐值冻结,任何字面漂移即红灯);②库层 `audit_log.kind` CHECK 约束(migrations/006 `audit_log_kind_closed_set`,十值字面同锚)——不经迁移的任何逐次漂移在库层即拒,verifier 角色的 INSERT 同受约束。**定案后集合冻结**:任何再扩张走新迁移 + 本条增补,不得在实现期逐次添加。
+
+**发射面归属(为 WP-62 预留,本包不实现)**:session-api 现有事件沿七既有值(调用面零改动);裁决域三值由 **WP-62 在 verifier 侧(信任域 4)发射**——verifier 本包不触碰,其发射依赖的库层预留已就位(`audit_log` CHECK 含三值 + verifier 角色 INSERT 授权,D-API-93)。
+
+### D-API-91 AuditSink PG 落库:`PgAuditSink` 与 `audit_log` 表(D-API-33 已知留白收口;阶段六 WP-64)
+
+- **端口语义零改动(D-API-18 ②)**:`AuditSink` 仍只有 `append(event)`,无更新 / 删除路径——端口形状即第一强制层;`PgAuditSink`(`src/persistence/pg/audit-sink.ts`)仅实现 append,参数映射 = kind / at(epoch 毫秒 → timestamptz)/ actor{tenantId, userId} / sessionId(可空)/ detail(仅非秘密标量字典 → jsonb,零凭证材料,D-API-18 detail 纪律);
+- **fail-closed 语义**:落库失败翻译为 `PersistenceError("store_unavailable")` 上抛,**绝不静默吞没**——审计是安全事件账,append 失败即调用方(签发 / 消费 / 生命周期链路)同步失败;错误消息只含稳定语义文案,零载荷细节(与持久化面错误纪律同源,红灯断言:消息不含 tenantId / sessionId / detail);
+- **`audit_log` 表(migrations/006)**:`id BIGINT GENERATED ALWAYS AS IDENTITY` 主键、`kind` / `at` / `tenant_id` / `user_id` / `session_id` / `detail JSONB` / `created_at`;kind CHECK 封闭集合(D-API-90);索引 `(created_at, id)`(归档切片)与 `(tenant_id, created_at)`;
+- **append-only 库层强制(第二层,D-API-22 `action_log` 同款)**:`BEFORE UPDATE / DELETE`(行级)+ `BEFORE TRUNCATE`(语句级)触发器一律 `RAISE EXCEPTION`('audit_log is append-only');红灯反例三连(容器门控 IT):UPDATE 拒 / DELETE 拒 / TRUNCATE 拒,外加**触发器禁用路径拒**(非属主角色 `ALTER TABLE ... DISABLE TRIGGER` 被权限层拒绝,角色治理红灯见 D-API-93);
+- **装配切换与行为同构**:生产装配(`buildSessionApiRuntime`)= `PgAuditSink(pool)`(D-API-33 留白收口);`InMemoryAuditSink` 保留为单测 / rig 形态(D-API-18 ③ 边界不变:不得用于生产常驻);两实现行为同构由 IT 断言(append → 库行读回 = 内存快照逐字段一致);compose 全拓扑断言真实进程链路(create_session 的审计事件经运行中 session-api 落库可查)。
+
+### D-API-92 归档对象存储:批切片、SHA-256 清单与批 ID 幂等(副本形态;计划书 5.7;阶段六 WP-64)
+
+- **形态**:进程内定时任务(`AuditArchiveJob`,不引入外部调度设施;多实例调度归 T2 演进)按节拍执行 runOnce:`audit_log` 按窗口切片 → MinIO 审计桶写**双对象**(数据 JSONL + SHA-256 清单)→ 归档后完整性校验 → 台账落行。归档是**副本形态:在线表不删行**(与 append-only 纪律零冲突;在线删除 / 裁剪归 T2 演进登记——在线保留窗口只决定"何时可归档",不触发删除);
+- **切片与游标**:窗口轴 = `created_at`(落库时刻),切片上界 = `now - SESSION_API_AUDIT_RETENTION_DAYS`;游标 = 台账最近批的**最后行 id**(`id` 严格单调)——**不采用时刻作游标**(登记实现期教训:库内时刻为微秒精度而 JS Date 只到毫秒,毫秒截断使游标回退、末行被重复选中;id 锚下零重叠零漏批);单批行数上限 = `SESSION_API_AUDIT_ARCHIVE_BATCH`;
+- **对象与清单**:数据对象 `audit-archive/{窗口起}-{窗口止}/{批ID}.jsonl`(对象名含批窗口;JSONL 每行 = 审计事件同构投影 `{id, kind, at, actor{tenantId, userId}, sessionId, detail}`,行内键序冻结、可选字段归一 null,同事件集合恒同字节);清单对象 `{批ID}.manifest.json`(`stackmaster-audit-archive-manifest/1`:batchId / 窗口 / lastId / rowCount / dataObjectName / **dataSha256** / dataBytes / archivedAt,键序冻结);
+- **归档后完整性校验(fail-closed)**:双对象写回后立即取回,数据字节 SHA-256 复算与清单 / 台账摘要三方比对,不符(或清单不可解析)即抛错且**台账不推进**(下次节拍重试同批);
+- **批 ID 幂等**:批 ID = 行集合边界(窗口起止 + 游标行 id)确定性派生的 SHA-256——同批重跑同 ID:台账命中即跳过上传(alreadyArchived);崩溃恢复(上传成功而台账未写)重跑同批**覆盖写同字节**后补台账——重复归档不产生双份(红灯断言:重跑后对象字节摘要不变、台账行数不变);
+- **失败重试**:runOnce 失败上抛(可调用入口可见);定时面 `tick()` 吞错转受控日志 + `failed` 计数,节拍自然重入即重试;
+- **运维事件账载体(D-API-90 归档排除的兑现)**:`/metrics` 计数器 `session_api_audit_archive_batches_total{outcome ∈ {completed, failed}}`(idle 稳态不计数;METRIC_FAMILIES 白名单内,D-API-71 标签纪律);
+- **配置键登记(过 D-API-9 三道闸)**:
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS` | 否 | 3600 | 上限 604800(归档节拍,秒;进程内定时面) |
+| `SESSION_API_AUDIT_ARCHIVE_BATCH` | 否 | 10000 | 上限 1000000(单批行数上限) |
+| `SESSION_API_AUDIT_RETENTION_DAYS` | 否 | 30 | 上限 3650(在线保留窗口,天;切片上界 = now - 窗口;**副本形态,在线行不删除**) |
+| `SESSION_API_AUDIT_BUCKET` | 否 | audit-archive | 审计归档桶名(3~63 字符;独立桶,与双包域分桶、最小授权面各自独立) |
+
+### D-API-93 REVOKE 角色治理与部署面(D-API-22 第二层的阶段六落地面;阶段六 WP-64)
+
+- **append-only 三层强制结构(汇总登记)**:①端口形状(只有 append,无更新 / 删除方法,D-API-18)→ ②库层触发器(`action_log` D-API-22 / `audit_log` D-API-91,任何角色 UPDATE / DELETE / TRUNCATE 一律库内被拒)→ ③应用连接角色 REVOKE(本条,部署面);二者叠加:即使触发器被(属主)禁用,角色权限层仍拒;即使角色被误授,触发器仍拒;
+- **session-api 应用角色 `session_app`**(`compose/session-api-db-init.sql`,与 WP-61 `verifier-db-init.sql` 同形态的一次性幂等 init 服务):两本 append-only 账仅 `SELECT, INSERT`(显式 `REVOKE UPDATE, DELETE, TRUNCATE`,零 DDL);其余按端口实际面最小授予(sessions SELECT/INSERT/UPDATE、checkpoints SELECT/INSERT/**DELETE(仅保留期清理 sanction,D-API-20/25)**、submissions / verifier_runs SELECT+INSERT(submit 入队,D-API-85)、verdicts SELECT(裁决呈现面姿态,D-API-83)、challenges SELECT/INSERT/UPDATE(upsert)、challenge_versions SELECT/INSERT、迁移记账表);
+- **verifier 角色预留(D-API-90 发射面的库层落位)**:`verifier-db-init.sql` 增 `GRANT INSERT ON audit_log` + `USAGE ON SEQUENCE audit_log_id_seq`——WP-62 可在 verifier 侧发射裁决域三值;verifier 对 `audit_log` **零 UPDATE / 零 DELETE**(kind CHECK 约束同锚);
+- **红灯矩阵(compose 套件;host 降级形态角色不存在时如实跳过登记,CI 完整容器拓扑实跑)**:`session_app` 对 audit_log INSERT 受理、UPDATE / DELETE 拒(permission denied,权限层;即便绕过亦被触发器拒)、`ALTER TABLE ... DISABLE TRIGGER` 拒(must be owner of table——第二层治理的第三红灯);verifier 角色对 audit_log INSERT(verdict_completed)受理、UPDATE / DELETE 拒;
+- **表属主例外与生产连线义务(登记)**:表属主的隐含权利不受 REVOKE 影响——迁移执行角色(属主)不受本治理约束;**生产部署义务:应用连接(`SESSION_API_POSTGRES_URL`)必须使用最小授权角色,不得使用表属主**;dev compose 拓扑的应用连接仍为管理面凭证(角色治理降级,如实登记——先例 D-API-87 host 形态同纪律;CI 始终完整容器拓扑,init 服务在拓扑内实跑)。
+
+
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 

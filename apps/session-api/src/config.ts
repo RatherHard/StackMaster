@@ -141,6 +141,26 @@ export const DEFAULT_MAX_DESCRIPTOR_BYTES = 262144;
 export const MAX_DESCRIPTOR_BYTES_CEILING = 4194304;
 
 /**
+ * 阶段六 WP-64 审计归档面(D-API-92):与既有面同一形态——常量默认值 +
+ * 配置天花板双闸。归档是运维事件账(不上审计,D-API-90),运行事实走
+ * 受控日志 + /metrics 计数器。
+ */
+/** 归档节拍默认值(秒;进程内定时面,D-API-92)。 */
+export const DEFAULT_AUDIT_ARCHIVE_INTERVAL_SECONDS = 3600;
+/** 归档节拍天花板(秒;7 天——超过即失去"定期"语义)。 */
+export const AUDIT_ARCHIVE_INTERVAL_SECONDS_CEILING = 604800;
+/** 单批归档行数默认值(切片窗口行上限;批越大对象越大,保守值)。 */
+export const DEFAULT_AUDIT_ARCHIVE_BATCH = 10000;
+/** 单批归档行数天花板。 */
+export const AUDIT_ARCHIVE_BATCH_CEILING = 1000000;
+/** 审计在线保留窗口默认值(天;切片上界 = now - 窗口;本阶段归档为副本形态,在线行不删)。 */
+export const DEFAULT_AUDIT_RETENTION_DAYS = 30;
+/** 审计在线保留窗口天花板(天;与终态会话保留窗口同档)。 */
+export const AUDIT_RETENTION_DAYS_CEILING = 3650;
+/** 审计归档桶缺省名(独立桶:审计副本与双包域分桶,最小授权面各自独立)。 */
+export const DEFAULT_AUDIT_BUCKET = "audit-archive";
+
+/**
  * 必备环境变量登记表(缺失即拒绝启动)。
  *
  * WP-1 骨架期无必备密钥;WP-2 登记凭证签名密钥、WP-3 登记存储端点时逐项
@@ -208,6 +228,11 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_TERMINAL_SESSION_RETENTION_DAYS",
   // ── 阶段五 WP-50 公开描述包下发通道(2026-09-11;D-API-76)──
   "SESSION_API_MAX_DESCRIPTOR_BYTES",
+  // ── 阶段六 WP-64 审计归档面(2026-09-12;D-API-92)──
+  "SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS",
+  "SESSION_API_AUDIT_ARCHIVE_BATCH",
+  "SESSION_API_AUDIT_RETENTION_DAYS",
+  "SESSION_API_AUDIT_BUCKET",
 ];
 
 const envSchema = z.object({
@@ -407,6 +432,26 @@ const envSchema = z.object({
     .min(1)
     .max(MAX_DESCRIPTOR_BYTES_CEILING)
     .default(DEFAULT_MAX_DESCRIPTOR_BYTES),
+  // ── 阶段六 WP-64 审计归档面(D-API-92):默认值 + 天花板双闸 ──
+  SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AUDIT_ARCHIVE_INTERVAL_SECONDS_CEILING)
+    .default(DEFAULT_AUDIT_ARCHIVE_INTERVAL_SECONDS),
+  SESSION_API_AUDIT_ARCHIVE_BATCH: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AUDIT_ARCHIVE_BATCH_CEILING)
+    .default(DEFAULT_AUDIT_ARCHIVE_BATCH),
+  SESSION_API_AUDIT_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AUDIT_RETENTION_DAYS_CEILING)
+    .default(DEFAULT_AUDIT_RETENTION_DAYS),
+  SESSION_API_AUDIT_BUCKET: z.string().min(3).max(63).default(DEFAULT_AUDIT_BUCKET),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -496,6 +541,15 @@ export interface SessionApiConfig {
   // ── 阶段五 WP-50 公开描述包下发通道(D-API-76)──
   /** 公开描述包响应体字节上限(桶内对象取回后、解析前强制);≤ MAX_DESCRIPTOR_BYTES_CEILING。 */
   readonly maxDescriptorBytes: number;
+  // ── 阶段六 WP-64 审计归档面(D-API-92)──
+  /** 审计归档节拍(秒;进程内定时面);≤ AUDIT_ARCHIVE_INTERVAL_SECONDS_CEILING。 */
+  readonly auditArchiveIntervalSeconds: number;
+  /** 单批归档行数上限(切片窗口);≤ AUDIT_ARCHIVE_BATCH_CEILING。 */
+  readonly auditArchiveBatch: number;
+  /** 审计在线保留窗口(天;切片上界 = now - 窗口;副本形态在线行不删);≤ AUDIT_RETENTION_DAYS_CEILING。 */
+  readonly auditRetentionDays: number;
+  /** 审计归档桶(独立桶;缺省 audit-archive)。 */
+  readonly auditBucket: string;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -636,6 +690,10 @@ export function loadSessionApiConfig(
     tenantStorageQuotaBytes: raw.SESSION_API_TENANT_STORAGE_QUOTA_BYTES,
     terminalSessionRetentionDays: raw.SESSION_API_TERMINAL_SESSION_RETENTION_DAYS,
     maxDescriptorBytes: raw.SESSION_API_MAX_DESCRIPTOR_BYTES,
+    auditArchiveIntervalSeconds: raw.SESSION_API_AUDIT_ARCHIVE_INTERVAL_SECONDS,
+    auditArchiveBatch: raw.SESSION_API_AUDIT_ARCHIVE_BATCH,
+    auditRetentionDays: raw.SESSION_API_AUDIT_RETENTION_DAYS,
+    auditBucket: raw.SESSION_API_AUDIT_BUCKET,
   };
 }
 

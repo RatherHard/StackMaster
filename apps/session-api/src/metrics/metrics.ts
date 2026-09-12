@@ -106,6 +106,12 @@ export const METRIC_FAMILIES: readonly MetricFamilySpec[] = [
     labels: [],
     type: "counter",
   },
+  {
+    name: "session_api_audit_archive_batches_total",
+    help: "审计归档批计数(outcome ∈ {completed, failed};idle 稳态不计数;运维事件账,D-API-92)",
+    labels: ["outcome"],
+    type: "counter",
+  },
 ];
 
 /** 动作 RTT 直方图分桶(秒):覆盖本地亚毫秒到看门狗超时上限的量级。 */
@@ -149,6 +155,7 @@ export class SessionMetrics {
   readonly #debugWorkerProcesses: client.Gauge;
   readonly #debugFrames: client.Counter<"frame" | "outcome">;
   readonly #debugBudgetRejections: client.Counter;
+  readonly #auditArchiveBatches: client.Counter<"outcome">;
 
   constructor(registry: client.Registry = new client.Registry()) {
     this.#registry = registry;
@@ -204,6 +211,12 @@ export class SessionMetrics {
       help: spec(7).help,
       registers: [registry],
     });
+    this.#auditArchiveBatches = new client.Counter({
+      name: "session_api_audit_archive_batches_total",
+      help: spec(8).help,
+      labelNames: ["outcome"] as const,
+      registers: [registry],
+    });
   }
 
   /** 动作 RTT 观测(秒)。 */
@@ -246,6 +259,11 @@ export class SessionMetrics {
   /** 调试帧被每会话动作预算拒绝计数(挤占观察,ADR-DC1 条款 6)。 */
   observeDebugBudgetRejection(): void {
     this.#debugBudgetRejections.inc();
+  }
+
+  /** 审计归档批计数(WP-64,D-API-92;运维事件账的 /metrics 载体,outcome 有界二值)。 */
+  observeAuditArchiveBatch(outcome: "completed" | "failed"): void {
+    this.#auditArchiveBatches.inc({ outcome });
   }
 
   /** 渲染 Prometheus 文本格式(经 /metrics 暴露;输出受白名单机检约束)。 */

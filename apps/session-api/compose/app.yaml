@@ -125,6 +125,12 @@ services:
         condition: service_completed_successfully
       verifier-minio-init:
         condition: service_completed_successfully
+      # 拓扑收敛(WP-64):应用连接角色治理 init 也纳入 verifier 启动前置——
+      # 两个 init 服务全部完成后裁决面才进入服务态(审计发射面的库层授权
+      # 齐备);compose up --wait 将无依赖方的一次性容器退出判为应用失败,
+      # 故一次性 init 必须以 service_completed_successfully 挂入依赖图。
+      session-api-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -146,6 +152,26 @@ services:
     entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init/verifier-db-init.sql"]
     networks:
       - verifier-net
+    depends_on:
+      session-api:
+        condition: service_healthy
+    restart: "no"
+
+  # ── 阶段六 WP-64:session-api 应用连接角色治理(D-API-93;D-API-22 第二层)──
+  # 一次性 init:最小授权角色 session_app(两本 append-only 账 REVOKE
+  # UPDATE/DELETE,详见 session-api-db-init.sql)。dev 拓扑的应用连接仍走
+  # 管理面凭证属角色治理降级(如实登记,与 verifier host 形态同纪律);
+  # 生产连线义务(应用经本角色连接)随部署面执行。
+  session-api-db-init:
+    image: postgres:16
+    environment:
+      PGHOST: postgres
+      PGUSER: stackmaster
+      PGPASSWORD: stackmaster-dev
+      PGDATABASE: session_api
+    volumes:
+      - ./session-api-db-init.sql:/init/session-api-db-init.sql:ro
+    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init/session-api-db-init.sql"]
     depends_on:
       session-api:
         condition: service_healthy

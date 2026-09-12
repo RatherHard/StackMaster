@@ -9,8 +9,9 @@
  *  - CredentialRevocationStore 是会话凭证 jti 的吊销键域(存在即拒绝),
  *    键 TTL 不得小于凭证剩余有效期;
  *  - AuditSink 是 **append-only 端口语义**:只有 append,没有更新 / 删除;
- *    PG 落库实现(WP-3 / WP-4)须以数据库层强制追加性(任务分解 WP-3
- *    `action_log` 同一纪律),内存实现(本包)以深冻结对象表达同一语义。
+ *    PG 落库实现(阶段六 WP-64 收口,D-API-91)以数据库层强制追加性
+ *    (任务分解 WP-3 `action_log` 同一纪律;`audit_log` 触发器 + REVOKE
+ *    双层,migrations/006),内存实现(本包)以深冻结对象表达同一语义。
  *
  * 端口方法全部异步:内存实现即时返回,Redis / PG 适配器不因签名形状受限。
  */
@@ -50,12 +51,32 @@ export interface CredentialRevocationStore {
 }
 
 /**
- * 审计事件种类(枚举冻结;WP-2 审计最小写入面)。
+ * 审计事件种类(枚举冻结;阶段三 WP-2 七值 + 阶段六 WP-64 Q5 定案裁决域
+ * 三值 = **十值封闭集合**,D-API-90 一次性定案后冻结,不逐次漂移——
+ * D-API-59 的阶段六开口由此收口;库层 CHECK 约束同锚,migrations/006)。
+ *
  * 会话凭证的吊销不设独立种类:运行期吊销由强制终止流程触发(以
  * `session_force_closed` 承载),embed token 的吊销以 `embed_token_revoked`
  * 承载。
+ *
+ * 裁决域三值(发射面归属:verifier 侧,信任域 4,WP-62 接线;本包只定案
+ * 集合并预留库层,verifier 角色对 audit_log 仅有 INSERT,D-API-93):
+ *  - `verdict_completed`:裁决完成(run completed,verdicts 行落库,detail
+ *    携带 submissionId 与 11 值 verdict 字面;成绩终态是审计重放与争议复核
+ *    的必要要素)——含 challenge_invalid / replay_mismatch 等非成绩方向
+ *    (它们是有效裁决,D-API-85/87);
+ *  - `verdict_replay_failed`:重放失败(run failed:重放执行面故障 / 重试
+ *    耗尽,run 未产生任何裁决,D-API-85 failed 语义;裁决链路安全状态);
+ *  - `verdict_rejected`:拒裁(输入完整性 / 授权完整性 / 形态完备性事实
+ *    导致裁决请求被拒:log_digest 复算不符、双包哈希与登记不符、对象取回
+ *    越权、bundle lock 不一致、六记录项缺项等拒裁方向;run 状态机映射沿
+ *    D-API-87 主从关系,审计 kind 记录的是拒裁安全事实)。
+ *
+ * 归档动作(archive 批完成)**不在集合内**:运维事件账不上审计
+ * (D-API-59 原裁决),走受控日志 + `/metrics` 计数器(D-API-92)。
  */
 export const AUDIT_EVENT_KINDS = [
+  // ── 阶段三 WP-2 七值(D-API-18,原样零改动)──
   "embed_token_issued",
   "embed_token_consumed",
   "embed_token_revoked",
@@ -63,6 +84,10 @@ export const AUDIT_EVENT_KINDS = [
   "create_session",
   "submit",
   "session_force_closed",
+  // ── 阶段六 WP-64 Q5 定案:裁决域三值(D-API-90;发射面 = WP-62 / verifier)──
+  "verdict_completed",
+  "verdict_replay_failed",
+  "verdict_rejected",
 ] as const;
 
 export type AuditEventKind = (typeof AUDIT_EVENT_KINDS)[number];

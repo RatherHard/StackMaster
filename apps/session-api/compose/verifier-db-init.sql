@@ -25,3 +25,9 @@ GRANT SELECT ON challenges TO verifier;
 GRANT SELECT ON challenge_versions TO verifier;
 GRANT SELECT, INSERT, UPDATE ON verifier_runs TO verifier;
 GRANT SELECT, INSERT ON verdicts TO verifier;
+
+-- 审计发射面预留(WP-64 Q5 定案 / WP-62 接线,D-API-90 / 93):verifier 可
+-- 追加裁决域审计事件(verdict_completed / verdict_replay_failed / verdict_rejected);
+-- 零 UPDATE / 零 DELETE(append-only,库层触发器同拒;kind CHECK 同约束)。
+GRANT INSERT ON audit_log TO verifier;
+GRANT USAGE ON SEQUENCE audit_log_id_seq TO verifier;
