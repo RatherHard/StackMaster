@@ -50,6 +50,16 @@ export const SCHEMA_CLASSIFICATIONS = {
     rootClass: "public",
     fieldClasses: {},
   },
+  "verdict-query-response": {
+    rootClass: "public",
+    fieldClasses: {
+      submissionId: "public",
+      revision: "public",
+      status: "public",
+      verdict: "public",
+      decidedAt: "public",
+    },
+  },
   "public-state-projection": {
     rootClass: "public",
     fieldClasses: {

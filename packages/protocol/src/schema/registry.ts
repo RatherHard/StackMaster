@@ -32,7 +32,9 @@ import {
   DEBUG_SCHEMA_BASE_ID,
   EMBED_SCHEMA_BASE_ID,
   SESSION_ACTION_SCHEMA_BASE_ID,
+  VERDICT_SCHEMA_BASE_ID,
 } from "../version.js";
+import { VerdictQueryResponseSchema } from "../verdict/verdict-query-response.js";
 
 /** 已登记字段分类的 Schema 名(与 SCHEMA_CLASSIFICATIONS 键严格对齐)。 */
 export type SchemaName = keyof typeof SCHEMA_CLASSIFICATIONS;
@@ -114,6 +116,14 @@ export const SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "DebugFrame",
     baseId: DEBUG_SCHEMA_BASE_ID,
     schema: DebugFrameSchema,
+  },
+  {
+    // 裁决呈现通道查询响应(阶段六 WP-60,D-API-83 / D-API-86):正式裁决的
+    // 唯一公开承载面(11 值结果类型 + 契约定位字段),独立版本命名空间。
+    name: "verdict-query-response",
+    title: "VerdictQueryResponse",
+    baseId: VERDICT_SCHEMA_BASE_ID,
+    schema: VerdictQueryResponseSchema,
   },
 ];
 

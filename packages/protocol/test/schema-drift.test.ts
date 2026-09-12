@@ -166,6 +166,38 @@ describe("JSON Schema 生成产物(落盘纪律)", () => {
     ]);
   });
 
+  it("verdict-query-response 的 pending/verdicted 状态机耦合以 if/then 形态注入落盘产物(superRefine 等价物,阶段六 WP-60)", () => {
+    const document = JSON.parse(
+      readFileSync(join(OUTPUT_DIR, "verdict-query-response.schema.json"), "utf8"),
+    ) as { allOf?: unknown[]; $id?: string };
+    // 独立契约族版本命名空间(VERDICT_CHANNEL_PROTOCOL_VERSION 派生)。
+    expect(document.$id).toBe("https://stackmaster.dev/schemas/verdict/v1/verdict-query-response.schema.json");
+    // pending ⇒ verdict 与 decidedAt 整体缺席;verdicted ⇒ 两者必在。
+    expect(document.allOf).toEqual([
+      {
+        if: {
+          properties: { status: { const: "pending" } },
+          required: ["status"],
+        },
+        then: {
+          allOf: [
+            { not: { required: ["verdict"] } },
+            { not: { required: ["decidedAt"] } },
+          ],
+        },
+      },
+      {
+        if: {
+          properties: { status: { const: "verdicted" } },
+          required: ["status"],
+        },
+        then: {
+          required: ["verdict", "decidedAt"],
+        },
+      },
+    ]);
+  });
+
   it("provisional 临时标记已彻底退场:任何落盘产物不得再出现 x-sm-provisional(M-3 收口)", () => {
     for (const fileName of readdirSync(OUTPUT_DIR)) {
       if (!fileName.endsWith(".json")) {

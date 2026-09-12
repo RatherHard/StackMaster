@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**) |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54) |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**) |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -37,6 +37,12 @@ HTTP 路由表为**实现面文档登记**,不作 JSON Schema 契约(WP-0 冻结
 | 路由(阶段五 WP-50 增补行) | 命令 | 请求体契约 | 成功响应契约 |
 |---|---|---|---|
 | `GET /descriptors/:challengeId/:version` | ——(公开内容读取,非会话命令) | 无(路径参数:challengeId 冻结标识符字符集、version 语义化版本字符集,违规同形 404) | 描述包 JSON 原始字节(`application/json`;`ETag` = 登记摘要;体 = `public-descriptors` 桶对象,逐字节确定性) |
+
+**阶段六 WP-60 增补(2026-09-12)**:裁决查询端点登记为 **`GET /verdicts/:submissionId`**(D-API-83 定案;会话凭证同模型、租户 / 用户归属校验,载荷契约 `VerdictQueryResponse`):
+
+| 路由(阶段六 WP-60 增补行) | 命令 | 请求体契约 | 成功响应契约 |
+|---|---|---|---|
+| `GET /verdicts/:submissionId` | ——(裁决查询,非会话命令) | 无(路径参数 submissionId 冻结标识符字符集,违规同形 404) | `VerdictQueryResponse`(`@stackmaster/protocol`,`…/schemas/verdict/v1`;pending / verdicted 两态;非 2xx = 冻结 `PublicError`) |
 
 ### D-API-2 WSS 传输帧随会话动作协议版本编号;连接级版本锚定(阶段三 WP-0)
 
@@ -661,6 +667,56 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 **失败呈现纪律**:全部失败折叠进 `descriptorStatus = "absent"` → 工作区「题目描述未加载」静态明示面板;原因码属诊断面不进玩家可见 DOM;不中断会话、零重试风暴。**装配时序**:引导配置就绪即并行发起描述包获取(与 create_session 并行),晚到即注入(hintLadder / publicErrorMapping / 静态面 / debugModeAvailable 到达即补写)、缺席不中断会话(渐进增强,workspace 就绪只等待握手 + create_session)。**静态面落点**:`sm-workspace.challengeStatic`(title / summary / VM Profile 事实表 / encodingTable)+ `<details>` 折叠形态零视觉重设计,新文案走 D-API-81 i18n 双目录;缺席明示 ≠ 空数据(与"本题没有配置提示"语义分离)。**plugin-dev 双通道**:夹具通道缺省保留(开发态零依赖正式部署,形态自检测试继续生效)、`?descriptor=formal` 经 vite `/descriptors` 反代同源走正式端点(同源形态 ETag 可读);跨源直取依赖服务端 `exposedHeaders: ["ETag"]`(D-API-76 增补段,主控已登记)。夹具 ↔ 公开 Schema 形态一致性断言(`packages/challenge-schema/test/fixture-consistency.test.ts`)对齐锚 = 公开 Schema。
 
 测试锚:`packages/vm-ui/test/descriptor/challenge-descriptor.test.ts`(获取序 / 红灯逐项 / 护栏 / 原因码)、`packages/vm-ui/test/workspace/sm-workspace-descriptor.test.ts`、`packages/web-component/test/descriptor-channel.test.ts`(装配管线,76 用例之一部)、`packages/challenge-schema/test/fixture-consistency.test.ts`;E2E `apps/plugin-dev/e2e/descriptor.spec.ts`(正式下发全链路 3 用例)。
+
+## 三·十三、裁决呈现通道与异步裁决语义(阶段六 WP-60;D-API-83 ~ D-API-86)
+
+> 本节为 WP-60「裁决呈现通道与异步裁决语义定案(前置,契约先行)」的定案记录,对应阶段六任务分解 §一边界裁决 2 的候选新契约面 (a) 与 §六决策点 Q2 / Q3。**契约先行纪律**:本节定案与 `@stackmaster/protocol` 契约增量(`VerdictQueryResponse`)、字段分类硬门槛论证(WP-1 清单 §6.10,v1.14)、golden fixture 与 contract-smoke 接入同步冻结;session-api 路由实现归 WP-63(呈现消费)、verifier 服务本体归 WP-61——**实现不得先于契约**(WP-60 完成标准,本 WP 不动 session-api / verifier 实现面与 vm-engine)。既有契约面零改动:submit 响应面 `{submissionId, revision}`、12 动作、16 错误码、嵌入协议 v1、调试通道协议、会话 WSS 通道全部原样(阶段六边界裁决 2)。
+
+### D-API-83 裁决呈现通道定案(Q2):REST 查询面 `GET /verdicts/:submissionId`;呈现链路 = session-api 读裁决域;载荷上限面 = 11 值公开、其余 SERVER_ONLY(阶段六 WP-60)
+
+任务分解 §六 Q2 的定案。三候选取舍:
+
+- **定案 = 候选 (a) REST 查询面**:正式裁决是低频查询(一次提交至多数次重询),不是交互流;REST 面复用既有凭证 / 错误 / 限流 / 机检全套纪律,契约面最小;
+- **排除候选 (b) 认证 WSS 通道帧扩展**:阶段六边界裁决 2 冻结「会话 WSS 通道零改动」,帧类型集合封闭(D-API-6:扩展消息类型 = 协议版本演进);裁决呈现新开帧族即触发既有通道版本面演进,违背「本阶段候选新契约面恰两处、通道零改动」基线;
+- **排除候选 (c) 两者并存**:WSS 推送形态在 (a) 已可承接(客户端重询即推送的退化形态),双面冗余扩大探测面与实现面,零收益。
+
+**呈现链路定案**:session-api(信任域 2)直接读裁决域 PG `verdicts` 表呈现;**verifier(信任域 4)不对外提供查询面**——信任域 4 是独立凭证与网络域(5.2 / 5.8),零浏览器可达路由面。裁决唯一出处 = verifier 对规范化动作日志的独立重放(硬门槛),呈现 = session-api 读库:写入方与呈现方经 PG 单向解耦,verifier 故障不拖垮呈现面(已落库裁决可查,未落库 = 确定性 pending,D-API-84);编排器、通道与浏览器任何位置不预判、不缓存、不改写裁决(硬门槛)。
+
+**认证与归属校验(会话凭证同模型)**:裁决查询复用会话凭证(`authenticateSessionCredential` 同一入口,Cookie 呈递;GET 非变更方法不走 CSRF 闸,D-API-17 同纪律)。**Cookie Path 调宽登记**:D-API-12 的凭证 Cookie 为精确 `Path=/sessions`,裁决路由族在其覆盖之外——按 D-API-12 预留的装配参数路径调宽 cookie path 至根 `Path=/`(覆盖 `/sessions` 与 `/verdicts` 两族;`HttpOnly` / `Secure` / `SameSite=Strict` 属性零改动;签发端点 `/auth/embed-tokens` 与公开描述包 `/descriptors` 不读凭证,不受影响)。定位链:`verdicts` → `submissions`(同 `submission_id`)→ 会话归属(tenantId 与凭证 claims 全等 + sessionId 与凭证 claims 全等;查询层租户校验强制,D-API-20),任一环不符 = **404 + 冻结 `PublicError`**(`invalid_input_format` / "resource not found")——跨租户、跨会话与"不存在"同形态(防枚举,D-API-32 会话定位失败行同形)。
+
+**载荷上限面与字段分类论证(硬门槛)**:载荷为五字段 strictObject 上限面 `{submissionId, revision, status: "pending" | "verdicted", verdict?: <冻结 11 值结果类型>, decidedAt?}`——**11 值结果类型公开,其余全部 SERVER_ONLY**。逐字段硬门槛论证见 WP-1 清单 §6.10(v1.14,走 §1.3 契约变更流程先行);要点:判定细节(`verdicts.detail` 列)、提交引用(`submissions.reference`,D-W8-9 完整形态)、隐藏测试内容、谓词 / 命中 / 测试索引、重放中间态在本载荷**无 sanctioned 表达位**(strictObject 即拒,红灯 fixture 登记);零部分匹配信息(D1 约束 1 / 3、I-7:无进度字段、无队列位置、无预计等待);载荷字段全部 `PUBLIC`(值来源 ⊆ 服务端签发标识符 / 玩家操作史 / 裁决落库状态 / 公开枚举契约 / 服务端时钟)。跨域载荷机检(ZR-B9 / ZR-B2 语料)对响应录制面的覆盖沿 D-API-61 既有捕获面延伸(归 WP-63 / WP-67 集成承接)。
+
+**版本面**:`VERDICT_CHANNEL_PROTOCOL_VERSION = 1`(独立契约族,与调试通道同款独立编号先例——新契约面按 5.6 携带独立版本号,不搅动既有协议版本空间),受理集合锚点 `SUPPORTED_VERDICT_CHANNEL_PROTOCOL_VERSIONS`,JSON Schema $id 命名空间 `https://stackmaster.dev/schemas/verdict/v1`;**响应载荷不携带版本字段**(沿 `SessionCommandResponse` 先例,N-1 受理是路由级事实,回显版本判定细节即扩大探测面),契约版本由 $id 命名空间承载;N-1 窗口约定同 D-API-4 形态(破坏性变更递增版本常量,窗口期双版本路由受理)。
+
+### D-API-84 异步裁决语义定案(Q3):pending → verdicted 单向状态机;重询限流 429 冻结形态;非成绩方向呈现与重试语义;裁决不可用 ≠ 判负(fail-closed 登记;阶段六 WP-60)
+
+任务分解 §六 Q3 的定案。
+
+- **状态机**:submit 受理(`submissions` 行登记)即 `pending`;verifier 裁决落库(`verdicts` 行写入)即 `verdicted`;**单向不可逆**——verdicted 无回退路径,"重新裁决"以新 submit → 新 submissionId → 新 pending 承载。**提交后未决期「已提交」态语义不变**:submit 响应面 `{submissionId, revision}` 零改动;交互会话生命周期(动作、投影、won / failed)与裁决链路相互独立(清单 D6),pending 期交互行为零影响;
+- **pending 确定性形态**:未决期内任意次重询返回**恒定三字段形态**(无队列位置、无进度、无预计等待——I-7 无进度泄露在裁决域的延伸;同 submission 未决期内载荷随 `submissionId` 确定而字节确定,I-4 同族);UI 呈现「已提交」态,不得把 pending 误读为通过 / 失败(任务分解 §六风险表"裁决呈现与「已提交」态漂移"的定案锚,呈现面归 WP-63);
+- **重询限流(429 冻结形态)**:裁决查询频率上限为**新增配置键** `SESSION_API_VERDICT_QUERIES_PER_MINUTE`(默认 30 / 分钟,天花板 100000,固定窗口 60 s;计量域 `rate:{tenant}:{user}:verdict` 维度子键,沿 D-API-50 提交频率闸同款载体与键域纪律),触顶 = **429 + 冻结 `PublicError`** `{code:"budget_exhausted", message:"rate limit exceeded"}`——与 D-API-50 频率类冻结形态**字节级一致**,同类别恒同三元组、零限流器状态透出;计数器故障 fail-closed(`store_unavailable` → 503,不降级不静默放行,D-API-24 分级)。契约级红灯锚已落:protocol 单测锁定该形态在冻结 `PublicErrorSchema` 下的合法性与零解释面(`budget_exhausted` 能力矩阵 addressHex / explanation 双 forbidden)。数值复核归 WP-65(Q6,k6 证据驱动;本 WP 定形态与默认值);
+- **非成绩方向呈现与重试语义**:`engine_error` / `challenge_invalid` / `replay_mismatch` / `cancelled` 等非成绩方向是**已产生的裁决**(`verdicted` + 11 值冻结字面),不是"未决":呈现为非成绩结果(UI 文案明示"本次提交未产生成绩",走 i18n 双目录纪律);**不自动重试**(verifier 对已落库裁决零重试);客户端侧提供**重新提交入口**(显式新 submit → 新 submissionId → 新 pending;旧 submission 与旧裁决不动);非成绩方向成绩语义为零,不与交互 won / failed 混同(D6:交互独立于正式裁决,双向);
+- **裁决不可用 ≠ 判负(fail-closed 方向登记)**:队列积压、verifier 实例故障、裁决域存储不可用时,呈现面保持确定性 `pending` 或 503 `store_unavailable` 同形(D-API-32 存储不可用行),**绝不**以 `timeout` / `wrong_answer` 类兜底判负——「无裁决」与「判负」在契约面结构性不可混淆(`status = "pending"` 无 `verdict` 字段,红灯 fixture 锁定);verifier run 失败不产生 verdicts 行,查询面恒为 pending(D-API-85);
+- **侧信道登记**:异步队列使裁决时延与载荷解耦(阶段六 WP-67 侧信道审查的登记面);`decidedAt` 单值时刻不构成侧信道通道(清单 §6.10 论证:pending 态整体缺席,不存在"已等待多久"的公开读数);重询响应形态与秘密内容零相关——载荷只有 11 值字面,无部分匹配信息(D1 约束 1 兑现)。
+
+### D-API-85 裁决队列触发形态定案:PG 轮询(FOR UPDATE SKIP LOCKED);`verifier_runs` 状态机与 `log_digest` 绑定面(阶段六 WP-60;边界裁决 4 约束)
+
+- **触发形态定案 = PG 轮询**:verifier 以 `SELECT ... FOR UPDATE SKIP LOCKED` 批量认领待裁决行(轮询间隔与批量大小为实现期参数,归 WP-61;行锁认领即互斥,多 verifier 实例天然安全)。取舍理由(受阶段六边界裁决 4 路线纪律约束):**Redis Streams 不引入**(5.1 路线纪律禁止);**LISTEN/NOTIFY 不引入**——通知是触发优化而非正确性依赖,且把队列语义绑定到 PG 连接模型,MVP 单 verifier 实例规模下轮询足够;多实例 verifier 规模化触发时按 **T2 演进登记**复核(只登记,本阶段不实现)。队列以 PG 承载 = 004 迁移裁决域两表(`verdicts` / `verifier_runs`)预留结构启用写入(阶段三"零写入"承诺兑现,D-API-20);
+- **入队语义**:submit 受理时 session-api 在写入 `submissions`(内部裁决引用完整形态,D-W8-9)的同时插入 `verifier_runs` 行(`status = 'pending'`,`log_digest` = `submissions.reference` 内规范化动作日志的 SHA-256 十六进制摘要)——入队与提交引用同锚;`pending` 行即队列本体,零新增队列设施;
+- **`verifier_runs` 状态机**:`pending → running → completed / failed`(单向):verifier 认领 → `running` + `started_at`;重放 + 隐藏测试裁决完成 → `completed` + `finished_at`,同事务写 `verdicts` 行。**裁决幂等**:`verdicts.submission_id` 唯一,同 submission 重复裁决确定性同判、不重复写入(裁决可复现是阶段六退出条件 2 的实现前提);run 自身故障(进程崩溃 / 装载失败 / 六记录项缺项等**无法产生任何裁决**的形态)→ `failed` + `finished_at`(失败细节只进受控日志与审计,不进公开面)。**failed ≠ 非成绩裁决**:`replay_mismatch` / `engine_error` / `challenge_invalid` 是有效裁决(`completed` + verdicts 行,11 值内字面);`failed` 表示"本次 run 未产生裁决",不改写 `submissions` / `verdicts`,verifier 对其 submission 的重试以新 run 行承载(最大重试次数归 WP-61 实现期定案),重试耗尽仍 failed 的 submission 查询面恒为 pending(D-API-84 fail-closed 方向);
+- **`log_digest` 绑定面(004 预留表消费语义定案)**:`log_digest`(CHAR(64),SHA-256 hex)是**可重放性的绑定锚**(004 迁移列注释兑现):verifier 取回 `submissions.reference` 后先复算其动作日志摘要与 `verifier_runs.log_digest` 比对——不一致 = 拒裁方向(run 置 failed,不落 verdicts,审计登记;篡改检测锚,与 WP-61 `replay_mismatch` 语义互补:digest 不符在重放之前即拒);verdicts 行经 `submission_id` 关联 run 行即可复核"该裁决判的是哪份日志",可机检回答。digest 只绑定日志内容,零 seed / 零私有包内容(004 迁移注释纪律;verifier 对 seed 零驻留,边界裁决 3)。
+
+### D-API-86 契约增量与机检接入登记:VerdictQueryResponse(WP-1 §1.3 全流程)、contract-smoke 接入形态与 serde 镜像不设的理由、配置键登记(阶段六 WP-60)
+
+- **契约增量(既有契约零改动)**:`VerdictQueryResponseSchema`(strictObject 五字段上限面 + superRefine 状态机耦合)冻结于 `@stackmaster/protocol` 新模块 `src/verdict/verdict-query-response.ts`,**公开入口导出**(浏览器可达——它是呈现通道的消费契约,与 `SessionCommandResponse` 同类);JSON Schema 落盘 `schema/verdict-query-response.schema.json`(`$id = …/schemas/verdict/v1/verdict-query-response.schema.json`,`x-sm-class: public`);分类清单 `schema/classification.json` 增登记条目(既有条目零改动);版本常量 `VERDICT_CHANNEL_PROTOCOL_VERSION` / `SUPPORTED_VERDICT_CHANNEL_PROTOCOL_VERSIONS` / `VERDICT_SCHEMA_BASE_ID` 入 `src/version.ts`;状态机耦合以等价 if/then 注入生成管线(`VERDICT_QUERY_STATUS_COUPLINGS`,先例 `ACTION_RESPONSE_REJECTED_COUPLING` / `DEBUG_VARIANT_ASLR_COUPLINGS`),superRefine 与落盘产物双侧锁定、schema-drift 测试断言注入形态;
+- **WP-1 §1.3 流程回执**:清单 §6.10 逐字段硬门槛论证(v1.14)先行 → Zod Schema → JSON Schema 落盘 → classification 登记 → golden fixture(合法 6:pending / verdicted×{success, wrong_answer, engine_error, replay_mismatch, cancelled}——覆盖成绩方向与非成绩方向;反例 12:状态机耦合四向(pending 携带 verdict / pending 携带 decidedAt / verdicted 缺 verdict / verdicted 缺 decidedAt)、11 值外字面、部分匹配对象形态、SERVER_ONLY detail 注入、队列位置与预计等待进度字段、负 revision、标识符字符集违规、状态枚举外值、非整数时刻)→ contract-smoke 接入;
+- **contract-smoke 接入形态**:§1 Schema 编译自动覆盖(全目录遍历,编译计数 19 → 20);§2 实例校验映射 `PROTOCOL_CONTRACTS` 扩入 `verdict-query-response`——Rust 侧有效接受 / 非法拒绝与 TS 同判,**if/then 耦合的跨语言机检由此承接**(有效样例 55 → 61,非法样例 115 → 127);§3 规范化摘要清单自动覆盖全部新 fixture(`fixtures:manifest` 重生成,比对 214 → 232 条)。**serde + schemars 镜像不设**(§4):理由沿 D-API-7——本契约消费面止于 TS 侧(浏览器 vm-ui / 插件消费呈现,session-api 产出),verifier 不消费该响应契约(verifier 面向 PG 裁决域与内部引用,不经呈现通道);未来 Rust 侧若需消费,按 WP-1 §1.3 流程扩 §4 镜像;
+- **红灯语料边界(实现期红灯归属)**:本 WP 交付**契约级红灯**(fixture 反例矩阵 + protocol 单测:pending 确定性形态与进度类字段拒绝 / 状态机耦合 / 非成绩方向与成绩方向同构呈现 / 429 冻结形态在 `PublicErrorSchema` 下的合法性与零解释面 / 限流器状态零透出);**路由实现期红灯**(404 同形矩阵、401 统一形态、429 逐字节断言、Cookie Path 覆盖、跨租户与不存在同形、响应面机检扫描)归 WP-63 集成测试——不得先于本契约实现(WP-60 完成标准"契约先冻结后实现");
+- **配置键登记(过 D-API-9 三道闸)**:
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_VERDICT_QUERIES_PER_MINUTE` | 否 | 30 | 上限 100000(裁决查询频率,窗口恒 60 s;`rate:{tenant}:{user}:verdict` 维度子键,D-API-84;数值复核归 WP-65 Q6) |
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/verdict/v1/verdict-query-response.schema.json",
+  "title": "VerdictQueryResponse",
+  "x-sm-class": "public",
+  "type": "object",
+  "properties": {
+    "submissionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "verdicted"
+      ]
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "success",
+        "wrong_answer",
+        "invalid_action",
+        "program_crash",
+        "memory_fault",
+        "resource_limit",
+        "timeout",
+        "engine_error",
+        "challenge_invalid",
+        "replay_mismatch",
+        "cancelled"
+      ]
+    },
+    "decidedAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "submissionId",
+    "revision",
+    "status"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "pending"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "allOf": [
+          {
+            "not": {
+              "required": [
+                "verdict"
+              ]
+            }
+          },
+          {
+            "not": {
+              "required": [
+                "decidedAt"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "verdicted"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "verdict",
+          "decidedAt"
+        ]
+      }
+    }
+  ]
+}

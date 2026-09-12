@@ -39,6 +39,10 @@ const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
         "public-state-projection.schema.json",
     ),
     ("verdict-result", "verdict-result.schema.json"),
+    (
+        "verdict-query-response",
+        "verdict-query-response.schema.json",
+    ),
 ];
 const CHALLENGE_CONTRACTS: &[(&str, &str)] =
     &[("public-descriptor", "public-descriptor.schema.json")];

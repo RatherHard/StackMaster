@@ -603,6 +603,60 @@
     "packages/protocol/test/fixtures/session-credential-claims/valid/01-full-claims.json": {
       "sha256": "0c1a2cc4059d3fc924f27bfba5c57c57b71f7559007b4a9fcff548f3aa9d8115"
     },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/01-pending-carries-verdict.json": {
+      "sha256": "ee5f78386c567d6f6fcbd52611bda2b117559ff40b82c1201d4352a2d540d7ce"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/02-pending-carries-decided-at.json": {
+      "sha256": "acbdef94d79c6ff918af5de215ab578705656d4651ebe167d0cf6f189971d476"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/03-verdicted-missing-verdict.json": {
+      "sha256": "3ed9af02037475395da918cea8484e884cb76ef3b5265568224e18a5cb657b2f"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/04-verdicted-missing-decided-at.json": {
+      "sha256": "f555bffd72a40c19b0907ea1e7f156e40cb3ba7a495fce11843768f6ba9b6bbb"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/05-unknown-verdict-value.json": {
+      "sha256": "8e99e1c22c2cdc5722b1ed80c36ceaa4eadb2115d9badc75b7db920d15d7c879"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/06-verdict-partial-match-shape.json": {
+      "sha256": "95d377ab14f1ac6d62ccdb93893dc46684d0202f38b184ecfe8e85e9b8a81c6f"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/07-server-only-detail-tamper.json": {
+      "sha256": "f7b646d626b43ee16290c87fccb649e536e3fb7cc4172cb229ec3e173b22d2f1"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/08-negative-revision.json": {
+      "sha256": "040ac2acb653d47786c881f231a2fcc7df287bc57ce11943abf57a9efd4d3931"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/09-submission-id-charset-violation.json": {
+      "sha256": "445ae457f2ad3faab12a4dd8d8a43c8df0c8094434322408f50d59c23026c3c5"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/10-unknown-status-value.json": {
+      "sha256": "2a6db386bffe62ef3a06df37d3867bdc6a7bf2a86a63c16285a8d662d40b241f"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/11-pending-carries-queue-position.json": {
+      "sha256": "c6dc19102cdf9e19b8fda13ab6bcaa50675409e84d1b46198dda8f1ca1f58a39"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/invalid/12-float-decided-at.json": {
+      "rejected": "non_integer_number"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/valid/01-pending.json": {
+      "sha256": "41ccca1905d1d806cdae5443ba450aae17d3135613455be20fc270393ab716e0"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/valid/02-verdicted-success.json": {
+      "sha256": "63f8d2b05e7f037c9d14cb0cd3d078bb1b9a9b69e6db8f5e05bc048fa1da5075"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/valid/03-verdicted-wrong-answer.json": {
+      "sha256": "fcd678d77d96b86f724d9405c08194936a57de02e7edbab71442498beaf6e347"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/valid/04-verdicted-engine-error.json": {
+      "sha256": "4c8cd36bf52c3a8460a05b82475fe9954398e184fd458163667525d9f424df55"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/valid/05-verdicted-replay-mismatch.json": {
+      "sha256": "900796c19152f3be409210053f553582567f32e069dced8fe179ed6e7cc5cc23"
+    },
+    "packages/protocol/test/fixtures/verdict-query-response/valid/06-verdicted-cancelled.json": {
+      "sha256": "3f914f3175e71a2420ea9143eef763a8d4e752b285ea6fda8f1f2a2dff8ba49d"
+    },
     "packages/protocol/test/fixtures/verdict-result/invalid/01-unknown-value.json": {
       "sha256": "2a1f13c719ddf1e6120a110392005a4144525374c7ad4f81fd631c8a1cf2a8fa"
     },

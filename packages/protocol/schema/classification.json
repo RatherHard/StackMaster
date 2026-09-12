@@ -144,6 +144,19 @@
         "payload": "boundary"
       }
     },
+    "verdict-query-response": {
+      "file": "verdict-query-response.schema.json",
+      "title": "VerdictQueryResponse",
+      "baseId": "https://stackmaster.dev/schemas/verdict/v1",
+      "rootClass": "public",
+      "fieldClasses": {
+        "submissionId": "public",
+        "revision": "public",
+        "status": "public",
+        "verdict": "public",
+        "decidedAt": "public"
+      }
+    },
     "projection-policy": {
       "file": "projection-policy.schema.json",
       "title": "ProjectionPolicy",

@@ -59,6 +59,40 @@ const ACTION_RESPONSE_REJECTED_COUPLING = {
 } as const;
 
 /**
+ * VerdictQueryResponse 的 pending / verdicted 状态机耦合(阶段六 WP-60,
+ * 权威 API 语义规约 D-API-84;清单 §6.10):
+ * - status = "pending" ⇒ verdict 与 decidedAt 必须整体缺席(未决期确定性
+ *   形态:零进度、零队列位置、零部分匹配信息,I-7 / D1 约束 1);
+ * - status = "verdicted" ⇒ verdict(冻结 11 值)与 decidedAt 必须存在
+ *   (裁决已落库,终态)。
+ * TS 侧等价规则在 VerdictQueryResponseSchema.superRefine;本常量是其
+ * JSON Schema 形态——两侧必须同步修改。
+ */
+const VERDICT_QUERY_STATUS_COUPLINGS = [
+  {
+    if: {
+      properties: { status: { const: "pending" } },
+      required: ["status"],
+    },
+    then: {
+      allOf: [
+        { not: { required: ["verdict"] } },
+        { not: { required: ["decidedAt"] } },
+      ],
+    },
+  },
+  {
+    if: {
+      properties: { status: { const: "verdicted" } },
+      required: ["status"],
+    },
+    then: {
+      required: ["verdict", "decidedAt"],
+    },
+  },
+] as const;
+
+/**
  * DebugVariantBundle 的 ASLR 跨字段耦合(阶段四 WP-40,WP-1 清单 §6.9):
  * aslrEnabled = false ⇒ derivation.baseAddresses 必须缺席(基址与真实镜像
  * 一致);aslrEnabled = true ⇒ derivation.draws ≥ 1(首个 draw 为基址派生)。
@@ -139,6 +173,12 @@ function injectCrossFieldRules(
     const injected: JsonSchemaDocument = structuredClone(document);
     const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
     injected.allOf = [...existing, ACTION_RESPONSE_REJECTED_COUPLING];
+    return injected;
+  }
+  if (entryName === "verdict-query-response") {
+    const injected: JsonSchemaDocument = structuredClone(document);
+    const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
+    injected.allOf = [...existing, ...VERDICT_QUERY_STATUS_COUPLINGS];
     return injected;
   }
   if (entryName === "debug-variant-bundle") {

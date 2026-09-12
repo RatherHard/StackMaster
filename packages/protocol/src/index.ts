@@ -26,6 +26,11 @@
  *   DebugVariantBundle(编排器 ↔ 调试 worker 进程间契约)为 server-only
  *   契约,仅经 server-only 子路径导出(WP-1 清单 §6.9)。既有 WSS 通道
  *   与 D-API-2 零改动。
+ * - 阶段六 WP-60:裁决呈现通道 v1——VerdictQueryResponse(`GET /verdicts/:submissionId`
+ *   响应体,pending / verdicted 两态 × 冻结 11 值结果类型;独立版本命名空间
+ *   `…/schemas/verdict/v1`,VERDICT_CHANNEL_PROTOCOL_VERSION;分类论证
+ *   WP-1 清单 §6.10,决策登记 D-API-83 / D-API-86)。既有 submit 响应面
+ *   `{submissionId, revision}` 零改动。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
  * 与 EmbedTokenClaims / SessionCredentialClaims(凭证解析器)不从本入口导出,
@@ -66,4 +71,5 @@ export * from "./session-command/session-command-request.js";
 export * from "./session-command/session-command-response.js";
 export * from "./transport/wss-frame.js";
 export * from "./transport/debug-frame.js";
+export * from "./verdict/verdict-query-response.js";
 export * from "./schema/registry.js";

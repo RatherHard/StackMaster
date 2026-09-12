@@ -1,0 +1,11 @@
+{
+  "submissionId": "sub-01J9KD5EXAMPLE003",
+  "revision": 43,
+  "status": "verdicted",
+  "verdict": "wrong_answer",
+  "decidedAt": 1789200000,
+  "detail": {
+    "failedTestIndex": 2,
+    "predicate": "FLAG == memory[0x7FFF0100]"
+  }
+}

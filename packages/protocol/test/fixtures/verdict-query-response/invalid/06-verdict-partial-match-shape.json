@@ -1,0 +1,10 @@
+{
+  "submissionId": "sub-01J9KD5EXAMPLE003",
+  "revision": 43,
+  "status": "verdicted",
+  "verdict": {
+    "matchedHiddenTests": 3,
+    "totalHiddenTests": 7
+  },
+  "decidedAt": 1789200000
+}
