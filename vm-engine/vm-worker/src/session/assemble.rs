@@ -309,18 +309,7 @@ pub fn assemble_replay_config(
             max_predicate_eval_steps: bundle.judging_config.max_predicate_eval_steps,
         },
     };
-    let context = JudgingContext {
-        // D-W8-6(判题语义规约 D-H2 承接):双包 Schema v1 无输入槽声明字段,
-        // `input_sink` 保持未声明——`reference_payload` 非空载荷的题目在装配
-        // 复验即拒绝;契约面增补走契约变更流程,不在本 WP 私扩。
-        input_sink: None,
-        virtual_file_ids: bundle
-            .secrets
-            .virtual_files
-            .iter()
-            .map(|file| file.file_id.clone())
-            .collect(),
-    };
+    let context = judging_context(bundle);
     let judge = vm_core::judge::Judge::assemble(spec, &context, &mut engine)
         .map_err(|_| AssembleError::reject("judge_assemble"))?;
 
@@ -353,6 +342,23 @@ pub fn assemble_replay_config(
         judge,
     };
     Ok(runtime_config)
+}
+
+/// 判题装配上下文派生(**单一来源**,WP-62):装载装配与 verify 命令面的
+/// 隐藏测试执行共用同一 `JudgingContext`(装配复验与执行所见一致)。
+/// D-W8-6(判题语义规约 D-H2 承接):双包 Schema v1 无输入槽声明字段,
+/// `input_sink` 恒未声明——`reference_payload` 非空载荷的题目在装配复验即
+/// 拒绝;契约面增补走契约变更流程,不在本 WP 私扩。
+pub fn judging_context(bundle: &PrivateBundleMirror) -> JudgingContext {
+    JudgingContext {
+        input_sink: None,
+        virtual_file_ids: bundle
+            .secrets
+            .virtual_files
+            .iter()
+            .map(|file| file.file_id.clone())
+            .collect(),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

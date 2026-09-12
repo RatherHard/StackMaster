@@ -46,10 +46,29 @@ export interface VerifyReplayOutcome {
   readonly reason?: string;
 }
 
-/** verify 响应载荷(11 值裁决面 + 逐项结论 + logDigest 复算值)。 */
+/** 隐藏测试逐项结论(WP-62;仅索引与判定值,谓词内容 / testId 零公开面)。 */
+export interface HiddenTestEntryReport {
+  readonly index: number;
+  readonly verdict: string;
+  readonly expected: string;
+  readonly passed: boolean;
+}
+
+/** 隐藏测试汇总面(worker verify 响应的 `hiddenTests` 字段;协议 §4.9 增补)。 */
+export type HiddenTestSummaryReport =
+  | {
+      readonly kind: "executed";
+      readonly allPassed: boolean;
+      readonly tests: readonly HiddenTestEntryReport[];
+    }
+  | { readonly kind: "fault"; readonly reason: string }
+  | { readonly kind: "skipped" };
+
+/** verify 响应载荷(11 值裁决面 + 逐项结论 + 隐藏测试汇总 + logDigest 复算值)。 */
 export interface VerifyReport {
   readonly verdict: string;
   readonly replay: VerifyReplayOutcome;
+  readonly hiddenTests?: HiddenTestSummaryReport;
   readonly logDigest: string;
 }
 
@@ -200,6 +219,7 @@ export class VerifyWorkerClient {
           report: {
             verdict: String(record["verdict"] ?? ""),
             replay: record["replay"] as VerifyReplayOutcome,
+            hiddenTests: record["hiddenTests"] as HiddenTestSummaryReport | undefined,
             logDigest: String(record["logDigest"] ?? ""),
           },
         };

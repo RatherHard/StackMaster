@@ -19,6 +19,7 @@ import {
   type ClaimedRun,
   type ChallengeSource,
   type ChallengeVersionRegistration,
+  type VerdictAuditEvent,
   type VerdictQueue,
 } from "./ports.js";
 
@@ -28,6 +29,30 @@ export class VerifierStoreError extends Error {
     super(message);
     this.name = "VerifierStoreError";
   }
+}
+
+/** 审计事件主体形态(D-API-95):信任域 4 系统主体,会话锚随 run。 */
+const AUDIT_ACTOR = "verifier";
+
+/** 裁决域审计事件追加(append-only;调用方事务内执行,D-API-90 / 95)。 */
+async function appendAudit(
+  client: PoolClient,
+  tenantId: string,
+  sessionId: string,
+  audit: VerdictAuditEvent,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_log (kind, at, tenant_id, user_id, session_id, detail)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [
+      audit.kind,
+      new Date(audit.at),
+      tenantId,
+      AUDIT_ACTOR,
+      sessionId === "" ? null : sessionId,
+      JSON.stringify(audit.detail),
+    ],
+  );
 }
 
 /** PostgreSQL 连接池(裁决域独立角色;连接失败即拒绝启动)。 */
@@ -46,6 +71,7 @@ interface RunRowRaw {
   id: string;
   tenant_id: string;
   submission_id: string;
+  session_id: string | null;
   log_digest: string | null;
   attempt_count: string | number;
   reference: unknown;
@@ -83,6 +109,7 @@ export class PostgresVerdictQueue implements VerdictQueue {
          FROM claimed c
          WHERE r.id = c.id
          RETURNING r.id, r.tenant_id, r.submission_id, r.log_digest,
+           (SELECT s.session_id FROM submissions s WHERE s.id = r.submission_id) AS session_id,
            (SELECT count(*) FROM verifier_runs r2
             WHERE r2.submission_id = r.submission_id) AS attempt_count,
            (SELECT s.reference FROM submissions s WHERE s.id = r.submission_id) AS reference`,
@@ -93,6 +120,7 @@ export class PostgresVerdictQueue implements VerdictQueue {
         runId: raw.id,
         tenantId: raw.tenant_id,
         submissionId: raw.submission_id,
+        sessionId: raw.session_id ?? "",
         logDigest: raw.log_digest,
         attemptCount: Number(raw.attempt_count),
         reference: raw.reference,
@@ -109,18 +137,29 @@ export class PostgresVerdictQueue implements VerdictQueue {
     runId: string;
     submissionId: string;
     tenantId: string;
+    sessionId: string;
     verdict: string;
     detail: unknown;
+    audit: VerdictAuditEvent;
   }): Promise<void> {
     const client = await this.withClient();
     try {
       await client.query("BEGIN");
-      await client.query(
+      const inserted = await client.query<{ submission_id: string }>(
         `INSERT INTO verdicts (tenant_id, submission_id, verdict, detail)
          VALUES ($1, $2, $3, $4::jsonb)
-         ON CONFLICT (submission_id) DO NOTHING`,
+         ON CONFLICT (submission_id) DO NOTHING
+         RETURNING submission_id`,
         [input.tenantId, input.submissionId, input.verdict, JSON.stringify(input.detail ?? null)],
       );
+      // 审计与处置同事务(D-API-95):append 失败即整体回滚——裁决完成
+      // 事实与审计账不可分(fail-closed,D-API-91 同构;append-only 端口
+      // 零 UPDATE / 零 DELETE,库层触发器与角色 INSERT 授权同锚,D-API-93)。
+      // 幂等重放(冲突 DO NOTHING)不重复发射:审计记"该 submission 被判
+      // 为何值"这一事实一次,重复 complete 无新事实。
+      if (inserted.rows.length > 0) {
+        await appendAudit(client, input.tenantId, input.sessionId, input.audit);
+      }
       await client.query(
         `UPDATE verifier_runs SET status = 'completed', finished_at = now()
          WHERE id = $1 AND tenant_id = $2`,
@@ -139,9 +178,11 @@ export class PostgresVerdictQueue implements VerdictQueue {
     runId: string;
     tenantId: string;
     submissionId: string;
+    sessionId: string;
     attemptCount: number;
     reason: string;
     maxAttempts: number;
+    audit: VerdictAuditEvent;
   }): Promise<void> {
     const client = await this.withClient();
     try {
@@ -152,6 +193,8 @@ export class PostgresVerdictQueue implements VerdictQueue {
          WHERE id = $1 AND tenant_id = $2`,
         [input.runId, input.tenantId],
       );
+      // 审计与失败态同事务(同 appendAudit 纪律)。
+      await appendAudit(client, input.tenantId, input.sessionId, input.audit);
       // 重试以新 pending run 行承载;耗尽后不再入队(查询面恒为 pending),
       // 并取消同 submission 的残留 pending 行(防空转认领)。
       if (input.attemptCount < input.maxAttempts) {

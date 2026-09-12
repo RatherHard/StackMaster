@@ -580,6 +580,55 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(verdict).toBe("wrong_answer");
     }, 150_000);
 
+    // ── 阶段六 WP-62:隐藏测试裁决汇总、跨重启一致与审计发射(D-API-94 ~ 96)──
+
+    it("同日志跨 verifier 重启汇总一致:同一引用两次独立裁决,verdicts.detail 逐字节一致", async () => {
+      // 复制全链路 submission 的引用为第二行(同日志同 log_digest),由独立
+      // 的 verify 进程重放——同日志同裁决(含隐藏测试汇总面)是裁决可复现
+      // 的实现前提(阶段六退出条件 2)。
+      const first = await pool!.query<{ reference: unknown; verdict: string; detail: unknown }>(
+        `SELECT s.reference, v.verdict, v.detail
+         FROM submissions s JOIN verdicts v ON v.submission_id = s.id
+         WHERE s.id = $1`,
+        [firstSubmissionId!],
+      );
+      expect(first.rows[0]).toBeDefined();
+      const twin = await pool!.query<{ id: string }>(
+        `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
+         SELECT tenant_id, session_id || '-wp62-twin', revision, public_status, reference
+         FROM submissions WHERE id = $1 RETURNING id`,
+        [firstSubmissionId!],
+      );
+      const twinId = twin.rows[0]!.id;
+      await pool!.query(
+        `INSERT INTO verifier_runs (tenant_id, submission_id, status, log_digest)
+         SELECT tenant_id, $1, 'pending', log_digest FROM verifier_runs
+         WHERE submission_id = $2 ORDER BY created_at DESC LIMIT 1`,
+        [twinId, firstSubmissionId!],
+      );
+      const twinVerdict = await pollVerdict(twinId, 90_000);
+      expect(twinVerdict).toBe(first.rows[0]!.verdict);
+      const twinDetail = await pool!.query<{ detail: unknown }>(
+        `SELECT detail FROM verdicts WHERE submission_id = $1`,
+        [twinId],
+      );
+      expect(twinDetail.rows[0]!.detail).toEqual(first.rows[0]!.detail);
+    }, 120_000);
+
+    it("裁决完成审计发射:verdict_completed 行落库(detail 携 submissionId 与 11 值字面)", async () => {
+      const rows = await pool!.query<{ user_id: string; session_id: string | null; detail: Record<string, unknown> }>(
+        `SELECT user_id, session_id, detail FROM audit_log
+         WHERE tenant_id = $1 AND kind = 'verdict_completed' AND detail->>'submissionId' = $2`,
+        [tenantId, firstSubmissionId!],
+      );
+      expect(rows.rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows.rows[0]!.user_id).toBe("verifier");
+      expect(rows.rows[0]!.detail).toMatchObject({
+        submissionId: firstSubmissionId,
+        verdict: "wrong_answer",
+      });
+    }, 30_000);
+
     it("篡改动作日志(log_digest 复算不符)→ run failed 拒裁,零 verdicts(D-API-85 绑定锚)", async () => {
       const tamperTenant = `tamper-digest-${runSuffix}`;
       const reference = fabricatedReference(challengeId);
@@ -601,6 +650,15 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(states.statuses.filter((status) => status === "failed").length).toBeGreaterThanOrEqual(1);
       const verdict = await pollVerdict(submissionId, 0);
       expect(verdict).toBeNull();
+      // 审计发射(WP-62 / D-API-95):拒裁安全事实 = verdict_rejected,方向码
+      // 随 detail 落账(零秘密载荷)。
+      const rejected = await pool!.query<{ detail: Record<string, unknown> }>(
+        `SELECT detail FROM audit_log
+         WHERE tenant_id = $1 AND kind = 'verdict_rejected' AND detail->>'submissionId' = $2`,
+        [tamperTenant, submissionId],
+      );
+      expect(rejected.rows.length).toBeGreaterThanOrEqual(1);
+      expect(rejected.rows[0]!.detail).toMatchObject({ direction: "log_digest_mismatch" });
     }, 150_000);
 
     it("六记录项缺项(replay 材料缺席的旧形态引用)→ 裁决无效 challenge_invalid", async () => {

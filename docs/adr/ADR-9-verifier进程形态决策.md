@@ -4,7 +4,7 @@
 |---|---|
 | 状态 | **已决策(2026-09-12):候选 (b) 正式启用——Node verifier 服务(`apps/verifier`,信任域 4)+ vm-worker 新增裁决重放命令面(引擎进程协议 additive 演进,阶段六边界裁决 2 契约面 (b) 落位)**;本文件是该决策的定案记录与复核依据,与计划书冲突时以计划书为准 |
 | 决策人口径 | 阶段六任务分解 §六 Q1(WP-61 定案记 ADR / D-API);主控预决策框架内成文 |
-| 关联 | 计划书 5.2(信任域 4)/ 5.3 / 5.8、9.1、ADR-3 / ADR-8、版本策略 §三 / §四.4、快照与回放语义规约 §五、引擎进程协议 §二变更纪律 / §四 / §九、会话编排语义规约 D-W8-9 / §六、阶段六任务分解 WP-61 / §一边界裁决 2~3;D-API-87(实现面登记) |
+| 关联 | 计划书 5.2(信任域 4)/ 5.3 / 5.8、9.1、ADR-3 / ADR-8、版本策略 §三 / §四.4、快照与回放语义规约 §五、引擎进程协议 §二变更纪律 / §四 / §九、会话编排语义规约 D-W8-9 / §六、判题语义规约 §七 / §八·一、阶段六任务分解 WP-61 / WP-62 / §一边界裁决 2~3;D-API-87(实现面登记)/ D-API-94 ~ 96(WP-62 增补) |
 
 ---
 
@@ -51,6 +51,37 @@
 | 重放逐项一致,终态 `won` | `success` 落 verdicts | 判题语义 §五(won 只在检查点) |
 | 重放逐项一致,`failed`(引擎结局标签可粗化) | `program_crash` / `memory_fault` / `resource_limit` / `engine_error` 落 verdicts | 判题语义 §七 classify 同源标签 |
 | 重放逐项一致,非 won(failed 判题条件 / running / paused) | `wrong_answer` 落 verdicts | fail-closed:未达成成功条件不判成功 |
+
+### 四·一、WP-62 增补:隐藏测试裁决与 11 值汇总合成(2026-09-12;主控预决策框架内成文)
+
+**执行位置定案**:隐藏测试在 **vm-worker `verify` 命令内**执行——重放逐项比对完成后,在**重放终态**上由引擎侧判题驱动执行(`vm_core::judge::hidden::run_hidden_tests`,零第二实现):基线 = 重放终态,每测试独立克隆;`predicate_probe` 在基线上直接求值;`reference_payload` 经输入槽写入 + 运行至终止(预算 = 基线剩余全局步数);`classify_outcome` 7 值分类。引擎面为最小 additive 扩展:`vm_runtime::replay` 增 `replay_with_final`(返回重放终态运行时;既有 `replay()` 委托之,逐项比对语义零改动)+ `SessionRuntime::engine_mut` 只读装配面访问器;`vm-core` 判题语义零变更。交互期与重放期的执行形态差异即在此收口:判题语义规约 §七的"会话 settle 后由判题方驱动"在 verifier 面落为"重放 settle 完成后由 verify 命令驱动"——交互执行路径(host / SessionRuntime 动作循环)不执行隐藏测试,隐藏测试内容只存在于 vm-worker 进程内与 verdicts SERVER_ONLY 明细列。
+
+**D-H2 边界维持**:双包 Schema v1 无输入槽声明,`JudgingContext.input_sink` 恒 `None`(D-W8-6 同款,装配复验对非空 `reference_payload` 载荷即拒)——verifier 不私扩契约面,通用输入槽增补走 WP-1 §1.3 契约变更流程(登记为非目标);v1 隐藏测试语料按 `predicate_probe` 形态制作(载荷空),空载荷 `reference_payload` 语料合法(基线克隆直接运行至终止)。
+
+**11 值汇总合成规则**(失败方向优先 / fail-closed,沿判题语义规约 §1.1;交互 `won` / `failed` 与正式裁决相互独立的独立性锚 = 规则②):
+
+- **①(终态失败优先)** 重放终态 `failed` ⇒ 引擎结局标签粗化(§四既有映射:`program_crash` / `memory_fault` / `resource_limit` / `engine_error`,其余 `wrong_answer`)**优先于**隐藏测试结论——fail-closed:交互期已失败的方向不被隐藏测试"救回"(也不被改写);
+- **②(隐藏测试失败方向)** 终态非 `failed` 且任一隐藏测试判定 ≠ `expectedResult` ⇒ 失败方向 = 该测试 `classify_outcome` 值的映射(下表);任一隐藏测试失败即否定 `success`——**交互 `won` ≠ 强制 `success`**;
+- **③(成功合成)** 隐藏测试全部通过 ∧ 终态 `won` ⇒ `success`;
+- **④(非终态 fail-closed)** 隐藏测试全过 ∧ 终态非 `won`(`running` / `paused`)⇒ `wrong_answer`(未达成成功条件不判成功);
+- **⑤(汇总执行面异常)** 隐藏测试驱动错误(基线谓词预算耗尽,当前驱动面唯一错误变体)⇒ `engine_error` 方向——与重放面谓词预算耗尽(`challenge_invalid`,§四行)有意区分:重放逐项比对已在预算内完成,耗尽发生在 verifier 汇总附加记账上,归裁决基础设施方向(非成绩、不自动重试、显式重提);判题语义规约 §1.3 的交互路径方向零改动,差异如实登记;
+- 重放漂移 / 上下文错配 / 运行时故障路径:隐藏测试**不执行**(汇总面 `skipped`),裁决走 §四既有映射——汇总语义不参与。
+
+**7 值 × 汇总矩阵(逐格可测;失败测试的 `classify_outcome` 值 → 11 值承载)**:
+
+| 失败测试的 classify 值 | 汇总 verdict | 端到端可达性(v1) |
+|---|---|---|
+| `success`(条件达成但 ≠ 期望,如期望 crash) | `wrong_answer` | 可达(独立锚语料) |
+| `wrong_answer` | `wrong_answer` | 可达 |
+| `invalid_action` | `invalid_action` | **结构性不可达**(需输入槽 + 非空载荷,D-H2 边界;映射格由映射函数单测承载) |
+| `program_crash` | `program_crash` | 可达 |
+| `memory_fault` | `memory_fault` | 可达 |
+| `resource_limit` | `resource_limit` | 可达 |
+| `timeout` | `timeout` | **结构性不可达**(分类器不产生,worker 看门狗补充面;映射格由映射函数单测承载) |
+
+**裁决细节零公开面**:verify 响应的隐藏测试汇总面仅含逐测试**索引 + classify 值 + expected 比对结论 + 总判定**——谓词内容、命中详情、testId 不进报告(判题语义规约 §1.5 载荷纪律的响应面延伸);verifier 落库 `verdicts.detail`(004 预留 JSONB 明细列,零新迁移)整体 SERVER_ONLY,零浏览器可达面(D-API-96)。
+
+**裁决域审计发射**(D-API-90 三值,verifier 侧;发射矩阵与方向码封闭集 = D-API-95):裁决完成 ⇒ `verdict_completed`;重放失败(执行面故障 / 重试耗尽)⇒ `verdict_replay_failed`;拒裁(digest 复算不符 / 双包哈希不符 / 对象取回越权 / bundle lock 不一致 / 六记录项缺项等形态完备性事实)⇒ `verdict_rejected`(detail 携方向码,零秘密载荷)。发射与 run 处置**同事务**落库(append-only;审计失败即处置回滚,fail-closed 与 D-API-91 同构)。
 
 **裁决幂等**(库层 + 队列层双层):`verdicts.submission_id` 唯一(005 迁移)+ complete 事务 `ON CONFLICT DO NOTHING`;认领 SQL 排除已有 verdicts 的 submission。同 submission 重复裁决确定性同判、不重复写入。
 

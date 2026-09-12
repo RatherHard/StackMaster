@@ -11,6 +11,7 @@ import type {
   ChallengeSource,
   ChallengeVersionRegistration,
   ClaimedRun,
+  VerdictAuditEvent,
   VerdictQueue,
 } from "../../src/persistence/ports.js";
 
@@ -64,23 +65,27 @@ export class MemoryVerdictQueue implements VerdictQueue {
     runId: string;
     tenantId: string;
     submissionId: string;
+    sessionId: string;
     status: "pending" | "running" | "completed" | "failed";
     logDigest: string | null;
     attemptCount: number;
     reference: unknown;
   }[] = [];
   readonly verdicts = new Map<string, { verdict: string; detail: unknown }>();
+  /** 同事务追加的审计事件(D-API-95;与 PG complete/fail 语义同构)。 */
+  readonly auditEvents: (VerdictAuditEvent & { tenantId: string; sessionId: string })[] = [];
   private nextId = 1;
 
-  constructor(runs: readonly { submissionId: string; tenantId?: string; logDigest: string | null; reference: unknown }[] = []) {
+  constructor(runs: readonly { submissionId: string; tenantId?: string; sessionId?: string; logDigest: string | null; reference: unknown }[] = []) {
     for (const run of runs) {
-      this.push(run.submissionId, run.tenantId ?? "tenant-1", run.logDigest, run.reference);
+      this.push(run.submissionId, run.tenantId ?? "tenant-1", run.sessionId ?? "sess-test-1", run.logDigest, run.reference);
     }
   }
 
   private push(
     submissionId: string,
     tenantId: string,
+    sessionId: string,
     logDigest: string | null,
     reference: unknown,
   ): void {
@@ -89,6 +94,7 @@ export class MemoryVerdictQueue implements VerdictQueue {
       runId: `run-${this.nextId++}`,
       tenantId,
       submissionId,
+      sessionId,
       status: "pending",
       logDigest,
       attemptCount: existing.length + 1,
@@ -122,6 +128,7 @@ export class MemoryVerdictQueue implements VerdictQueue {
         runId: run.runId,
         tenantId: run.tenantId,
         submissionId: run.submissionId,
+        sessionId: run.sessionId,
         logDigest: run.logDigest,
         attemptCount,
         reference: run.reference,
@@ -134,9 +141,12 @@ export class MemoryVerdictQueue implements VerdictQueue {
     runId: string;
     submissionId: string;
     tenantId: string;
+    sessionId: string;
     verdict: string;
     detail: unknown;
+    audit: VerdictAuditEvent;
   }): Promise<void> {
+    this.auditEvents.push({ ...input.audit, tenantId: input.tenantId, sessionId: input.sessionId });
     if (!this.verdicts.has(input.submissionId)) {
       this.verdicts.set(input.submissionId, {
         verdict: input.verdict,
@@ -153,18 +163,21 @@ export class MemoryVerdictQueue implements VerdictQueue {
     runId: string;
     tenantId: string;
     submissionId: string;
+    sessionId: string;
     attemptCount: number;
     reason: string;
     maxAttempts: number;
+    audit: VerdictAuditEvent;
   }): Promise<void> {
     const run = this.runs.find((candidate) => candidate.runId === input.runId);
     if (run === undefined) {
       return;
     }
     run.status = "failed";
+    this.auditEvents.push({ ...input.audit, tenantId: input.tenantId, sessionId: input.sessionId });
     this.failures.push(input.reason);
     if (input.attemptCount < input.maxAttempts) {
-      this.push(run.submissionId, run.tenantId, run.logDigest, run.reference);
+      this.push(run.submissionId, run.tenantId, run.sessionId, run.logDigest, run.reference);
     } else {
       // 耗尽:取消同 submission 残留 pending 行(与 PG fail 同构,防空转)。
       for (const candidate of this.runs) {

@@ -245,14 +245,17 @@ describe("adjudicateRun(裁决管线矩阵)", () => {
       runId: "run-0",
       submissionId: SUBMISSION_ID,
       tenantId: "tenant-1",
+      sessionId: "sess-test-1",
       verdict: "success",
       detail: null,
+      audit: { kind: "verdict_completed", at: 0, detail: { submissionId: SUBMISSION_ID, verdict: "success" } },
     });
     // 同 submission 重复入队(pending 行在场)也不被认领。
     queue.runs.push({
       runId: "run-9",
       tenantId: "tenant-1",
       submissionId: SUBMISSION_ID,
+      sessionId: "sess-test-1",
       status: "pending",
       logDigest: null,
       attemptCount: 2,
@@ -265,8 +268,10 @@ describe("adjudicateRun(裁决管线矩阵)", () => {
       runId: "run-0",
       submissionId: SUBMISSION_ID,
       tenantId: "tenant-1",
+      sessionId: "sess-test-1",
       verdict: "wrong_answer",
       detail: null,
+      audit: { kind: "verdict_completed", at: 0, detail: { submissionId: SUBMISSION_ID, verdict: "wrong_answer" } },
     });
     expect(queue.verdicts.get(SUBMISSION_ID)?.verdict).toBe("success");
   });
@@ -484,4 +489,171 @@ describe("adjudicateRun(裁决管线矩阵)", () => {
     const outcome = await adjudicateRun((await queue.claim(10, 3))[0]!, opts);
     expect(outcome).toEqual({ kind: "failed", reason: "internal_error" });
   });
+});
+
+describe("裁决域审计发射矩阵(WP-62;D-API-90 三值 / D-API-95 方向码)", () => {
+  it("引擎合成裁决 → verdict_completed(detail 携 submissionId 与 11 值字面)", async () => {
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: DIGEST_OF_REFERENCE, reference: validReference() },
+    ]);
+    const opts = options(queue);
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    expect(queue.auditEvents).toHaveLength(1);
+    const event = queue.auditEvents[0]!;
+    expect(event.kind).toBe("verdict_completed");
+    expect(event.detail).toEqual({ submissionId: SUBMISSION_ID, verdict: "success" });
+    expect(typeof event.at).toBe("number");
+    expect(event.tenantId).toBe("tenant-1");
+    expect(event.sessionId).toBe("sess-test-1");
+  }, 15_000);
+
+  it("log_digest 复算不符 → verdict_rejected(拒裁安全事实;run 仍 failed 不落 verdicts)", async () => {
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: "f".repeat(64), reference: validReference() },
+    ]);
+    const opts = options(queue);
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    expect(queue.auditEvents).toHaveLength(1);
+    expect(queue.auditEvents[0]!.kind).toBe("verdict_rejected");
+    expect(queue.auditEvents[0]!.detail).toEqual({
+      submissionId: SUBMISSION_ID,
+      direction: "log_digest_mismatch",
+    });
+    expect(queue.verdicts.size).toBe(0);
+  }, 15_000);
+
+  it("spawn 失败(执行面故障)→ verdict_replay_failed", async () => {
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: null, reference: validReference() },
+    ]);
+    const opts = options(queue, { workerSpec: { command: "definitely-not-a-binary-xyz" } });
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    expect(queue.auditEvents).toHaveLength(1);
+    expect(queue.auditEvents[0]!.kind).toBe("verdict_replay_failed");
+    expect(queue.auditEvents[0]!.detail).toEqual({
+      submissionId: SUBMISSION_ID,
+      direction: "spawn_failed",
+    });
+  }, 15_000);
+
+  it("六记录项缺项 → verdict_rejected(拒裁事实)且 challenge_invalid 裁决仍落库(D-API-87 主从关系双轨)", async () => {
+    const reference = validReference() as Record<string, unknown>;
+    delete reference["replay"];
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: null, reference },
+    ]);
+    const opts = options(queue);
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    expect(queue.verdicts.get(SUBMISSION_ID)?.verdict).toBe("challenge_invalid");
+    expect(queue.auditEvents).toHaveLength(1);
+    expect(queue.auditEvents[0]!.kind).toBe("verdict_rejected");
+    expect(queue.auditEvents[0]!.detail).toEqual({
+      submissionId: SUBMISSION_ID,
+      direction: "six_records_incomplete",
+    });
+  });
+
+  it("bundle lock 不一致 → verdict_rejected(方向码 bundle_lock_mismatch;replay_mismatch 落库)", async () => {
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: null, reference: validReference() },
+    ]);
+    const opts = options(queue, {
+      workerSpec: {
+        command: process.execPath,
+        args: [FAKE_WORKER],
+        env: [["FAKE_WORKER_VERSION", "9.9.9"]],
+      },
+    });
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    expect(queue.verdicts.get(SUBMISSION_ID)?.verdict).toBe("replay_mismatch");
+    expect(queue.auditEvents).toHaveLength(1);
+    expect(queue.auditEvents[0]!.kind).toBe("verdict_rejected");
+    expect(queue.auditEvents[0]!.detail).toEqual({
+      submissionId: SUBMISSION_ID,
+      direction: "bundle_lock_mismatch",
+    });
+  }, 15_000);
+
+  it("worker 命令级 challenge_invalid → verdict_rejected(方向码 worker_rejected)", async () => {
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: null, reference: validReference() },
+    ]);
+    const opts = options(queue, {
+      workerSpec: {
+        command: process.execPath,
+        args: [FAKE_WORKER],
+        env: [
+          ["FAKE_MODE", "command_error_challenge_invalid"],
+          ["FAKE_LOG_DIGEST", DIGEST_OF_REFERENCE],
+        ],
+      },
+    });
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    expect(queue.auditEvents).toHaveLength(1);
+    expect(queue.auditEvents[0]!.kind).toBe("verdict_rejected");
+    expect(queue.auditEvents[0]!.detail).toEqual({
+      submissionId: SUBMISSION_ID,
+      direction: "worker_rejected",
+    });
+  }, 15_000);
+
+  it("双包哈希不符 → verdict_rejected;进程崩溃 → verdict_replay_failed(方向码矩阵)", async () => {
+    const hashQueue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: null, reference: validReference() },
+    ]);
+    const bundles = new Map([
+      ["chal-1/1.0.0/bundle.json", new TextEncoder().encode("tampered-bundle")],
+      ["chal-1/1.0.0/descriptor.json", new TextEncoder().encode(DESCRIPTOR_JSON)],
+    ]);
+    const hashOpts = options(hashQueue, { bundles: new MemoryBundleSource(bundles) });
+    await adjudicateRun((await claimFirst(hashQueue, hashOpts))!, hashOpts);
+    expect(hashQueue.auditEvents[0]!.kind).toBe("verdict_rejected");
+    expect(hashQueue.auditEvents[0]!.detail).toEqual({
+      submissionId: SUBMISSION_ID,
+      direction: "bundle_hash_mismatch",
+    });
+
+    const crashQueue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: null, reference: validReference() },
+    ]);
+    const crashOpts = options(crashQueue, {
+      workerSpec: {
+        command: process.execPath,
+        args: [FAKE_WORKER],
+        env: [
+          ["FAKE_MODE", "crash_on_verify"],
+          ["FAKE_LOG_DIGEST", DIGEST_OF_REFERENCE],
+        ],
+      },
+    });
+    await adjudicateRun((await claimFirst(crashQueue, crashOpts))!, crashOpts);
+    expect(crashQueue.auditEvents).toHaveLength(1);
+    expect(crashQueue.auditEvents[0]!.kind).toBe("verdict_replay_failed");
+  }, 20_000);
+
+  it("审计 detail 零秘密载荷:键域 ⊆ {submissionId, direction, verdict}(方向码封闭集)", async () => {
+    const rejected = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: "f".repeat(64), reference: validReference() },
+    ]);
+    await adjudicateRun((await claimFirst(rejected, options(rejected)))!, options(rejected));
+    for (const event of rejected.auditEvents) {
+      expect(Object.keys(event.detail).every((key) => ["submissionId", "direction", "verdict"].includes(key))).toBe(true);
+    }
+  }, 15_000);
+
+  it("隐藏测试汇总面随裁决入 verdicts 明细(SERVER_ONLY;仅索引与判定值)", async () => {
+    const queue = new MemoryVerdictQueue([
+      { submissionId: SUBMISSION_ID, logDigest: DIGEST_OF_REFERENCE, reference: validReference() },
+    ]);
+    const opts = options(queue);
+    await adjudicateRun((await claimFirst(queue, opts))!, opts);
+    const detail = queue.verdicts.get(SUBMISSION_ID)?.detail as {
+      hiddenTests?: { kind: string; allPassed?: boolean; tests?: { index: number; verdict: string; expected: string; passed: boolean }[] };
+    };
+    expect(detail.hiddenTests).toEqual({
+      kind: "executed",
+      allPassed: true,
+      tests: [{ index: 0, verdict: "success", expected: "success", passed: true }],
+    });
+  }, 15_000);
 });

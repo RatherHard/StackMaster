@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**);**阶段六 WP-64 审计面完善与归档 D-API-90~D-API-93 2026-09-12 增补(Q5 kind 集合定案 = D-API-59 开口收口、AuditSink PG 落库 = D-API-33 留白收口、归档对象存储、REVOKE 角色治理 = D-API-22 阶段六落地面——既有 D-API-1~89 条目语义零改动,D-API-59 / D-API-33 仅增收口指向)** |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61);2026-09-12 增补 D-API-90~D-API-93(阶段六 WP-64) |
+| 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**);**阶段六 WP-64 审计面完善与归档 D-API-90~D-API-93 2026-09-12 增补(Q5 kind 集合定案 = D-API-59 开口收口、AuditSink PG 落库 = D-API-33 留白收口、归档对象存储、REVOKE 角色治理 = D-API-22 阶段六落地面——既有 D-API-1~89 条目语义零改动,D-API-59 / D-API-33 仅增收口指向)**;**阶段六 WP-62 隐藏测试裁决汇总与 verifier 审计发射 D-API-94~D-API-96 2026-09-12 增补(汇总语义 / 审计发射面 / verdicts 明细列——既有 D-API-1~93 条目语义零改动,D-API-90 仅增发射实现指向)** |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61);2026-09-12 增补 D-API-90~D-API-93(阶段六 WP-64);2026-09-12 增补 D-API-94~D-API-96(阶段六 WP-62) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -783,7 +783,7 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 
 **集合冻结机制(双锚)**:①TS 侧 `AUDIT_EVENT_KINDS` 十值常量(封闭联合类型,机检断言锚 `test/audit/audit-kinds.test.ts`:逐值冻结,任何字面漂移即红灯);②库层 `audit_log.kind` CHECK 约束(migrations/006 `audit_log_kind_closed_set`,十值字面同锚)——不经迁移的任何逐次漂移在库层即拒,verifier 角色的 INSERT 同受约束。**定案后集合冻结**:任何再扩张走新迁移 + 本条增补,不得在实现期逐次添加。
 
-**发射面归属(为 WP-62 预留,本包不实现)**:session-api 现有事件沿七既有值(调用面零改动);裁决域三值由 **WP-62 在 verifier 侧(信任域 4)发射**——verifier 本包不触碰,其发射依赖的库层预留已就位(`audit_log` CHECK 含三值 + verifier 角色 INSERT 授权,D-API-93)。
+**发射面归属(为 WP-62 预留,本包不实现)**:session-api 现有事件沿七既有值(调用面零改动);裁决域三值由 **WP-62 在 verifier 侧(信任域 4)发射**(**已实现,2026-09-12:发射矩阵 / 方向码封闭集 / 同事务原子性 = D-API-95**);verifier 本包不触碰,其发射依赖的库层预留已就位(`audit_log` CHECK 含三值 + verifier 角色 INSERT 授权,D-API-93)。
 
 ### D-API-91 AuditSink PG 落库:`PgAuditSink` 与 `audit_log` 表(D-API-33 已知留白收口;阶段六 WP-64)
 
@@ -818,6 +818,37 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 - **verifier 角色预留(D-API-90 发射面的库层落位)**:`verifier-db-init.sql` 增 `GRANT INSERT ON audit_log` + `USAGE ON SEQUENCE audit_log_id_seq`——WP-62 可在 verifier 侧发射裁决域三值;verifier 对 `audit_log` **零 UPDATE / 零 DELETE**(kind CHECK 约束同锚);
 - **红灯矩阵(compose 套件;host 降级形态角色不存在时如实跳过登记,CI 完整容器拓扑实跑)**:`session_app` 对 audit_log INSERT 受理、UPDATE / DELETE 拒(permission denied,权限层;即便绕过亦被触发器拒)、`ALTER TABLE ... DISABLE TRIGGER` 拒(must be owner of table——第二层治理的第三红灯);verifier 角色对 audit_log INSERT(verdict_completed)受理、UPDATE / DELETE 拒;
 - **表属主例外与生产连线义务(登记)**:表属主的隐含权利不受 REVOKE 影响——迁移执行角色(属主)不受本治理约束;**生产部署义务:应用连接(`SESSION_API_POSTGRES_URL`)必须使用最小授权角色,不得使用表属主**;dev compose 拓扑的应用连接仍为管理面凭证(角色治理降级,如实登记——先例 D-API-87 host 形态同纪律;CI 始终完整容器拓扑,init 服务在拓扑内实跑)。
+
+## 三·十六、隐藏测试裁决汇总与 verifier 审计发射(阶段六 WP-62;D-API-94 ~ D-API-96)
+
+> 本节为 WP-62「隐藏测试裁决与正式裁决汇总(判题驱动复用)」的定案记录。语义权威 = 判题语义规约 §七(隐藏测试执行 D-H1 / D-H2)与 **§八·一**(11 值汇总合成)及 ADR-9 §四·一;本节登记其服务面 / 落库面 / 审计发射面。既有 D-API-1~93 条目语义零改动。
+
+### D-API-94 正式裁决 11 值汇总语义与 verify 响应增补面(阶段六 WP-62)
+
+- **汇总语义(权威 = 判题语义规约 §八·一 / ADR-9 §四·一,此处登记服务面结论)**:隐藏测试在 vm-worker `verify` 命令内、重放逐项比对完成后于**重放终态**上执行(`vm_core::judge::hidden::run_hidden_tests` 单一实现复用,零第二裁决实现;基线独立克隆 / probe 直接求值 / reference_payload 运行至终止 / classify 7 值)。合成规则:①终态 `failed` ⇒ 引擎结局标签粗化优先(交互失败方向不被隐藏测试救回,fail-closed);②终态非 failed 且任一隐藏测试判定 ≠ 期望 ⇒ 失败方向 = 该测试 classify 值映射(7 值 × 汇总矩阵,ADR-9 §四·一;`success` / `wrong_answer` ⇒ `wrong_answer`,其余同字面)——**交互 won ≠ 强制 success**(交互判定与正式裁决独立性的裁决面锚);③全过 ∧ won ⇒ `success`;④全过 ∧ 非 won ⇒ `wrong_answer`;⑤隐藏测试驱动错误 ⇒ `engine_error`(非成绩方向;与重放面谓词预算耗尽的 `challenge_invalid` 方向有意区分,登记于 ADR-9 §四·一);重放漂移 / 上下文错配 / 运行时故障路径隐藏测试不执行(ADR-9 §四既有映射);
+- **verify 响应增补(additive,引擎进程协议 §4.9 登记兑付)**:`verify_report` 追加 `hiddenTests` 汇总面(`executed{allPassed, tests[{index, verdict, expected, passed}]}` / `fault{reason}` / `skipped` 三确定性别形态);**零公开面字段**:谓词内容 / 命中详情 / testId 不进报告,整体 SERVER_ONLY 不变;`ENGINE_PROCESS_PROTOCOL_VERSION` 维持 1;
+- **D-H2 边界维持(非目标登记)**:双包 Schema v1 无输入槽声明,`reference_payload` 非空载荷装配期即拒(D-W8-6 同款)——verifier 不私扩契约面,通用输入槽增补走 WP-1 §1.3;v1 隐藏测试语料按 `predicate_probe` 形态制作(载荷空),空载荷 `reference_payload` 语料合法;
+- **单方裁决出处不变**:11 值汇总由引擎侧 verify 命令面产出,TS 侧零裁决逻辑(字面受理 + 搬运落库,ADR-8 / ADR-9 同锚)。
+
+### D-API-95 verifier 裁决域审计发射面(D-API-90 三值的发射实现;阶段六 WP-62)
+
+- **发射矩阵(一 run 一事件;kind 记录安全事实,非 run 状态——D-API-90 行 3 语义)**:
+
+| 管线处置 | verdicts 行 | 审计 kind | detail |
+|---|---|---|---|
+| verify 报告裁决(引擎合成,11 值任意字面,含非成绩方向) | 落库 | `verdict_completed` | `{submissionId, verdict}`(11 值冻结有界域) |
+| 拒裁方向(六记录项缺项 / 版本未登记 / 双包缺失 / seed 不可裁决 / bundle lock 不一致 / worker 拒绝 / log_digest 复算不符 / 双包哈希不符 / 对象取回越权 / 双包 JSON 不可解析 / 动作日志超帧预算) | 按 D-API-87 主从关系(failed 不落,或 challenge_invalid / replay_mismatch 落库) | `verdict_rejected` | `{submissionId, direction}`(方向码封闭集,见下) |
+| 重放执行面故障(spawn 失败 / worker 进程异常 / worker 命令级非 challenge_invalid / 裁决字面非法 / 存储不可达 / 管线内部异常) | 不落(run failed 重试链) | `verdict_replay_failed` | `{submissionId, direction}` |
+
+- **方向码封闭集(`verdict_rejected`)**:`six_records_incomplete` / `challenge_version_unregistered` / `challenge_bundle_missing` / `seed_policy_unverifiable` / `bundle_lock_mismatch` / `worker_rejected` / `log_digest_mismatch` / `bundle_hash_mismatch` / `bundle_access_denied` / `bundle_json_unparseable` / `action_log_over_frame_budget`;`verdict_replay_failed` 的 direction 为同类确定性标签(`spawn_failed` / `process_exited` / `worker_command_error:<code>` / `invalid_verdict_literal` / `bundle_unavailable` / `store_unavailable` / `internal_error` 等)——零秘密载荷,零载荷细节(D-API-90"拒裁安全事实");
+- **发射原子性(fail-closed,D-API-91 同构)**:审计 INSERT 与 run 处置(verdicts 幂等落库 + run 状态推进)**同事务**——append 失败即处置整体回滚(裁决完成事实与审计账不可分);存储不可达时处置与审计一同缺席(受控日志留痕,重试链承接),不静默放行;幂等重放(`ON CONFLICT DO NOTHING` 未落新行)不重复发射——审计记"该 submission 被判为何值"这一事实一次;
+- **事件主体形态**:`tenant_id` = run 行租户;`user_id` = `'verifier'`(信任域 4 系统主体——裁决域事件无用户身份,拒绝事件占位先例 D-API-14 同方向);`session_id` = submissions 行 `session_id`(认领 SQL 随引用一并取回,争议复核关联锚);`at` = 发射时刻(epoch 毫秒);
+- **发射面归属**:verifier(信任域 4)侧实现(本条);session-api 既有七值发射面零改动;verifier 角色对 `audit_log` 仅 INSERT(D-API-93 预留,库层 CHECK 十值同约束)。
+
+### D-API-96 verdicts 明细列与 SERVER_ONLY 机检(阶段六 WP-62)
+
+- **明细列**:004 迁移预留的 `verdicts.detail JSONB` 直接承载(零新迁移)——verifier 落库 detail 形态 = `{replay(重放逐项结论), logDigest(复算摘要), hiddenTests(隐藏测试汇总面,与 verify 响应同形)}`;拒裁落库路径(challenge_invalid / replay_mismatch 裁决面结论)detail = `{reason: <方向码>}`;detail 整体 SERVER_ONLY:呈现链路(session-api 读裁决域)只取 11 值 verdict 与五字段上限面(D-API-83),detail 零浏览器可达面;
+- **机检断言**:verify 响应 JSON 序列化语料对谓词内容 / testId / 隐藏测试载荷零命中(Rust 测试锚);`scan:public` 构建产物扫描面不变(verifier 产物不进浏览器可达面);verdicts 明细的浏览器可达性红灯由 D-API-83 契约反例(SERVER_ONLY detail 注入拒绝)与呈现路由实现(WP-63)承接。
 
 
 

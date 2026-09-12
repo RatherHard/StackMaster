@@ -253,6 +253,12 @@ impl SessionRuntime {
         &self.judge
     }
 
+    /// 引擎可变引用(阶段六 WP-62 verify 面:隐藏测试驱动的重放终态基线;
+    /// 零公开面——仅引擎进程内判题驱动消费)。
+    pub fn engine_mut(&mut self) -> &mut Engine {
+        &mut self.engine
+    }
+
     /// 动作日志(append-only 只读视图)。
     pub fn log(&self) -> &ActionLog {
         &self.log

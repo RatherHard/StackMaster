@@ -61,6 +61,16 @@ pub enum ReplayError {
 
 /// 以日志驱动全新运行时重放,逐项比对(见模块头)。
 pub fn replay(config: SessionConfig, log: &ActionLog) -> Result<ReplayReport, ReplayError> {
+    replay_with_final(config, log).map(|(report, _)| report)
+}
+
+/// 以日志驱动全新运行时重放,逐项比对并返回**重放终态运行时**(阶段六 WP-62
+/// 隐藏测试执行基线;additive:既有 [`replay`] 委托本函数,逐项比对语义零
+/// 改动——终态运行时仅 verify 命令面的判题驱动消费,基线之上每测试独立克隆)。
+pub fn replay_with_final(
+    config: SessionConfig,
+    log: &ActionLog,
+) -> Result<(ReplayReport, SessionRuntime), ReplayError> {
     if log.context != config.context {
         return Err(ReplayError::ContextMismatch);
     }
@@ -121,5 +131,5 @@ pub fn replay(config: SessionConfig, log: &ActionLog) -> Result<ReplayReport, Re
         report.revision_sequence.push(receipt.revision);
     }
     report.final_status = runtime.state().status;
-    Ok(report)
+    Ok((report, runtime))
 }

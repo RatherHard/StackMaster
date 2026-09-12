@@ -57,7 +57,12 @@ rl.on("line", (line) => {
       send({
         type: "verify_report",
         seq,
-        report: { verdict, replay, logDigest: digest },
+        report: {
+          verdict,
+          replay,
+          hiddenTests: { kind: "executed", allPassed: true, tests: [{ index: 0, verdict: "success", expected: "success", passed: true }] },
+          logDigest: digest,
+        },
       });
       break;
     }

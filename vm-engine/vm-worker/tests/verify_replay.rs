@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use vm_worker::contract::strict_value::StrictValue;
 use vm_worker::protocol::message::{WorkerErrorCode, WorkerOutbound};
 use vm_worker::protocol::worker::{ProtocolViolation, Worker};
-use vm_worker::session::verify::VerifyReplayOutcome;
+use vm_worker::session::verify::{VerifyReplayOutcome, VerifyReport};
 
 const A32_REGION: u64 = 4096;
 const CODE_BASE: &str = "0x401000";
@@ -135,12 +135,21 @@ fn winning_action() -> Value {
 
 /// 活体会话:load → 动作 → export_action_log;返回 (上下文, 规范化日志文本)。
 fn live_material(challenge_id: &str, actions: &[Value]) -> (Value, String) {
+    live_material_with(
+        &verify_bundle(challenge_id),
+        &verify_descriptor(challenge_id),
+        actions,
+    )
+}
+
+/// 同上,语料可注入(WP-62:隐藏测试 / 程序变体的装配哈希须与活体装载一致)。
+fn live_material_with(bundle: &Value, descriptor: &Value, actions: &[Value]) -> (Value, String) {
     let mut worker = Worker::new().expect("worker 构造");
     let loaded = worker
         .handle_frame(&strict(&json!({
             "type": "load", "seq": 1,
-            "privateBundle": verify_bundle(challenge_id),
-            "publicDescriptor": verify_descriptor(challenge_id)
+            "privateBundle": bundle,
+            "publicDescriptor": descriptor
         })))
         .expect("load 受理");
     assert!(
@@ -148,13 +157,13 @@ fn live_material(challenge_id: &str, actions: &[Value]) -> (Value, String) {
         "{loaded:?}"
     );
     let mut seq = 2;
-    for action in actions {
+    for (index, action) in actions.iter().enumerate() {
         let response = worker
             .handle_frame(&strict(&json!({
-                "type": "apply_action", "seq": seq, "requestId": "req-live",
+                "type": "apply_action", "seq": seq, "requestId": format!("req-live-{index}"),
                 "actionRequest": {
-                    "protocolVersion": 1, "sessionId": "sess-verify", "clientSeq": 1,
-                    "idempotencyKey": "idem-verify", "baseRevision": 0, "action": action
+                    "protocolVersion": 1, "sessionId": "sess-verify", "clientSeq": index + 1,
+                    "idempotencyKey": format!("idem-verify-{index}"), "baseRevision": index, "action": action
                 }
             })))
             .expect("apply_action 受理");
@@ -447,5 +456,283 @@ fn export_action_log_roundtrips_context_and_log() {
             assert_eq!(parsed.len(), 0, "空会话日志零条目");
         }
         other => panic!("应回 action_log_exported,实际 {other:?}"),
+    }
+}
+
+// ── WP-62:隐藏测试裁决与 11 值汇总(判题语义规约 §八·一 / ADR-9 §四·一)──
+
+/// 题目语料变体:在 verify_bundle 上追加隐藏测试声明(predicate_probe 形态,
+/// 载荷空,D-H2 边界)。
+fn bundle_with_hidden_tests(challenge_id: &str, tests: Value) -> Value {
+    let mut bundle = verify_bundle(challenge_id);
+    bundle["judging"]["hiddenTests"] = tests;
+    bundle
+}
+
+/// 程序变体注入(IR 指令序列;隐藏测试克隆从基线运行)。
+fn with_program(bundle: &mut Value, instructions: Value) {
+    bundle["compiledIr"]["instructions"] = instructions;
+}
+
+fn probe_tests(expected: &str) -> Value {
+    json!([{ "testId": "probe-0", "kind": "predicate_probe", "expectedResult": expected }])
+}
+
+fn reference_payload_tests(expected: &str) -> Value {
+    json!([{ "testId": "ref-0", "kind": "reference_payload", "expectedResult": expected }])
+}
+
+/// 非制胜动作:写 0x42 到 buffer(成功条件锚定 stack 0x200,会话保持 running)。
+fn neutral_action() -> Value {
+    json!({ "type": "write_bytes", "args": { "addressHex": "0x20000000", "bytesHex": "42" } })
+}
+
+fn summary_tests(report: &VerifyReport) -> Vec<(u32, String, String, bool)> {
+    match &report.hidden_tests {
+        vm_worker::session::verify::HiddenTestSummary::Executed { tests, .. } => tests
+            .iter()
+            .map(|t| (t.index, t.verdict.clone(), t.expected.clone(), t.passed))
+            .collect(),
+        other => panic!("汇总面应为 executed,实际 {other:?}"),
+    }
+}
+
+/// 参考解语料(predicate_probe 全过 + 终态 won)⇒ success:汇总面 executed /
+/// allPassed / 逐测试(索引,classify,expected,passed)逐格断言。
+#[test]
+fn verify_runs_hidden_probe_on_won_terminal_as_success_summary() {
+    let bundle = bundle_with_hidden_tests("wp62-probe-pass", probe_tests("success"));
+    let descriptor = verify_descriptor("wp62-probe-pass");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[winning_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "success");
+    match &report.hidden_tests {
+        vm_worker::session::verify::HiddenTestSummary::Executed { all_passed, tests } => {
+            assert!(*all_passed);
+            assert_eq!(tests.len(), 1);
+            assert_eq!(tests[0].index, 0);
+            assert_eq!(tests[0].verdict, "success");
+            assert_eq!(tests[0].expected, "success");
+            assert!(tests[0].passed);
+        }
+        other => panic!("汇总面应为 executed,实际 {other:?}"),
+    }
+}
+
+/// 独立性锚:交互 won ≠ 强制 success——probe 期望 wrong_answer 而基线达成
+/// 成功条件 ⇒ 测试失败(classify success),汇总 wrong_answer(失败方向优先)。
+#[test]
+fn interaction_won_does_not_force_success_when_hidden_probe_expects_failure() {
+    let bundle = bundle_with_hidden_tests("wp62-probe-invert", probe_tests("wrong_answer"));
+    let descriptor = verify_descriptor("wp62-probe-invert");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[winning_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "wrong_answer");
+    let tests = summary_tests(&report);
+    assert_eq!(tests[0].1, "success", "基线达成成功条件 ⇒ classify success");
+    assert!(!tests[0].3, "与期望 wrong_answer 不一致 ⇒ 测试失败");
+}
+
+/// 未达成成功条件的 probe(期望 success,classify wrong_answer)⇒ wrong_answer
+/// (失败方向映射矩阵 wrong_answer 格;终态 running + 全过路径同 wrong_answer)。
+#[test]
+fn failing_probe_on_unwon_session_maps_to_wrong_answer() {
+    let bundle = bundle_with_hidden_tests("wp62-probe-fail", probe_tests("success"));
+    let descriptor = verify_descriptor("wp62-probe-fail");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[neutral_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "wrong_answer");
+    let tests = summary_tests(&report);
+    assert_eq!(tests[0].1, "wrong_answer");
+    assert!(!tests[0].3);
+}
+
+/// reference_payload(空载荷)克隆自 running 基线运行至崩溃 ⇒ classify
+/// program_crash ⇒ 汇总 program_crash(失败方向同字面承载)。
+#[test]
+fn hidden_reference_payload_crash_maps_to_program_crash() {
+    let mut bundle = bundle_with_hidden_tests("wp62-ref-crash", reference_payload_tests("success"));
+    with_program(
+        &mut bundle,
+        json!([{ "op": "mov", "operands": [
+            { "kind": "register", "name": "RAX" },
+            { "kind": "immediate", "valueHex": "0x1" }
+        ] }]),
+    );
+    let descriptor = verify_descriptor("wp62-ref-crash");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[neutral_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "program_crash");
+    let tests = summary_tests(&report);
+    assert_eq!(tests[0].1, "program_crash");
+    assert!(!tests[0].3);
+}
+
+/// reference_payload 克隆运行至数据访问越权 ⇒ classify memory_fault ⇒
+/// 汇总 memory_fault。
+#[test]
+fn hidden_reference_payload_memory_fault_maps_to_memory_fault() {
+    let mut bundle =
+        bundle_with_hidden_tests("wp62-ref-memfault", reference_payload_tests("success"));
+    with_program(
+        &mut bundle,
+        json!([{ "op": "mov", "operands": [
+            { "kind": "register", "name": "RAX" },
+            { "kind": "memory", "baseRegister": "RSP", "displacementHex": "0x40000000" }
+        ] }]),
+    );
+    let descriptor = verify_descriptor("wp62-ref-memfault");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[neutral_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "memory_fault");
+    let tests = summary_tests(&report);
+    assert_eq!(tests[0].1, "memory_fault");
+    assert!(!tests[0].3);
+}
+
+/// reference_payload 克隆运行至全局步数预算耗尽 ⇒ classify resource_limit ⇒
+/// 汇总 resource_limit。
+#[test]
+fn hidden_reference_payload_budget_exhaustion_maps_to_resource_limit() {
+    let mut bundle = bundle_with_hidden_tests("wp62-ref-limit", reference_payload_tests("success"));
+    with_program(
+        &mut bundle,
+        json!([{ "op": "jmp", "operands": [{ "kind": "immediate", "valueHex": "0x0" }] }]),
+    );
+    let descriptor = verify_descriptor("wp62-ref-limit");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "resource_limit");
+    let tests = summary_tests(&report);
+    assert_eq!(tests[0].1, "resource_limit");
+    assert!(!tests[0].3);
+}
+
+/// 终态 failed 的引擎结局粗化优先于隐藏测试结论(fail-closed:交互失败方向
+/// 不被隐藏测试"救回";probe 在失败基线上另报 wrong_answer,汇总仍
+/// program_crash)。
+#[test]
+fn failed_terminal_coarsening_takes_priority_over_hidden_probe_direction() {
+    // 程序 = 单条 mov:两次 step,第二次取指越界 ⇒ invalid_rip 终态
+    //(终态只能由指令执行 / 判题条件置位;动作级教学失败不置终态)。
+    let mut bundle = bundle_with_hidden_tests("wp62-failed-priority", probe_tests("success"));
+    with_program(
+        &mut bundle,
+        json!([{ "op": "mov", "operands": [
+            { "kind": "register", "name": "RAX" },
+            { "kind": "immediate", "valueHex": "0x1" }
+        ] }]),
+    );
+    let descriptor = verify_descriptor("wp62-failed-priority");
+    let (context, log) = live_material_with(
+        &bundle,
+        &descriptor,
+        &[
+            json!({ "type": "step", "args": {} }),
+            json!({ "type": "step", "args": {} }),
+        ],
+    );
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "program_crash");
+    let tests = summary_tests(&report);
+    assert_eq!(
+        tests[0].1, "wrong_answer",
+        "probe 在失败基线上另报 wrong_answer"
+    );
+}
+
+/// 隐藏测试驱动错误(基线谓词预算耗尽)⇒ 汇总 fault 面 + engine_error 方向
+/// (主控定案 ④;与重放面谓词预算耗尽的 challenge_invalid 有意区分)。
+#[test]
+fn predicate_budget_exhaustion_in_hidden_summary_maps_to_engine_error() {
+    let mut bundle = bundle_with_hidden_tests("wp62-probe-budget", probe_tests("success"));
+    bundle["judgingConfig"]["maxPredicateEvalSteps"] = json!(1);
+    let descriptor = verify_descriptor("wp62-probe-budget");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[winning_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "engine_error");
+    match &report.hidden_tests {
+        vm_worker::session::verify::HiddenTestSummary::Fault { reason } => {
+            assert_eq!(*reason, "predicate_budget_exhausted");
+        }
+        other => panic!("汇总面应为 fault,实际 {other:?}"),
+    }
+}
+
+/// 重放逐项漂移 ⇒ 隐藏测试不执行(汇总面 skipped),裁决走既有映射。
+#[test]
+fn verify_skips_hidden_summary_when_replay_diverges() {
+    let bundle = bundle_with_hidden_tests("wp62-skip-tamper", probe_tests("success"));
+    let descriptor = verify_descriptor("wp62-skip-tamper");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[winning_action()]);
+    let marker = "\"stateHashAfter\":\"";
+    let position = log.find(marker).expect("日志含 stateHashAfter") + marker.len();
+    let mut tampered = log.clone();
+    tampered.replace_range(position..position + 1, "f");
+    let report =
+        report_of(run_verify(&bundle, &descriptor, &context, &tampered).expect("verify 受理"));
+    assert_eq!(report.verdict.as_str(), "replay_mismatch");
+    assert_eq!(
+        report.hidden_tests,
+        vm_worker::session::verify::HiddenTestSummary::Skipped
+    );
+}
+
+/// 零公开面机检:verify 响应 JSON 对 testId / 谓词形态 / 载荷字段零命中
+/// (汇总面只有索引与判定值,判题语义 §1.5 载荷纪律的响应面延伸)。
+#[test]
+fn verify_report_hidden_summary_carries_zero_public_face_material() {
+    let bundle = bundle_with_hidden_tests("wp62-zero-public", probe_tests("success"));
+    let descriptor = verify_descriptor("wp62-zero-public");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[winning_action()]);
+    let report = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    let text = serde_json::to_string(&report).expect("报告可序列化");
+    for forbidden in [
+        "probe-0",
+        "testId",
+        "memory_equals",
+        "regionId",
+        "bytesHex",
+        "offsetBytes",
+        "payload",
+    ] {
+        assert!(
+            !text.contains(forbidden),
+            "报告面不得携带 {forbidden}:{text}"
+        );
+    }
+}
+
+/// 同日志同汇总(I-4 在汇总面的延伸):同材料两次 verify 结论与汇总面逐字节一致。
+#[test]
+fn verify_hidden_summary_deterministic_for_same_log() {
+    let bundle = bundle_with_hidden_tests("wp62-determinism", probe_tests("success"));
+    let descriptor = verify_descriptor("wp62-determinism");
+    let (context, log) = live_material_with(&bundle, &descriptor, &[winning_action()]);
+    let first = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    let second = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    assert_eq!(first, second);
+}
+
+/// 7 值 × 汇总映射矩阵逐格单测(失败测试 classify 值 → 11 值承载;
+/// invalid_action / timeout 两格 v1 端到端结构性不可达,由本单测承载)。
+#[test]
+fn hidden_failure_direction_matrix_covers_seven_classify_values() {
+    use vm_worker::session::verify::hidden_test_failure_direction;
+    let cases = [
+        ("success", "wrong_answer"),
+        ("wrong_answer", "wrong_answer"),
+        ("invalid_action", "invalid_action"),
+        ("program_crash", "program_crash"),
+        ("memory_fault", "memory_fault"),
+        ("resource_limit", "resource_limit"),
+        ("timeout", "timeout"),
+    ];
+    for (classify, expected) in cases {
+        assert_eq!(
+            hidden_test_failure_direction(classify).as_str(),
+            expected,
+            "矩阵格 {classify} ⇒ {expected}"
+        );
     }
 }

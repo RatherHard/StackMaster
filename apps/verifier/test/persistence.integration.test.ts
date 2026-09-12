@@ -8,6 +8,10 @@
  *  - 失败:重试以新 pending run 行承载;耗尽后残留 pending 行收口;
  *  - 题目登记:租户作用域查询(跨租户与未登记同形 null,D-API-20 延伸);
  *  - MinIO:getPrivate 往返 / 缺失 null / readiness 探针(NotFound = 健康)。
+ *
+ * WP-62 增补:审计发射同事务面(verdict_completed / verdict_replay_failed
+ * 行落库、审计 append 失败整体回滚的 fail-closed 红灯;audit_log 行为
+ * append-only 账,测试数据按套件唯一租户隔离、不清理)。
  */
 import { Buffer } from "node:buffer";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -71,6 +75,7 @@ describe.skipIf(!IT_ENABLED)("PostgreSQL 裁决域(容器门控)", () => {
     const mine = claimed.find((run) => run.runId === runId);
     expect(mine).toBeDefined();
     expect(mine?.tenantId).toBe(ids.tenantId);
+    expect(mine?.sessionId).toBe(ids.sessionId);
     expect(mine?.logDigest).toBe("a".repeat(64));
     expect(mine?.attemptCount).toBe(1);
     expect((mine?.reference as { form?: string })["form"]).toBe("stackmaster-session-submit/1");
@@ -114,20 +119,52 @@ describe.skipIf(!IT_ENABLED)("PostgreSQL 裁决域(容器门控)", () => {
       logDigest: null,
     });
 
+    const audit = {
+      kind: "verdict_completed",
+      at: Date.now(),
+      detail: { submissionId, verdict: "success" },
+    } as const;
     await queue.complete({
       runId,
       submissionId,
       tenantId: ids.tenantId,
+      sessionId: ids.sessionId,
       verdict: "success",
       detail: { replay: { kind: "matched" } },
+      audit,
     });
-    // 幂等:同 submission 的重复 complete(并发 / 重放形态)不产生第二行。
+    // 幂等:同 submission 的重复 complete(并发 / 重放形态)不产生第二行
+    //(审计事件同事务追加,幂等路径下也不改写既有裁决)。
     await queue.complete({
       runId,
       submissionId,
       tenantId: ids.tenantId,
+      sessionId: ids.sessionId,
       verdict: "success",
       detail: { replay: { kind: "matched" } },
+      audit,
+    });
+
+    // 审计发射(WP-62 / D-API-95):verdict_completed 与处置同事务落库,
+    // user_id = verifier 系统主体,session_id = 提交会话锚,detail 零秘密。
+    const auditRows = await pool.query<{
+      kind: string;
+      user_id: string;
+      session_id: string | null;
+      detail: Record<string, unknown>;
+    }>(
+      `SELECT kind, user_id, session_id, detail FROM audit_log WHERE tenant_id = $1 ORDER BY id`,
+      [ids.tenantId],
+    );
+    expect(auditRows.rows).toHaveLength(1);
+    expect(auditRows.rows[0]).toMatchObject({
+      kind: "verdict_completed",
+      user_id: "verifier",
+      session_id: ids.sessionId,
+    });
+    expect(auditRows.rows[0]?.["detail"]).toEqual({
+      submissionId,
+      verdict: "success",
     });
 
     const runs = await pool.query<{ status: string }>(
@@ -156,9 +193,15 @@ describe.skipIf(!IT_ENABLED)("PostgreSQL 裁决域(容器门控)", () => {
       runId,
       tenantId: ids.tenantId,
       submissionId,
+      sessionId: ids.sessionId,
       attemptCount: 1,
       reason: "bundle_unavailable",
       maxAttempts: 3,
+      audit: {
+        kind: "verdict_replay_failed",
+        at: Date.now(),
+        detail: { submissionId, direction: "bundle_unavailable" },
+      },
     });
     const afterFirst = await pool.query<{ status: string }>(
       `SELECT status FROM verifier_runs WHERE submission_id = $1 ORDER BY created_at`,
@@ -176,9 +219,26 @@ describe.skipIf(!IT_ENABLED)("PostgreSQL 裁决域(容器门控)", () => {
       runId: secondRun.rows[0]?.["id"] ?? "",
       tenantId: ids.tenantId,
       submissionId,
+      sessionId: ids.sessionId,
       attemptCount: 3,
       reason: "bundle_unavailable",
       maxAttempts: 3,
+      audit: {
+        kind: "verdict_replay_failed",
+        at: Date.now(),
+        detail: { submissionId, direction: "bundle_unavailable" },
+      },
+    });
+
+    // 失败态的审计发射:verdict_replay_failed 行随失败态同事务落库。
+    const failAudit = await pool.query<{ kind: string; detail: Record<string, unknown> }>(
+      `SELECT kind, detail FROM audit_log WHERE tenant_id = $1 AND kind = 'verdict_replay_failed'`,
+      [ids.tenantId],
+    );
+    expect(failAudit.rows.length).toBeGreaterThanOrEqual(2);
+    expect(failAudit.rows[0]?.["detail"]).toMatchObject({
+      submissionId,
+      direction: "bundle_unavailable",
     });
     const afterExhaust = await pool.query<{ status: string }>(
       `SELECT status FROM verifier_runs WHERE submission_id = $1 ORDER BY created_at`,
@@ -231,9 +291,15 @@ describe.skipIf(!IT_ENABLED)("PostgreSQL 裁决域(容器门控)", () => {
         runId: "not-a-uuid",
         tenantId: ids.tenantId,
         submissionId: "00000000-0000-0000-0000-000000000000",
+        sessionId: ids.sessionId,
         attemptCount: 1,
         reason: "bundle_unavailable",
         maxAttempts: 3,
+        audit: {
+          kind: "verdict_replay_failed",
+          at: Date.now(),
+          detail: { submissionId: "00000000-0000-0000-0000-000000000000", direction: "bundle_unavailable" },
+        },
       }),
     ).rejects.toBeInstanceOf(VerifierStoreError);
     // 回滚后连接可用(池未污染)。
@@ -247,10 +313,55 @@ describe.skipIf(!IT_ENABLED)("PostgreSQL 裁决域(容器门控)", () => {
         runId: "00000000-0000-0000-0000-00000000000f",
         submissionId: "00000000-0000-0000-0000-000000000000",
         tenantId: ids.tenantId,
+        sessionId: ids.sessionId,
         verdict: "success",
         detail: null,
+        audit: {
+          kind: "verdict_completed",
+          at: Date.now(),
+          detail: { submissionId: "00000000-0000-0000-0000-000000000000", verdict: "success" },
+        },
       }),
     ).rejects.toBeInstanceOf(VerifierStoreError);
+  });
+
+  it("审计 append 失败 → complete 整体回滚(审计与处置不可分,fail-closed)", async () => {
+    const submissionId = await insertSubmission(pool, {
+      tenantId: ids.tenantId,
+      sessionId: ids.sessionId,
+      reference: validReference({ challengeId: "chal-audit-fail" }),
+    });
+    const runId = await insertRun(pool, { tenantId: ids.tenantId, submissionId });
+    // kind 封闭集合违例(CHECK,D-API-90)→ 审计 INSERT 失败 → 整个
+    // complete 事务回滚:verdicts 不落、run 不推进(裁决完成事实与审计账
+    // 不可分,D-API-95)。
+    await expect(
+      queue.complete({
+        runId,
+        submissionId,
+        tenantId: ids.tenantId,
+        sessionId: ids.sessionId,
+        verdict: "success",
+        detail: null,
+        audit: {
+          kind: "bogus_kind" as "verdict_completed",
+          at: Date.now(),
+          detail: { submissionId },
+        },
+      }),
+    ).rejects.toBeInstanceOf(VerifierStoreError);
+    const runs = await pool.query<{ status: string }>(
+      `SELECT status FROM verifier_runs WHERE id = $1`,
+      [runId],
+    );
+    expect(runs.rows[0]?.["status"]).toBe("pending");
+    const verdicts = await pool.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM verdicts WHERE submission_id = $1`,
+      [submissionId],
+    );
+    expect(verdicts.rows[0]?.["count"]).toBe("0");
+    // 回滚后连接可用(池未污染)。
+    expect(await queue.pendingCount()).toBeGreaterThanOrEqual(0);
   });
 
   it("查询面故障:连接池关闭后 pendingCount / findVersion → VerifierStoreError", async () => {
