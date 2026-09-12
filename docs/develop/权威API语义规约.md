@@ -1059,6 +1059,41 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 
 **完成标准对照(任务分解 WP-66)**:容器池形态全链路集成测试绿(①③层;会话全生命周期 + 崩溃替换恢复实跑);容器无网络出口红灯(结构 + 行为双面);强制终止后零残留断言;进程池形态既有测试零回退(①④层);cgroup / 只读 / 禁网络出口形态交付(§五退出条件 6);开关生效且缺省进程池(Q4,D-API-105)。
 
+## 三·二十、MVP 题目集制作与发布(阶段六 WP-68 题目集部分;D-API-107 ~ D-API-109)
+
+> 本节为 WP-68「MVP 题目集制作」的登记(题目集面;T3 扩展评估报告与 MVP 验收 13.6 评审成文留 WP-68b 承接)。上游依据:计划书 11.1(6~10 道渐进式题目,栈帧 / buffer / return address 闭环为主)/ 13.2(题目发布前义务:参考解、边界输入、回归测试)/ 13.6;《最小DSL范围.md》(DSL 词汇面);《判题语义规约.md》§七(隐藏测试 v1 = `predicate_probe`,载荷空,无输入槽——题目设计在此边界内)/ §八·一(11 值汇总);《数据分类与秘密零驻留清单.md》§10.2(T-SC1 逐题必过);阶段四验收评审 §六.8(ZR-B13 非平凡复算 fixture 移交);判题语义规约 §6.1 D-J8。主控预决策:题目集规模 = 8 道(6~10 区间中位);制作管线沿 challenge-compiler 既有形态;至少一组题目进 compose 套件、其余进 IT 形态;D-J8 = 不启用真实实例 ASLR。
+
+### D-API-107 MVP 题目集登记与发布面(8 道渐进式;阶段六 WP-68)
+
+- **题目集清单(规模 = 8;渐进式梯度:栈帧 → buffer 溢出 → return address 覆盖 → 组合闭环;教学文案中文为主,承载于公开描述包 `briefing` / `hintLadder` / `publicErrorMapping`——题目教学内容在描述包内而非 vm-ui i18n,沿既有形态不设第二机制)**:
+
+| # | challengeId | 模式 | 教学目标(十一章观察框架一格) | 成功条件判题面 | 语料矩阵(参考解 / 边界) | 十五章观察点 |
+|---|---|---|---|---|---|---|
+| 1 | sm-ch01-write-basics | IR | 可见内存与 `write_bytes`;区域权限与可解释错误 | `memory_equals` | 4(success / wrong_answer×2 / program_crash) | 首次成功时间;错误类型分布;提示使用等级 |
+| 2 | sm-ch02-little-endian | IR | 小端序观察;"值 ≠ 地址" | `memory_contains` | 3(success / wrong_answer / program_crash) | 完成率;端序错误重复率;提示使用等级 |
+| 3 | sm-ch03-frame-layout | IR | 栈帧布局算术(saved RBP / 返回地址槽) | `register_equals`(RIP)+ `stack_canary_intact` | 3(success / wrong_answer / program_crash) | 首次成功时间;槽位错写率;回退次数 |
+| 4 | sm-ch04-buffer-overflow | IR | 连续溢出覆写返回地址(payload 构造) | 同上 | 3(同上) | 溢出因果链首次成功;端序错误;概念前测 |
+| 5 | sm-ch05-canary-guard | IR | 栈保护(金丝雀)语义与精准绕过局限 | 同上 + 守护标记 `memory_equals` | 3(同上) | 溢出越界长度;防护机制概念前后测;回退次数 |
+| 6 | sm-ch06-ret2win-byte | 字节 | 字节模式真实地址语义下的 ret2win | `register_equals`(RIP) | 3(同上) | 字节模式过渡首次成功;提示等级;投影传输量 |
+| 7 | sm-ch07-hidden-vault | 字节 | 隐藏区域不可探测(I-9)+ 虚拟文件 flag(作者接口) | `virtual_file_read` | 3(同上) | 隐藏区域概念完成率;探针行为;inaccessible_address 分布 |
+| 8 | sm-ch08-full-chain | 字节 | 两阶段状态机 + 全要素组合闭环 | `virtual_file_read`(阶段机编排) | 3(success / wrong_answer(闸门拒绝) / program_crash) | 收官完成率;阶段闸门重试;动作 p50/p95 |
+
+- **制作管线(沿既有形态,零第二目录体系)**:语料源 = `apps/session-api/test/mvp-challenges/corpus.ts`(构造式 DSL 源,私有包进程内构造**永不入 git**,沿 `lifecycle-challenge.ts` / challenge-compiler test helpers 先例)→ `loadChallengePair` 全量门禁(Ajv Schema + WP-4 检查器全量 + 编译期校验 + 状态机封闭性;`test/mvp-challenges/mvp-challenge-set.test.ts` 44 用例,红灯先行)→ 规范化 JSON SHA-256 摘要(登记哈希输入,确定性断言)→ compose 套件 `ChallengeRegistrar` 真实登记(Ed25519 签发验签 + PG `challenge_versions` + MinIO 双桶,`test/compose/mvp-challenge-set.compose.integration.test.ts` 6 用例;版本不可变语义下,固定 ID + 确定性内容使重跑前清残留后重登记字节逐字节同源);
+- **发布前义务逐题兑现(13.2)**:①参考解语料;②边界语料(每题 ≥ 1 条 wrong_answer 方向 + ≥ 1 条相关失败方向 program_crash);③裁决回归(见下);④T-SC1(见 D-API-107 附则);⑤公开/私有零越界(检查器 + `scan:public` 全绿)。题目集全部 26 条语料的裁决矩阵在真实 vm-worker 上回归(`verdict-closed-loop.test.ts`:会话 → 动作 → `export_action_log` → 一次性 verify → 11 值 = 语料预期,26/26 全绿);生产闭环(登记 → 队列 → verifier 服务 → verdicts → `GET /verdicts` 五字段契约)由 compose 套件以 CH-07 参考解(**生产链路首个 success 判定**)与 CH-04 crash 语料(program_crash)实跑;
+- **教学指标观察点衔接(十五章)**:每题登记 3 项观察点(见清单表末列),经 `MvpChallengeMeta.observationPoints` 进 T3 扩展评估报告接口(WP-68b 消费);MVP 试用初期的实际数据采集不在本阶段。
+- **附则(T-SC1 逐题必过)**:`t-sc1-secret-variants.test.ts` 9 用例——对每题声明秘密(flag 长度 8/16/32/64 + 同长异值;CH-05 守护标记值;CH-07/08 隐藏区域标记与虚拟文件内容)生成变体,布局 / 代码 / 动作脚本(含隐藏映射与未映射地址的 I-9 探针写)完全不变,逐动作响应规范化序列化后字节全等(唯一剥离面 = 每响应 `requestId` 服务端随机关联标识,非秘密函数,与 I-4 断言剥离面同形);8 题 × 5~7 变体全绿。
+
+### D-API-108 D-J8 产品决策登记:不启用真实实例 ASLR(阶段六 WP-68)
+
+- **裁决**:题目集**不启用** `aslrEnabled` 作用于真实实例(全集 8 题 `aslrEnabled` 缺省,机检断言入题目集门禁);v1 真实实例维持固定基址,ASLR 仅以调试实例兄弟形态呈现("同结构、异基址",D-J10 映射算法定案的既有落地)。
+- **理由与触发条件**(判题语义规约 §6.1 D-J8 行原文承接):触发条件 = 真实实例 ASLR 的产品决策进入实施排期;当前无排期。触发则随行演进:①权威动作日志 `write_bytes` 等动作参数为绝对地址,重放须定义地址置换变换(或动作日志地址语义演进为结构相对地址);②verifier 重放的 `replay_mismatch` 语义须先扩展派生路径复核;③快照信封须新增基址登记位;④`DerivationPathSummary` 已承载派生次数,Schema 无需变更。超出本阶段;本登记不改变 `SeedDeriver` / 调试变体派生面的任何既有语义(ZR-B13 复算面照常)。
+
+### D-API-109 ZR-B13 非平凡复算 fixture 接入与检查器组合归因修正(阶段六 WP-68;含 canary 契约现状登记)
+
+- **接入面**:承载题 = CH-07(sm-ch07-hidden-vault,字节模式 + 隐藏区域)的派生面 fixture(`zrB13FixturePair`:CH-07 + 公开包 canary 启用 + 私有包 hidden + containsSecret 的 canary 对象落隐藏区域内,XS-CANARY-CORR ✓)。`zr-b13-derivation.test.ts` 6 用例:ASLR 开零命中 + **draws = 514(基址 1 + 隐藏区域 512 + canary 1)> 0 非平凡**;ASLR 关 draws = 513 零命中(D-J8 口径的调试兄弟形态面);红灯(错误种子 / 派生槽单字节篡改)必命中。阶段四集成层 draws = 0 的"平凡一致性"登记自此闭合;`test/scan/debug-variant-derivation-checker.test.ts` 既有 7 用例零回退。
+- **检查器修正(机检实现对齐已登记槽序,零契约变更)**:`debug-variant-derivation-checker.ts` 原实现对"隐藏区域 + canary 槽同区域"组合存在假阳性(阶段 A 以纯派生内容比对隐藏区域,而 canary 叠加后的真值是阶段 B;阶段四单测两者分属不同区域,未触发)。修正 = canary 属主区域的逐字节比对推迟到阶段 B,纯隐藏区域维持阶段 A 归因;与 WP-40 §七.2 冻结槽序(基址 → 隐藏区域 → canary 叠加)一致。
+- **canary 契约现状登记(制作期发现,冲突如实报告)**:XS-CANARY-CORR(检查器:启用 canary ⇒ 存在 hidden + containsSecret 的 canary 对象且与公开区域不相交)与引擎装配 `build_canary_slots`(canary 对象必须 `visibility = public`,且 canary 对象存在时公开包必须启用 canary)在冻结契约下结构性不相容 ⇒ **交互可玩题不能启用引擎 canary**(canary 启用的题目无法同时通过装载管线与交互装配)。处置:①CH-05 以"守护标记 + `memory_equals` 谓词"承担金丝雀教学(引擎 `stack_canary_intact` 在无槽题目上恒真,谓词词汇面保持覆盖);②CH-07 派生面携带真实 canary 槽声明承载 ZR-B13;③契约收口(canary 槽可见性语义的两侧对齐)按 WP-1 §1.3 流程另行登记,本包不改任何契约面。
+
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:

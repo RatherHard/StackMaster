@@ -23,6 +23,13 @@
  * 声明派生)。复算方与产出方(buildDebugVariantBundle)共用同一派生原语、
  * 独立实现槽序消费,与确定性属性测试(同种子同序列)互补。
  *
+ * WP-68 修正(2026-09-13):隐藏区域 + canary 槽**同区域组合**的归因——
+ * 拥有 canary 槽的区域,其最终内容 = 阶段 A 派生 + 阶段 B canary 叠加,
+ * 逐字节比对按阶段 B 承载(阶段 A 只对纯隐藏区域比对)。阶段四单测未覆盖
+ * 该组合(隐 + canary 分属不同区域),WP-68 非平凡复算 fixture(CH-07
+ * 派生面,隐藏区域与 canary 同区域)首次触发原实现的假阳性;本修正与
+ * WP-40 §七.2 冻结槽序(基址 → 隐藏区域 → canary 叠加)对齐,零契约变更。
+ *
  * 依赖纪律:仅依赖 `@stackmaster/challenge-compiler` 的派生原语(SeedDeriver /
  * deriveAslrBaseAddress / 算法标识;session-api 生产 Provider 同源依赖,无新增
  * 依赖边),零 IO、零运行时/会话依赖;单测进常规 CI。变体视图取结构形态,与
@@ -245,6 +252,30 @@ export function checkDebugVariantDerivation(
   // expected = 复算内容(隐藏区域)/ 变体声明内容透传(可见区域)。
   // 槽序消费与内容合法性解耦:即使某区域 contentHex 形态非法(已另行登记),
   // 派生消费照常推进,保证 draws 复算与槽序记账确定性。
+  //
+  // canary 属主区域预扫(WP-68 修正):拥有 canary 槽的区域,其最终内容 =
+  // 阶段 A 派生内容 + canary 叠加(阶段 B)——阶段 A 的逐字节比对对这类
+  // 区域**推迟到阶段 B**(否则隐藏区域 + canary 组合必假阳性;阶段四单测
+  // 未覆盖该组合,WP-68 非平凡 fixture 首次触发)。纯隐藏区域(无 canary)
+  // 仍在阶段 A 比对。
+  const canaryOwnerIndexes = new Set<number>();
+  for (const slot of variant.canarySlots ?? []) {
+    const address = parseAddressHex(slot.addressHex);
+    if (address === null) {
+      continue;
+    }
+    const ownerIndex = regions.findIndex((region) => {
+      const start = parseAddressHex(region.startAddressHex);
+      return (
+        start !== null &&
+        address >= start &&
+        address < start + BigInt(region.byteLength)
+      );
+    });
+    if (ownerIndex >= 0) {
+      canaryOwnerIndexes.add(ownerIndex);
+    }
+  }
   const expectedStageA: (Uint8Array | null)[] = regions.map((region, index) => {
     if (region.isHidden) {
       return deriveBytes(deriver, region.byteLength);
@@ -254,7 +285,14 @@ export function checkDebugVariantDerivation(
   regions.forEach((region, index) => {
     const actual = contentBytes[index];
     const expected = expectedStageA[index];
-    if (region.isHidden && actual !== null && actual !== undefined && expected !== null && expected !== undefined) {
+    if (
+      region.isHidden &&
+      !canaryOwnerIndexes.has(index) &&
+      actual !== null &&
+      actual !== undefined &&
+      expected !== null &&
+      expected !== undefined
+    ) {
       if (bytesToHex(actual) !== bytesToHex(expected)) {
         violations.push({
           id: "ZR-B13-hidden-region-content-mismatch",
@@ -308,8 +346,8 @@ export function checkDebugVariantDerivation(
   }
   regions.forEach((region, index) => {
     const actual = contentBytes[index];
-    const stageA = expectedStageA[index];
     const stageB = expectedStageB[index];
+    const stageA = expectedStageA[index];
     if (
       actual === null ||
       actual === undefined ||
@@ -325,8 +363,8 @@ export function checkDebugVariantDerivation(
     if (actualHex === stageBHex) {
       return;
     }
-    if (region.isHidden && actualHex !== bytesToHex(stageA)) {
-      // 阶段 A 已归因隐藏区域内容不一致(避免同一区域双重报告)。
+    if (region.isHidden && !canaryOwnerIndexes.has(index)) {
+      // 纯隐藏区域(无 canary):阶段 A 已归因隐藏区域内容不一致,避免双重报告。
       return;
     }
     violations.push({

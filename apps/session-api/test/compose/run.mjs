@@ -36,7 +36,10 @@ async function runVitest(topology) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["./node_modules/vitest/vitest.mjs", "run", "test/compose"],
+      // --no-file-parallelism:拓扑级集成文件各自 spawn 宿主进程 / verifier
+      // 进程并绑定发布端口(13117 / 13100),并行文件会端口互踩(WP-68 新增
+      // 题目集套件后的确定性要求);串行化即文件间互斥,文件内并发不变。
+      ["./node_modules/vitest/vitest.mjs", "run", "test/compose", "--no-file-parallelism"],
       {
         cwd: APP_DIR,
         stdio: "inherit",
