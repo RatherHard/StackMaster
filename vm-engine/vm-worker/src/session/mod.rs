@@ -9,6 +9,8 @@
 //! - [`host`]:会话托管——`apply_action` 的写分类前置(D-P1)→ 运行时
 //!   执行 → 响应面装配(WP-7 `response` 面唯一入口)、投影查询、快照
 //!   导出 / 导入;
+//! - [`verify`]:独立裁决重放(阶段六 WP-61)——装配(与 load 共用)+
+//!   `vm_runtime::replay` 逐项比对 → 11 值裁决面(ADR-8 同一份回放实现);
 //! - [`watchdog`]:wall-clock 看门狗(9.1 资源面;引擎 crate 无时钟,
 //!   超时由本进程层实现);
 //! - [`variant`]:调试实例装配与托管(阶段四 WP-41;ADR-DC1 条款 2/3/4/5/8
@@ -21,4 +23,5 @@
 pub mod assemble;
 pub mod host;
 pub mod variant;
+pub mod verify;
 pub mod watchdog;

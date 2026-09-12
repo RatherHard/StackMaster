@@ -32,11 +32,11 @@ use vm_core::arch::{ArchBits, ArchValue};
 use vm_core::exec::{CanarySlotSpec, Engine, EngineConfig, RunOutcome};
 use vm_core::instr::Program;
 use vm_core::memory::{Permissions, RegionContents, RegionKind, RegionSpec};
-use vm_core::state::{
-    Budget, CumulativeBudget, RuntimeConstraints, SeedState, SeedStrategy, VmState,
-    VmStateConfig, VmStatus,
-};
 use vm_core::registers::is_flag_name;
+use vm_core::state::{
+    Budget, CumulativeBudget, RuntimeConstraints, SeedState, SeedStrategy, VmState, VmStateConfig,
+    VmStatus,
+};
 use vm_runtime::action_log::RecordedAction;
 
 use crate::contract::mirrors::{DebugVariantBundleMirror, PublicDescriptorExtract};
@@ -85,8 +85,10 @@ pub fn assemble_variant(
 ) -> VariantResult<DebugComponents> {
     // 信封版本锁定(fail-closed;Schema const 已锚,镜像层防御性复验)。
     if variant.schema_version != 1
-        || variant.engine_process_protocol_version != crate::protocol::version::ENGINE_PROCESS_PROTOCOL_VERSION
-        || variant.derivation.algorithm_id != crate::contract::mirrors::DEBUG_VARIANT_SEED_ALGORITHM_ID
+        || variant.engine_process_protocol_version
+            != crate::protocol::version::ENGINE_PROCESS_PROTOCOL_VERSION
+        || variant.derivation.algorithm_id
+            != crate::contract::mirrors::DEBUG_VARIANT_SEED_ALGORITHM_ID
     {
         return Err(AssembleError::reject("variant_envelope"));
     }
@@ -103,11 +105,8 @@ pub fn assemble_variant(
 
     // ── 内存区域(变体 contentHex 即权威初始字节;无种子解析)──
     let (regions, contents) = build_variant_regions(&variant.memory_regions, arch)?;
-    let (registers, flag_register_names, initial_ip) = build_variant_registers(
-        &variant.registers,
-        &public.vm_profile.registers,
-        arch,
-    )?;
+    let (registers, flag_register_names, initial_ip) =
+        build_variant_registers(&variant.registers, &public.vm_profile.registers, arch)?;
 
     // ── 约束预算(装配默认;无判题预算来源,predicate_evals 恒 0)──
     let constraints = RuntimeConstraints {
@@ -155,10 +154,9 @@ pub fn assemble_variant(
             .into_iter()
             .filter(|entry| {
                 !matches!(entry.op, vm_core::instr::Op::Custom(_))
-                    && !entry
-                        .operand_shapes
-                        .iter()
-                        .any(|shape| matches!(shape, vm_core::instr::EncodingOperandShape::Interface(_)))
+                    && !entry.operand_shapes.iter().any(|shape| {
+                        matches!(shape, vm_core::instr::EncodingOperandShape::Interface(_))
+                    })
             })
             .collect(),
         None => return Err(AssembleError::reject("variant_requires_encoding_table")),
@@ -475,10 +473,7 @@ impl DebugHost {
 
     /// 重放一条已接受动作(确定性重放对齐;无判题闸门评估——动作日志中的
     /// 已接受动作在真实实例已过闸,重放侧不重复评估,条款 4)。
-    pub fn apply_recorded(
-        &mut self,
-        action: &RecordedAction,
-    ) -> DebugApplyOutcome {
+    pub fn apply_recorded(&mut self, action: &RecordedAction) -> DebugApplyOutcome {
         // 执行类动作先压历史栈(undo 支撑;管理类不压——与真实实例
         // "管理动作不入回退链"的历史语义同形)。栈深以动作日志护栏为上限。
         if is_execution_action(action) {
@@ -493,9 +488,10 @@ impl DebugHost {
                 .engine
                 .action_write_bytes(ArchValue::new(*address, self.engine.arch()), data)
                 .is_ok(),
-            RecordedAction::Push { value } => {
-                self.engine.action_push(ArchValue::new(*value, self.engine.arch())).is_ok()
-            }
+            RecordedAction::Push { value } => self
+                .engine
+                .action_push(ArchValue::new(*value, self.engine.arch()))
+                .is_ok(),
             RecordedAction::Pop => self.engine.action_pop().is_ok(),
             RecordedAction::Call { target } => self
                 .engine
@@ -596,7 +592,8 @@ impl DebugHost {
             while offset + pattern.len() as u64 <= region.byte_length {
                 let address = region_start + offset;
                 let matched = pattern.iter().enumerate().all(|(index, expected)| {
-                    self.raw_byte(address + index as u64).is_some_and(|byte| byte == *expected)
+                    self.raw_byte(address + index as u64)
+                        .is_some_and(|byte| byte == *expected)
                 });
                 if matched {
                     if hits.len() >= max_hits {
@@ -644,8 +641,11 @@ impl DebugHost {
     /// 函数表展示数据(源 = 已装载程序结构,label / 起址 / 长度三字段)。
     pub fn function_table(&self, max_entries: usize) -> (Vec<DebugFunctionEntryJson>, bool) {
         let max_entries = max_entries.clamp(1, DEBUG_FUNCTION_TABLE_MAX_ENTRIES);
-        let (functions, truncated) =
-            derive_function_table(self.engine.program(), &self.engine.state.memory, max_entries);
+        let (functions, truncated) = derive_function_table(
+            self.engine.program(),
+            &self.engine.state.memory,
+            max_entries,
+        );
         (
             functions
                 .into_iter()

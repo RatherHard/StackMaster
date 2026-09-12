@@ -118,6 +118,46 @@ pub fn assemble(
     session_seed_hex: Option<&str>,
     identity: &EngineIdentity,
 ) -> Result<SessionComponents, AssembleError> {
+    let config = assemble_replay_config(
+        bundle,
+        bundle_json,
+        public,
+        public_json,
+        session_seed_hex,
+        identity,
+    )?;
+    let runtime =
+        SessionRuntime::new(config).map_err(|_| AssembleError::reject("runtime_assemble"))?;
+    // ── 投影策略与静态声明面(D-W8-1)──
+    let (policy, statics) = build_projection_face(bundle, public)?;
+
+    Ok(SessionComponents {
+        runtime,
+        policy,
+        statics,
+        timeout_ms_per_action: bundle
+            .judging_config
+            .timeout_ms_per_action
+            .unwrap_or(DEFAULT_TIMEOUT_MS_PER_ACTION),
+        max_write_bytes_per_action: public
+            .resource_limits
+            .and_then(|limits| limits.max_write_bytes_per_action)
+            .unwrap_or(PROTOCOL_MAX_WRITE_BYTES),
+    })
+}
+
+/// 回放装配(阶段六 WP-61):与 [`assemble`] 同一装配序产出
+/// [`SessionConfig`](不含投影面——verifier 裁决不生成投影),供
+/// `vm_runtime::replay` 消费。**零第二装配实现**:load 与 verify 共用本
+/// 函数(ADR-8 同锚;装配序与拒绝理由集逐字一致)。
+pub fn assemble_replay_config(
+    bundle: &PrivateBundleMirror,
+    bundle_json: &serde_json::Value,
+    public: &PublicDescriptorExtract,
+    public_json: &serde_json::Value,
+    session_seed_hex: Option<&str>,
+    identity: &EngineIdentity,
+) -> Result<SessionConfig, AssembleError> {
     let arch = ArchBits::from_bits(public.vm_profile.arch_bits)
         .ok_or_else(|| AssembleError::reject("arch_bits_invalid"))?;
     let page_size = public.vm_profile.page_size_bytes;
@@ -128,18 +168,18 @@ pub fn assemble(
         (None, Some(_)) => ProgramMode::Byte,
         _ => return Err(AssembleError::reject("program_mode_ambiguous")),
     };
-        let encoding_table = match (&public.vm_profile.encoding_table, program_mode) {
-            (None, ProgramMode::Ir) => None,
-            (Some(table), ProgramMode::Byte) => Some(encoding_table(table)?),
-            (None, ProgramMode::Byte) => {
-                return Err(AssembleError::reject(
-                    "byte_mode_requires_public_encoding_table",
-                ));
-            }
-            (Some(_), ProgramMode::Ir) => {
-                return Err(AssembleError::reject("ir_mode_forbids_encoding_table"));
-            }
-        };
+    let encoding_table = match (&public.vm_profile.encoding_table, program_mode) {
+        (None, ProgramMode::Ir) => None,
+        (Some(table), ProgramMode::Byte) => Some(encoding_table(table)?),
+        (None, ProgramMode::Byte) => {
+            return Err(AssembleError::reject(
+                "byte_mode_requires_public_encoding_table",
+            ));
+        }
+        (Some(_), ProgramMode::Ir) => {
+            return Err(AssembleError::reject("ir_mode_forbids_encoding_table"));
+        }
+    };
 
     // ── seed 策略解析(XS-SEED-POLICY 引擎镜像;worker 只消费编排器会话种子)
     let package_seed = match &bundle.seed_policy.seed_hex {
@@ -306,30 +346,13 @@ pub fn assemble(
         },
     };
 
-    let runtime = SessionRuntime::new(SessionConfig {
+    let runtime_config = SessionConfig {
         identity: identity_ref,
         context: replay_context,
         engine,
         judge,
-    })
-    .map_err(|_| AssembleError::reject("runtime_assemble"))?;
-
-    // ── 投影策略与静态声明面(D-W8-1)──
-    let (policy, statics) = build_projection_face(bundle, public)?;
-
-    Ok(SessionComponents {
-        runtime,
-        policy,
-        statics,
-        timeout_ms_per_action: bundle
-            .judging_config
-            .timeout_ms_per_action
-            .unwrap_or(DEFAULT_TIMEOUT_MS_PER_ACTION),
-        max_write_bytes_per_action: public
-            .resource_limits
-            .and_then(|limits| limits.max_write_bytes_per_action)
-            .unwrap_or(PROTOCOL_MAX_WRITE_BYTES),
-    })
+    };
+    Ok(runtime_config)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

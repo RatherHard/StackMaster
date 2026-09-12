@@ -110,15 +110,29 @@ export class PostgresSubmissionStore implements SubmissionStore {
     revision: number;
     publicStatus: string;
     reference: unknown;
+    logDigest: string;
   }): Promise<SubmissionRecord> {
+    // 入队与提交引用同锚(D-API-85):同一事务插入 submissions 行与
+    // verifier_runs pending 行(队列本体;多实例 SKIP LOCKED 认领天然安全)。
+    const client = await this.pool.connect();
     try {
-      const result = await this.pool.query<SubmissionRowRaw>(
+      await client.query("BEGIN");
+      const result = await client.query<SubmissionRowRaw>(
         `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
          VALUES ($1, $2, $3, $4, $5::jsonb)
          RETURNING *`,
         [input.tenantId, input.sessionId, input.revision, input.publicStatus, JSON.stringify(input.reference)],
       );
-      const raw = result.rows[0] as SubmissionRowRaw;
+      const raw: SubmissionRowRaw | undefined = result.rows[0];
+      if (raw === undefined) {
+        throw new PersistenceError("store_unavailable", "提交引用落库失败(无返回行)");
+      }
+      await client.query(
+        `INSERT INTO verifier_runs (tenant_id, submission_id, status, log_digest)
+         VALUES ($1, $2, 'pending', $3)`,
+        [input.tenantId, raw.id, input.logDigest],
+      );
+      await client.query("COMMIT");
       return {
         id: raw.id,
         sessionId: raw.session_id,
@@ -128,7 +142,10 @@ export class PostgresSubmissionStore implements SubmissionStore {
         createdAt: raw.created_at.toISOString(),
       };
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
       throw new PersistenceError("store_unavailable", "提交引用落库失败", { cause: error });
+    } finally {
+      client.release();
     }
   }
 

@@ -165,7 +165,9 @@ export interface ActionLogStore {
   countBySession(sessionId: string, tenantId: string): Promise<number>;
 }
 
-/** submit 内部裁决引用落库(submissions 行;verdicts / verifier_runs 归阶段六)。 */
+/**
+ * submit 内部裁决引用落库(submissions 行;verdicts / verifier_runs 归阶段六)。
+ */
 export interface SubmissionRecord {
   readonly id: string;
   readonly sessionId: string;
@@ -176,12 +178,19 @@ export interface SubmissionRecord {
 }
 
 export interface SubmissionStore {
+  /**
+   * 落库提交引用并同步入队裁决(WP-61,D-API-85):同一事务插入
+   * `verifier_runs` pending 行(`logDigest` = 引用内规范化动作日志的
+   * SHA-256 hex 绑定锚),pending 行即队列本体,零新增队列设施。
+   */
   record(input: {
     tenantId: string;
     sessionId: string;
     revision: number;
     publicStatus: string;
     reference: unknown;
+    /** 规范化动作日志 SHA-256 hex(verifier_runs.log_digest;取回复算比对)。 */
+    logDigest: string;
   }): Promise<SubmissionRecord>;
   findBySession(sessionId: string, tenantId: string): Promise<SubmissionRecord[]>;
 }

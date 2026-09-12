@@ -51,8 +51,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base
 COPY packages ./packages
 COPY apps ./apps
 RUN pnpm install --frozen-lockfile
-# session-api 及其 workspace 依赖(拓扑序;tsc -b project references)。
-RUN pnpm --filter @stackmaster/session-api... run build
+# session-api 与 verifier 及其各自 workspace 依赖(拓扑序;tsc -b project
+# references)。verifier 与 session-api 共用本镜像:镜像同一性保证两服务
+# spawn 同一份 vm-worker 构建(版本策略 §四.4 同锁,WP-61)。
+RUN pnpm --filter @stackmaster/session-api... run build     && pnpm --filter @stackmaster/verifier... run build
 
 # ── 3. 运行时 ────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim

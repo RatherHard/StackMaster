@@ -240,6 +240,23 @@ impl Worker {
                 max_items,
             } => self.handle_debug_instruction_stream(seq, &address_hex, max_items),
             WorkerCommand::DebugFunctionTable { seq } => self.handle_debug_function_table(seq),
+            // ── 裁决重放命令面(阶段六 WP-41→61:additive;状态机约束见 §四)──
+            WorkerCommand::ExportActionLog { seq } => self.handle_export_action_log(seq),
+            WorkerCommand::Verify {
+                seq,
+                private_bundle,
+                public_descriptor,
+                session_seed_hex,
+                replay_context,
+                action_log,
+            } => self.handle_verify(
+                seq,
+                private_bundle,
+                public_descriptor,
+                session_seed_hex,
+                replay_context,
+                action_log,
+            ),
             WorkerCommand::Shutdown { seq } => Ok(WorkerOutbound::ShutdownAck { seq }),
         }
     }
@@ -397,10 +414,7 @@ impl Worker {
                 error: WorkerError::new(WorkerErrorCode::ChallengeInvalid),
             })
         };
-        if !self
-            .validators
-            .debug_variant_bundle
-            .is_valid(&variant)
+        if !self.validators.debug_variant_bundle.is_valid(&variant)
             || !self
                 .validators
                 .public_descriptor
@@ -413,14 +427,13 @@ impl Worker {
             Ok(mirror) => mirror,
             Err(_) => return reject(),
         };
-        let public: PublicDescriptorExtract = match serde_json::from_value(public_descriptor.clone())
-        {
-            Ok(public) => public,
-            Err(_) => return reject(),
-        };
+        let public: PublicDescriptorExtract =
+            match serde_json::from_value(public_descriptor.clone()) {
+                Ok(public) => public,
+                Err(_) => return reject(),
+            };
         // 装配(零装载:变体 contentHex 即权威初始字节;无判题面、无 seed)。
-        let components = match crate::session::variant::assemble_variant(&variant_mirror, &public)
-        {
+        let components = match crate::session::variant::assemble_variant(&variant_mirror, &public) {
             Ok(components) => components,
             Err(AssembleError { reason }) => {
                 log_assembly_reject(reason);
@@ -484,10 +497,7 @@ impl Worker {
         let Some(address) = parse_address_hex(address_hex) else {
             return Ok(command_invalid_input(seq));
         };
-        if byte_length < 1
-            || byte_length
-                > crate::session::variant::DEBUG_WINDOW_MAX_BYTES as u64
-        {
+        if byte_length < 1 || byte_length > crate::session::variant::DEBUG_WINDOW_MAX_BYTES as u64 {
             return Ok(command_invalid_input(seq));
         }
         let host = self
@@ -517,11 +527,11 @@ impl Worker {
         action: Value,
     ) -> Result<WorkerOutbound, ProtocolViolation> {
         self.require_debug_ready(seq)?;
-        let mirror: crate::contract::mirrors::ActionCallMirror = match serde_json::from_value(action)
-        {
-            Ok(mirror) => mirror,
-            Err(_) => return Ok(command_internal_error(seq)),
-        };
+        let mirror: crate::contract::mirrors::ActionCallMirror =
+            match serde_json::from_value(action) {
+                Ok(mirror) => mirror,
+                Err(_) => return Ok(command_internal_error(seq)),
+            };
         let arch = self
             .debug_session
             .as_ref()
@@ -573,7 +583,8 @@ impl Worker {
         max_steps: u64,
     ) -> Result<WorkerOutbound, ProtocolViolation> {
         self.require_debug_ready(seq)?;
-        if breakpoints.is_empty() || breakpoints.len() > crate::session::variant::DEBUG_SEARCH_MAX_HITS
+        if breakpoints.is_empty()
+            || breakpoints.len() > crate::session::variant::DEBUG_SEARCH_MAX_HITS
         {
             return Ok(command_invalid_input(seq));
         }
@@ -669,6 +680,78 @@ impl Worker {
         })
     }
 
+    /// export_action_log(阶段六 WP-61):权威动作日志与六记录项上下文的
+    /// 导出面(D-W8-9 submit 引用随行落库的引擎权威形态)。仅已装载阶段受理。
+    fn handle_export_action_log(&mut self, seq: u64) -> Result<WorkerOutbound, ProtocolViolation> {
+        let host = self
+            .session
+            .as_ref()
+            .ok_or(ProtocolViolation::StateViolation { seq })?;
+        let log = host.action_log();
+        let text = log
+            .canonical_text()
+            .map_err(|_| ProtocolViolation::ContractInconsistency)?;
+        Ok(crate::session::verify::export_outcome(
+            seq,
+            &log.context,
+            text,
+        ))
+    }
+
+    /// verify(阶段六 WP-61;协议 §四):独立裁决重放。仅未装载阶段受理
+    /// (独立一次性裁决进程形态;已装载会话进程不可达)。载荷 / 镜像 / 身份 /
+    /// seed / 版本锁定 / 上下文 / 日志形态任一拒绝 = `challenge_invalid` 方向
+    /// 命令级错误,进程存活、阶段不变(与 load 同判;重放本身经
+    /// `session::verify::verify` 委托 `vm_runtime::replay`,ADR-8 同一份实现)。
+    fn handle_verify(
+        &self,
+        seq: u64,
+        private_bundle: Value,
+        public_descriptor: Value,
+        session_seed_hex: Option<String>,
+        replay_context: Value,
+        action_log: String,
+    ) -> Result<WorkerOutbound, ProtocolViolation> {
+        if !matches!(self.phase, Phase::AwaitingLoad) {
+            return Err(ProtocolViolation::StateViolation { seq });
+        }
+        let reject = || {
+            Ok(WorkerOutbound::CommandError {
+                seq,
+                error: WorkerError::new(WorkerErrorCode::ChallengeInvalid),
+            })
+        };
+        // 双包 Schema 复验(与 load 同闸;上下文与日志的形态校验在 verify 内)。
+        if !self.validators.private_bundle.is_valid(&private_bundle)
+            || !self
+                .validators
+                .public_descriptor
+                .is_valid(&public_descriptor)
+        {
+            return reject();
+        }
+        let identity = EngineIdentity {
+            vm_engine_version: String::from(VM_ENGINE_VERSION),
+            engine_build_id: String::from(ENGINE_BUILD_ID),
+        };
+        match crate::session::verify::verify(
+            private_bundle,
+            public_descriptor,
+            session_seed_hex.as_deref(),
+            replay_context,
+            &action_log,
+            &identity,
+        ) {
+            Ok(report) => {
+                log_verify_outcome(seq, report.verdict.as_str());
+                Ok(WorkerOutbound::VerifyReport { seq, report })
+            }
+            Err(rejection) => {
+                eprintln!("[vm-worker] verify_rejected reason={}", rejection.reason);
+                reject()
+            }
+        }
+    }
 
     /// apply_action(§四):载荷契约校验失败 → 确定性 `rejected` 响应
     /// (revision 不变、delta null、事件空,§4.5 协议级拒绝行);通过校验的
@@ -914,8 +997,13 @@ fn is_server_identifier(value: &str) -> bool {
 }
 
 /// 会话种子形态(`^([0-9a-fA-F]{2}){8,32}$`,与包内 seedHex 同锚)。
-fn is_seed_hex(value: &str) -> bool {
+pub(crate) fn is_seed_hex(value: &str) -> bool {
     (16..=64).contains(&value.len())
         && value.len().is_multiple_of(2)
         && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// verify 裁决完成受控日志(仅事件 + 裁决字面;无载荷内容,§3.4)。
+fn log_verify_outcome(seq: u64, verdict: &str) {
+    eprintln!("[vm-worker] verify_completed seq={seq} verdict={verdict}");
 }

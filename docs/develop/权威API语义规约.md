@@ -3,7 +3,7 @@
 | 项 | 值 |
 |---|---|
 | 状态 | 实现期决策记录(阶段三起持续增补;WP-0 首批决策与 WP-1 工程载体纪律 D-API-9 2026-09-09;WP-2 认证与凭证面 D-API-10~D-API-19 2026-09-10;WP-3 持久化面 D-API-20~D-API-26 2026-09-10;WP-4 REST 生命周期路由与请求护栏 D-API-30~D-API-39 2026-09-10;WP-5 认证 WSS 通道与投影下发 D-API-40~D-API-49 2026-09-10;WP-6 限流、配额与会话资源回收 D-API-50~D-API-59 2026-09-10;WP-8 可观测基线、部署收尾 D-API-70~D-API-73 2026-09-10,阶段三全量收口;阶段四 WP-40 / WP-41 调试通道面 D-API-74 2026-09-11 增补;阶段五 WP-50 嵌入交付通道与描述包下发 D-API-75~D-API-77 2026-09-11 增补;**阶段五 WP-51~54 嵌入实现面 D-API-78~D-API-82 2026-09-12 增补(实现期定案收编,全部零契约改动)——既有 D-API-1~77 条目零改动**;**阶段六 WP-60 裁决呈现通道与异步裁决语义 D-API-83~D-API-86 2026-09-12 增补(契约先行:阶段六边界裁决 2 候选新契约面 (a) 落位,protocol 契约增量 `verdict-query-response` 同步冻结——既有 D-API-1~82 条目与既有契约面零改动**) |
-| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60) |
+| 日期 | 2026-09-10(阶段三全量);2026-09-11 增补 D-API-74(阶段四);2026-09-11 增补 D-API-75~D-API-77(阶段五 WP-50);2026-09-12 增补 D-API-78~D-API-82(阶段五 WP-51~54);2026-09-12 增补 D-API-83~D-API-86(阶段六 WP-60);2026-09-12 增补 D-API-87~D-API-89(阶段六 WP-61) |
 | 上游依据 | 计划书 5.3(运行时拓扑)、8.2(嵌入协议字段与接收校验)、8.3(请求护栏)、9.1(生命周期)、9.2(威胁模型);阶段三任务分解 WP-0~WP-8;会话动作协议语义(§5.1 / §5.2 / §九);嵌入协议 §六;WP-1 数据分类清单 §6.5–§6.7(v1.10) |
 | 效力范围 | `apps/session-api`(信任域 2)的路由、通道、凭证链路与运维参数;与冻结契约冲突时以 `@stackmaster/protocol` 及上游文档为准 |
 
@@ -717,6 +717,50 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 | 键 | 必备 | 默认 | 约束 |
 |---|---|---|---|
 | `SESSION_API_VERDICT_QUERIES_PER_MINUTE` | 否 | 30 | 上限 100000(裁决查询频率,窗口恒 60 s;`rate:{tenant}:{user}:verdict` 维度子键,D-API-84;数值复核归 WP-65 Q6) |
+
+## 三·十四、verifier 独立裁决服务(阶段六 WP-61;D-API-87 ~ D-API-89)
+
+> 本节为 WP-61「verifier 独立裁决服务(信任域 4)」的定案记录,对应阶段六任务分解 §六 Q1 与边界裁决 2 候选新契约面 (b)。进程形态决策权威 = `docs/adr/ADR-9-verifier进程形态决策.md`(Q1 定案候选 (b):Node verifier 服务 + vm-worker 裁决重放命令面;引擎进程协议 §4.9 `export_action_log` / `verify` 以 additive 变体追加,`ENGINE_PROCESS_PROTOCOL_VERSION` 维持 1)。既有契约面零改动:submit 响应面 `{submissionId, revision}`、12 动作、16 错误码、嵌入协议 v1、调试通道协议、会话 WSS 通道、`VerdictQueryResponse`(D-API-83)全部原样。
+
+### D-API-87 `apps/verifier` 服务本体:管线、拒裁方向矩阵与配置键(阶段六 WP-61)
+
+**服务形态**:Fastify 最小运维面(`GET /healthz` liveness 恒 200;`GET /readyz` 探针 = PG `SELECT 1` + MinIO 授权可达探测,失败 503 + 冻结 `PublicError` 统一形态 `{code:"internal_error",message:"dependencies unavailable"}`,失败方不透出,D-API-34 同款;`GET /metrics` Prometheus 文本)——零业务路由、零浏览器可达面(信任域 4;呈现链路 = session-api 读裁决域,verifier 零查询面,D-API-83)。工程载体纪律沿 D-API-9(配置三道闸 / Pino 日志 / 优雅停机 SIGTERM + Windows IPC),保留前缀 `VERIFIER_`。
+
+**裁决管线**(每认领 run;完整拒裁方向矩阵 = ADR-9 §四):引用受理(六记录项完备性,strictObject 即拒)→ `log_digest` 复算比对 → 登记行取回(查询层租户校验强制,D-API-20 延伸)→ 双包取回(对象名取自 `challenge_versions` 登记行)→ 双包哈希与登记摘要比对 → seed 策略边界(`server_random_per_session` ⇒ `challenge_invalid`,零 worker 往返;v1 seed 零驻留,边界裁决 3)→ bundle lock(包声明引擎构建 vs worker `ready` 自报;不一致 = `replay_mismatch`)→ `verify` 命令(一次性 worker 进程,ADR-8 同一份 `vm_runtime::replay`)→ 落库(run 状态机 + verdicts 幂等)。
+
+**两道裁决边界的主从关系(登记论证)**:六记录项缺项与上下文错配是**裁决面结论**(`challenge_invalid` 落 verdicts——缺项的裁决不可审计,视同无效,版本策略 §三);`log_digest` 复算不符、双包哈希不符、对象取回越权是**拒裁面**(run failed、不落 verdicts——输入完整性 / 授权完整性事实可能瞬时,fail-closed 方向裁决不可用 ≠ 判负,重试以新 run 行承载)。`replay_mismatch` 是**裁决面结论**(重放已实际执行、逐项漂移是确定性问题)。run failed 重试默认上限 3 次(`VERIFIER_MAX_RUN_ATTEMPTS`),耗尽后查询面恒为 pending(D-API-84)。
+
+**跨租户例外的第三处登记**:认领 SQL 以 `submission_id`(UUID 主键)为锚 join `submissions` 取引用,不经租户过滤——run 行的 `tenant_id` 随入队原子写 submissions 行同事务落库(D-API-85 入队同锚),租户一致性由结构担保;这是服务进程生命周期操作(队列消费)而非租户作用域数据访问(先例:D-API-63 `listActiveSessions`、D-API-76 `findPublishedChallengeVersion`)。题目登记行取回仍强制 `WHERE tenant_id`(裁决引用中的租户为锚)。
+
+**配置键登记(过 D-API-9 三道闸,`VERIFIER_` 前缀保留命名空间)**:
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `VERIFIER_POSTGRES_URL` | 是 | —— | 裁决域 PG 连接串(独立角色;容器拓扑 = `verifier` 最小授权角色) |
+| `VERIFIER_MINIO_ENDPOINT` / `VERIFIER_MINIO_ACCESS_KEY` / `VERIFIER_MINIO_SECRET_KEY` | 是 | —— | 对象存储只读面(独立最小授权用户) |
+| `VERIFIER_HOST` / `VERIFIER_PORT` | 否 | `127.0.0.1` / `3100` | `PORT=0` 仅 `NODE_ENV=test`(D-API-9 同款) |
+| `VERIFIER_LOG_LEVEL` / `VERIFIER_LOG_ERROR_STACKS` / `VERIFIER_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS` | 否 | `info` / `false` / 10 | D-API-9 载体纪律同款(停机上界 300 s) |
+| `VERIFIER_MINIO_PORT` / `VERIFIER_MINIO_BUCKET_PRIVATE` / `VERIFIER_MINIO_BUCKET_PUBLIC` | 否 | `9000` / `private-bundles` / `public-descriptors` | 登记双包只读桶(各归其桶:私有判题包 → private-bundles,公开描述包 → public-descriptors——公开产物零秘密面;001 迁移对象名语义) |
+| `VERIFIER_POLL_INTERVAL_MS` | 否 | 1000 | 上限 60000(D-API-85 轮询间隔,WP-61 定值) |
+| `VERIFIER_CLAIM_BATCH_SIZE` | 否 | 4 | 上限 100(SKIP LOCKED 批量认领,D-API-85 批量大小) |
+| `VERIFIER_MAX_RUN_ATTEMPTS` | 否 | 3 | 上限 100(耗尽后查询面恒为 pending) |
+| `VERIFIER_MAX_ACTION_LOG_BYTES` | 否 | 4194304 | 上限 `MAX_FRAME_BYTES`(verify 帧内日志预检;超限确定性拒裁方向,上界论证 ADR-9 §三) |
+| `VERIFIER_VERIFY_TIMEOUT_MS` | 否 | 120000 | 上限 600000(单次 verify 往返超时;超时 = 进程收割 + run failed) |
+
+**worker 二进制解析**:`STACKMASTER_WORKER_BIN` → `vm-engine/target/{release,debug}` 产物序(与 session-core 同序);缺失即拒绝启动(fail-closed)。版本策略 §四.4 同锁由 compose 拓扑的镜像同一性结构性保证(verifier 复用 `stackmaster/session-api:dev` 镜像内同一份 `/app/bin/vm-worker`)+ 双层运行时锁定(worker 装载闸与 verifier bundle lock 复核)。
+
+### D-API-88 提交链路增补:重放材料随引用落库与裁决入队(阶段六 WP-61;D-W8-9 / D-API-85 落地)
+
+- **引用形态增补**:`stackmaster-session-submit/1` 引用新增必选 `replay` 字段 = `{replayContext, actionLog}`(六记录项上下文 + 规范化动作日志 `stackmaster-action-log/1` 文本)。数据源 = submit 时编排器经引擎进程协议 `export_action_log`(§4.9)取引擎权威材料,经 `SessionOrchestrator.exportReplayMaterial()`(串行队列承载;最小结构复验后原样透传)组装——编排器零派生逻辑(纯搬运);引用其余字段与既有动作日志数组零改动。整体 SERVER_ONLY(session-api 服务端面,非玩家通道);
+- **入队同锚落地**:submit 同一事务写 `submissions` 行 + `verifier_runs` pending 行(`status='pending'`,`log_digest` = 引用内规范化动作日志 SHA-256 hex)——pending 行即队列本体,零新增队列设施(D-API-85)。`SubmissionStore.record` 端口扩展 `logDigest` 入参(memory / PG 双实现同构);落库失败语义不变(submit 失败,引用不回滚半提交——事务化);
+- **结构约束补齐(005 迁移)**:`verdicts.submission_id` 唯一索引(裁决幂等的库层强制)+ `verifier_runs(status, created_at)` 认领索引;
+- **恢复会话边界**:崩溃替换恢复清空 worker 进程内日志,恢复后提交的 `export_action_log` 自快照 revision 起始,verify 重放自零起始不可达 ⇒ 确定性 `replay_mismatch`(fail-closed;ADR-9 §六登记,T2 演进 = 日志分段时间线重放)。
+
+### D-API-89 verifier 部署分离与指标面(阶段六 WP-61;D-API-64 / 65 / 70 纪律延伸)
+
+- **compose 独立服务(信任域 4)**:`verifier` 服务 + 两个一次性角色治理 init 服务(`verifier-db-init`:独立 PG 角色 `verifier` 最小授权——submissions / challenge_versions / challenges 只读,verifier_runs SELECT/INSERT/UPDATE,verdicts SELECT/INSERT,零 DELETE / 零 DDL;`verifier-minio-init`:独立 MinIO 用户,`s3:GetObject` on `private-bundles/*` 与 `public-descriptors/*` 双桶策略(公开描述包为公开产物,零秘密面))——与 session-api 凭证不共享;**独立网络域 `verifier-net`**(postgres / minio 双宿,session-api 不入该网络;verifier 与编排器经 PG 单向解耦);镜像同一性保证引擎同锁(D-API-87)。host 降级形态以依赖服务管理面凭证运行(角色治理降级如实登记,CI 始终完整容器拓扑);
+- **CI compose-integration 拓扑扩展**:全拓扑 = PostgreSQL + Redis + MinIO + session-api + vm-worker + verifier(+ 2 init);裁决闭环集成测试 = submit → 队列 → 独立重放 → verdicts 落库全链路 + 队列跨 verifier 重启持久(停机提交 → 重启落库)+ 篡改矩阵(log_digest 复算不符 / 双包哈希不符 ⇒ run failed 零 verdicts;六记录项缺项 ⇒ `challenge_invalid`)+ 幂等(同一 submission 单一 verdicts 行);
+- **指标面(最小集,`verifier_` 命名空间,标签零秘密零标识符)**:`verifier_queue_depth`(gauge,pending run 数;D-API-72 队列深度语义延伸,T2 规模化判据输入)、`verifier_runs_total{outcome}`(outcome ∈ {completed, failed})、`verifier_verdicts_total{verdict}`(verdict ∈ 11 值冻结枚举,有界域)、`verifier_verify_duration_seconds`(histogram);指标名白名单机检沿 D-API-71(`METRIC_FAMILIES`)。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 

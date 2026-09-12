@@ -25,7 +25,7 @@
  * 已关闭会话从在途表移除:后续命令一律 404(终态资源不复活;重开 =
  * 重新 create_session)。
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { loadChallengePair } from "@stackmaster/challenge-compiler";
 import {
   ActionResponseSchema,
@@ -36,6 +36,7 @@ import {
 import {
   OrchestratorError,
   SessionOrchestrator,
+  type ReplayMaterial,
   type SubmitReference,
   type WorkerCommandSpec,
   type WorkerExit,
@@ -459,6 +460,13 @@ export class LiveSessionManager {
    * 随后把引用内的权威动作日志增量落入 ActionLogStore(WP-6 接线,D-API-56:
    * 仅已接受动作——拒绝天然不入账,引用只含已接受动作;增量条目以本次提交
    * 引用为锚 submissionRef;落库失败不影响 submit 成功响应,裁决引用是权威锚)。
+   *
+   * WP-61(D-API-85):落库前经 `exportReplayMaterial` 取引擎权威重放材料
+   * (六记录项上下文 + 规范化动作日志文本,worker 往返,纯搬运)随引用组装,
+   * 并同步入队 `verifier_runs` pending 行(log_digest = 规范化日志 SHA-256,
+   * 与 verifier 取回复算同源)。重放材料是裁决引用完整形态的组成部分,其
+   * worker 往返失败 = 提交失败(engine_error 方向)——不可落一份无法独立
+   * 重放的裁决引用。
    */
   async submit(
     sessionId: string,
@@ -469,17 +477,24 @@ export class LiveSessionManager {
       return this.#sessionGone();
     }
     let reference: SubmitReference;
+    let replayMaterial: ReplayMaterial;
     try {
       reference = entry.session.submit();
+      replayMaterial = await entry.session.exportReplayMaterial();
     } catch (error) {
       throw await this.#classifyOrchestratorFailure(entry, error);
     }
+    const referenceWithReplay = { ...reference, replay: replayMaterial };
+    const logDigest = createHash("sha256")
+      .update(replayMaterial.actionLog, "utf8")
+      .digest("hex");
     const record = await this.#deps.submissions.record({
       tenantId,
       sessionId,
       revision: reference.revision,
       publicStatus: reference.publicStatus,
-      reference,
+      reference: referenceWithReplay,
+      logDigest,
     });
     await this.#persistActionLogDelta(entry, record.id, reference);
     await this.#deps.audit.append({

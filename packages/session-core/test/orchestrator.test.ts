@@ -60,6 +60,29 @@ describe("SessionOrchestrator(假 worker)", () => {
     await session.closeSession();
   });
 
+  it("exportReplayMaterial 回六记录项上下文与规范化日志(WP-61 重放材料面)", async () => {
+    const session = await SessionOrchestrator.create({
+      sessionId: "sess-unit-replay-material",
+      privateBundle: { seedPolicy: { strategy: "fixed" } },
+      publicDescriptor: {},
+      workerCommand: fakeWorkerCommand(),
+    });
+    await session.applyAction({
+      type: "write_bytes",
+      args: { addressHex: "0x401000", bytesHex: "41" },
+    });
+    const material = await session.exportReplayMaterial();
+    // 结构复验面:六记录项在场、哈希 64 hex、动作日志为规范化文本。
+    expect(material.replayContext.challengeId).toBe("fake-challenge");
+    expect(material.replayContext.vmEngineVersion).toBe("0.1.0");
+    expect(material.replayContext.challengeBundleHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(material.replayContext.vmProfileHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(material.replayContext.archBits).toBe(32);
+    expect(material.replayContext.seedPolicy.strategy).toBe("fixed");
+    expect(material.actionLog).toContain("stackmaster-action-log/1");
+    await session.closeSession();
+  });
+
   it("幂等窗口内同键同负载返回字节相同缓存响应,动作不重放", async () => {
     const session = await SessionOrchestrator.create({
       privateBundle: { seedPolicy: { strategy: "fixed" } },

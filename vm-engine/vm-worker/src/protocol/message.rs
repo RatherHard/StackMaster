@@ -65,10 +65,7 @@ pub enum WorkerCommand {
     },
     /// 重放一条已接受动作(确定性重放对齐,ADR-DC1 条款 3;无判题闸门评估
     /// ——调试实例未装载判题面,条款 4/5)。
-    DebugApplyRecorded {
-        seq: u64,
-        action: serde_json::Value,
-    },
+    DebugApplyRecorded { seq: u64, action: serde_json::Value },
     /// 调试实例单步(恰一条指令;等价真实实例 step 的引擎落点,不产判题评估)。
     DebugStep { seq: u64 },
     /// 运行至命中任一地址断点(步数上限防失控:超限确定性暂停 reason=budget)。
@@ -91,6 +88,28 @@ pub enum WorkerCommand {
     },
     /// 函数表展示数据(源 = 已装载程序结构,仅 label / 起址 / 长度)。
     DebugFunctionTable { seq: u64 },
+    // ── 裁决重放命令面(阶段六 WP-61;Q1 定案候选 (b),additive 追加变体,
+    //    ENGINE_PROCESS_PROTOCOL_VERSION 维持 1,双端同仓同发)──
+    /// 导出会话重放材料(D-W8-9 submit 引用的引擎权威面):六记录项上下文
+    /// + 规范化动作日志文本(`stackmaster-action-log/1`)。仅已装载阶段受理。
+    ///
+    /// 提交链路(session-api)在 submit 时调用并随引用落库。
+    ExportActionLog { seq: u64 },
+    /// 独立裁决重放(协议 §四 verify):以请求内私有包 + 公开描述包 + 六记录
+    /// 项上下文装配全新运行时(与 load 共用同一装配实现),对规范化动作日志
+    /// 逐项比对(ADR-8 同一份 `vm_runtime::replay`)。仅未装载阶段受理——
+    /// verify 是独立一次性裁决进程的形态,已装载会话进程不可达。
+    ///
+    /// 载荷或上下文拒绝 = challenge_invalid 方向命令级错误,进程存活;响应
+    /// 整体 SERVER_ONLY(仅 verifier 受控日志 / 审计与落库消费)。
+    Verify {
+        seq: u64,
+        private_bundle: serde_json::Value,
+        public_descriptor: serde_json::Value,
+        session_seed_hex: Option<String>,
+        replay_context: serde_json::Value,
+        action_log: String,
+    },
     /// 优雅关闭:worker 回 `shutdown_ack` 后以退出码 0 结束,进程不复用。
     Shutdown { seq: u64 },
 }
@@ -112,6 +131,8 @@ impl WorkerCommand {
             | WorkerCommand::DebugSearch { seq, .. }
             | WorkerCommand::DebugInstructionStream { seq, .. }
             | WorkerCommand::DebugFunctionTable { seq }
+            | WorkerCommand::ExportActionLog { seq }
+            | WorkerCommand::Verify { seq, .. }
             | WorkerCommand::Shutdown { seq } => *seq,
         }
     }
@@ -244,7 +265,10 @@ pub enum WorkerOutbound {
     SnapshotImported { seq: u64 },
     // ── 调试面响应帧(additive;与 WorkerCommand 调试命令一一对应)──
     /// load_variant 成功:变体镜像装载回执(零装载面,无任何秘密内容)。
-    VariantLoaded { seq: u64, loaded: DebugLoadedSummary },
+    VariantLoaded {
+        seq: u64,
+        loaded: DebugLoadedSummary,
+    },
     /// debug_query_state:调试实例状态摘要。
     DebugState { seq: u64, state: DebugStateSummary },
     /// 任意地址窗口读取回执(truncated = 窗口跨区域边界截断)。
@@ -285,6 +309,20 @@ pub enum WorkerOutbound {
         seq: u64,
         functions: Vec<DebugFunctionEntryJson>,
         truncated: bool,
+    },
+    // ── 裁决重放命令面响应(additive;与 ExportActionLog / Verify 一一对应)──
+    /// export_action_log 成功:重放材料(六记录项上下文 + 规范化动作日志
+    /// 文本;提交链路随 submissions.reference 落库,整体 SERVER_ONLY)。
+    ActionLogExported {
+        seq: u64,
+        replay_context: serde_json::Value,
+        action_log: String,
+    },
+    /// verify 产出:裁决面(11 值结果类型)+ 重放逐项结论 + `logDigest`
+    /// 复算值(整体 SERVER_ONLY:仅 verifier 受控日志 / 审计与落库消费)。
+    VerifyReport {
+        seq: u64,
+        report: crate::session::verify::VerifyReport,
     },
     /// shutdown 确认:worker 随后以退出码 0 结束。
     ShutdownAck { seq: u64 },

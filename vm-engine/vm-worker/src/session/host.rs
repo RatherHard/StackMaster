@@ -109,6 +109,11 @@ impl SessionHost {
         self.runtime.revision()
     }
 
+    /// 权威动作日志只读视图(export_action_log 的数据源;阶段六 WP-61)。
+    pub fn action_log(&self) -> &vm_runtime::action_log::ActionLog {
+        self.runtime.log()
+    }
+
     /// 单动作 wall-clock 上限(看门狗读取)。
     pub fn timeout_ms_per_action(&self) -> u64 {
         self.timeout_ms_per_action

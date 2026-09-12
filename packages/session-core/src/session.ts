@@ -80,6 +80,40 @@ export interface SubmitReference {
     readonly revisionAfter: number;
     readonly action: ActionObject;
   }[];
+  /**
+   * 重放材料(阶段六 WP-61;`exportReplayMaterial` 随行,编排器落库前组装):
+   * 六记录项上下文 + 引擎权威规范化动作日志(`stackmaster-action-log/1`
+   * 文本,含状态哈希序列)。整体 SERVER_ONLY:引擎进程协议面,零浏览器
+   * 可达面;verifier 消费(纯搬运与落库,零裁决语义)。
+   */
+  readonly replay?: ReplayMaterial;
+}
+
+/** 回放上下文(六记录项,版本策略 §三;**不含 seed 值**)。 */
+export interface ReplayContextSummary {
+  readonly challengeId: string;
+  readonly challengeContentVersion: string;
+  readonly vmProfileVersion: string;
+  readonly vmEngineVersion: string;
+  readonly engineBuildId: string;
+  readonly verdictRuleVersion: string;
+  readonly challengeBundleHash: string;
+  readonly vmProfileHash: string;
+  readonly archBits: number;
+  readonly seedPolicy: {
+    readonly strategy: string;
+    readonly derivation: {
+      readonly algorithmId: string;
+      readonly draws: number;
+    } | null;
+  };
+}
+
+/** 重放材料(`export_action_log` 响应;引擎进程协议 SERVER_ONLY 面)。 */
+export interface ReplayMaterial {
+  readonly replayContext: ReplayContextSummary;
+  /** 规范化动作日志文本(`stackmaster-action-log/1`;`log_digest` 的摘要输入)。 */
+  readonly actionLog: string;
 }
 
 export interface CreateSessionOptions {
@@ -459,6 +493,38 @@ export class SessionOrchestrator {
     };
   }
 
+  /**
+   * 重放材料导出(阶段六 WP-61;`export_action_log` worker 往返):引擎权威
+   * 的六记录项上下文 + 规范化动作日志文本。编排器在 submit 落库前调用并组装
+   * 进裁决引用(`replay` 字段);经串行队列承载,不与在途动作交错。响应面为
+   * 引擎 SERVER_ONLY 面:本层只做最小结构复验(5.6 对 worker 输出复验的
+   * 编排侧纪律)后原样透传,零语义解析。
+   */
+  exportReplayMaterial(): Promise<ReplayMaterial> {
+    return this.enqueue(async () => {
+      this.assertActive();
+      const frame = await this.rawRequest({ type: "export_action_log" });
+      if (frame.type !== "action_log_exported") {
+        this.phaseState = "crashed";
+        this.connection.kill();
+        throw new OrchestratorError(
+          "invalid_worker_output",
+          "export_action_log 未回 action_log_exported 帧",
+        );
+      }
+      const material = parseReplayMaterial(frame);
+      if (material === null) {
+        this.phaseState = "crashed";
+        this.connection.kill();
+        throw new OrchestratorError(
+          "invalid_worker_output",
+          "worker 重放材料未通过结构复验",
+        );
+      }
+      return material;
+    });
+  }
+
   // ── 关闭与进程管理(D-W8-10)──────────────────────────────────────────
 
   /** close-session:优雅 shutdown,进程以退出码 0 结束,不复用。 */
@@ -607,4 +673,60 @@ export class SessionOrchestrator {
   private static generateSessionId(): string {
     return `sess-${crypto.randomUUID().replaceAll("-", "")}`;
   }
+}
+
+/** 64 位十六进制(SHA-256 摘要 / 状态哈希形态域)。 */
+const HEX_64 = /^[0-9a-f]{64}$/;
+
+/**
+ * 重放材料最小结构复验(WP-61;编排器对 worker 输出的复验纪律,5.6):
+ * 字段在、类型对、摘要形态合;零语义解析(内容面归引擎与 verifier)。
+ * 失败返回 null(调用方按 invalid_worker_output 处置)。
+ */
+function parseReplayMaterial(frame: { readonly [field: string]: unknown }): ReplayMaterial | null {
+  const context = frame["replayContext"];
+  const actionLog = frame["actionLog"];
+  if (typeof actionLog !== "string" || actionLog.length === 0) {
+    return null;
+  }
+  if (context === null || typeof context !== "object" || Array.isArray(context)) {
+    return null;
+  }
+  const record = context as { readonly [field: string]: unknown };
+  const stringFields = [
+    "challengeId",
+    "challengeContentVersion",
+    "vmProfileVersion",
+    "vmEngineVersion",
+    "engineBuildId",
+    "verdictRuleVersion",
+  ] as const;
+  for (const field of stringFields) {
+    if (typeof record[field] !== "string" || (record[field] as string).length === 0) {
+      return null;
+    }
+  }
+  if (
+    typeof record["challengeBundleHash"] !== "string" ||
+    !HEX_64.test(record["challengeBundleHash"] as string) ||
+    typeof record["vmProfileHash"] !== "string" ||
+    !HEX_64.test(record["vmProfileHash"] as string)
+  ) {
+    return null;
+  }
+  if (record["archBits"] !== 32 && record["archBits"] !== 64) {
+    return null;
+  }
+  const seedPolicy = record["seedPolicy"];
+  if (seedPolicy === null || typeof seedPolicy !== "object" || Array.isArray(seedPolicy)) {
+    return null;
+  }
+  const strategy = (seedPolicy as { readonly [field: string]: unknown })["strategy"];
+  if (strategy !== "fixed" && strategy !== "server_random_per_session") {
+    return null;
+  }
+  return {
+    replayContext: context as unknown as ReplayContextSummary,
+    actionLog,
+  };
 }

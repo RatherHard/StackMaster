@@ -24,6 +24,7 @@ use alloc::vec::Vec;
 
 use crate::action_log::ActionLog;
 use crate::runtime::{ApplyError, RuntimeError, SessionConfig, SessionRuntime};
+use vm_core::state::VmStatus;
 
 /// 重放报告:逐项状态哈希序列与 revision 序列(黄金回放比对的证据面)。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +33,9 @@ pub struct ReplayReport {
     pub state_hash_sequence: Vec<String>,
     /// 每条目后置 revision(单调 +1)。
     pub revision_sequence: Vec<u64>,
+    /// 重放终态(won / failed / running / paused;阶段六 verify 裁决面的
+    /// 结果映射输入。additive:WP-61 增补,既有逐项比对语义零改动)。
+    pub final_status: VmStatus,
 }
 
 /// 重放失败(方向注释:`Mismatch` / `ContextMismatch` → `replay_mismatch` /
@@ -64,6 +68,7 @@ pub fn replay(config: SessionConfig, log: &ActionLog) -> Result<ReplayReport, Re
     let mut report = ReplayReport {
         state_hash_sequence: Vec::with_capacity(log.len()),
         revision_sequence: Vec::with_capacity(log.len()),
+        final_status: VmStatus::Running,
     };
     for entry in log.entries() {
         let receipt = match runtime.apply(entry.action.clone()) {
@@ -115,5 +120,6 @@ pub fn replay(config: SessionConfig, log: &ActionLog) -> Result<ReplayReport, Re
         report.state_hash_sequence.push(receipt.state_hash);
         report.revision_sequence.push(receipt.revision);
     }
+    report.final_status = runtime.state().status;
     Ok(report)
 }

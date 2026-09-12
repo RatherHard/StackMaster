@@ -211,6 +211,123 @@ export class HostProcess {
   }
 }
 
+/** verifier 运维面地址(compose 发布端口 13100;host 拓扑同端口)。 */
+export const VERIFIER_BASE_URL = process.env["VERIFIER_BASE_URL"] ?? "http://127.0.0.1:13100";
+
+/** 轮询 verifier /healthz 至 200(容器重启 / 宿主进程重启共用)。 */
+export async function waitForVerifierHealth(timeoutMs = 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "never";
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${VERIFIER_BASE_URL}/healthz`);
+      if (response.ok) {
+        return;
+      }
+      lastError = `status ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`等待 verifier 就绪超时(${lastError})`);
+}
+
+/**
+ * 宿主 verifier 进程(host 拓扑;container 拓扑 start/stop 为 no-op,由
+ * compose 管理;restart 两形态分别为 compose restart / 受控终止后重拉)。
+ * 裁决闭环的队列持久性测试消费其 restart:停机 → 提交(pending 行落库)→
+ * 重启 → 裁决落库(裁决队列以 PG 承载,跨进程不丢)。
+ */
+export class VerifierProcess {
+  #child: ChildProcess | null = null;
+
+  async start(): Promise<void> {
+    if (TOPOLOGY !== "host") {
+      await waitForVerifierHealth();
+      return; // 容器拓扑:进程由 compose 管理。
+    }
+    await this.#spawn();
+    await waitForVerifierHealth();
+  }
+
+  async #spawn(): Promise<void> {
+    const verifierDir = join(APP_DIR, "..", "verifier");
+    const dist = join(verifierDir, "dist", "index.js");
+    if (!existsSync(dist)) {
+      throw new Error("apps/verifier/dist 不存在:先运行 pnpm --filter @stackmaster/verifier build");
+    }
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      ...integrationEnv(),
+      STACKMASTER_WORKER_BIN: localWorkerBinary(),
+    };
+    // 门控 / 拓扑选择键不是 verifier 的登记配置键(保留键闸会拒绝启动)。
+    delete env["SESSION_API_IT"];
+    delete env["SESSION_API_COMPOSE"];
+    delete env["SESSION_API_TOPOLOGY"];
+    this.#child = spawn(process.execPath, [dist], {
+      cwd: verifierDir,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    this.#child.stdout?.on("data", (chunk: Buffer) => {
+      process.stderr.write(`[verifier:host] ${chunk}`);
+    });
+    this.#child.stderr?.on("data", (chunk: Buffer) => {
+      process.stderr.write(`[verifier:host] ${chunk}`);
+    });
+  }
+
+  async restart(): Promise<void> {
+    if (TOPOLOGY !== "host") {
+      await compose(["restart", "verifier"]);
+      await waitForVerifierHealth();
+      return;
+    }
+    const child = this.#child;
+    if (child === null) {
+      // stop() 之后的 restart = start(停机窗口语义:队列行持久于 PG)。
+      await this.#spawn();
+      await waitForVerifierHealth();
+      return;
+    }
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    child.kill("SIGTERM");
+    await Promise.race([
+      exited,
+      new Promise<void>((resolve) => setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve();
+      }, 15_000)),
+    ]);
+    await this.#spawn();
+    await waitForVerifierHealth();
+  }
+
+  async stop(): Promise<void> {
+    if (TOPOLOGY !== "host") {
+      await compose(["stop", "verifier"]);
+      return;
+    }
+    const child = this.#child;
+    if (child === null) {
+      return;
+    }
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    child.kill("SIGTERM");
+    await Promise.race([
+      exited,
+      new Promise<void>((resolve) => setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve();
+      }, 15_000)),
+    ]);
+    this.#child = null;
+  }
+}
+
 /** 机检流量录制器(HTTP 响应体 + WSS 入站帧;扫描器输入)。 */
 export class TrafficRecorder {
   readonly httpBodies: unknown[] = [];

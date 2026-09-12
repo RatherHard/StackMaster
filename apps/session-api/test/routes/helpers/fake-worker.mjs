@@ -165,6 +165,28 @@ rl.on("line", (line) => {
       });
       break;
     }
+    case "export_action_log": {
+      // 重放材料面(WP-61):最小合法形态(结构复验通过;内容为合成占位,
+      // 单元测试不消费其语义)。
+      send({
+        type: "action_log_exported",
+        seq,
+        replayContext: {
+          challengeId: "fake-challenge",
+          challengeContentVersion: "1.0.0",
+          vmProfileVersion: "1.0.0",
+          vmEngineVersion: "0.1.0",
+          engineBuildId: "dev",
+          verdictRuleVersion: "1.0.0",
+          challengeBundleHash: "a".repeat(64),
+          vmProfileHash: "b".repeat(64),
+          archBits: 32,
+          seedPolicy: { strategy: "fixed", derivation: null },
+        },
+        actionLog: `{"context":{"archBits":32,"challengeBundleHash":"${"a".repeat(64)}","challengeContentVersion":"1.0.0","challengeId":"fake-challenge","engineBuildId":"dev","seedPolicy":{"derivation":null,"strategy":"fixed"},"vmEngineVersion":"0.1.0","vmProfileHash":"${"b".repeat(64)}","vmProfileVersion":"1.0.0","verdictRuleVersion":"1.0.0"},"entries":[],"format":"stackmaster-action-log/1"}`,
+      });
+      break;
+    }
     case "shutdown": {
       if (mode === "watchdog_on_shutdown") {
         process.exit(3);

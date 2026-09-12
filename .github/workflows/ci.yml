@@ -55,7 +55,9 @@ jobs:
       - name: 安装依赖(frozen lockfile)
         run: pnpm install --frozen-lockfile
       - name: 构建 TS 工作区(套件消费 workspace 产物;与 ts-gate 并行,重复构建换取 job 独立性)
-        run: pnpm --filter @stackmaster/session-api... run build
+        run: |
+          pnpm --filter @stackmaster/session-api... run build
+          pnpm --filter @stackmaster/verifier... run build
       # ZR-B9 / ZR-B10 / ZR-B5 / ZR-B4 / B1 / B6:跨域载荷机检扫描器的规则
       # 精度与必触发红灯反例(单测面;ts-gate 亦有,此处就近承载一份门禁锚)。
       # ZR-B12 / ZR-B13(WP-44):调试通道帧语料包含性 + 变体派生复算单测面
@@ -167,4 +169,7 @@ jobs:
         working-directory: vm-engine
       - name: fuzz byte_decode(字节模式取指译码器,gadget 路径)
         run: cargo fuzz run byte_decode --target x86_64-unknown-linux-gnu -- -max_total_time=60 -max_len=16384
+        working-directory: vm-engine
+      - name: fuzz action_log_parse(规范化动作日志解析面;阶段六 WP-61)
+        run: cargo fuzz run action_log_parse --target x86_64-unknown-linux-gnu -- -max_total_time=60 -max_len=16384
         working-directory: vm-engine

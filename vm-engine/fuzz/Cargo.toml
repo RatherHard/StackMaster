@@ -17,14 +17,17 @@ cargo-fuzz = true
 # (cargo fuzz run,每目标限时冒烟)。本地无 cargo-fuzz 环境时,同等解析
 # 管线由 vm-worker 单元测试覆盖。
 #
-# 三个 fuzz 目标对应三类解析器:
+# 四个 fuzz 目标对应四类解析器:
 #   frame_command     —— 引擎进程协议帧载荷 → 严格 JSON → WorkerCommand
 #                        → apply_action 的动作请求契约校验管线;
 #   challenge_bundle  —— 私有题目包 + 公开描述包双包管线:严格解析 →
 #                        Schema + 语义承接 → serde 镜像 → 会话装配
 #                        (IR 形态校验 / 布局互证 / 谓词预算双真相源均在此路);
 #   byte_decode       —— 字节模式取指译码纯函数(任意编码表 × 任意字节
-#                        × 任意取指地址)。
+#                        × 任意取指地址);
+#   action_log_parse  —— 规范化动作日志解析面(阶段六 WP-61:verifier
+#                        verify 命令的不可信入站;解析 → 摘要 → 往返读回,
+#                        畸形输入必须 Err 不 panic)。
 
 [dependencies]
 libfuzzer-sys = "0.4"
@@ -45,6 +48,13 @@ bench = false
 [[bin]]
 name = "challenge_bundle"
 path = "fuzz_targets/challenge_bundle.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "action_log_parse"
+path = "fuzz_targets/action_log_parse.rs"
 test = false
 doc = false
 bench = false

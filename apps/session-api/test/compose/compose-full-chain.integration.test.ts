@@ -59,6 +59,7 @@ import {
   TOPOLOGY,
   TrafficRecorder,
   HostProcess,
+  VerifierProcess,
   credentialFromSetCookie,
   postJson,
   waitForHealth,
@@ -79,10 +80,13 @@ describe.skipIf(!COMPOSE_ENABLED)(
 
     const recorder = new TrafficRecorder();
     const host = new HostProcess();
+    const verifier = new VerifierProcess();
     const clients: WssChannelClient[] = [];
     let pool: Pool | null = null;
+    let registeredBundles: MinioChallengeBundleStore | null = null;
 
     let firstSession: { sessionId: string; cookie: string } | null = null;
+    let firstSubmissionId: string | null = null;
 
     async function connectChannel(cookie: string): Promise<WssChannelClient> {
       const client = await WssChannelClient.connect({
@@ -133,6 +137,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
         bucketPublic: IT_CONFIG.minioBucketPublic,
       });
       await bundles.ensureBuckets();
+      registeredBundles = bundles;
 
       // 生命周期教学题目(合成占位内容;引擎侧已验证的合法装载形态——
       // 真实 vm-worker 的装配器会拒绝 helper 最小 IR 对,见 helper 文件头说明)。
@@ -318,6 +323,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(submissions.length).toBeGreaterThanOrEqual(1);
       const found = submissions.find((row) => row.id === submissionId);
       expect(found).toBeDefined();
+      firstSubmissionId = submissionId;
       const reference = found!.reference as { actionLog?: unknown[] };
       expect(Array.isArray(reference.actionLog)).toBe(true);
 
@@ -437,5 +443,229 @@ describe.skipIf(!COMPOSE_ENABLED)(
       };
       expect(strip(bTail)).toBe(strip(cTail));
     }, 180_000);
+
+    // ── 阶段六 WP-61:verifier 裁决闭环(信任域 4;D-API-85 / 87)──────────
+
+    /** 轮询某 submission 的裁决行(verifier 异步落库;返回 11 值字面)。 */
+    async function pollVerdict(
+      submissionId: string,
+      timeoutMs: number,
+    ): Promise<string | null> {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const result = await pool!.query<{ verdict: string | null }>(
+          `SELECT verdict FROM verdicts WHERE submission_id = $1`,
+          [submissionId],
+        );
+        if (result.rows[0]?.verdict != null) {
+          return result.rows[0].verdict;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      return null;
+    }
+
+    /** 某 submission 的 run 行聚合(status 集合与 pending 计数)。 */
+    async function runStates(submissionId: string): Promise<{ statuses: string[]; pending: number }> {
+      const result = await pool!.query<{ status: string }>(
+        `SELECT status FROM verifier_runs WHERE submission_id = $1 ORDER BY created_at`,
+        [submissionId],
+      );
+      const statuses = result.rows.map((row) => row.status);
+      return { statuses, pending: statuses.filter((status) => status === "pending").length };
+    }
+
+    /** 直接落一条内部裁决引用(submissions + verifier_runs pending 行)。 */
+    async function seedSubmission(input: {
+      tenantId: string;
+      reference: Record<string, unknown>;
+      logDigest: string;
+    }): Promise<string> {
+      const inserted = await pool!.query<{ id: string }>(
+        `INSERT INTO submissions (tenant_id, session_id, revision, public_status, reference)
+         VALUES ($1, $2, 1, 'running', $3::jsonb) RETURNING id`,
+        [input.tenantId, `sess-seeded-${runSuffix}-${Math.random().toString(16).slice(2, 8)}`,
+          JSON.stringify(input.reference)],
+      );
+      const submissionId = inserted.rows[0]!.id;
+      await pool!.query(
+        `INSERT INTO verifier_runs (tenant_id, submission_id, status, log_digest)
+         VALUES ($1, $2, 'pending', $3)`,
+        [input.tenantId, submissionId, input.logDigest],
+      );
+      return submissionId;
+    }
+
+    /** 合法形态的内部裁决引用(含重放材料;challengeId 可注入)。 */
+    function fabricatedReference(challengeId: string): Record<string, unknown> {
+      const actionLog =
+        `{"context":{"archBits":32,"challengeBundleHash":"${sha256Hex(Buffer.from("x"))}","challengeContentVersion":"1.0.0","challengeId":"${challengeId}","engineBuildId":"dev","seedPolicy":{"derivation":null,"strategy":"fixed"},"vmEngineVersion":"0.1.0","vmProfileHash":"${sha256Hex(Buffer.from("y"))}","vmProfileVersion":"1.0.0","verdictRuleVersion":"1.0.0"},"entries":[],"format":"stackmaster-action-log/1"}`;
+      return {
+        form: "stackmaster-session-submit/1",
+        sessionId: "sess-fabricated",
+        challenge: { challengeId, challengeContentVersion: "1.0.0", vmProfileVersion: "1.0.0" },
+        engine: { vmEngineVersion: "0.1.0", engineBuildId: "dev" },
+        seedPolicy: { strategy: "fixed" },
+        revision: 1,
+        publicStatus: "running",
+        actionLog: [],
+        replay: {
+          replayContext: {
+            challengeId,
+            challengeContentVersion: "1.0.0",
+            vmProfileVersion: "1.0.0",
+            vmEngineVersion: "0.1.0",
+            engineBuildId: "dev",
+            verdictRuleVersion: "1.0.0",
+            challengeBundleHash: sha256Hex(Buffer.from("x")),
+            vmProfileHash: sha256Hex(Buffer.from("y")),
+            archBits: 32,
+            seedPolicy: { strategy: "fixed", derivation: null },
+          },
+          actionLog,
+        },
+      };
+    }
+
+    it("verifier 裁决闭环:submit → 队列 → 独立重放 → verdicts 落库(阶段六退出条件 1)", async () => {
+      await verifier.start();
+      expect(firstSubmissionId).not.toBeNull();
+      const verdict = await pollVerdict(firstSubmissionId!, 90_000);
+      // 交互会话保持 running(教学题成功条件未触发);重放非 won ⇒
+      // wrong_answer(WP-61 重放面映射,ADR-9 登记)。
+      expect(verdict).toBe("wrong_answer");
+      const run = await runStates(firstSubmissionId!);
+      expect(run.statuses.at(-1)).toBe("completed");
+      // 幂等复查:重复轮询不产生第二行(verdicts.submission_id 唯一,005)。
+      const count = await pool!.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM verdicts WHERE submission_id = $1`,
+        [firstSubmissionId!],
+      );
+      expect(Number(count.rows[0]!.count)).toBe(1);
+    }, 120_000);
+
+    it("裁决队列跨 verifier 重启持久:停机提交 → 重启后裁决落库(裁决可复现前提)", async () => {
+      // 停机(verifier 不在服务态)时提交:pending run 行已随 submit 落库。
+      await verifier.stop();
+      const embedSessionIdD = embedSessionId();
+      const embedD = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId, userId, challengeId, challengeVersion: contentVersion,
+        embedSessionId: embedSessionIdD,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      const tokenD = (embedD.body as { embedToken: string }).embedToken;
+      const createdD = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdD, embedToken: tokenD },
+      });
+      const sessionIdD = (createdD.body as { payload: { sessionId: string } }).payload.sessionId;
+      const cookieD = credentialFromSetCookie(createdD.setCookie);
+      const submittedD = await postJson(recorder, "/sessions/submissions", {
+        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdD },
+      }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieD}` });
+      expect(submittedD.status).toBe(200);
+      const submissionIdD = (submittedD.body as { payload: { submissionId: string } }).payload.submissionId;
+
+      // verifier 停机窗口内零裁决(pending 持久于 PG,队列本体零新增设施)。
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      expect(await pollVerdict(submissionIdD, 0)).toBeNull();
+
+      // 重启后同一 pending 行被认领,裁决落库(同日志同裁决跨重启)。
+      await verifier.restart();
+      const verdict = await pollVerdict(submissionIdD, 90_000);
+      expect(verdict).toBe("wrong_answer");
+    }, 150_000);
+
+    it("篡改动作日志(log_digest 复算不符)→ run failed 拒裁,零 verdicts(D-API-85 绑定锚)", async () => {
+      const tamperTenant = `tamper-digest-${runSuffix}`;
+      const reference = fabricatedReference(challengeId);
+      const replay = reference["replay"] as { actionLog: string };
+      // 登记摘要 = 另一份内容(取回复算不符 = 篡改检测锚)。
+      const submissionId = await seedSubmission({
+        tenantId: tamperTenant,
+        reference,
+        logDigest: sha256Hex(Buffer.from(`different-than-${replay.actionLog}`)),
+      });
+      // 重试链(默认 3 次)逐次失败后恒为 failed,查询面不产生 verdicts。
+      const deadline = Date.now() + 120_000;
+      let states = await runStates(submissionId);
+      while (Date.now() < deadline && states.pending > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        states = await runStates(submissionId);
+      }
+      expect(states.pending).toBe(0);
+      expect(states.statuses.filter((status) => status === "failed").length).toBeGreaterThanOrEqual(1);
+      const verdict = await pollVerdict(submissionId, 0);
+      expect(verdict).toBeNull();
+    }, 150_000);
+
+    it("六记录项缺项(replay 材料缺席的旧形态引用)→ 裁决无效 challenge_invalid", async () => {
+      const tamperTenant = `tamper-records-${runSuffix}`;
+      const reference = fabricatedReference(challengeId);
+      delete reference["replay"];
+      const submissionId = await seedSubmission({
+        tenantId: tamperTenant,
+        reference,
+        logDigest: sha256Hex(Buffer.from("no-replay-material")),
+      });
+      const verdict = await pollVerdict(submissionId, 90_000);
+      expect(verdict).toBe("challenge_invalid");
+    }, 120_000);
+
+    it("双包哈希与登记值不符(对象被替换)→ run failed 拒裁,零 verdicts", async () => {
+      const tamperTenant = `tamper-hash-${runSuffix}`;
+      const tamperChallengeId = `chal-tamper-${runSuffix}`;
+      // 正常登记(真实验签;对象字节与登记摘要一致)……
+      const privateBundle = Buffer.from(JSON.stringify(lifecycleBundle(tamperChallengeId)), "utf8");
+      const publicDescriptor = Buffer.from(JSON.stringify(lifecycleDescriptor(tamperChallengeId)), "utf8");
+      const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+      const signature = cryptoSign(
+        null,
+        Buffer.from(
+          registrationSignatureBasis({
+            challengeId: tamperChallengeId,
+            contentVersion,
+            vmProfileVersion: "1.0.0",
+            privateBundleSha256: sha256Hex(privateBundle),
+            publicDescriptorSha256: sha256Hex(publicDescriptor),
+          }),
+          "utf8",
+        ),
+        privateKey,
+      ).toString("base64");
+      const registry = new PostgresChallengeRegistry(pool!);
+      await new ChallengeRegistrar({ bundles: registeredBundles!, registry, signingPublicKey: publicKey }).register({
+        tenantId: tamperTenant,
+        challengeId: tamperChallengeId,
+        contentVersion,
+        vmProfileVersion: "1.0.0",
+        privateBundle,
+        publicDescriptor,
+        signature,
+      });
+      // ……随后对象被替换(登记摘要不再匹配桶内字节)。
+      const tampered = Buffer.from(
+        JSON.stringify(lifecycleBundle(tamperChallengeId)).replace('"1.0.0"', '"9.9.9"'),
+        "utf8",
+      );
+      await registeredBundles!.putPrivate(tamperChallengeId, contentVersion, tampered);
+
+      const reference = fabricatedReference(tamperChallengeId);
+      const replay = reference["replay"] as { actionLog: string };
+      const submissionId = await seedSubmission({
+        tenantId: tamperTenant,
+        reference,
+        logDigest: sha256Hex(Buffer.from(replay.actionLog, "utf8")),
+      });
+      const deadline = Date.now() + 120_000;
+      let states = await runStates(submissionId);
+      while (Date.now() < deadline && states.pending > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        states = await runStates(submissionId);
+      }
+      expect(states.pending).toBe(0);
+      expect(states.statuses.filter((status) => status === "failed").length).toBeGreaterThanOrEqual(1);
+      expect(await pollVerdict(submissionId, 0)).toBeNull();
+    }, 150_000);
   },
 );

@@ -29,6 +29,7 @@
 | 文档 | 说明 |
 |---|---|
 | [ADR-8-vm-core语言产能决策.md](adr/ADR-8-vm-core语言产能决策.md) | vm-core 维持 Rust 的产能决策、证据与回退 tripwire(2026-09-05) |
+| [ADR-9-verifier进程形态决策.md](adr/ADR-9-verifier进程形态决策.md) | verifier 进程形态 Q1 定案(候选 (b):Node verifier + vm-worker 裁决重放命令面)、裁决映射与拒裁方向、fuzz / miri 评估(2026-09-12) |
 
 ### develop/(设计期与实现期文档)
 
@@ -37,12 +38,12 @@
 | [Vm 模块设计.md](develop/Vm 模块设计.md) | Vm 模块设计(硬规范与语义) |
 | [Vm 模块设计冲突与整改方案.md](develop/Vm 模块设计冲突与整改方案.md) | G / D 系列裁决与整改批次记录 |
 | [Vm 模块后续审查事项与整改清单.md](develop/Vm 模块后续审查事项与整改清单.md) | R 系列审查整改与回归纪律 |
-| [引擎进程协议.md](develop/引擎进程协议.md) | 编排器 / verifier ↔ vm-worker 进程协议:版本登记、帧格式、命令面、职责切分与错误语义(WP-1,冻结) |
+| [引擎进程协议.md](develop/引擎进程协议.md) | 编排器 / verifier ↔ vm-worker 进程协议:版本登记、帧格式、命令面、职责切分与错误语义(WP-1,冻结;阶段六 WP-61 additive 演进:裁决重放命令面 export_action_log / verify,§4.9,版本维持 1) |
 | [秘密零驻留CI检查项映射.md](develop/秘密零驻留CI检查项映射.md) | 零驻留清单机检条目 → CI 检查项落点与反例位置(随 WP 接线更新) |
 | [指令规约.md](develop/指令规约.md) | vm-core 逐 opcode 执行语义权威规约:统一执行入口、位宽 / 栈 / 标志模型、异常与事件面、调用与 Canary、自定义指令与接口派发(WP-4) |
 | [判题语义规约.md](develop/判题语义规约.md) | vm-core 判题语义权威规约:谓词求值、权威成功 / 失败判定、多阶段状态机运行时、seed 策略与派生、隐藏测试执行(WP-5) |
 | [快照与回放语义规约.md](develop/快照与回放语义规约.md) | vm-runtime 权威规约:COW 分页快照与 checkpoint、规范化动作日志(6.3 清单)、revision / undo / checkout / reset 语义、回放一致性、版本锁定与资源计数(WP-6) |
-| [权威API语义规约.md](develop/权威API语义规约.md) | session-api(D-API-* )实现期决策单一登记处:路由与通道形态、凭证链路、版本窗口与幂等窗口运维参数、通道行为、工程载体纪律(配置 fail-closed / 日志纪律 / 优雅停机)、限流与配额、跨域机检、指标面与 k6 基线(阶段三 WP-0 ~ WP-8 全量) |
+| [权威API语义规约.md](develop/权威API语义规约.md) | session-api / verifier(D-API-* )实现期决策单一登记处:路由与通道形态、凭证链路、版本窗口与幂等窗口运维参数、通道行为、工程载体纪律(配置 fail-closed / 日志纪律 / 优雅停机)、限流与配额、跨域机检、指标面与 k6 基线(阶段三 WP-0 ~ WP-8 全量;阶段六 WP-60 / WP-61:D-API-83~89) |
 
 ### phases/
 

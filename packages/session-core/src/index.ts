@@ -21,6 +21,8 @@ export type {
   CreateSessionOptions,
   PrecheckErrorCode,
   RecoverOptions,
+  ReplayContextSummary,
+  ReplayMaterial,
   SessionPhase,
   SubmitReference,
 } from "./session.js";

@@ -18,7 +18,7 @@
     "lint:rust": "turbo run lint:rust",
     "test:rust": "cargo test --manifest-path vm-engine/Cargo.toml --workspace && cargo test --release --manifest-path vm-engine/Cargo.toml --workspace",
     "test:miri": "cargo +nightly miri test --manifest-path vm-engine/Cargo.toml -p vm-core",
-    "fuzz:smoke": "cargo fuzz run frame_command && cargo fuzz run challenge_bundle && cargo fuzz run byte_decode",
+    "fuzz:smoke": "cargo fuzz run frame_command && cargo fuzz run challenge_bundle && cargo fuzz run byte_decode && cargo fuzz run action_log_parse",
     "cross:test": "cargo test --manifest-path vm-engine/Cargo.toml -p vm-core -p vm-runtime && cargo test --release --manifest-path vm-engine/Cargo.toml -p vm-core -p vm-runtime",
     "cov:rust": "cargo llvm-cov --manifest-path vm-engine/Cargo.toml --workspace --exclude vm-worker --fail-under-lines 90",
     "scan:public": "node tooling/scan-public-artifacts.mjs",

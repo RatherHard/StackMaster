@@ -161,6 +161,17 @@ module.exports = {
       to: { path: "^packages/protocol/(dist|src)/server-only" },
     },
     {
+      name: "verifier-workspace-deps-allowlist",
+      severity: "error",
+      comment:
+        "verifier(信任域 4,WP-61)对工作区包只允许依赖 protocol / challenge-schema(5.5 依赖方向:verifier 零编排核心依赖——裁决面在引擎进程内,TS 侧纯搬运与落库);其余工作区包一律禁止。",
+      from: { path: "^apps/verifier/" },
+      to: {
+        path: "^packages/",
+        pathNot: "^packages/(protocol|challenge-schema)/",
+      },
+    },
+    {
       name: "session-api-workspace-deps-allowlist",
       severity: "error",
       comment:

@@ -306,6 +306,15 @@ export class MemoryActionLogStore implements ActionLogStore {
 
 export class MemorySubmissionStore implements SubmissionStore {
   private readonly rows: (SubmissionRecord & { tenantId: string })[] = [];
+  /** 入队的裁决 run(pending 行即队列本体;D-API-85 的内存同构形态)。 */
+  readonly verifierRuns: {
+    readonly id: string;
+    tenantId: string;
+    submissionId: string;
+    status: "pending" | "running" | "completed" | "failed";
+    logDigest: string | null;
+    createdAt: string;
+  }[] = [];
 
   constructor(private readonly now: Clock = Date.now) {}
 
@@ -315,6 +324,7 @@ export class MemorySubmissionStore implements SubmissionStore {
     revision: number;
     publicStatus: string;
     reference: unknown;
+    logDigest: string;
   }): Promise<SubmissionRecord> {
     const row: SubmissionRecord & { tenantId: string } = {
       id: nextId("sub"),
@@ -326,6 +336,14 @@ export class MemorySubmissionStore implements SubmissionStore {
       createdAt: new Date(this.now()).toISOString(),
     };
     this.rows.push(row);
+    this.verifierRuns.push({
+      id: nextId("run"),
+      tenantId: input.tenantId,
+      submissionId: row.id,
+      status: "pending",
+      logDigest: input.logDigest,
+      createdAt: row.createdAt,
+    });
     return row;
   }
 

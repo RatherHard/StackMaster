@@ -1,7 +1,8 @@
 # 阶段三 WP-7:全拓扑编排文件(质量门禁 7 阶段三子集;D-API-64)。
+# 阶段六 WP-61 增补:verifier 独立裁决服务入网(信任域 4;D-API-87)。
 #
 # 完整拓扑 = PostgreSQL + Redis + MinIO(deps.yaml 三服务)+ session-api
-# + vm-worker。vm-worker 不是常驻服务:由编排器按会话 spawn(ADR-3 单会话
+# + vm-worker + verifier(+ 两个 verifier 角色治理 init 服务)。vm-worker 不是常驻服务:由编排器按会话 spawn(ADR-3 单会话
 # 单进程),拓扑第五元素以"session-api 镜像内二进制 + 会话期子进程"形态
 # 交付;本文件的 vm-worker 服务是一次性冒烟(linux 二进制可执行 + stdio
 # EOF 优雅退出),供 test:compose 在 up --wait 之后以
@@ -22,6 +23,19 @@
 name: session-api-app
 
 services:
+  # 依赖服务双宿(postgres / minio 同时入 verifier-net):信任域 4 的独立
+  # 网络域——verifier 与其数据面(postgres / minio)独占 verifier-net,
+  # session-api 不入该网络(verifier 与编排器经 PG 单向解耦,D-API-83;
+  # 双宿合并语义由 compose 多文件 merge 提供)。
+  postgres:
+    networks:
+      - default
+      - verifier-net
+  minio:
+    networks:
+      - default
+      - verifier-net
+
   session-api:
     build:
       context: ../../..
@@ -75,3 +89,88 @@ services:
     depends_on:
       - session-api
     restart: "no"
+
+  # ── 阶段六 WP-61:verifier 独立裁决服务(信任域 4;D-API-87)────────────
+  # 版本策略 §四.4(verifier 与交互执行同锁)由镜像同一性结构性保证:
+  # verifier 复用 stackmaster/session-api:dev 镜像内的同一份 /app/bin/vm-worker
+  # 构建(spawn 一次性裁决进程,ADR-3 进程边界)。独立网络域 verifier-net
+  # (postgres / minio 双宿,session-api 不入该网络);独立 PG 角色与 MinIO
+  # 最小授权角色(经下方两个 init 服务授予;与 session-api 凭证不共享)。
+  verifier:
+    image: stackmaster/session-api:dev
+    command: ["node", "apps/verifier/dist/index.js"]
+    environment:
+      VERIFIER_HOST: 0.0.0.0
+      VERIFIER_PORT: "3100"
+      # ── 持久化面(独立角色 verifier;凭据为本地 dev / CI 合成值)──
+      VERIFIER_POSTGRES_URL: postgres://verifier:verifier-dev@postgres:5432/session_api
+      VERIFIER_MINIO_ENDPOINT: minio
+      VERIFIER_MINIO_PORT: "9000"
+      VERIFIER_MINIO_ACCESS_KEY: verifier
+      VERIFIER_MINIO_SECRET_KEY: verifier-dev
+      # 双包各归其桶(001 迁移对象名语义):私有判题包 + 公开描述包(公开产物,
+      # 零秘密);init 服务按双桶授予 GetObject(verifier-minio-policy.json)。
+      VERIFIER_MINIO_BUCKET_PRIVATE: private-bundles
+      VERIFIER_MINIO_BUCKET_PUBLIC: public-descriptors
+      # 拓扑集成节奏:轮询取小值,便于裁决闭环复验。
+      VERIFIER_POLL_INTERVAL_MS: "500"
+    ports:
+      - "13100:3100"
+    networks:
+      - verifier-net
+    depends_on:
+      session-api:
+        condition: service_healthy
+      verifier-db-init:
+        condition: service_completed_successfully
+      verifier-minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    restart: "no"
+
+  verifier-db-init:
+    # 一次性角色治理(幂等 SQL;执行前置 = session-api 迁移已应用)。
+    image: postgres:16
+    environment:
+      PGHOST: postgres
+      PGUSER: stackmaster
+      PGPASSWORD: stackmaster-dev
+      PGDATABASE: session_api
+    volumes:
+      - ./verifier-db-init.sql:/init/verifier-db-init.sql:ro
+    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init/verifier-db-init.sql"]
+    networks:
+      - verifier-net
+    depends_on:
+      session-api:
+        condition: service_healthy
+    restart: "no"
+
+  verifier-minio-init:
+    # 一次性最小授权角色(GetObject on private-bundles/*;mc 挂载策略文件)。
+    image: minio/mc:latest
+    environment:
+      MINIO_ENDPOINT: minio
+      MINIO_ROOT_USER: stackmaster-dev
+      MINIO_ROOT_PASSWORD: stackmaster-dev-secret
+      VERIFIER_ACCESS_KEY: verifier
+      VERIFIER_SECRET_KEY: verifier-dev
+    volumes:
+      - ./verifier-minio-init.sh:/init/init.sh:ro
+      - ./verifier-minio-policy.json:/policy.json:ro
+    entrypoint: ["sh", "/init/init.sh"]
+    networks:
+      - verifier-net
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+networks:
+  verifier-net:
+    driver: bridge
