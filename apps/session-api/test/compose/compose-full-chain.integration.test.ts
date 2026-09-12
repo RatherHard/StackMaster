@@ -911,6 +911,98 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(again.bodyText).toBe(firstReject!.bodyText);
     }, 60_000);
 
+    // ── 阶段六 WP-67:裁决边界攻击面(9.2 第四边界;verifier_runs 推进不可达)──
+
+    it("客户端全表面重询风暴不可推进 verifier_runs:verifier 停机窗口内 run 恒 pending、零 verdicts;重启后裁决正常落库", async () => {
+      // 攻击面设定:选手唯一的裁决链客户端表面 = GET /verdicts 族(认证 /
+      // 限流闸后)。状态机推进(pending → running → completed / failed)是
+      // verifier 信任域 4 经 SKIP LOCKED 认领的独占面(D-API-85)——本用例
+      // 在 verifier 停机窗口(认领面物理缺席)做客户端风暴,直接断言 PG
+      // 侧 run 行零迁移、verdicts 零写入;随后重启证明队列未被风暴腐化。
+      await verifier.stop();
+      const wp67User = "user-compose-wp67";
+      const embedSessionIdS = embedSessionId();
+      const embedS = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId, userId: wp67User, challengeId, challengeVersion: contentVersion,
+        embedSessionId: embedSessionIdS,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      const tokenS = (embedS.body as { embedToken: string }).embedToken;
+      const createdS = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdS, embedToken: tokenS },
+      });
+      expect(createdS.status).toBe(201);
+      const cookieS = credentialFromSetCookie(createdS.setCookie);
+      const sessionIdS = (createdS.body as { payload: { sessionId: string } }).payload.sessionId;
+      const submittedS = await postJson(recorder, "/sessions/submissions", {
+        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdS },
+      }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieS}` });
+      expect(submittedS.status).toBe(200);
+      const submissionIdS = (submittedS.body as { payload: { submissionId: string } }).payload.submissionId;
+      const revisionS = (submittedS.body as { payload: { revision: number } }).payload.revision;
+
+      // 客户端风暴:归属重询(200 pending / 触顶 429)+ 不存在与字符集违规
+      // 404 + 无凭证 401,混合 40 次(限流 30/min ⇒ 后段 429 是攻击面的一部分)。
+      let pendingBytes: string | null = null;
+      const cookieHeader = `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieS}`;
+      for (let index = 0; index < 34; index += 1) {
+        const attempt = await getJson(recorder, `/verdicts/${submissionIdS}`, cookieHeader);
+        expect([200, 429]).toContain(attempt.status);
+        if (attempt.status === 200) {
+          const expected = JSON.stringify({ submissionId: submissionIdS, revision: revisionS, status: "pending" });
+          expect(attempt.bodyText).toBe(expected);
+          pendingBytes = attempt.bodyText;
+        } else {
+          expect(attempt.bodyText).toBe(JSON.stringify({ code: "budget_exhausted", message: "rate limit exceeded" }));
+        }
+      }
+      expect(pendingBytes).not.toBeNull();
+      const missing = await getJson(recorder, "/verdicts/22222222-2222-4000-8000-222222222222", cookieHeader);
+      expect([404, 429]).toContain(missing.status);
+      if (missing.status === 404) {
+        expect(missing.bodyText).toBe(JSON.stringify({ code: "invalid_input_format", message: "resource not found" }));
+      }
+      const malformed = await fetch(`${BASE_URL}/verdicts/not-a%2Fuuid`, { headers: { cookie: cookieHeader } });
+      if (malformed.status !== 429) {
+        expect(malformed.status).toBe(404);
+      }
+      const anonymous = await fetch(`${BASE_URL}/verdicts/${submissionIdS}`);
+      expect([401, 429]).toContain(anonymous.status);
+
+      // PG 侧断言:风暴后 run 行状态机零迁移(全部 pending)、裁决零落库。
+      const runsAfter = await pool!.query<{ status: string }>(
+        `SELECT status FROM verifier_runs WHERE submission_id = $1`,
+        [submissionIdS],
+      );
+      expect(runsAfter.rows.length).toBeGreaterThanOrEqual(1);
+      expect(runsAfter.rows.map((row) => row.status)).toEqual(
+        runsAfter.rows.map(() => "pending"),
+      );
+      const verdictsAfter = await pool!.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM verdicts WHERE submission_id = $1`,
+        [submissionIdS],
+      );
+      expect(Number(verdictsAfter.rows[0]!.count)).toBe(0);
+
+      // 重启 verifier:同一 pending 行被认领,裁决正常落库(风暴未腐化队列)。
+      await verifier.restart();
+      const verdict = await pollVerdict(submissionIdS, 90_000);
+      expect(verdict).toBe("wrong_answer");
+      const runsFinal = await pool!.query<{ status: string }>(
+        `SELECT status FROM verifier_runs WHERE submission_id = $1`,
+        [submissionIdS],
+      );
+      expect(runsFinal.rows.map((row) => row.status).at(-1)).toBe("completed");
+
+      // 收尾:显式 close_session 释放并发会话预算槽位(租户预算 8;不释放
+      // 会让本套件后段的审计落库用例撞 concurrent budget 提前闸)。
+      const closed = await postJson(recorder, "/sessions/close", {
+        command: "close_session", protocolVersion: 1, payload: { sessionId: sessionIdS },
+      }, { cookie: cookieHeader });
+      expect(closed.status).toBe(200);
+    }, 180_000);
+
     it("ZR-T4 verifier 级复锚:伪造 won 成功标志,verifier 独立重放裁决与未伪造会话一致", async () => {
       // 诚实会话(firstSubmissionId,交互期未伪造)的引用与裁决;伪造 =
       // 提交行 public_status = 'won'(客户端成功标志;D-API-62 篡改矩阵

@@ -16,7 +16,10 @@
  *  - 服务器数据完整性:落库字面在 11 值外 → 响应面自检失败 500 兜底
  *    (绝不下发非契约形态);
  *  - Cookie Path(D-API-83 调宽登记):凭证 Cookie Path=/ 覆盖 /verdicts 族;
- *    GET 非变更方法不走 CSRF 闸(无 Origin 的 Cookie 呈递放行,D-API-17)。
+ *    GET 非变更方法不走 CSRF 闸(无 Origin 的 Cookie 呈递放行,D-API-17);
+ *  - 裁决边界攻击面(WP-67,9.2 第四边界延伸):伪造 public_status 客户端
+ *    污染不可达(未决期呈现恒三字段 pending,与诚实提交同形);客户端
+ *    全表面重询风暴不可推进 verifier_runs 状态机(认领 = verifier 独占)。
  */
 
 import { describe, expect, it } from "vitest";
@@ -90,12 +93,13 @@ async function seedSubmission(
   sessionId: string,
   revision = 3,
   tenantId: string = TEST_TENANT_ID,
+  publicStatus = "running",
 ): Promise<string> {
   const record = await rig.submissions.record({
     tenantId,
     sessionId,
     revision,
-    publicStatus: "running",
+    publicStatus,
     reference: { form: "stackmaster-session-submit/1", sessionId, revision },
     logDigest: LOG_DIGEST,
   });
@@ -331,5 +335,115 @@ describe("Cookie Path 调宽(D-API-83:Path=/ 覆盖 /sessions 与 /verdicts 两�
     expect(raw).not.toContain("Path=/sessions");
     expect(raw).toContain("HttpOnly");
     expect(raw).toContain("SameSite=Strict");
+  });
+});
+
+// ── 阶段六 WP-67:裁决边界攻击面(9.2 第四边界延伸;裁决伪造方向)──────────
+// 两个不可达性质:①客户端污染不可达——提交行上任何客户端可伪造字段
+// (public_status 成功标志)不改变未决期呈现的零成绩语义;②状态机推进
+// 不可达——客户端全部可达表面(GET /verdicts 族)不触发 verifier_runs
+// 状态迁移(认领与推进是 verifier 信任域 4 独占面,D-API-85)。
+describe("裁决边界攻击面(WP-67:客户端污染与 verifier_runs 推进不可达)", () => {
+  it("伪造 public_status='won' 的提交行:未决期呈现恒 pending 三字段,与诚实提交同形(零成绩语义客户端污染不可达)", async () => {
+    const rig = await buildSessionTestRig();
+    const { sessionId, cookie } = await createSession(rig);
+    const honest = await seedSubmission(rig, sessionId, 5);
+    const forged = await seedSubmission(rig, sessionId, 5, TEST_TENANT_ID, "won");
+
+    const honestResult = await getVerdict(rig, cookie, honest);
+    const forgedResult = await getVerdict(rig, cookie, forged);
+    expect(honestResult.status).toBe(200);
+    expect(forgedResult.status).toBe(200);
+    // 同 revision 下,伪造行与诚实行未决期载荷仅 submissionId 不同(逐字节对齐)。
+    expect(forgedResult.bodyText).toBe(honestResult.bodyText.replaceAll(honest, forged));
+    // 恒定三字段:零 verdict 键、零成绩方向字段(pending ≠ 通过 / 失败)。
+    const payload = VerdictQueryResponseSchema.parse(JSON.parse(forgedResult.bodyText));
+    expect(payload).toEqual({ submissionId: forged, revision: 5, status: "pending" });
+    expect(forgedResult.bodyText).not.toContain("won");
+    expect(forgedResult.bodyText).not.toContain("verdict");
+  });
+
+  it("重询风暴(200 / 404 / 429 / 401 全表面)后:verifier_runs 恒 pending、裁决零落库(客户端面不可推进状态机)", async () => {
+    const rig = await buildSessionTestRig({
+      env: { SESSION_API_VERDICT_QUERIES_PER_MINUTE: "12" },
+    });
+    const { sessionId, cookie } = await createSession(rig);
+    const submissionId = await seedSubmission(rig, sessionId);
+
+    // 风暴(计量序):归属重询 200 × 8 → 不存在 / 字符集违规 404 × 2 →
+    // 无凭证 401(认证先于计量,不占预算)→ 触顶 429 × 2(计数不回退)。
+    for (let index = 0; index < 8; index += 1) {
+      const attempt = await getVerdict(rig, cookie, submissionId);
+      expect(attempt.status, `第 ${index + 1} 次归属重询`).toBe(200);
+      expect(JSON.parse(attempt.bodyText)).toMatchObject({ status: "pending" });
+    }
+    expect((await getVerdict(rig, cookie, "00000000-0000-4000-8000-000000000000")).status).toBe(404);
+    const malformed = await rig.app.inject({
+      method: "GET",
+      url: "/verdicts/..%2Fetc",
+      cookies: { sm_session_credential: cookie },
+    });
+    expect(malformed.statusCode).toBe(404);
+    const anonymous = await rig.app.inject({ method: "GET", url: `/verdicts/${submissionId}` });
+    expect(anonymous.statusCode).toBe(401);
+    // 触顶(有界循环:404 探测是否计量属实现细节,两种形态都收敛到 429)。
+    let capped: { status: number; bodyText: string } | null = null;
+    for (let index = 0; index < 12 && capped === null; index += 1) {
+      const attempt = await getVerdict(rig, cookie, submissionId);
+      if (attempt.status === 429) {
+        capped = attempt;
+      } else {
+        expect(attempt.status).toBe(200);
+        expect(JSON.parse(attempt.bodyText)).toMatchObject({ status: "pending" });
+      }
+    }
+    expect(capped, "风暴内必触顶(限流生效)").not.toBeNull();
+    expect(capped!.bodyText).toBe(RATE_LIMIT_BODY);
+    // 计数不回退:窗口内继续触顶(确定性同形,I-4)。
+    expect((await getVerdict(rig, cookie, submissionId)).bodyText).toBe(capped!.bodyText);
+
+    // 状态机零推进:全部 run 行仍 pending(认领 = verifier SKIP LOCKED 独占)。
+    const runs = rig.submissions.verifierRuns.filter((run) => run.submissionId === submissionId);
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+    expect(runs.map((run) => run.status)).toEqual(runs.map(() => "pending"));
+    // 裁决零落库(直接查 VerdictQueryStore 端口,不受重询限流计量影响)。
+    expect(await rig.submissions.findVerdictBySubmissionId(submissionId, TEST_TENANT_ID)).toBeNull();
+  });
+
+  it("未决期载荷与最终裁决方向零相关(侧信道最小断言):异裁决双提交的 pending 字节同形", async () => {
+    // 侧信道论证的裁决呈现面最小断言(WP-67;9.2 侧信道约束在裁决链上的
+    // 延伸):异步队列解耦使 pending 期客户端可观察面 = 恒定三字段,与该
+    // 提交最终的裁决字面(success / wrong_answer / 非成绩方向)零相关——
+    // 若 pending 载荷携带任何与最终裁决相关的信号(长度 / 字段 / 字节),
+    // 本用例的逐字节对齐断言即红灯。
+    const rig = await buildSessionTestRig();
+    const { sessionId, cookie } = await createSession(rig);
+    const eventualSuccess = await seedSubmission(rig, sessionId, 5);
+    const eventualWrong = await seedSubmission(rig, sessionId, 5);
+    const eventualNonScore = await seedSubmission(rig, sessionId, 5);
+
+    // 未决期窗口:三提交 pending 载荷仅 submissionId 不同,其余逐字节一致。
+    const pendingBodies = [eventualSuccess, eventualWrong, eventualNonScore].map(
+      (id) => getVerdict(rig, cookie, id).then((result) => {
+        expect(result.status).toBe(200);
+        return result.bodyText.replaceAll(id, "<submissionId>");
+      }),
+    );
+    const [pendingSuccess, pendingWrong, pendingNonScore] = await Promise.all(pendingBodies);
+    expect(pendingWrong).toBe(pendingSuccess);
+    expect(pendingNonScore).toBe(pendingSuccess);
+
+    // 三提交最终落向三个不同方向(成绩两极 + 非成绩),反证"同 pending 字节
+    // ≠ 同裁决":pending 期可观察面不承载裁决方向的任何函数。
+    await rig.submissions.recordVerdict(eventualSuccess, "success", 1_789_200_000);
+    await rig.submissions.recordVerdict(eventualWrong, "wrong_answer", 1_789_200_001);
+    await rig.submissions.recordVerdict(eventualNonScore, "engine_error", 1_789_200_002);
+    const finalVerdicts = [eventualSuccess, eventualWrong, eventualNonScore].map(
+      (id) => getVerdict(rig, cookie, id).then((result) => {
+        expect(result.status).toBe(200);
+        return (JSON.parse(result.bodyText) as { verdict: string }).verdict;
+      }),
+    );
+    expect(await Promise.all(finalVerdicts)).toEqual(["success", "wrong_answer", "engine_error"]);
   });
 });

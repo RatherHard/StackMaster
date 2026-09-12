@@ -736,3 +736,78 @@ fn hidden_failure_direction_matrix_covers_seven_classify_values() {
         );
     }
 }
+
+// ── WP-67:golden 三路一致延伸到裁决服务面(任务分解 WP-67 第 3 条;
+// 快照与回放语义规约 §五 的裁决面延伸)──────────────────────────────
+
+/// 黄金风格多动作脚本(非制胜写 → checkpoint → 再写 → undo → pause → 制胜写):
+/// 覆盖写 / 恢复点 / 回退 / 暂停 / 终态触发五类动作形态,revision 稠密 1..=6,
+/// 终态 won。golden 回放三路一致(活体 = 重放一次 = 重放两次 = 序列化往返
+/// 再重放)在裁决面(vm-worker verify 命令)复锚:同一日志经三个独立 verify
+/// 进程(一次性裁决形态)裁决,结论 / log_digest / 重放序列逐字节一致。
+#[test]
+fn golden_log_verdict_identical_across_three_verify_runs() {
+    let challenge_id = "wp67-golden-verdict";
+    let bundle = verify_bundle(challenge_id);
+    let descriptor = verify_descriptor(challenge_id);
+    let script = [
+        // 非制胜写(buffer 区;会话保持 running)。
+        json!({ "type": "write_bytes", "args": { "addressHex": "0x20000000", "bytesHex": "41" } }),
+        // 恢复点(确定性 ID 由运行时签发;undo 链的锚)。
+        json!({ "type": "create_checkpoint", "args": { "label": "golden" } }),
+        // 第二写(将被 undo 回退)。
+        json!({ "type": "write_bytes", "args": { "addressHex": "0x20000001", "bytesHex": "43" } }),
+        json!({ "type": "undo", "args": {} }),
+        json!({ "type": "pause", "args": {} }),
+        // 制胜写(栈区 0x200 偏移 = 0x42 ⇒ won 终态)。
+        winning_action(),
+    ];
+    let (context, log) = live_material(challenge_id, &script);
+
+    // log_digest 独立复算锚(与 verify 报告面同源比对)。
+    let digest = vm_runtime::action_log::ActionLog::from_canonical_text(&log)
+        .unwrap()
+        .hash_hex()
+        .unwrap();
+
+    // 路 1:活体导出日志 → 独立 verify 进程裁决。
+    let report1 = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    // 路 2:同一日志再裁决(任意时点 / 任意进程一致)。
+    let report2 = report_of(run_verify(&bundle, &descriptor, &context, &log).expect("verify 受理"));
+    // 路 3:规范化文本往返(解析 → 再序列化)后裁决——日志是自含裁决载体。
+    let reparsed = vm_runtime::action_log::ActionLog::from_canonical_text(&log).unwrap();
+    let roundtrip = reparsed.canonical_text().unwrap();
+    assert_eq!(
+        reparsed.hash_hex().unwrap(),
+        digest,
+        "规范化哈希往返一致(与活体导出同值)"
+    );
+    let report3 =
+        report_of(run_verify(&bundle, &descriptor, &context, &roundtrip).expect("verify 受理"));
+
+    // 三路一致:裁决字面 / digest / 报告整体逐字节一致(VerifyReport: PartialEq)。
+    assert_eq!(report1.verdict.as_str(), "success");
+    assert_eq!(report2, report1);
+    assert_eq!(report3, report1);
+    assert_eq!(report1.log_digest, digest);
+    match &report1.replay {
+        VerifyReplayOutcome::Matched {
+            final_status,
+            revision_sequence,
+            state_hash_sequence,
+            ..
+        } => {
+            assert_eq!(final_status, "won");
+            // 稠密单调 revision(golden 属性:每已受理动作恰 +1)。
+            assert_eq!(revision_sequence, &vec![1u64, 2, 3, 4, 5, 6]);
+            assert_eq!(state_hash_sequence.len(), 6);
+            // 制胜写改变可见内存 ⇒ 哈希前进(undo / pause 类内容中性动作
+            // 允许哈希重访,不作为 golden 不变量;此处只锚写动作的哈希效应)。
+            assert_ne!(
+                state_hash_sequence[5], state_hash_sequence[4],
+                "制胜写改变栈区内容 ⇒ 状态哈希前进"
+            );
+        }
+        other => panic!("重放应逐项一致,实际 {other:?}"),
+    }
+}
