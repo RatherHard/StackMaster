@@ -32,6 +32,7 @@ import type { Pool } from "pg";
 import { SessionOrchestrator } from "@stackmaster/session-core";
 
 import type { SessionApiConfig } from "../config.js";
+import { resolveWorkerExecutionForm } from "./worker-execution.js";
 import {
   buildAuthPlugin,
   createTokenSigner,
@@ -135,6 +136,7 @@ export async function recoverActiveSessions(deps: {
   readonly manager: LiveSessionManager;
   readonly logger: Logger;
   readonly workerCommand?: import("@stackmaster/session-core").WorkerCommandSpec;
+  readonly workerLauncherFactory?: import("@stackmaster/session-core").WorkerLauncherFactory;
 }): Promise<number> {
   const actives = await deps.sessions.listActiveSessions();
   let recovered = 0;
@@ -148,6 +150,9 @@ export async function recoverActiveSessions(deps: {
         ...(plan.load.sessionSeedHex === undefined ? {} : { sessionSeedHex: plan.load.sessionSeedHex }),
         snapshot: plan.snapshot,
         ...(deps.workerCommand === undefined ? {} : { workerCommand: deps.workerCommand }),
+        ...(deps.workerLauncherFactory === undefined
+          ? {}
+          : { workerLauncherFactory: deps.workerLauncherFactory }),
         // 恢复会话的认证上下文按持久化身份重建(身份只来自持久化凭证链,
         // 与 create-session 同一派生形态)。
         auth: createSessionAuthContext({
@@ -241,6 +246,14 @@ export interface SessionApiRuntime {
 export interface BuildRuntimeOptions {
   /** 可注入 worker 进程描述(测试假 worker;生产缺省由 session-core 定位)。 */
   readonly workerCommand?: import("@stackmaster/session-core").WorkerCommandSpec;
+  /**
+   * 可注入 worker 执行形态启动器工厂(WP-66;集成替身直通,跳过容器探测 ——
+   * 生产装配经 resolveWorkerExecutionForm 按配置构造,D-API-105)。
+   */
+  readonly workerLauncherFactory?: import("@stackmaster/session-core").WorkerLauncherFactory;
+  /** 容器形态 docker CLI 注入(缺省 "docker";真实容器集成实测面)。 */
+  readonly dockerCommand?: string;
+  readonly dockerArgs?: readonly string[];
 }
 
 /**
@@ -329,6 +342,24 @@ export async function buildSessionApiRuntime(
   const metrics = new SessionMetrics();
   const metricsPlugin = buildMetricsPlugin(metrics);
 
+  // ── 6.05 worker 执行形态选择(WP-66,Q4 定案,D-API-105):缺省 = 进程池
+  //    (零探测,dev / CI 拓扑零回退);container = 显式启用形态,启动期
+  //    fail-closed 探测(daemon 可达 + 同锁镜像本地在场),失败即拒绝启动
+  //    —— 不静默降级进程池(Windows dev 降级路径的明示形态)。启用前置 =
+  //    MVP 验收通过(边界裁决 1)。
+  const workerExecution = await resolveWorkerExecutionForm({
+    config,
+    ...(options.workerLauncherFactory === undefined
+      ? {}
+      : { injectedFactory: options.workerLauncherFactory }),
+    ...(options.dockerCommand === undefined ? {} : { dockerCommand: options.dockerCommand }),
+    ...(options.dockerArgs === undefined ? {} : { dockerArgs: options.dockerArgs }),
+  });
+  logger.info(
+    { kind: workerExecution.kind },
+    "worker execution form resolved (process = default; container = explicit opt-in, WP-66)",
+  );
+
   // ── 6.2 审计归档任务(WP-64,D-API-92):进程内定时面(运维事件账不上审计
   //    ——运行事实走受控日志 + /metrics 计数器 session_api_audit_archive_batches_total);
   //    归档为副本形态(在线表不删行,T2 演进登记);首拍立即执行,其后按
@@ -371,6 +402,9 @@ export async function buildSessionApiRuntime(
     idleRecycleSeconds: config.disconnectKeepaliveSeconds,
     runToBreakpointMaxSteps: DEBUG_RUN_TO_BREAKPOINT_MAX_STEPS,
     ...(options.workerCommand === undefined ? {} : { workerCommand: options.workerCommand }),
+    ...(workerExecution.launcherFactory === undefined
+      ? {}
+      : { workerLauncherFactory: workerExecution.launcherFactory }),
   });
 
   const manager = new LiveSessionManager({
@@ -394,6 +428,9 @@ export async function buildSessionApiRuntime(
     metrics,
     onSessionClosed: ({ sessionId, tenantId }) => debugOrchestrator.recycleSession(sessionId, tenantId),
     ...(options.workerCommand === undefined ? {} : { workerCommand: options.workerCommand }),
+    ...(workerExecution.launcherFactory === undefined
+      ? {}
+      : { workerLauncherFactory: workerExecution.launcherFactory }),
   });
   managerRef = manager;
 
@@ -406,6 +443,9 @@ export async function buildSessionApiRuntime(
     manager,
     logger,
     ...(options.workerCommand === undefined ? {} : { workerCommand: options.workerCommand }),
+    ...(workerExecution.launcherFactory === undefined
+      ? {}
+      : { workerLauncherFactory: workerExecution.launcherFactory }),
   });
   if (recoveredSessions > 0) {
     logger.info({ recovered: recoveredSessions }, "live sessions recovered from snapshots at startup");

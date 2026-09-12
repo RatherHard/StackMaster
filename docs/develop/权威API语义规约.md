@@ -958,6 +958,8 @@ D-API-20 登记的"行级策略归阶段六完善"开口由本条收口。落地
 
 **并发会话预算 × 容器形态资源预算对齐(登记判据面,WP-66 回填接口)**:T0 每会话单 worker 进程(ADR-3)下,租户并发预算 = worker 进程数上限(`session_api_worker_processes` 与 `session_api_live_sessions` 同源同值,D-API-72)——内存 / 句柄预算可直接线性推导(8 并发 ≈ 8 × 单进程上限);WP-66 容器池交付时,以本键为**单一真源**接线"每租户容器并发上限",并把容器冷启动 / 镜像 / cgroup 预算的量化判据回填本表(边界裁决 1:启用前置 = MVP 验收通过)。
 
+**WP-66 回填兑现(2026-09-12,容器池交付,D-API-105)**:并发会话预算键已按"单一真源"接线为每租户容器并发上限(每会话恰一容器,1:1 映射经装配层结构强制——容器仅在 `createSession` 预算预留成功后的题目装载路径内启动,触顶拒绝发生在容器启动之前,D-API-52 计量语义不变);量化判据回填:容器内存缺省 256 MiB × 预算 8 = **2 GiB / 租户容器资源总量**、CPU 缺省 1 核 × 8 = 8 核 / 租户(cgroup `--memory` / `--cpus` 逐容器硬限,超并发即拒绝创建会话而非超卖资源);冷启动实测 ≈ 0.26 s(容器创建 → ready,Windows Docker Desktop 本机进程级五轮 258~277 ms)、镜像预算实测 152,470,823 字节(`docker image inspect .Size` ≈ 145 MiB;`docker images` 本地视图呈 714 MB 为 Desktop 展开口径)——教学规模(8 并发 / 租户)下租户总量与冷启动时延均在预算内;量化面与判据式全文见 D-API-105 / D-API-106。
+
 ### D-API-103 Redis 键域 T1 边界复核登记(不实现;阶段六 WP-65)
 
 对幂等 / route / rate / token 四键域的多实例演进边界复核(D-API-24 / 36 / 49 / 50 原裁决逐条确认),**纯文档节,零代码、零键域改动**:
@@ -978,6 +980,84 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **compose 拓扑端口发布面盘点(现状登记)**:session-api 发布 `13000:3000`、verifier 发布 `13100:3100`——两服务的 `/metrics` 与 `/healthz` / `/readyz` 同端口同族(未认证 GET;D-API-70 / D-API-89 纪律),dev / CI 拓扑按现状发布:k6 采样(`concurrent-sessions` 经 `GET /metrics` 观测,D-API-73)、compose 机检与运维探活依赖该发布面;
 - **生产部署面选项(成文登记,随部署执行)**:①**内网段形态**(基线推荐)——应用端口不发布到公网宿主,`/metrics` 仅内网可达(Prom 抓取器与探针同内网;K8s Service / compose 无 ports 发布即达成);②**反代准入形态**——公网入口反代对 `/metrics`(及 `/healthz` / `/readyz`)路径做准入控制(allowlist / 基本认证 / 来源 IP 白名单),应用侧零改动;③**独立端口形态**——管理面端口单独暴露指标族(需要反向代理改写或应用侧多监听器,后者 = 端点语义外的装配演进,非本阶段);三选项均不触碰 D-API-70 的"同端口运维路由 + 未挂载即 404"端点语义;
 - **纪律确认**:`/metrics` 指标名 ⊆ 白名单(`METRIC_FAMILIES`)、标签有界域(D-API-71)、秘密语料零命中机检——生产暴露面收敛不引入新的公开载荷面(指标 = 聚合数值 + 有界枚举)。
+
+## 三·十九、容器级 Worker 隔离(阶段六 WP-66;D-API-105 ~ D-API-106)
+
+### D-API-105 容器池定案(Q4)与执行形态接口:缺省进程池零回退、容器池显式启用;镜像策略与每租户预算接线(阶段六 WP-66)
+
+**Q4 定案(2026-09-12)**:
+
+- **缺省形态 = 进程池**(`SESSION_API_WORKER_EXECUTION_MODE` 缺省 `process`):dev / CI 拓扑零回退——既有装配路径零改动(不探测、不建工厂、零新依赖),既有测试全量零回退实跑(session-core 28 + session-api 461 单测 + compose 全拓扑 22 用例);
+- **容器池 = 显式启用形态**(`= "container"`,严格枚举,其余取值拒绝启动):启用前置 = **MVP 验收通过**(计划书 5.1 T1 进入条件;边界裁决 1 登记**不翻转**)——本阶段交付执行形态、配置开关与语义保持测试面(交付面),不改变缺省启用形态;MVP 验收通过后切换即配置操作,零代码变更;
+- **弹性切换判据(ADR-3"按赛事弹性与租户预算切换"的量化面)= 冷启动时延与镜像预算登记**(实测见 D-API-106):冷启动 ≈ 0.26 s 与镜像 ≈ 145 MiB 在教学规模预算内,判据登记后按赛事期实际并发与资源预算启用容器池。
+
+**执行形态接口(session-core `worker-execution.ts`;装配层注入抽象)**:
+
+- **端口三件**:`WorkerLauncher`(每会话启动器,`kind: "process" | "container"`)→ `launch(): Promise<WorkerLaunch>`;`WorkerLaunch`(承载进程 + 描述符 + `dispose()` 补强清理);`WorkerLauncherFactory`(`(sessionId) => WorkerLauncher`,容器名由会话 ID 确定性派生)。`resolveWorkerLauncher` 是编排核心唯一解析入口:工厂优先(容器池),否则进程形态(`workerCommand` 或按需定位真实二进制)——既有 `workerCommand` 注入面零改动;
+- **连接层唯一化(同构的结构保证)**:信封协议(NDJSON 帧、单帧 16 MiB、`seq` 严格递增、stop-and-wait)、ready 握手与协议版本 fail-closed、退出分类(`graceful` / `watchdog_timeout`(退出码 3)/ `forced` / `crashed`)全部留在 `WorkerConnection`,两形态共享同一协议层——`WorkerConnection.spawn(WorkerCommandSpec)` 收敛为 `WorkerConnection.connect(WorkerLauncher)`,承载差异(进程 / 容器)不再进入协议与分类代码;
+- **行为同构断言**(单元级,fake docker shim 承载,12 用例全绿):同一假 worker 经两形态驱动响应序列逐项一致(信封零漂移);kill → `forced` 两形态同判;worker 退出码 3 → `watchdog_timeout` 两形态同判(容器退出码经 docker CLI 逐码传播);非零退出 → `crashed` 两形态同判(容器 OOM 同判);协议版本不匹配 fail-closed 两形态同判;
+- **容器形态强制终止语义**:SIGKILL 承载进程(docker CLI)+ `docker rm -f <容器名>` 补强清理(容器由 dockerd 管辖,仅杀 CLI 不及容器)——`waitExit()` 返回即含补强清理完成,9.1"强制终止后必须清理任务状态"在连接层单一来源兑现;优雅退出由 `--rm` 即弃承载。
+
+**容器运行参数(ADR-3 T1 行逐项;缺省值 = 量化登记)**:
+
+| 参数 | 值 | 依据 |
+|---|---|---|
+| `--network none` | 禁网络出口 | ADR-3 T1 行;结构性无出口面(结构断言 + 行为级红灯见 D-API-106) |
+| `--read-only` + `--tmpfs /tmp` | 只读文件系统 + 临时写面(仅 /tmp,会话终了即弃) | ADR-3 T1 行;秘密零驻留(容器内不留存跨会话数据) |
+| `--cpus 1` | cgroup CPU 配额(整核) | vm-worker 是单线程同步解释器,单核即单会话执行上限,多余配额不产生吞吐 |
+| `--memory 268435456`(256 MiB) | cgroup 内存配额 | 协议单帧 16 MiB × 2(请求 + 响应缓冲)+ 快照信封天花板 64 MiB(D-API-54)+ 双包与 VmState(教学题 MB 级)+ 运行时基线——256 MiB 为最坏组合保守外圈(单帧上限 16 倍) |
+| `--pids-limit 64` | pids 上限 | 9.1"无子进程创建":单进程 + 少量运行时辅助线程即可;结构性封死 fork 炸弹 |
+| `--cap-drop ALL` + `--security-opt no-new-privileges` | 最小权限 | 9.1"最小权限、只读文件系统、网络隔离和资源配额"(纯计算 worker 零能力需要) |
+| `--rm -i` + `--name sm-worker-<sessionId>` | 每会话一容器(即弃 + 交互 stdio) | 每会话一容器模型(ADR-3);确定性命名 = 补强清理与零残留断言的锚 |
+
+**配置键登记(五键,三道闸同形:未知保留键 / 取值双闸;D-API-9)**:
+
+| 键 | 必备 | 默认 | 约束 |
+|---|---|---|---|
+| `SESSION_API_WORKER_EXECUTION_MODE` | 否 | `process` | 枚举 `process` / `container`(Q4:缺省进程池;container 显式启用) |
+| `SESSION_API_WORKER_CONTAINER_IMAGE` | 否 | `stackmaster/session-api:dev` | 1~256 字符(同锁镜像引用) |
+| `SESSION_API_WORKER_CONTAINER_CPUS` | 否 | 1 | 1~16 整核 |
+| `SESSION_API_WORKER_CONTAINER_MEMORY` | 否 | 268435456(字节) | 32 MiB 地板(单帧 + 运行时基线最小可行形态)~ 4 GiB |
+| `SESSION_API_WORKER_CONTAINER_PIDS_LIMIT` | 否 | 64 | 1~4096 |
+
+**镜像策略(不新建 worker 专属镜像)**:worker 容器复用 session-api 同一镜像(`stackmaster/session-api:dev`,镜像内 `/app/bin/vm-worker` 固定布局)——vm-worker 二进制同镜像 = 版本策略 §四.4 同锁(verifier 与交互执行同引擎构建)的**结构性保证**,与 verifier 复用先例同构(D-API-87);镜像预算登记 = 该镜像体积 + 容器层开销(实测见 D-API-106)。镜像在场检查(`docker image inspect`)是容器池启用前置探测的组成部分,同时是**供应链闸**:worker 容器只允许运行同锁镜像的本地构建,禁运行期拉取外部镜像。
+
+**装配层形态选择(`resolveWorkerExecutionForm`)与 fail-closed 探测**:装配序在在途会话管理器创建之前;`process`(缺省)零探测零工厂直通既有路径;`container` 先经启动期探测(①`docker info` daemon 可达;②`docker image inspect` 同锁镜像本地在场),任一失败即**启动拒绝并明示**("容器池启用前置探测失败……不静默降级进程池"),不静默降级——Windows dev 降级路径由探测承载(Docker Desktop 不可用 = 启动拒绝,明示形态);探测失败 / 未启用场景的形态 = 维持缺省进程池(零降级代码路径,形态差异只在配置键)。工厂经 `BuildRuntimeOptions.workerLauncherFactory` 可注入替身(集成测试直通,跳过探测);装配注入贯穿 `LiveSessionManager` / 调试实例编排器(容器池下调试实例与交互 worker 同形态承载)/ 启动恢复(`recoverActiveSessions`)三链路。
+
+**每租户预算接线(D-API-52 / 54 对齐;D-API-102 回填接口兑现)**:并发会话预算(`SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT`,缺省 8)= **每租户容器并发上限的单一真源**(每会话恰一容器,1:1 映射)——容器仅在 `createSession` 预算预留成功后的题目装载路径内启动,触顶拒绝发生在容器启动之前(不超卖资源,预算计量语义零改动,D-API-52);租户容器资源总量判据式 = **容器内存缺省 256 MiB × 预算 8 = 2 GiB / 租户**(CPU 同式 = 8 核 / 租户),进 Q6 判据面回填(D-API-102)与扩展评估报告接口;指标注记:`session_api_worker_processes` 与 `session_api_live_sessions` 的 1:1 关系在容器形态下维持(gauge 语义 = worker 承载体(进程或容器)数,D-API-72 同源同值)。
+
+### D-API-106 容器形态语义保持测试面与冷启动 / 镜像预算量化登记(阶段六 WP-66)
+
+**测试分层(TDD 红灯先行;四层形态)**:
+
+1. **进程池形态零回退**(缺省路径):session-core 28 用例 + session-api 461 用例(含 config / runtime / debug / manager 全量)+ compose 全拓扑 **22 用例**实跑全绿——缺省形态下行为零改动(不探测、不建工厂,`WorkerConnection.connect` 经进程启动器承载同一协议层);
+2. **执行形态接口单测**(session-core `test/worker-execution.test.ts`,12 用例):容器运行参数逐旗断言(纯函数)+ 假 docker shim(`run` 语义 = CLI 退出码逐码传播、`rm -f` 记录、`info` / `image inspect` 探测应答)承载的双实现行为同构(信封序列 / kill → forced / 退出码 3 → watchdog_timeout / 非零 → crashed / 版本不匹配 fail-closed)+ 探测 fail-closed 三红灯(daemon 不可达 / 镜像缺失 / CLI 不可执行);
+3. **真实容器形态集成测试**(session-api `test/compose/worker-container.integration.test.ts`,6 用例,真实镜像 + 真实 vm-worker 容器实跑全绿):镜像可用性门控(`docker image inspect` 缺失则如实跳过并登记 CI 复跑义务——本机 `stackmaster/session-api:dev` 在场,6 用例全实跑;CI compose-integration job 由 run.mjs 先行构建同一镜像,义务沿 WP-62/63/65 先例承接);
+4. **compose 全拓扑零回退**:既有 22 用例(host 拓扑实跑)全绿,容器形态不改变 compose 缺省拓扑(Q4)。
+
+**语义保持逐项(完成标准对照)**:
+
+| 语义 | 测试形态 | 结果 |
+|---|---|---|
+| 全生命周期(ready → 动作 → checkpoint → undo → checkout → submit 引用 → 优雅关闭) | 真实镜像容器实跑(与进程形态 `integration.worker.test.ts` 同构脚本) | ✅ 629 ms;容器随会话终了移除(零残留断言) |
+| 强制终止零残留(容器终止 + 任务状态清理,9.1) | kill → `forced` 分类 → `docker ps -a` 会话容器名零命中(waitExit 即含 `rm -f` 汇合,断言确定性) | ✅ 547 ms |
+| 崩溃替换恢复(容器 OOM / 退出非零 → 与进程池同构收割) | checkpoint → kill → `recover`(新容器 + 重新提供装载参数)→ revision 续算 + 投影逐字节还原 | ✅ 1106 ms |
+| 超时看门狗(容器内超时 → 强制终止路径) | worker 退出码 3 经 docker CLI 逐码传播 → `watchdog_timeout` 分类(单测双形态同判;真实 worker 看门狗本体零改动) | ✅ |
+| 秘密零驻留(容器内不留存跨会话数据) | 每会话一容器 + `--rm` 即弃 + tmpfs /tmp 会话终了即弃 + `rm -f` 补强清理(零残留断言);**容器 env 仅取显式 `-e` 面,零编排器环境继承**(进程形态默认继承宿主 env;容器形态结构性不继承 = 秘密面不随容器下发,单测逐旗断言缺省零 `-e`) | ✅ |
+| 禁网络出口红灯(出口即拒) | **结构闸**:运行中容器 `docker inspect` 断言 `NetworkMode=none` + Networks 仅 `none`;**行为级红灯**:`--network none` 容器内 `fetch` 出网即败(同镜像语料,exit 1) | ✅ 双面 |
+| 运行参数结构闸(cgroup / 只读 / tmpfs / 最小权限) | 运行中容器 `docker inspect`:`ReadonlyRootfs=true`、`Tmpfs={/tmp}`、`Memory=268435456`、`NanoCpus=1e9`、`PidsLimit=64`、`CapDrop⊇ALL` | ✅ |
+
+**冷启动与镜像预算量化登记(本机实测;Windows Docker Desktop / WSL2,弹性切换判据面)**:
+
+| 量化面 | 实测值 | 登记口径 |
+|---|---|---|
+| 冷启动(容器创建 → ready 帧) | ≈ 0.26 s(IT 实测 260 ms;进程级五轮 258~277 ms) | 预算上限 30 s(IT 断言);教学规模预算内富余两个数量级 |
+| 镜像预算 | 152,470,823 字节(`docker image inspect .Size` ≈ 145 MiB;`docker images` 本地视图呈 714 MB,Desktop 展开口径差异) | 复用同一镜像 = 零新增镜像;容器层开销 = tmpfs /tmp(容量随内存预算)+ 可写层(即弃) |
+| 租户容器资源总量(判据式) | 8(并发预算,D-API-52 单一真源)× 256 MiB = **2 GiB / 租户**;CPU 同式 = 8 核 / 租户 | 进 D-API-102 判据面回填 + 扩展评估报告接口(T3 / 容量扩展的判据输入) |
+
+**compose 扩展(交付面登记)**:`compose/worker-container-override.yaml` 为容器池显式启用路径的演示覆盖(socket 挂载 + 形态开关),**缺省拓扑不启用**(Q4);部署面义务(登记不实现,沿 D-API-93/101"生产连线义务"纪律):容器池形态下编排器容器需具备 ①docker CLI(镜像构建面增补)②`/var/run/docker.sock` 挂载(sibling 容器承载)③同锁镜像本地在场(启动期探测闸)——dev / CI 拓扑维持缺省进程池形态,真实启用按义务在部署面执行。
+
+**完成标准对照(任务分解 WP-66)**:容器池形态全链路集成测试绿(①③层;会话全生命周期 + 崩溃替换恢复实跑);容器无网络出口红灯(结构 + 行为双面);强制终止后零残留断言;进程池形态既有测试零回退(①④层);cgroup / 只读 / 禁网络出口形态交付(§五退出条件 6);开关生效且缺省进程池(Q4,D-API-105)。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 

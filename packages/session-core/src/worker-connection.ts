@@ -7,10 +7,11 @@
  * 判定进程不可信,标记崩溃并拒绝后续使用(恢复归崩溃替换路径)。
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { ENGINE_PROCESS_PROTOCOL_VERSION } from "@stackmaster/protocol";
 import { OrchestratorError } from "./errors.js";
+import type { WorkerLaunch, WorkerLauncher } from "./worker-execution.js";
 
 /** 单帧上限(协议 D-F2;双向强制)。 */
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
@@ -51,9 +52,10 @@ interface PendingRequest {
   reject: (error: OrchestratorError) => void;
 }
 
-/** 单会话 worker 进程连接。一次服务一个会话,终止后不复用。 */
+/** 单会话 worker 连接。一次服务一个会话,终止后不复用;承载进程由执行形态启动器供给(进程 / 容器双形态同构,WP-66)。 */
 export class WorkerConnection {
   private readonly child: ChildProcess;
+  private readonly launch: WorkerLaunch;
   private readonly stdin: NodeJS.WritableStream;
   private readonly reader: Interface;
   private pending: PendingRequest | null = null;
@@ -62,11 +64,14 @@ export class WorkerConnection {
   private readonly exitPromise: Promise<WorkerExit>;
   private exitKind: WorkerExitKind | null = null;
   private readyFrame: ReadyFrame | null = null;
+  /** 补强清理(容器形态 = rm -f;进程形态 no-op)的调度与汇合锚。 */
+  private disposePromise: Promise<void> | null = null;
 
-  private constructor(child: ChildProcess) {
-    this.child = child;
-    const stdout = child.stdout;
-    const stdin = child.stdin;
+  private constructor(launch: WorkerLaunch) {
+    this.launch = launch;
+    this.child = launch.child;
+    const stdout = this.child.stdout;
+    const stdin = this.child.stdin;
     if (stdout === null || stdin === null) {
       throw new OrchestratorError("worker_spawn_failed", "worker stdio 管道缺失");
     }
@@ -91,28 +96,21 @@ export class WorkerConnection {
               : signal !== null
                 ? "forced"
                 : "crashed");
+        // 补强清理(容器形态 = rm -f;进程形态 no-op):任何退出路径都调度,
+        // 零残留语义单一来源(9.1"强制终止后必须清理任务状态")。
+        this.scheduleDispose();
         resolve({ kind, code, signal });
       });
     });
   }
 
-  /** spawn 并等待 `ready` 自报帧;协议版本不一致即回收进程并拒绝建会话。 */
-  static async spawn(options: WorkerCommandSpec): Promise<{
+  /** 经执行形态启动器建立连接并等待 `ready` 自报帧;协议版本不一致即回收并拒绝建会话。 */
+  static async connect(launcher: WorkerLauncher): Promise<{
     connection: WorkerConnection;
     ready: ReadyFrame;
   }> {
-    const child = spawn(options.command, options.args ?? [], {
-      stdio: ["pipe", "pipe", "pipe"],
-      ...(options.env === undefined
-        ? {}
-        : {
-            env: {
-              ...process.env,
-              ...Object.fromEntries(options.env),
-            },
-          }),
-    });
-    const connection = new WorkerConnection(child);
+    const launch = await launcher.launch();
+    const connection = new WorkerConnection(launch);
     const ready = (await connection.receive()) as unknown as ReadyFrame;
     if (ready.type !== "ready" || typeof ready.protocolVersion !== "number") {
       connection.destroy();
@@ -210,25 +208,38 @@ export class WorkerConnection {
     return this.closed;
   }
 
-  /** 强制终止(SIGKILL);幂等。 */
+  /**
+   * 强制终止(SIGKILL 承载进程 + 补强清理调度);幂等。
+   * 容器形态:SIGKILL 只及 docker CLI,容器由 dockerd 管辖 —— rm -f 补强
+   * 清理在 waitExit 中汇合(9.1"强制终止后必须清理任务状态")。
+   */
   kill(): void {
     this.exitKind = this.exitKind ?? "forced";
     this.child.kill("SIGKILL");
+    this.scheduleDispose();
   }
 
-  /** 版本握手失败等场景:杀进程、按崩溃分类。 */
+  /** 版本握手失败等场景:杀进程、按崩溃分类(补强清理随行调度)。 */
   destroy(): void {
     this.markCrashed();
     this.child.kill("SIGKILL");
+    this.scheduleDispose();
   }
 
-  /** 等待进程退出并返回分类。 */
-  waitExit(): Promise<WorkerExit> {
-    return this.exitPromise;
+  /** 等待进程退出(含补强清理完成)并返回分类。 */
+  async waitExit(): Promise<WorkerExit> {
+    const exit = await this.exitPromise;
+    await this.disposePromise;
+    return exit;
   }
 
   /** 标记正常关闭(优雅 shutdown 之后;进程不复用)。 */
   markClosed(): void {
     this.closed = true;
+  }
+
+  /** 补强清理调度(幂等;exit / kill / destroy 三触发点共享同一 promise)。 */
+  private scheduleDispose(): void {
+    this.disposePromise ??= this.launch.dispose().catch(() => undefined);
   }
 }

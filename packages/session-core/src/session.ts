@@ -32,7 +32,7 @@ import {
   type WorkerCommandSpec,
   type WorkerExit,
 } from "./worker-connection.js";
-import { ensureWorkerBinary } from "./worker-binary.js";
+import { resolveWorkerLauncher, type WorkerLauncherFactory } from "./worker-execution.js";
 
 /** 编排器可产生的确定性拒绝码(冻结 PublicError 16 码子集)。 */
 export type PrecheckErrorCode =
@@ -127,6 +127,11 @@ export interface CreateSessionOptions {
   sessionSeedHex?: string;
   /** 可注入 worker 进程描述(测试假 worker;缺省定位真实二进制)。 */
   workerCommand?: WorkerCommandSpec;
+  /**
+   * 可注入 worker 执行形态启动器工厂(WP-66:容器池显式启用形态经此注入;
+   * 优先于 workerCommand —— 形态选择归装配层,单会话启动器由会话 ID 派生)。
+   */
+  workerLauncherFactory?: WorkerLauncherFactory;
   /** 可注入认证上下文(阶段二替身;真实认证归阶段三)。 */
   auth?: AuthContext;
 }
@@ -200,10 +205,16 @@ export class SessionOrchestrator {
     this.publicStatus = init.projection.status;
   }
 
-  /** create-session:spawn → ready 比对 → load → query_projection(§5.1)。 */
+  /** create-session:执行形态启动 → ready 比对 → load → query_projection(§5.1;WP-66 形态注入)。 */
   static async create(options: CreateSessionOptions): Promise<SessionOrchestrator> {
-    const command = options.workerCommand ?? { command: await ensureWorkerBinary() };
-    const { connection, ready } = await WorkerConnection.spawn(command);
+    // 会话标识先于承载启动确定(容器形态按其派生容器名;生成序对调用方零观感差异)。
+    const sessionId = options.sessionId ?? SessionOrchestrator.generateSessionId();
+    const launcher = await resolveWorkerLauncher({
+      sessionId,
+      workerLauncherFactory: options.workerLauncherFactory,
+      workerCommand: options.workerCommand,
+    });
+    const { connection, ready } = await WorkerConnection.connect(launcher);
 
     // 私有包透传面:仅读取 seed 策略(决定会话种子义务)与身份三元组。
     const bundle = options.privateBundle as
@@ -248,8 +259,6 @@ export class SessionOrchestrator {
       const loaded = load.loaded as LoadedSummary & { initialRevision: number };
 
       const projection = await SessionOrchestrator.queryProjection(connection);
-      const sessionId =
-        options.sessionId ?? SessionOrchestrator.generateSessionId();
       const auth = options.auth ?? stubAuthContext;
       auth.assertSessionAllowed({ sessionId });
 

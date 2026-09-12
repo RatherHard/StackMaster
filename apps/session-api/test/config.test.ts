@@ -86,6 +86,13 @@ describe("配置加载与启动校验(fail-closed)", () => {
       auditBucket: "audit-archive",
       // 阶段六 WP-63 裁决重询限流(D-API-84 / D-API-86)默认值。
       verdictQueriesPerMinute: 30,
+      // 阶段六 WP-66 容器级 Worker 隔离(Q4 定案,D-API-105)默认值:
+      // 缺省进程池(dev / CI 拓扑零回退)+ 容器池参数量化缺省。
+      workerExecutionMode: "process",
+      workerContainerImage: "stackmaster/session-api:dev",
+      workerContainerCpus: 1,
+      workerContainerMemory: 268435456,
+      workerContainerPidsLimit: 64,
     });
   });
 
@@ -307,5 +314,67 @@ describe("配置加载与启动校验(fail-closed)", () => {
         load({ ...REQUIRED_WP3, SESSION_API_SNAPSHOT_ENCRYPTION_KEY: "!!not-base64!!" }),
       ).toThrow(ConfigValidationError);
     });
+  });
+});
+
+// ── 阶段六 WP-66 容器级 Worker 隔离(Q4 定案;D-API-105)────────────────────
+describe("worker 执行形态配置键(WP-66,Q4 定案:缺省进程池,容器池显式启用)", () => {
+  it("缺省形态 = process(dev / CI 拓扑零回退;容器池不做缺省)", () => {
+    const config = load(REQUIRED_WP3);
+    expect(config.workerExecutionMode).toBe("process");
+    // 容器池参数缺省值(量化理由见 config.ts 常量注释与 D-API-105)。
+    expect(config.workerContainerImage).toBe("stackmaster/session-api:dev");
+    expect(config.workerContainerCpus).toBe(1);
+    expect(config.workerContainerMemory).toBe(268435456); // 256 MiB(字节)
+    expect(config.workerContainerPidsLimit).toBe(64);
+  });
+
+  it("显式 SESSION_API_WORKER_EXECUTION_MODE=container 被受理(容器池为显式启用形态)", () => {
+    const config = load({
+      ...REQUIRED_WP3,
+      SESSION_API_WORKER_EXECUTION_MODE: "container",
+    });
+    expect(config.workerExecutionMode).toBe("container");
+  });
+
+  it("容器池参数显式取值被解析(cpus / memory(字节) / pids / image)", () => {
+    const config = load({
+      ...REQUIRED_WP3,
+      SESSION_API_WORKER_CONTAINER_CPUS: "2",
+      SESSION_API_WORKER_CONTAINER_MEMORY: "536870912",
+      SESSION_API_WORKER_CONTAINER_PIDS_LIMIT: "128",
+      SESSION_API_WORKER_CONTAINER_IMAGE: "registry.example.com/session-api:1.2.3",
+    });
+    expect(config.workerContainerCpus).toBe(2);
+    expect(config.workerContainerMemory).toBe(536870912);
+    expect(config.workerContainerPidsLimit).toBe(128);
+    expect(config.workerContainerImage).toBe("registry.example.com/session-api:1.2.3");
+  });
+
+  it("执行形态取值非法(process | container 之外)拒绝启动", () => {
+    expect(() =>
+      load({ ...REQUIRED_WP3, SESSION_API_WORKER_EXECUTION_MODE: "kube" }),
+    ).toThrow(ConfigValidationError);
+  });
+
+  it("容器池参数越天花板拒绝启动(cpus / memory / pids;默认值 + 天花板双闸同形)", () => {
+    expect(() =>
+      load({ ...REQUIRED_WP3, SESSION_API_WORKER_CONTAINER_CPUS: "17" }),
+    ).toThrow(ConfigValidationError);
+    expect(() =>
+      load({ ...REQUIRED_WP3, SESSION_API_WORKER_CONTAINER_MEMORY: "4294967297" }),
+    ).toThrow(ConfigValidationError);
+    expect(() =>
+      load({ ...REQUIRED_WP3, SESSION_API_WORKER_CONTAINER_PIDS_LIMIT: "4097" }),
+    ).toThrow(ConfigValidationError);
+  });
+
+  it("容器池参数低于地板拒绝启动(memory 低于单帧 + 状态的最小可行形态即拒)", () => {
+    expect(() =>
+      load({ ...REQUIRED_WP3, SESSION_API_WORKER_CONTAINER_MEMORY: "1024" }),
+    ).toThrow(ConfigValidationError);
+    expect(() =>
+      load({ ...REQUIRED_WP3, SESSION_API_WORKER_CONTAINER_CPUS: "0" }),
+    ).toThrow(ConfigValidationError);
   });
 });

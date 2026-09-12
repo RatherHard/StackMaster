@@ -12,6 +12,8 @@
 import { createInterface } from "node:readline";
 
 const mode = process.env.FAKE_MODE ?? "replay";
+// 协议版本自报可注入(WP-66 容器形态:版本不匹配 fail-closed 的同构断言)。
+const protocolVersion = Number(process.env.FAKE_PROTOCOL_VERSION ?? "1");
 
 const projection = {
   revision: 0,
@@ -43,12 +45,15 @@ const send = (frame) => process.stdout.write(`${JSON.stringify(frame)}\n`);
 
 send({
   type: "ready",
-  protocolVersion: 1,
+  protocolVersion,
   vmEngineVersion: "0.1.0",
   engineBuildId: "dev",
 });
 
 const rl = createInterface({ input: process.stdin });
+// stdin EOF → 优雅退出(与真实 vm-worker 同语义;容器形态下 CLI 死亡即
+// stdin 断流,假 worker 不遗留孤儿进程)。
+rl.on("close", () => process.exit(0));
 rl.on("line", (line) => {
   let command;
   try {
@@ -59,6 +64,11 @@ rl.on("line", (line) => {
   const { seq, type } = command;
   if (mode === "crash_on_apply" && type === "apply_action") {
     process.exit(9);
+  }
+  // 看门狗形态:首个命令处理期以退出码 3 终止(真实 worker 看门狗超时语义;
+  // 无响应帧 —— 在途请求以崩溃拒绝,退出分类 = watchdog_timeout)。
+  if (mode === "watchdog_exit3") {
+    process.exit(3);
   }
   switch (type) {
     case "load": {

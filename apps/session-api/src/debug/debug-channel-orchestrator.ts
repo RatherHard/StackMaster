@@ -6,8 +6,8 @@
  *
  *   debug_attach → 取会话 + debugMode 判定(公开描述包 `debugMode !== false`,
  *   WP-43 Schema 定稿前形态)→ 经 DebugVariantProvider 取变体 → 按需 spawn
- *   调试 worker(第二 per-session 进程,复用 WorkerConnection.spawn /
- *   ensureWorkerBinary;每会话至多一个调试实例,attach 幂等)→ load_variant
+ *   调试 worker(第二 per-session 承载体,经执行形态启动器建立连接
+ *   (WP-66:进程 / 容器同构;每会话至多一个调试实例,attach 幂等)→ load_variant
  *   → 从权威动作日志(ActionLogStore.listBySession)按 origin 截断逐条
  *   debug_apply_recorded 确定性重放 → debug_attached 回执。
  *
@@ -39,7 +39,13 @@
 import type { PublicError } from "@stackmaster/protocol";
 import { DEBUG_SEARCH_MAX_HITS } from "@stackmaster/protocol";
 import { DebugVariantBundleSchema } from "@stackmaster/protocol/server-only";
-import { ensureWorkerBinary, WorkerConnection, type WorkerCommandSpec, type WorkerFrame } from "@stackmaster/session-core";
+import {
+  resolveWorkerLauncher,
+  WorkerConnection,
+  type WorkerCommandSpec,
+  type WorkerFrame,
+  type WorkerLauncherFactory,
+} from "@stackmaster/session-core";
 import type { Logger } from "pino";
 
 import type { ActionLogStore, ChallengeBundleStore } from "../persistence/ports.js";
@@ -125,6 +131,11 @@ export interface DebugChannelOrchestratorDeps {
   readonly logger: Logger;
   /** 可注入 worker 进程描述(测试;缺省由 session-core 定位真实二进制)。 */
   readonly workerCommand?: WorkerCommandSpec;
+  /**
+   * 可注入 worker 执行形态启动器工厂(WP-66:容器池显式启用形态下调试实例
+   * 与会话 worker 同形态承载;缺省 = 进程池既有路径零回退,D-API-105)。
+   */
+  readonly workerLauncherFactory?: WorkerLauncherFactory;
   readonly metrics?: SessionMetrics;
   /**
    * 调试实例空闲回收窗口(秒;复用断线保持窗口预算,不设第二类配置键)。
@@ -250,9 +261,14 @@ export class DebugChannelOrchestrator {
     }
     const publicDescriptor = await this.#readPublicDescriptor(summary.challengeId, summary.challengeVersion);
 
-    // 按需 spawn 调试 worker(每会话至多一个;复用 WorkerConnection.spawn)。
-    const command = this.#deps.workerCommand ?? { command: await ensureWorkerBinary() };
-    const connection = (await WorkerConnection.spawn(command)).connection;
+    // 按需启动调试 worker(每会话至多一个;经执行形态启动器 —— 容器池形态
+    // 下调试实例同为容器承载,名称按会话 ID 派生,WP-66)。
+    const launcher = await resolveWorkerLauncher({
+      sessionId,
+      workerLauncherFactory: this.#deps.workerLauncherFactory,
+      workerCommand: this.#deps.workerCommand,
+    });
+    const connection = (await WorkerConnection.connect(launcher)).connection;
     const instance: DebugInstance = {
       tenantId,
       challengeId: summary.challengeId,

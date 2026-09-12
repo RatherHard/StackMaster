@@ -40,6 +40,7 @@ import {
   type SubmitReference,
   type WorkerCommandSpec,
   type WorkerExit,
+  type WorkerLauncherFactory,
 } from "@stackmaster/session-core";
 import type { Logger } from "pino";
 
@@ -141,6 +142,12 @@ export interface LiveSessionManagerDeps {
   readonly metrics?: SessionMetrics;
   /** 可注入 worker 进程描述(测试假 worker;缺省由 session-core 定位真实二进制)。 */
   readonly workerCommand?: WorkerCommandSpec;
+  /**
+   * 可注入 worker 执行形态启动器工厂(WP-66,Q4:容器池显式启用形态经此
+   * 注入;缺省缺省 = 进程池既有路径零回退。形态选择归装配层,
+   * D-API-105;每会话一容器 = 并发会话预算单一真源的容器并发上限接线)。
+   */
+  readonly workerLauncherFactory?: WorkerLauncherFactory;
   /**
    * 会话终态 / close 通知钩子(WP-41:调试实例同步回收的挂载点;close 与
    * 断线保持到期回收两条终态路径都会触发;缺省 = 无挂载)。
@@ -248,8 +255,9 @@ export class LiveSessionManager {
 
   /**
    * 会话生命周期计量同步(WP-8,D-API-70 / D-API-72):并发会话数与 Worker
-   * 占用在 T0 每会话单进程模型下同源(每个在途会话恰持有一个 vm-worker
-   * 子进程);T1 容器化 Worker 池引入后两者分道(池占用 = 进程池租约数)。
+   * 承载体占用在 1:1 模型下同源(每个在途会话恰持有一个 worker 承载体 ——
+   * 进程形态 = vm-worker 子进程;容器形态(WP-66)= 会话容器。T1 容器池
+   * 下 gauge 语义 = 承载体(进程或容器)数,数值关系不变)。
    * 标识符不入指标(标签纪律,D-API-71)。
    */
   #syncSessionGauges(): void {
@@ -379,6 +387,9 @@ export class LiveSessionManager {
       publicDescriptor,
       ...(strategy === "server_random_per_session" ? { sessionSeedHex: generateSessionSeedHex() } : {}),
       ...(this.#deps.workerCommand === undefined ? {} : { workerCommand: this.#deps.workerCommand }),
+      ...(this.#deps.workerLauncherFactory === undefined
+        ? {}
+        : { workerLauncherFactory: this.#deps.workerLauncherFactory }),
       auth: createSessionAuthContext({ sessionId, tenantId: identity.tenantId, userId: identity.userId }),
     });
 

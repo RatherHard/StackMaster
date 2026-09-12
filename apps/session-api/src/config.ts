@@ -170,6 +170,50 @@ export const DEFAULT_VERDICT_QUERIES_PER_MINUTE = 30;
 export const VERDICT_QUERIES_PER_MINUTE_CEILING = 100000;
 
 /**
+ * 阶段六 WP-66 容器级 Worker 隔离(Q4 定案,D-API-105):缺省 = 进程池
+ * (dev / CI 拓扑零回退);容器池 = 显式启用形态,启用前置 = MVP 验收通过
+ * (边界裁决 1,登记不翻转)。与既有面同一形态——常量默认值 + 天花板双闸。
+ */
+/** worker 执行形态合法取值(process = T0 既有进程池;container = T1 容器池)。 */
+export const WORKER_EXECUTION_MODES = ["process", "container"] as const;
+/** 执行形态缺省值(Q4:容器池不做缺省,显式开启才生效)。 */
+export const DEFAULT_WORKER_EXECUTION_MODE = "process";
+/**
+ * worker 镜像缺省值(镜像策略 = 复用 session-api 同一镜像:vm-worker 二进制
+ * 同镜像 = 版本策略 §四.4 同锁的结构性保证,与 verifier 复用先例同构,
+ * D-API-87;不新建 worker 专属镜像)。
+ */
+export const DEFAULT_WORKER_CONTAINER_IMAGE = "stackmaster/session-api:dev";
+/**
+ * cgroup CPU 配额缺省值(整核)。量化理由:vm-worker 是单线程同步解释器
+ * (纯同步状态机,无 async / 并行执行面),单核即单会话执行上限,多余
+ * 配额不产生吞吐 —— `--cpus 1` 恰为单会话 CPU 份额的结构上限。
+ */
+export const DEFAULT_WORKER_CONTAINER_CPUS = 1;
+/** cgroup CPU 配额天花板(整核;宿主机核数护栏)。 */
+export const WORKER_CONTAINER_CPUS_CEILING = 16;
+/**
+ * cgroup 内存配额缺省值(字节;256 MiB)。量化理由:协议单帧上限 16 MiB
+ * (请求 + 响应缓冲)× 2 + 快照信封天花板 64 MiB(D-API-54)+ 私有双包与
+ * VmState(教学题 MB 级)+ Rust 运行时基线 ≈ 数十 MiB —— 256 MiB 为最坏
+ * 组合的保守外圈(单帧上限的 16 倍)。每租户容器资源总量判据:并发会话
+ * 预算 8(D-API-52 单一真源)× 256 MiB = 2 GiB / 租户(判据式登记,
+ * D-API-102 回填)。
+ */
+export const DEFAULT_WORKER_CONTAINER_MEMORY = 268435456;
+/** cgroup 内存配额天花板(字节;4 GiB)。 */
+export const WORKER_CONTAINER_MEMORY_CEILING = 4294967296;
+/** cgroup 内存配额地板(字节;32 MiB = 单帧 16 MiB + 运行时基线的最小可行形态)。 */
+export const WORKER_CONTAINER_MEMORY_FLOOR = 33554432;
+/**
+ * pids 上限缺省值。量化理由:9.1"无子进程创建"—— vm-worker 不派生子进程,
+ * 单进程 + 少量运行时辅助线程即可;64 远超必要又结构性封死 fork 炸弹。
+ */
+export const DEFAULT_WORKER_CONTAINER_PIDS_LIMIT = 64;
+/** pids 上限天花板。 */
+export const WORKER_CONTAINER_PIDS_LIMIT_CEILING = 4096;
+
+/**
  * 必备环境变量登记表(缺失即拒绝启动)。
  *
  * WP-1 骨架期无必备密钥;WP-2 登记凭证签名密钥、WP-3 登记存储端点时逐项
@@ -244,6 +288,12 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_AUDIT_BUCKET",
   // ── 阶段六 WP-63 裁决重询限流(2026-09-12;D-API-84 / D-API-86)──
   "SESSION_API_VERDICT_QUERIES_PER_MINUTE",
+  // ── 阶段六 WP-66 容器级 Worker 隔离(2026-09-12;Q4 定案,D-API-105)──
+  "SESSION_API_WORKER_EXECUTION_MODE",
+  "SESSION_API_WORKER_CONTAINER_IMAGE",
+  "SESSION_API_WORKER_CONTAINER_CPUS",
+  "SESSION_API_WORKER_CONTAINER_MEMORY",
+  "SESSION_API_WORKER_CONTAINER_PIDS_LIMIT",
 ];
 
 const envSchema = z.object({
@@ -470,6 +520,36 @@ const envSchema = z.object({
     .min(1)
     .max(VERDICT_QUERIES_PER_MINUTE_CEILING)
     .default(DEFAULT_VERDICT_QUERIES_PER_MINUTE),
+  // ── 阶段六 WP-66 容器级 Worker 隔离(D-API-105):默认值 + 天花板双闸 ──
+  // 严格枚举:执行形态是结构性开关(缺省 process,零回退;container 为显式
+  // 启用形态,启用前置 = MVP 验收通过,边界裁决 1)。
+  SESSION_API_WORKER_EXECUTION_MODE: z
+    .enum(WORKER_EXECUTION_MODES)
+    .default(DEFAULT_WORKER_EXECUTION_MODE),
+  SESSION_API_WORKER_CONTAINER_IMAGE: z
+    .string()
+    .min(1)
+    .max(256)
+    .default(DEFAULT_WORKER_CONTAINER_IMAGE),
+  SESSION_API_WORKER_CONTAINER_CPUS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(WORKER_CONTAINER_CPUS_CEILING)
+    .default(DEFAULT_WORKER_CONTAINER_CPUS),
+  // 字节整数口径(无单位后缀歧义;量化理由见常量注释与 D-API-105)。
+  SESSION_API_WORKER_CONTAINER_MEMORY: z.coerce
+    .number()
+    .int()
+    .min(WORKER_CONTAINER_MEMORY_FLOOR)
+    .max(WORKER_CONTAINER_MEMORY_CEILING)
+    .default(DEFAULT_WORKER_CONTAINER_MEMORY),
+  SESSION_API_WORKER_CONTAINER_PIDS_LIMIT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(WORKER_CONTAINER_PIDS_LIMIT_CEILING)
+    .default(DEFAULT_WORKER_CONTAINER_PIDS_LIMIT),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -571,6 +651,17 @@ export interface SessionApiConfig {
   // ── 阶段六 WP-63 裁决重询限流(D-API-84 / D-API-86)──
   /** 裁决查询频率(次/分钟;rate:{tenant}:{user}:verdict 固定窗口 60 s)。 */
   readonly verdictQueriesPerMinute: number;
+  // ── 阶段六 WP-66 容器级 Worker 隔离(Q4 定案,D-API-105)──
+  /** worker 执行形态(process = 缺省进程池;container = 显式启用容器池)。 */
+  readonly workerExecutionMode: "process" | "container";
+  /** worker 镜像(复用 session-api 同一镜像,§四.4 同锁;缺省 stackmaster/session-api:dev)。 */
+  readonly workerContainerImage: string;
+  /** 容器 cgroup CPU 配额(整核;缺省 1 = 单线程解释器的结构上限)。 */
+  readonly workerContainerCpus: number;
+  /** 容器 cgroup 内存配额(字节;缺省 256 MiB,量化理由见 D-API-105)。 */
+  readonly workerContainerMemory: number;
+  /** 容器 pids 上限(缺省 64;防 fork 炸弹,9.1"无子进程创建")。 */
+  readonly workerContainerPidsLimit: number;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -716,6 +807,11 @@ export function loadSessionApiConfig(
     auditRetentionDays: raw.SESSION_API_AUDIT_RETENTION_DAYS,
     auditBucket: raw.SESSION_API_AUDIT_BUCKET,
     verdictQueriesPerMinute: raw.SESSION_API_VERDICT_QUERIES_PER_MINUTE,
+    workerExecutionMode: raw.SESSION_API_WORKER_EXECUTION_MODE,
+    workerContainerImage: raw.SESSION_API_WORKER_CONTAINER_IMAGE,
+    workerContainerCpus: raw.SESSION_API_WORKER_CONTAINER_CPUS,
+    workerContainerMemory: raw.SESSION_API_WORKER_CONTAINER_MEMORY,
+    workerContainerPidsLimit: raw.SESSION_API_WORKER_CONTAINER_PIDS_LIMIT,
   };
 }
 

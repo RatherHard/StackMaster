@@ -34,6 +34,24 @@ export type {
   WorkerExitKind,
   WorkerFrame,
 } from "./worker-connection.js";
+export {
+  CONTAINER_WORKER_PATH_DEFAULT,
+  containerNameFor,
+  containerRunArgs,
+  createContainerLauncher,
+  createContainerLauncherFactory,
+  createProcessLauncher,
+  probeContainerRuntime,
+  resolveWorkerLauncher,
+} from "./worker-execution.js";
+export type {
+  ContainerProbeSpec,
+  ContainerWorkerSpec,
+  WorkerExecutionKind,
+  WorkerLaunch,
+  WorkerLauncher,
+  WorkerLauncherFactory,
+} from "./worker-execution.js";
 export { ensureWorkerBinary } from "./worker-binary.js";
 export { OrchestratorError } from "./errors.js";
 export type { OrchestratorErrorCode } from "./errors.js";

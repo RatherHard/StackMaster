@@ -1,0 +1,30 @@
+# 阶段六 WP-66:容器池显式启用形态的 compose 演示覆盖(WP-66 交付物;Q4 定案,D-API-105)。
+#
+# ⚠ 缺省拓扑不启用容器池:Q4 定案 = 缺省进程池(dev / CI 拓扑零回退),
+#   容器池为显式启用形态,启用前置 = MVP 验收通过(边界裁决 1)。本文件
+#   是赛事弹性场景的启用路径演示,仅与 app.yaml 叠加使用:
+#
+#   docker compose -f compose/deps.yaml -f compose/app.yaml \
+#     -f compose/worker-container-override.yaml up -d --build --wait
+#
+# 部署面义务(登记,D-API-105):容器池形态下编排器容器需具备
+# ①docker CLI(docker.io-cli 包,镜像构建面增补)与
+# ②/var/run/docker.sock 挂载(每会话 sibling 容器承载);
+# ③worker 镜像与编排器同镜像构建在场(启动期 fail-closed 探测,
+#   禁运行期拉取外部镜像)。本阶段拓扑缺省不挂载、不安装 —— dev / CI
+#   始终以缺省进程池形态实跑(零回退);真实启用按上述义务在部署面执行。
+#
+# 容器运行参数与预算键(缺省值 = D-API-105 量化登记):
+#   SESSION_API_WORKER_EXECUTION_MODE=container   执行形态开关(显式启用)
+#   SESSION_API_WORKER_CONTAINER_IMAGE            同锁镜像(缺省 stackmaster/session-api:dev)
+#   SESSION_API_WORKER_CONTAINER_CPUS=1           cgroup CPU(单线程解释器结构上限)
+#   SESSION_API_WORKER_CONTAINER_MEMORY=268435456 cgroup 内存(256 MiB;× 并发预算 8 = 2 GiB/租户)
+#   SESSION_API_WORKER_CONTAINER_PIDS_LIMIT=64    pids 上限(防 fork 炸弹)
+services:
+  session-api:
+    environment:
+      SESSION_API_WORKER_EXECUTION_MODE: "container"
+    volumes:
+      # sibling 容器承载(每会话一容器,--network none / --read-only /
+      # tmpfs /tmp / cgroup 三闸 / --cap-drop ALL 由执行形态启动器逐旗注入)。
+      - /var/run/docker.sock:/var/run/docker.sock

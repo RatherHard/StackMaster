@@ -1,5 +1,8 @@
 # 阶段三 WP-7:全拓扑编排文件(质量门禁 7 阶段三子集;D-API-64)。
 # 阶段六 WP-61 增补:verifier 独立裁决服务入网(信任域 4;D-API-87)。
+# 阶段六 WP-66 增补:worker 执行形态开关(SESSION_API_WORKER_EXECUTION_MODE,
+# 缺省 process = 本文件形态零回退;容器池显式启用路径见
+# compose/worker-container-override.yaml 与 D-API-105,Q4 定案)。
 #
 # 完整拓扑 = PostgreSQL + Redis + MinIO(deps.yaml 三服务)+ session-api
 # + vm-worker + verifier(+ 两个 verifier 角色治理 init 服务)。vm-worker 不是常驻服务:由编排器按会话 spawn(ADR-3 单会话
