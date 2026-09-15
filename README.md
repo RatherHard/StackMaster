@@ -137,7 +137,9 @@ pnpm scan:public        # 公开产物隔离扫描
 | [`packages/protocol/docs/会话动作协议语义.md`](packages/protocol/docs/会话动作协议语义.md) | WP-2 交付:会话动作协议 v1 语义 |
 | [`docs/develop/Vm 模块设计.md`](docs/develop/Vm%20模块设计.md) | Vm 模块设计文档 |
 | [`docs/user/学习者上手指南.md`](docs/user/学习者上手指南.md) | 使用文档:学习者视角的工作区操作、提交与裁决、MVP 题目集路径 |
+| [`docs/user/界面帮助手册.html`](docs/user/界面帮助手册.html) | 使用文档(网页):工作区各界面逐项参考 + 调试→解题→提交→反馈完整交互链 |
 | [`docs/user/出题人指南.md`](docs/user/出题人指南.md) | 使用文档:双包制作、DSL 词汇、判题面与隐藏测试、装载门禁与发布 |
+| [`docs/user/出题人参考手册.html`](docs/user/出题人参考手册.html) | 使用文档(网页):逐字段双包参考、指令集与字节模式、校验规则速查、完整出题实例 |
 | [`docs/user/宿主平台接入指南.md`](docs/user/宿主平台接入指南.md) | 使用文档:CTF 平台嵌入插件的部署、token 与握手、能力与外观 |
 
 CLAUDE.md 是 Claude Code 在本仓库工作的操作规范(计划书的执行摘要);两者冲突时以计划书为准。

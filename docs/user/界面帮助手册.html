@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StackMaster 界面帮助手册（学习者版）</title>
+<style>
+  :root { --ink:#1a1a2e; --muted:#5a5a72; --line:#d8d8e4; --bg:#fafafc; --card:#ffffff;
+          --accent:#3b5bdb; --accent-soft:#edf2ff; --warn:#a61e4d; --warn-soft:#fff0f6;
+          --ok:#2b8a3e; --ok-soft:#ebfbee; --code-bg:#f1f3f5; --mono:Consolas,"Courier New",monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;
+         color:var(--ink); background:var(--bg); line-height:1.75; font-size:15px; }
+  .layout { display:flex; max-width:1280px; margin:0 auto; }
+  nav { width:250px; flex:none; position:sticky; top:0; max-height:100vh; overflow-y:auto;
+        padding:24px 16px; border-right:1px solid var(--line); font-size:13.5px; }
+  nav h2 { font-size:14px; color:var(--muted); margin:0 0 8px; }
+  nav a { display:block; color:var(--ink); text-decoration:none; padding:3px 8px; border-radius:4px; }
+  nav a:hover { background:var(--accent-soft); color:var(--accent); }
+  main { flex:1; min-width:0; padding:24px 40px 80px; }
+  h1 { font-size:26px; border-bottom:3px solid var(--accent); padding-bottom:10px; }
+  h2 { font-size:21px; margin-top:48px; border-left:5px solid var(--accent); padding-left:10px; }
+  h3 { font-size:17px; margin-top:28px; }
+  h4 { font-size:15px; margin-top:20px; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; background:var(--card); font-size:13.5px; }
+  th, td { border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-soft); }
+  code { font-family:var(--mono); background:var(--code-bg); padding:1px 5px; border-radius:3px; font-size:13px; }
+  pre { background:#22223a; color:#e8e8f2; padding:14px 16px; border-radius:8px; overflow-x:auto;
+        font-size:12.8px; line-height:1.55; }
+  pre code { background:none; color:inherit; padding:0; }
+  .tag { display:inline-block; font-size:11.5px; padding:1px 8px; border-radius:10px; margin-right:4px; vertical-align:middle; }
+  .req  { background:var(--warn-soft); color:var(--warn); }
+  .opt  { background:var(--ok-soft); color:var(--ok); }
+  .cond { background:#fff9db; color:#864904; }
+  .note { background:var(--accent-soft); border-left:4px solid var(--accent); padding:10px 14px;
+          border-radius:0 6px 6px 0; margin:14px 0; }
+  .warnbox { background:var(--warn-soft); border-left:4px solid var(--warn); padding:10px 14px;
+          border-radius:0 6px 6px 0; margin:14px 0; }
+  .okbox { background:var(--ok-soft); border-left:4px solid var(--ok); padding:10px 14px;
+          border-radius:0 6px 6px 0; margin:14px 0; }
+  .step { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent);
+          border-radius:6px; padding:10px 14px; margin:10px 0; }
+  .step b { color:var(--accent); }
+  .muted { color:var(--muted); font-size:13px; }
+  footer { margin-top:64px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }
+  @media (max-width: 900px){ nav{ display:none; } main{ padding:16px; } }
+  @media print { nav{ display:none; } pre{ white-space:pre-wrap; } }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <h2>目录</h2>
+  <a href="#s0">0. 这本手册怎么用</a>
+  <a href="#s1">1. 界面总览与布局模型</a>
+  <a href="#s2">2. 顶部菜单与会话状态条</a>
+  <a href="#s3">3. 横幅系统（四种全局提示）</a>
+  <a href="#s4">4. 字节视图（栈视图 / 自由视图）</a>
+  <a href="#s5">5. 寄存器视图</a>
+  <a href="#s6">6. 教学组件五件套</a>
+  <a href="#s7">7. Payload 搭建页</a>
+  <a href="#s8">8. 调试模式与指令视图</a>
+  <a href="#s9">9. 教学面板与题目简介</a>
+  <a href="#s10">10. 提交与正式裁决呈现</a>
+  <a href="#s11">11. 断线与重连</a>
+  <a href="#s12">12. 主题、语言与键盘操作</a>
+  <a href="#s13">13. 完整交互链：调试 → 解题 → 提交 → 反馈</a>
+  <a href="#s14">14. 故障排查 FAQ</a>
+  <a href="#sa">附录 A · 会话动作 ↔ 界面入口对照</a>
+  <a href="#sb">附录 B · 可见窗口语义速查</a>
+</nav>
+<main>
+
+<h1>StackMaster 界面帮助手册（学习者版）</h1>
+<p class="muted">版本 1.0 · 2026-09-15 · 面向：在 StackMaster 工作区做题的学习者<br>
+权威性说明：本手册是使用文档；界面行为的实现权威 = <code>packages/vm-ui/README.md</code>（组件逐条登记），
+交互语义权威 = <code>docs/develop/投影语义规约.md</code> 与 <code>packages/protocol/docs/会话动作协议语义.md</code>。
+手册与实现不一致时以实现为准。</p>
+
+<!-- ================================================================ -->
+<h2 id="s0">0. 这本手册怎么用</h2>
+<table>
+  <tr><th>如果你想知道…</th><th>直接看</th></tr>
+  <tr><td>屏幕上这一块是什么、能不能关</td><td><a href="#s1">§1 界面总览</a></td></tr>
+  <tr><td>顶部某个按钮是干什么的、什么时候亮</td><td><a href="#s2">§2 菜单与状态条</a></td></tr>
+  <tr><td>内存表怎么读、<code>??</code> 是什么、怎么跳转/搜索</td><td><a href="#s4">§4 字节视图</a></td></tr>
+  <tr><td>积木怎么搭、程序区/输出区看什么</td><td><a href="#s7">§7 Payload 搭建</a></td></tr>
+  <tr><td>调试模式能做什么、为什么有横幅警告</td><td><a href="#s8">§8 调试模式</a></td></tr>
+  <tr><td>提交之后界面会发生什么</td><td><a href="#s10">§10 提交与裁决</a></td></tr>
+  <tr><td>想照着一条完整流程从头走到尾</td><td><a href="#s13">§13 完整交互链</a></td></tr>
+</table>
+<div class="note">你在 CTF 平台里看到的是<strong>嵌入式插件页</strong>；本仓库的开发联调壳（plugin-dev）多一个
+「创建会话」表单，其余工作区界面完全一致。本手册以共同的工作区界面为主，表单在 §1.2 单独说明。</div>
+
+<h2 id="s1">1. 界面总览与布局模型</h2>
+<h3>1.1 页面解剖</h3>
+<pre><code>┌──────────────────────────────────────────────────────────────┐
+│ ① 状态横幅区   （会话创建提示 / 断线横幅 / what-if 纪律横幅 /   │
+│                 裁决横幅——出现时置顶显示，见 §3 / §10 / §11）   │
+├──────────────────────────────────────────────────────────────┤
+│ ② 顶部菜单   「打开」│模式│运行        会话状态 running ·      │
+│                标签页按钮  切换  动作按钮        revision 0 · 连接 │
+├──────────────────────────────────────────────────────────────┤
+│ ③ 题目简介（可折叠）  架构位宽 / 端序 / 页大小 / 寄存器 / canary│
+├──────────────────────────────────────────────────────────────┤
+│ ④ 教学面板（可折叠）  提示阶梯 + 错误解释           （§9）      │
+├──────────────────────────────────────────────────────────────┤
+│ ⑤ 工作区标签页区域（主战场）                                   │
+│ ┌─列 1────────────┐┌─列 2────────────┐┌─列 3───…           │
+│ │┌─标签页 A──────┐││┌─标签页 C────┐  ││                     │
+│ ││（上半）       ││││             │  ││   列间水平滚动       │
+│ │├─标签页 B──────┤││└─────────────┘  ││                     │
+│ ││（下半）       │││                  ││                     │
+│ │└───────────────┘│└──────────────────┘│                     │
+│ └─────────────────┘────────────────────┘                     │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+
+<h3>1.2 创建会话表单（开发壳 / 首次进入）</h3>
+<p>四个输入框 + 两个按钮。在 CTF 平台上这些通常由平台自动完成；开发联调时手工填写：</p>
+<table>
+  <tr><th>元素</th><th>作用</th></tr>
+  <tr><td><code>challengeId / challengeVersion</code></td><td>要玩的题目标识与版本（由平台下发或联调时指定）</td></tr>
+  <tr><td><code>embedSessionId / embedToken</code></td><td>一次性会话标识与短期凭证（自动下发；token 单次消费，过期/已用需重新获取）</td></tr>
+  <tr><td>「创建并连接」按钮</td><td>创建服务端会话 → 连接认证通道 → 工作区挂载。成功后横幅显示「会话已创建并连接(sessionId=…)」，菜单运行按钮解锁</td></tr>
+  <tr><td>「新建会话」按钮</td><td>结束当前会话并走全新创建流程（会话到达 won/failed 终态、或重启被禁用时的正规出路）</td></tr>
+</table>
+
+<h3>1.3 工作区布局模型（列式平铺）</h3>
+<table>
+  <tr><th>操作</th><th>行为</th></tr>
+  <tr><td>新开标签页</td><td>顶部菜单「打开」分组里点类型按钮；新标签落入<strong>当前焦点列</strong>、插在焦点页之后</td></tr>
+  <tr><td>列内分割</td><td>同列标签二叉均分（上下分割）；同列内容超高时列内滚动</td></tr>
+  <tr><td>列间浏览</td><td>列与列之间<strong>水平滚动</strong>；打开新列时视图自动滚到可达位置</td></tr>
+  <tr><td>拖拽排布</td><td>按住标签页标题栏拖动（位移超过 3px 进入拖拽，拖拽反馈只用透明度）：放到目标页上半 = 排它前面、下半 = 后面；放到目标列空白 = 追加到该列；放到列区空白 = 开新列</td></tr>
+  <tr><td>关闭标签页</td><td>每个标签页标题栏右侧「×」；关闭即销毁该页状态（Payload 页内容在切换模式时保留、关闭才弃置）</td></tr>
+  <tr><td>同类多开</td><td>任意类型可开多个实例；标题带稳定序号（如「栈视图 1」「栈视图 2」），序号只增不减，关闭后再开也继续往后编</td></tr>
+  <tr><td>焦点</td><td>点击过的标签页是「焦点页」；某些菜单动作只对焦点页生效（如「积木步进」要求 Payload 页是焦点）</td></tr>
+</table>
+<div class="note">可打开的标签页类型：<strong>栈视图 / 自由视图 / 寄存器视图 / Payload 搭建 / 指令视图（调试档）/
+结构视图 / 调用栈 / 内存 diff / 时间线 / checkpoint（检查点）</strong>。未连接会话时工作区显示空态：
+「工作区为空：从顶部菜单『打开』选择一个标签页类型开始」。</div>
+
+<h2 id="s2">2. 顶部菜单与会话状态条</h2>
+<h3>2.1 菜单按钮逐个说明</h3>
+<table>
+  <tr><th style="width:130px">按钮</th><th>可用条件</th><th>动作与你会看到什么</th></tr>
+  <tr><td>「打开」分组</td><td>恒可用</td><td>一排标签页类型按钮（§1.3 清单），点击即新开对应标签页</td></tr>
+  <tr><td>「指令步进」</td><td>已连接且会话未终态</td><td>让虚拟机<strong>恰好执行一条指令</strong>后暂停。每次点击 revision +1；控制流里当前指令会随之前进（在字节/指令视图中观察）</td></tr>
+  <tr><td>「积木步进」</td><td><strong>Payload 页是焦点页</strong>且已编译</td><td>推进积木程序的<strong>一个原子动作</strong>并暂停；等于在 Payload 页点工具栏「单步」</td></tr>
+  <tr><td>「运行到断点」</td><td>仅调试模式；断点集合非空；通道可用且未终态</td><td>运行到最近断点后暂停；命中后指令视图高亮暂停行并显示暂停原因「命中断点已暂停」</td></tr>
+  <tr><td>「切换到调试模式 / 返回解题模式」</td><td>题目启用调试时才显示（出题人可关闭）</td><td>切换数据档：工作区所有视图换绑数据源（§8）。切换后字节视图滚动/锚点重置属预期；Payload 页状态两模式共用不丢失</td></tr>
+  <tr><td>「提交」</td><td>已连接</td><td>把你的<strong>服务端操作日志</strong>送交独立裁决服务（§10）。终态后仍可提交（sync/时间线/提交/关闭不受终态限制）</td></tr>
+  <tr><td>「重启测试环境」</td><td>未终态时可用；<strong>won/failed 后禁用</strong></td><td>清空一切回到题目初始状态（revision 仍 +1）。终态后点击会看到引导「测试环境已结束，请新建会话」</td></tr>
+</table>
+<div class="note">模式分组里有当前模式指示（「解题模式」/「调试模式」）；运行分组按钮在未连接或终态时呈灰色禁用态，
+把鼠标停上去可看出不可用的原因（未连接 / 已终态）。</div>
+
+<h3>2.2 会话状态条（菜单右侧）</h3>
+<table>
+  <tr><th>字段</th><th>取值</th><th>说明</th></tr>
+  <tr><td>会话状态</td><td><code>running / paused / won / failed</code></td><td>交互判定状态（区别于正式裁决，见 §10.3）。running = 程序运行中；paused = 因事件/单步暂停；won/failed = 交互终态</td></tr>
+  <tr><td>revision</td><td>0, 1, 2, …</td><td>服务端权威版本号 = <strong>已被执行的动作数</strong>。你的每个操作（包括失败的教学反馈和重启）都 +1；被拒绝的操作不推进</td></tr>
+  <tr><td>连接</td><td><code>connecting / connected / reconnecting / disconnected</code></td><td>通道状态；reconnecting 时会显示第几次重试与下次重试间隔（§11）</td></tr>
+</table>
+
+<h2 id="s3">3. 横幅系统（四种全局提示）</h2>
+<table>
+  <tr><th>横幅</th><th>何时出现</th><th>内容与你要做的事</th></tr>
+  <tr><td>会话提示横幅</td><td>创建会话成功 / 关键动作后</td><td>如「会话已创建并连接(sessionId=…);顶部菜单可步进/重启」——纯提示，无需操作</td></tr>
+  <tr><td>断线横幅</td><td>通道断开</td><td>显示「最近一次公开投影(revision N)+ 重连中(第 n 次,间隔 x ms)」。界面冻结在最后已知状态，<strong>绝不本地假装继续运行</strong>；通常自动恢复，个别情况给「手动重连」按钮（§11）</td></tr>
+  <tr><td>what-if 纪律横幅</td><td><strong>调试模式下常驻</strong></td><td>「调试通过 ≠ 提交通过（裁决以提交为准）」+（题目启用 ASLR 时）「调试实例地址与真实实例可能不同，硬编码绝对地址跨实例失效属预期教学语义」。切回解题模式即消失</td></tr>
+  <tr><td>裁决横幅</td><td>点「提交」后</td><td>三态流转：pending（已受理，自动重询）→ verdicted（结果 + 11 值类型）→（异常时）unavailable（§10）</td></tr>
+  <tr><td>拒绝错误提示</td><td>动作被服务端拒绝</td><td>错误码 + 人话说明 + 解释（如「地址不可见」），「知道了」消隐；同时写入教学面板的错误解释器（§9.2）</td></tr>
+</table>
+
+<h2 id="s4">4. 字节视图（栈视图 / 自由视图）</h2>
+<p>主战场。<strong>栈视图与自由视图是同一个组件的两种默认姿态</strong>——栈视图打开时自动滚到 RSP 所在区域，自由视图从第一个区域看起；除此之外能力完全相同，所以放在一起讲。</p>
+
+<h3>4.1 组成结构</h3>
+<pre><code>┌─ 标签页「栈视图 1」──────────────────────────────────────────┐
+│ ┌─VMA 区域列表──┐ ┌─字节表────────────────────────────────┐ │
+│ │ ● stack  0x…  │ │ 0x7FFFF7F0  41 41 41 41 …  A A A A    │ │
+│ │ ○ code   0x…  │ │ 0x7FFFF7F8  41 41 …        → stack    │ │
+│ │ ○ global 0x…  │ │ 0x7FFFF800  42 42 …  [RSP 锚点行高亮]  │ │
+│ │ （按地址有序， │ │ …每行 8 字节：地址段│十六进制段│特殊显示段│ │
+│ │  点击切换区域）│ │                                        │ │
+│ └───────────────┘ └────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+<table>
+  <tr><th>组成</th><th>说明</th></tr>
+  <tr><td>VMA 区域列表（侧栏）</td><td>题目全部<strong>可见</strong>内存区域，按地址排序：名称、起始地址、长度。点击某区域 → 右侧字节表跳到该区域开头；在字节表里跳转到别的区域时，侧栏选中项会自动跟随（双向回路）</td></tr>
+  <tr><td>字节表</td><td>每行 8 字节，三段式：<strong>地址段</strong>（0x 大写十六进制）、<strong>十六进制段</strong>（字节 + 下方对应 ASCII 可见字符）、<strong>特殊显示段</strong>（语义标注/跳转链芯片，见下）</td></tr>
+  <tr><td>虚拟滚动</td><td>区域很长也只渲染可视行（窗口上限 512 行），滚动流畅</td></tr>
+</table>
+
+<h3>4.2 可见窗口：<code>??</code> 是什么</h3>
+<p>服务端对每块区域只下发<strong>锚定起点的开头一段</strong>（缺省 256 字节；区域更短则全量）。因此：</p>
+<table>
+  <tr><th>你看到的</th><th>含义</th></tr>
+  <tr><td>正常字节</td><td>已下发窗口内的真实数据</td></tr>
+  <tr><td><code>??</code> 格子</td><td>窗口外——服务端没有下发这里。不是 bug，不是"藏起来了"，是结构性不存在于你的浏览器</td></tr>
+  <tr><td>区域截断标记</td><td>区域列表/投影里 <code>truncated</code> 标记为真 = 该区域只下发了前缀（诚实声明）</td></tr>
+</table>
+<div class="warnbox">对窗口外的跳转/检索都不会报错，只会得到「在可见窗口之外」的提示。<strong>不存在"找到藏起来的字节"这种事</strong>：
+隐藏区域与未映射地址在你这边完全不可区分（防探测是协议层保证）。</div>
+
+<h3>4.3 锚点与导航</h3>
+<table>
+  <tr><th>功能</th><th>操作</th><th>行为</th></tr>
+  <tr><td>RSP/RBP 锚点</td><td>进入视图 / 切换区域时自动</td><td>视口自动滚到 RSP 所在行并高亮。滚远了点「回锚」按钮回去。若 RSP 的值不在已下发窗口内，会明示「&lt;寄存器&gt; 内容不在可见窗口」（不渲染空白、不报错）；寄存器未公开则不显示锚点</td></tr>
+  <tr><td>跳转输入</td><td>输入地址后回车</td><td><code>0x</code> 开头十六进制 = <strong>绝对地址</strong>；纯数字 = <strong>窗口内偏移</strong>。窗口外的输入 → 「在可见窗口之外」反馈，不滚动不报错</td></tr>
+  <tr><td>检索</td><td>输入十六进制字节串</td><td>只在<strong>已下发窗口字节</strong>内搜索；命中列表点击即滚动过去；命中在其他区域会先自动切区域</td></tr>
+  <tr><td>寄存器交叉标注</td><td>自动 + 点击</td><td>某寄存器的值恰好指向本行已下发窗口内的地址时，该行<strong>左缘</strong>出现标注徽标；点击在行内展开"哪些寄存器指向这里"</td></tr>
+  <tr><td>跳转链芯片</td><td>自动出现 + 点击</td><td>某行 8 字节按小端解释"像一个指向可见内存的指针"时，行尾出现地址芯片链。点击芯片 → 跳到目标行（窗口外则提示「在可见窗口之外」）。链默认横向最多 3 段，「展开完整链」可看竖向全链（上限 32 段），循环引用画回环箭头；链末尾若是可见 ASCII 字符串会直接把字符展示出来（≤32 字节）</td></tr>
+</table>
+<div class="okbox"><strong>读内存三板斧</strong>：跟着 RSP 锚点看栈 → 看到可疑指针点跳转链芯片顺藤摸瓜 → 用检索确认特征字节。指针追踪在窗口外会截断，这是诚实显示不是故障。</div>
+
+<h2 id="s5">5. 寄存器视图</h2>
+<table>
+  <tr><th>元素</th><th>说明</th></tr>
+  <tr><td>寄存器行</td><td>纵向列出题目公开的<strong>全部</strong>寄存器（不藏行）；每行三段：寄存器名 / 当前值（0x 大写十六进制）/ 特殊显示列（该值落在某个可见区域时显示「→ 区域名」）</td></tr>
+  <tr><td>点击复制</td><td>点击值复制到剪贴板，反馈「已复制」；非安全上下文（http 等）自动降级为选中 + 提示「已就绪手动复制」，片刻自动消隐</td></tr>
+  <tr><td>键盘操作</td><td>Tab 聚焦行，<kbd>Enter</kbd> 复制——全程可不碰鼠标</td></tr>
+  <tr><td>与字节视图联动</td><td>RSP/RBP 锚点、交叉标注都消费这里的数据；本视图里"→ stack"的寄存器就是字节视图交叉标注的来源</td></tr>
+</table>
+<p class="muted">FLAG 开头的秘密寄存器（若题目定义）永远不出现在这里——值在服务端，名字也不会给你。</p>
+
+<h2 id="s6">6. 教学组件五件套</h2>
+<h3>6.1 结构视图</h3>
+<p>出题人声明的"语义地图"。按固定分组排序展示：<code>buffer 起点 → 返回地址槽 → saved RBP 槽 → canary 槽 → 自定义</code>；
+每条高亮显示名称、所属区域、地址与长度（如「buffer 起点 · input-buffer · stack @ 0x7FFFF7F0 · 16B」）。
+<strong>点击任一条</strong>会发出跳转请求——配了字节视图时直接滚到对应位置。这是你把"抽象的栈帧布局"对上"具体字节地址"的主要工具。</p>
+
+<h3>6.2 调用栈</h3>
+<table>
+  <tr><th>元素</th><th>说明</th></tr>
+  <tr><td>帧条目</td><td>序号 + 函数标签 + 返回地址。<strong>index 0 标注「最内帧（当前函数）」</strong>，往下是调用者</td></tr>
+  <tr><td>截断明示</td><td>深度超过 64 帧时只显示最内 64 帧，最后一帧标注「仅显示最内 64 帧」——<strong>故意不显示"+N"</strong>，因为帧数本身也是信息</td></tr>
+  <tr><td>空栈</td><td>程序未调用任何函数时显示空态</td></tr>
+</table>
+
+<h3>6.3 内存 diff</h3>
+<p>对照"上一个动作前后"的字节变化：左/前列 = 动作前的值，右/后列 = 动作后的值，逐字节标红高亮差异。</p>
+<ul>
+  <li>只对照<strong>最近一次动作</strong>的增量（不是累积历史）——累积历史看时间线；</li>
+  <li>前值不在已下发窗口内时，该行明示「前值不可知」，不伪造；</li>
+  <li>变更区域被截断时提示「变更承载被截断，已按协议以 sync 重新对齐」。</li>
+</ul>
+
+<h3>6.4 时间线</h3>
+<p>你整个会话的操作历史，按 revision 排列：每个动作一行（动作摘要 + 关键参数）、checkpoint 事件、submit 事件；
+当前 revision 有指针标记。撤销/恢复/重启也各占一行——<strong>历史从不被抹掉</strong>，回退也是一步。做题卡壳时回看时间线，
+经常能发现"哪一步之后 layout 变了"。</p>
+
+<h3>6.5 checkpoint（检查点面板）</h3>
+<table>
+  <tr><th>功能</th><th>操作与规则</th></tr>
+  <tr><td>创建</td><td>输入可选标签（≤128 字符，禁止控制字符）→ 创建。服务端保存完整快照；<strong>revision 照常 +1</strong>，时间线多一条</td></tr>
+  <tr><td>恢复</td><td>列表按创建顺序列出所有检查点（标签 + 内容 revision）；点击恢复需<strong>两步确认</strong>（防误触）。恢复 = 内容回到快照、revision 继续 +1（回退也是一步）</td></tr>
+  <tr><td>终态</td><td>会话 won/failed 后恢复被拒绝（终态规则），面板会显示服务端返回的可解释错误</td></tr>
+</table>
+
+<h2 id="s7">7. Payload 搭建页</h2>
+<h3>7.1 三区布局</h3>
+<pre><code>┌─标签页「Payload 搭建 1」──────────────────────────────────────┐
+│ ┌─积木画布（左）──────┐ ┌─工具栏────────────────────────┐    │
+│ │ [工具箱分类] [积木]  │ │ 编译  运行  单步  暂停  复位步进 │    │
+│ │  🚩 Payload 开始    │ │ 状态:idle                       │    │
+│ │   └─写字节到…      │ ├─程序(原子动作序列)─────────────┤    │
+│ │   └─…              │ │ ▶ 1. write_bytes 0x7FFFF7F0 …  │    │
+│ │                     │ │   2. …（当前步高亮）            │    │
+│ │                     │ ├─执行输出───────────────────────┤    │
+│ │                     │ │ • 动作摘要 + 状态 + 错误解释     │    │
+│ └─────────────────────┘ └───────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+
+<h3>7.2 工具栏五按钮</h3>
+<table>
+  <tr><th>按钮</th><th>行为</th></tr>
+  <tr><td>「编译」</td><td>把积木图编译成<strong>原子动作序列</strong>（循环/分支/函数在客户端展开求值）。程序区逐行列出每个原子步骤；编译错误（如引用了题目不允许的动作）在对应积木上标红气泡提示，不产出步骤</td></tr>
+  <tr><td>「运行」</td><td>逐个提交原子动作，输出区实时记录每条的结果；遇到断点积木自动暂停（状态 paused）</td></tr>
+  <tr><td>「单步」</td><td>推进一个原子动作并暂停（与菜单「积木步进」等价，要求本页是焦点页）</td></tr>
+  <tr><td>「暂停」</td><td>暂停步进推进（当前动作完成后停下，状态 paused）</td></tr>
+  <tr><td>「复位步进」</td><td>游标回到第 0 步（不回滚服务端状态——已经执行的写操作要靠检查点/重启回退）</td></tr>
+</table>
+<div class="note"><strong>编辑即复位</strong>：改动画布后程序立即过期，运行/单步前会自动重新编译并把游标拨回第 0 步。
+状态机五态：<code>idle → running → paused/done/error</code>。展开上限 256 个原子动作、函数内联深度 32、
+表达式求值步数 4096——超限在编译期明确报错。</div>
+
+<h3>7.3 积木分类速查（中文工具箱）</h3>
+<table>
+  <tr><th>分类</th><th>积木</th><th>会产生服务端动作吗</th></tr>
+  <tr><td>会话动作</td><td>写字节到〔地址〕内容〔hex〕/ 压栈 / 出栈 / 调用〔目标〕/ 返回 / 单步执行一条指令</td><td class="tag req">是</td></tr>
+  <tr><td>字符串</td><td>写字符串到〔地址〕/ 连接 / UTF-8 字节数</td><td>「写字符串」会（按 UTF-8 编码成写字节）</td></tr>
+  <tr><td>断点</td><td>断点积木（插入序列中）</td><td>否——运行到此暂停（调试模式下转为并入调试断点集合）</td></tr>
+  <tr><td>变量</td><td>赋值 / 读取 / 增减</td><td>否（客户端求值）</td></tr>
+  <tr><td>列表</td><td>追加 / 取项 / 长度</td><td>否</td></tr>
+  <tr><td>分支</td><td>如果 / 否则</td><td>否（编译期只展开选中的支）</td></tr>
+  <tr><td>循环</td><td>重复 N 次</td><td>否（编译期展开；计入 256 上限）</td></tr>
+  <tr><td>函数</td><td>定义函数 / 调用 / 取返回值</td><td>否（编译期内联展开）</td></tr>
+  <tr><td>运算与赋值</td><td>数字 / 文本 / 算术 / 比较</td><td>否（64 位无符号回绕）</td></tr>
+  <tr><td>公开投影读取</td><td>寄存器〔名〕/ 读 8 字节（小端）/ 读单字节</td><td>否（读公开投影只读快照）</td></tr>
+</table>
+<div class="note">求值环境 = <strong>公开投影只读快照</strong>：引用未知寄存器、读窗口外地址都<strong>确定性报错</strong>（编译/运行期直接失败，不静默兜底）。
+题目没开放的动作（如 <code>run_to_event</code>）对应积木直接不可用。悬停积木有中文 tooltip 讲语义。</div>
+
+<h3>7.4 输出区你会看到的四种条目</h3>
+<table>
+  <tr><th>情形</th><th>输出区表现</th><th>游标</th></tr>
+  <tr><td>动作成功</td><td>动作摘要 + 状态（running/paused/won）+ revision</td><td>推进到下一步</td></tr>
+  <tr><td>教学性失败（已执行）</td><td>动作摘要 + 可解释错误（如 permission_denied + 教学注解）</td><td>推进（revision +1，失败了也是"执行过"）</td></tr>
+  <tr><td>被拒绝（未执行）</td><td>错误码 + 解释；<strong>停驻</strong>等你自己处理</td><td>不动（revision 不变）；修正后手动重试同一步</td></tr>
+  <tr><td>预算耗尽（429）</td><td>budget_exhausted 可解释错误</td><td>不动；稍候手动重试</td></tr>
+</table>
+
+<h2 id="s8">8. 调试模式与指令视图</h2>
+<h3>8.1 调试模式是什么</h3>
+<p>一个<strong>并行的沙盘实例</strong>：题目默认启用调试（出题人可关）。切换方式 = 菜单模式分组的切换按钮；
+切过去之后：所有字节视图换绑到调试数据源（滚动/锚点重置），「打开」里的<strong>指令视图</strong>变为可用，
+菜单出现「运行到断点」，工作区顶部出现<strong>常驻 what-if 纪律横幅</strong>。</p>
+<div class="warnbox">两条铁律（横幅会一直提醒）：①<strong>调试通过 ≠ 提交通过</strong>，裁决只看提交日志的重放；
+②调试实例地址可能与真实实例不同——在调试里看到的地址，硬编码进 payload 到真实实例可能失效（ASLR 题尤其如此，这本身是 pwn 第一课）。</div>
+
+<h3>8.2 指令视图（调试档专属标签页）</h3>
+<table>
+  <tr><th>组成</th><th>说明</th></tr>
+  <tr><td>指令流（三段）</td><td>每行 = 地址 / 伪机器码字节（没有字节信息显示"—"）/ 指令文本；跳转类指令尾随<strong>目标地址延展</strong>，点击直接跳到目标行</td></tr>
+  <tr><td>RIP 锚点</td><td>最新暂停地址行高亮 + 「回锚」；暂停位置按三级回退确定：最近单步暂停 → 附着时暂停点 → RIP 公开值</td></tr>
+  <tr><td>函数表</td><td>附着时推送的函数列表（按起始地址排序），点击跳转</td></tr>
+  <tr><td>行断点</td><td>点击指令行切换断点（断点集合是界面状态，可多个）；配合菜单「运行到断点」使用</td></tr>
+  <tr><td>暂停原因</td><td>暂停时显示四值之一：单步暂停 / 命中断点已暂停 / 程序已自行停机 / 预算耗尽确定性暂停</td></tr>
+  <tr><td>检索双入口</td><td>字节检索（全内存，异步）与指令文本检索（缓存内，大小写不敏感）分开呈现</td></tr>
+  <tr><td>地址跳转</td><td>覆盖面内直接滚动；超出已缓存覆盖面 → 自动预取后重试一次；仍不可达提示「覆盖面之外」</td></tr>
+</table>
+<p class="muted">解题模式下打开指令视图只会看到引导空态「切换到调试模式」，不会伪造指令流。
+调试档的内存/指令来自"推送 + 按需拉取"的缓存：缓存外区域同样以窗口外语义呈现。</p>
+
+<h2 id="s9">9. 教学面板与题目简介</h2>
+<h3>9.1 题目简介（可折叠）</h3>
+<p>题目标题、情境摘要、架构参数（位宽 / 端序 / 页大小 / 寄存器清单 / canary 状态）。正式通道下还会给出学习目标。
+做题前扫一眼，寄存器清单告诉你哪些名字会在寄存器视图里出现。</p>
+<h3>9.2 教学面板（可折叠，两块）</h3>
+<table>
+  <tr><th>块</th><th>机制</th></tr>
+  <tr><td>提示阶梯</td><td>出题人配的 ≤8 级提示。两种揭示策略：<strong>按请求</strong>（你点才揭示）与 <strong>失败 N 次后自动</strong>（本地计数，教学性失败才算）。揭示顺序固定，无法跳级看后面的——讲方法不给答案</td></tr>
+  <tr><td>错误解释器</td><td>每个错误码配出题人写的教学注解。收到错误时这里显示「错误码 + 解释 + 教学注解」；没有配注解的错误码会明示「该错误暂无教学注解」。16 个错误码清单见学习者上手指南</td></tr>
+</table>
+
+<h2 id="s10">10. 提交与正式裁决呈现</h2>
+<h3>10.1 流程</h3>
+<table>
+  <tr><th>阶段</th><th>触发</th><th>界面表现</th></tr>
+  <tr><td>提交</td><td>点菜单「提交」</td><td>按钮即回；服务端受理你的<strong>规范化操作日志</strong>（不是上传任何自制状态）</td></tr>
+  <tr><td>pending</td><td>受理成功</td><td>裁决横幅出现「已提交/裁决中」；界面<strong>每 2.5 秒自动重询</strong>（有退避），不需要你刷新。未决期不显示任何进度/排队位置——耐心等</td></tr>
+  <tr><td>verdicted</td><td>裁决落库</td><td>横幅显示最终 11 值结果（success / wrong_answer / program_crash / memory_fault / …）。<strong>不可逆</strong></td></tr>
+  <tr><td>unavailable</td><td>查询异常</td><td>横幅提示裁决暂不可查询（断线恢复后自动续询）</td></tr>
+</table>
+<h3>10.2 裁决之后</h3>
+<ul>
+  <li>终态会话：状态转换动作与撤销/恢复/重启全部拒绝；<strong>时间线、sync、提交记录仍可看</strong>；</li>
+  <li>新开一局 = 「新建会话」流程（新 token、新会话）;</li>
+  <li>结果不理想 → 教学面板看错误解释 + 提示阶梯 → 时间线复盘 → 新会话再来。</li>
+</ul>
+<h3>10.3 和界面上的 won/failed 什么关系</h3>
+<div class="warnbox">会话状态条上的 <code>won/failed</code> 是<strong>交互判定</strong>（即时反馈）；正式裁决由独立服务重放你的日志并跑隐藏测试，
+两者<strong>相互独立</strong>。界面 won 而裁决 wrong_answer 是可能的（隐藏测试没过）；伪造前端 won 拿不到任何东西——成绩只在服务端。</div>
+
+<h2 id="s11">11. 断线与重连</h2>
+<table>
+  <tr><th>情形</th><th>界面表现</th><th>你要做什么</th></tr>
+  <tr><td>网络抖动</td><td>状态条 reconnecting（第 n 次尝试 + 间隔）；断线横幅显示最后已知投影 revision。自动指数退避重连，成功后自动对齐最新状态</td><td>不用动，等它恢复</td></tr>
+  <tr><td>空闲被服务端断开</td><td>同上（语义化关闭码自动重连）</td><td>不用动</td></tr>
+  <tr><td>被新连接踢下线</td><td>「connection replaced」提示 + 手动重连按钮（单连接策略，防互踢循环）</td><td>确认没有别处打开同一会话 → 点「手动重连」</td></tr>
+  <tr><td>长时间断线</td><td>disconnected；视图冻结在最后已知状态（诚实标注），<strong>不会本地假装运行</strong></td><td>查网络后手动重连；期间操作不可用是设计使然</td></tr>
+</table>
+
+<h2 id="s12">12. 主题、语言与键盘操作</h2>
+<ul>
+  <li><strong>主题</strong>：light / dark / auto 三值（auto 跟随系统深浅色）。宿主平台切换时全界面即时生效；配色以可访问性对比度为准；</li>
+  <li><strong>语言</strong>：内置 zh-CN（默认）与 en，跟随宿主切换，未知语言标签确定性回落；协议/状态机词（write_bytes、running 等）保持原文不翻译；</li>
+  <li><strong>键盘可达</strong>：全部功能 Tab 序可达，按钮 Enter/Space 原生激活，焦点环可见；寄存器行 Enter 复制；信息全部有文本承载（不依赖颜色/图形）；动画零。</li>
+</ul>
+
+<h2 id="s13">13. 完整交互链：调试 → 解题 → 提交 → 反馈</h2>
+<p class="muted">以一道标准栈题（32 字节 buffer + saved RBP + 返回地址槽，存在 win 块）为例。地址以结构视图实际显示为准。
+每步都标注"你会看到什么"，照着走一遍就熟悉全部界面。</p>
+
+<h3>阶段 A · 调试侦察（沙盘，随便折腾）</h3>
+<div class="step"><b>A1 创建会话。</b>进入题目 → 创建并连接。你会看到：横幅「会话已创建并连接(sessionId=…)」；
+状态条 <code>running · revision 0 · connected</code>；工作区空态提示。</div>
+<div class="step"><b>A2 铺开视图。</b>菜单「打开」→ 点<strong>栈视图</strong>、<strong>寄存器视图</strong>、<strong>结构视图</strong>。
+你会看到：栈视图自动锚定 RSP 行（高亮）；寄存器视图列出全部公开寄存器；结构视图给出 buffer 起点 / 返回地址槽 / saved RBP 槽的实际地址。
+记下三件事：buffer 地址、返回地址槽地址、两者的偏移（本例 24 字节）。</div>
+<div class="step"><b>A3 切调试模式。</b>菜单模式分组 →「切换到调试模式」。你会看到：顶部出现常驻 what-if 横幅；
+字节视图滚动重置；「打开」里<strong>指令视图</strong>变为可用。</div>
+<div class="step"><b>A4 看程序找目标。</b>「打开」→ 指令视图。用函数表或文本检索定位 win 块（如检索 "win" 或浏览函数表）；
+记下它的地址。<strong>点击 win 函数内的指令行设置断点</strong>（行上出现断点标记）。</div>
+<div class="step"><b>A5 跑到断点验证理解。</b>菜单「运行到断点」。你会看到：指令视图该行高亮，暂停原因「命中断点已暂停」；
+状态条可能变为 paused。现在你在沙盘里确认了"控制流到达 win"长什么样、寄存器此时的值是什么。</div>
+<div class="step"><b>A6 侦察完毕。</b>（可选）用调试档全内存检索确认特征字节。结论带走：要劫持到 win，需要把返回地址槽覆盖为 win 地址。</div>
+
+<h3>阶段 B · 解题构造（真实会话，一击必中）</h3>
+<div class="step"><b>B1 切回解题模式。</b>菜单「返回解题模式」。what-if 横幅消失，数据源换绑（字节视图滚动重置属预期）。
+注意：刚才调试里的操作<strong>不影响</strong>真实会话。</div>
+<div class="step"><b>B2 打开 Payload 搭建。</b>「打开」→ Payload 搭建。画布上有唯一不可删的「🚩 Payload 开始」积木。</div>
+<div class="step"><b>B3 搭 payload。</b>从「会话动作」分类拖出「写字节到〔地址〕内容〔hex〕」积木，接到开始积木下方；
+地址填 buffer 地址；内容按结构视图的几何填：16 字节填充（如 <code>41×16</code>）+ 8 字节占位（<code>42×8</code>，恰好漫过 saved RBP）
++ 8 字节 win 地址的小端十六进制（正是 A4 记下的地址）。十六进制一律偶数长度、小端排列。</div>
+<div class="step"><b>B4 编译并运行。</b>点「编译」——程序区列出 1 个原子步骤；点「运行」——输出区出现该动作的成功记录。
+你会看到：状态条 <code>revision 1</code>；切到栈视图（或内存 diff）能直观看到返回地址槽被你的字节覆盖、diff 标红。</div>
+<div class="step"><b>B5 引爆。</b>菜单「指令步进」（执行 leave，RSP 被劫持到你的假 RBP）→ 再「指令步进」（ret 弹出你写的 win 地址）。
+你会看到：状态条翻成 <code>won</code>，revision 到 3。若没中：回输出区看错误解释（invalid_rip → 检查端序/地址），或时间线复盘每一步。</div>
+
+<h3>阶段 C · 提交</h3>
+<div class="step"><b>C1 提交。</b>菜单「提交」。你会看到：裁决横幅出现 pending 态（"已受理，独立裁决中"）。
+此时不要关页面；界面每 2.5 秒自动查询。</div>
+<div class="step"><b>C2 等待落库。</b>几秒到几十秒后横幅翻转为 verdicted，显示正式结果。本例预期 <code>success</code>
+——交互 won ∧ 隐藏测试全过。</div>
+
+<h3>阶段 D · 反馈与迭代</h3>
+<div class="step"><b>D1 读反馈。</b>success → 这一关通过，时间线留有完整作战记录。wrong_answer → 去教学面板：
+错误解释器看方向性提示、提示阶梯揭示下一级（失败次数足够时自动揭示）。program_crash / memory_fault →
+内存 diff + 时间线定位是哪一步把程序带崩的。</div>
+<div class="step"><b>D2 开新局。</b>终态会话不可继续操作（重启按钮已禁用并有引导）。点「新建会话」走全新流程
+（新凭证、revision 归零、时间线清空），把 B3 的内容换一个变体再来——比如这次试试故意写错端序，观察
+memory_fault 是什么样子。</div>
+<div class="okbox"><strong>这条链的三条安全底线</strong>（界面处处体现）：浏览器里的一切只是投影；调试是沙盘、提交才是成绩；
+窗口外的字节真的不在你机器上。</div>
+
+<h2 id="s14">14. 故障排查 FAQ</h2>
+<table>
+  <tr><th>症状</th><th>解释与处置</th></tr>
+  <tr><td>字节表出现 <code>??</code></td><td>窗口外（§4.2）。不是故障；窗口大小由协议决定</td></tr>
+  <tr><td>跳转/检索提示「在可见窗口之外」</td><td>目标不在已下发窗口。先做别的推断，或到调试模式用全内存检索（沙盘）</td></tr>
+  <tr><td>「&lt;寄存器&gt; 内容不在可见窗口」</td><td>RSP/RBP 的值指向未下发区域前缀之外；锚点功能自动降级为明示</td></tr>
+  <tr><td>积木编译报错"动作不允许"</td><td>题目 allowedActions 没开放该动作；换题目允许的积木</td></tr>
+  <tr><td>积木运行中输出 429 / budget_exhausted</td><td>触发会话预算；光标不动，稍候手动重试同一步</td></tr>
+  <tr><td>指令步进灰色不可点</td><td>未连接或会话已终态（won/failed）；看状态条与引导横幅</td></tr>
+  <tr><td>「积木步进」灰色</td><td>Payload 页不是焦点页——先点一下 Payload 标签页</td></tr>
+  <tr><td>「重启测试环境」灰色</td><td>会话已终态；走「新建会话」</td></tr>
+  <tr><td>提交一直 pending</td><td>独立裁决在排队/重放；保持页面打开（自动重询）。长时间（分钟级）不动请联系平台查裁决服务</td></tr>
+  <tr><td>调试模式和解题模式地址对不上</td><td>预期语义（尤其 ASLR 题）；裁决以真实会话为准</td></tr>
+  <tr><td>界面语言/主题突然变了</td><td>宿主平台切换了下发配置；可在平台设置改回</td></tr>
+</table>
+
+<h2 id="sa">附录 A · 会话动作 ↔ 界面入口对照</h2>
+<table>
+  <tr><th>协议动作（12 个）</th><th>界面入口</th></tr>
+  <tr><td><code>write_bytes</code></td><td>Payload「写字节到…」/「写字符串…」积木</td></tr>
+  <tr><td><code>push</code> / <code>pop</code></td><td>Payload「压栈」/「出栈」积木</td></tr>
+  <tr><td><code>call</code> / <code>ret</code></td><td>Payload「调用…」/「返回」积木</td></tr>
+  <tr><td><code>step</code></td><td>菜单「指令步进」/ Payload「单步执行一条指令」积木 / Payload 工具栏步进推进</td></tr>
+  <tr><td><code>run_to_event</code></td><td>MVP 界面不直接暴露（调试模式的「运行到断点」承载同类教学需求）</td></tr>
+  <tr><td><code>pause</code></td><td>Payload 工具栏「暂停」（步进暂停）</td></tr>
+  <tr><td><code>undo</code></td><td>界面未设独立按钮——回退需求由检查点恢复 + 时间线承载</td></tr>
+  <tr><td><code>create_checkpoint</code> / <code>checkout_checkpoint</code></td><td>checkpoint 检查点面板（创建 / 两步确认恢复）</td></tr>
+  <tr><td><code>reset</code></td><td>菜单「重启测试环境」（终态禁用）</td></tr>
+  <tr><td class="muted">生命周期命令（create/sync/checkpoints/submit/close）</td><td class="muted">创建会话表单 / 断线自动同步 / 检查点面板数据源 / 菜单「提交」/ 新建会话——自动发生，无需手动</td></tr>
+</table>
+
+<h2 id="sb">附录 B · 可见窗口语义速查</h2>
+<table>
+  <tr><th>对象</th><th>你能看到</th><th>你看不到</th></tr>
+  <tr><td>可见区域</td><td>锚定起点的窗口前缀（缺省 256 B；短区域全量）+ truncated 标记</td><td>前缀之外的字节（<code>??</code>）</td></tr>
+  <tr><td>隐藏区域</td><td>什么都不显示——"不存在"</td><td>全部；探测结果与未映射地址不可区分</td></tr>
+  <tr><td>寄存器</td><td>公开名单的值（0x 大写）</td><td>FLAG/秘密汇寄存器（名字都不出现）</td></tr>
+  <tr><td>调用栈</td><td>最内 64 帧（帧标签 + 返回地址）</td><td>更深帧（有截断明示，无计数）；帧基址/参数不下发</td></tr>
+  <tr><td>当前指令</td><td>单条指令文本 + 地址（控制流展示）</td><td>解题档无指令流；调试档缓存覆盖面之外的指令</td></tr>
+  <tr><td>裁决</td><td>pending/verdicted + 11 值结果 + 时间</td><td>进度、队列位置、隐藏测试明细（结构性不下发）</td></tr>
+</table>
+
+<footer>
+StackMaster · 界面帮助手册 v1.0（2026-09-15）· 本手册为使用文档，非冻结契约；
+界面行为以 <code>packages/vm-ui/README.md</code> 与各冻结契约为权威。
+姊妹篇：〈学习者上手指南〉(概念与玩法)、〈出题人参考手册〉(制作方)。
+</footer>
+</main>
+</div>
+</body>
+</html>

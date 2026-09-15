@@ -1,7 +1,38 @@
+import { createReadStream, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { join } from "node:path";
+import { defineConfig, type Plugin } from "vite";
 
 import { hostMockDevServer } from "./host-mock/dev-server.mjs";
+
+/**
+ * vm-ui 产物 dev 直通(Vite 8 行为修正):boot 的动态 import(/index.js)经
+ * Vite dev 的 `__vite__injectQuery` 注入 `?import` 查询后被转换管线拒绝
+ * (publicDir 文件"should not be imported from source code"→ 500),而静态
+ * GET 一直可用。对 /index.js(任意 query)直接回磁盘产物,保持"dist 自包含
+ * 产物按 ES module URL 加载"的宿主拓扑模型不变(WP-F1 §1);dev-only,
+ * 构建形态不受影响。
+ */
+function serveVmUiDistDirect(): Plugin {
+  return {
+    name: "plugin-dev:serve-vm-ui-dist",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = (req.url ?? "").split("?")[0] ?? "";
+        if (pathname !== "/index.js") {
+          return next();
+        }
+        const file = join(vmUiDist, "index.js");
+        if (!existsSync(file)) {
+          return next();
+        }
+        res.setHeader("content-type", "text/javascript; charset=utf-8");
+        createReadStream(file).pipe(res);
+      });
+    },
+  };
+}
 
 /**
  * plugin-dev 开发壳 Vite 配置(WP-F1;仅供开发联调,不参与生产部署)。
@@ -32,7 +63,7 @@ export default defineConfig({
   // 宿主模拟页 dev 替身(WP-51):/host-api 签发代理 + 引导配置取回端点 +
   // /vendor/embed-runtime 静态资源;apply: serve = dev-only,详见
   // host-mock/dev-server.mjs(纯 Node 侧,不产生浏览器包依赖边)。
-  plugins: [hostMockDevServer()],
+  plugins: [hostMockDevServer(), serveVmUiDistDirect()],
   server: {
     port: 5173,
     proxy: proxyEnabled

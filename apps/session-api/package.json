@@ -20,6 +20,7 @@
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "start": "node dist/index.js",
+    "dev:host": "node scripts/dev-host.mjs",
     "compose:deps:up": "docker compose -f compose/deps.yaml up -d --wait",
     "compose:deps:down": "docker compose -f compose/deps.yaml down",
     "compose:app:build": "docker compose -f compose/deps.yaml -f compose/app.yaml build",
