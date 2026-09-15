@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StackMaster 出题人文档 · 首页</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">首页 · 使用说明</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>StackMaster 出题人文档 <span class="muted">（分层分页版 · v2.1 · 2026-09-16）</span></h1>
+<p>面向 StackMaster 出题人的完整文档，共 <b>11 页</b>、分<b>四层</b>。每层回答一个层次的问题：</p>
+<table>
+  <tr><th style="width:190px">层</th><th>回答的问题</th><th>什么时读</th></tr>
+  <tr><td><b style="color:var(--l0)">第 0 层 · 认知入门</b><br><a href="00-认知入门.html">00-认知入门.html</a></td>
+      <td>这套系统是什么？出题人在其中的位置？一道题从构造到出成绩的全流程？术语都有哪些？</td>
+      <td>第一次接触，花 10 分钟通读</td></tr>
+  <tr><td><b style="color:var(--l1)">第 1 层 · 概念详解</b>（7 页 29 个概念）</td>
+      <td>每个概念<b>到底是什么、为什么这样设计、怎么用、容易误解在哪</b>——统一五段式：一句话 / 展开 / 为什么 / 例子 / 常见误解</td>
+      <td>做第一道题前通读 1A–1E；用到哪页翻哪页</td></tr>
+  <tr><td><b style="color:var(--l2)">第 2 层 · 任务指南</b><br><a href="20-任务指南.html">20-任务指南.html</a></td>
+      <td>照着做：<b>T1</b> 从零做最小题 · <b>T2</b> ret2win · <b>T3</b> 隐藏区域接口 flag 题 · <b>T4</b> 装载失败排查 · <b>T5</b> 测试与发布</td>
+      <td>动手时开在旁边</td></tr>
+  <tr><td><b style="color:var(--l3)">第 3 层 · 精确参考</b><br><a href="30-精确参考.html">30-精确参考.html</a></td>
+      <td>精确查：公开/私有包<b>逐字段表</b>、<b>20 opcode</b> 表、谓词/微算子/效果原语参数表、XS+XC <b>规则速查</b>、错误码/版本/检查清单</td>
+      <td>写语料时当字典</td></tr>
+</table>
+
+<h3>建议阅读路径</h3>
+<table>
+  <tr><th>你是谁</th><th>路径</th></tr>
+  <tr><td>完全新手</td><td>00 → 1A → 1B → 1D → 1E → T1 → 需要时回第 1 层与第 3 层</td></tr>
+  <tr><td>做过传统 pwn 的出题人</td><td>00.1 → 1D → 1E → T2 / T3 → 第 3 层当字典</td></tr>
+  <tr><td>评审 / 审计视角</td><td>1A（A4 镜像与零驻留）→ 1C（C2 可见与隐藏）→ 1G（装载 · 登记）→ R5 规则速查</td></tr>
+</table>
+
+<h3>几条贯穿全文档的底线（先立在此处）</h3>
+<ul>
+  <li><b>公开 = 你主动下发的</b>：选手浏览器里没有的东西（flag、隐藏区域、窗口外内存）结构上不存在，不存在"被找到"；</li>
+  <li><b>题目逻辑没有代码位</b>：全部表达能力 = 20 条指令 + 7 个谓词 + 1 种状态机写法 + 声明式自定义面；注入脚本在语法上不存在；</li>
+  <li><b>成绩是重放出来的</b>：verifier 复用同一引擎重放操作日志 + 跑隐藏测试；交互界面上的 won/failed 只是即时反馈；</li>
+  <li><b>私有内容永不入 git</b>：语料是 TS 代码，进程内构造双包，git 里只有"生成它们的代码"。</li>
+</ul>
+<div class="note">约束数字与枚举一律摘自冻结契约原文（<code>packages/challenge-schema/schema/*.schema.json</code>、
+<code>docs/contracts/最小DSL范围.md</code> 等）；本文档为使用文档，与契约/规约冲突时以后者为准。
+快速速览版姊妹篇：〈出题人指南〉；界面操作参考：〈界面帮助手册〉。</div>
+
+<div class="pager">
+  <a class="next" href="00-认知入门.html"><span class="lbl">从这里开始 ▶</span>第 0 层 · 认知入门</a>
+</div>
+
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 各页底部有"上一篇 / 下一篇"，左侧导航可在任意页之间跳转。</footer>
+</main>
+</div>
+</body>
+</html>

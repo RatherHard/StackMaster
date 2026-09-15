@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1C 内存 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 1 层 · 概念详解 · 1C 内存</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a class="cur" href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>1C 内存 <span class="badge b1">概念组 · 3 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-c1">C1 · 区域六类与页对齐</a>　<a href="#c-c2">C2 · 可见与隐藏</a>　<a href="#c-c3">C3 · 私有对象</a></div>
+<h3 id="c-c1">C1 · 区域六类与页对齐 <span class="badge b1">概念 · 内存</span></h3>
+<div class="one">一句话：内存由若干<b>区域</b>（region）组成，每块有类型（六选一）、起点、长度（4KB 的倍数）、权限（rwx 子集）
+和展示名；类型是给选手的"这是什么"暗示，权限才是硬约束。</div>
+<p><b>展开。</b>六类区域的传统语义（引擎不强制用途，但权限与惯例决定玩法）：</p>
+<table>
+  <tr><th>kind</th><th>传统用途</th><th>典型权限</th><th>出题要点</th></tr>
+  <tr><td><code>code</code></td><td>程序代码</td><td>rx（IR 模式可为 r——内存字节只是数据）</td><td><b>至多 1 块、不得隐藏、必须出现在初始投影</b>（D2-CODE-PUBLIC）；字节模式下还有额外规则（D6）</td></tr>
+  <tr><td><code>stack</code></td><td>栈</td><td>rw</td><td>栈帧、buffer、返回地址槽的家</td></tr>
+  <tr><td><code>global</code></td><td>全局数据</td><td>rw（只读数据可 r）</td><td>教学题的"输入区"（选手 write_bytes 的目标）</td></tr>
+  <tr><td><code>heap</code></td><td>堆</td><td>rw</td><td>MVP 无分配器语义，纯数据区</td></tr>
+  <tr><td><code>key</code></td><td>关键区</td><td>r</td><td>常配合隐藏（如"密库"）</td></tr>
+  <tr><td><code>custom</code></td><td>你自定义的类型</td><td>任意</td><td><code>publicLabel</code> 必填承载类型名</td></tr>
+</table>
+<p>数量与尺寸护栏：区域 1–64 块；每块长度 1–16MiB 且 4096 的倍数；全部区域合计 ≤64MiB；初始内容合计 ≤2MiB
+（内容是稠密定义的——每块都有完整的 <code>contentHex</code>，长度一字节不差等于 2×byteLength）。
+地址是 64 位空间里的半开区间 <code>[start, start+length)</code>，不得越过 <code>2^64</code>（XS-ADDR-SPACE）。</p>
+<div class="misuse"><b>常见误解。</b>①"权限是装饰"——写只读区域是<b>已执行的教学失败</b>（permission_denied，revision +1），
+这正是"权限错误可解释"的教学点；②"区域可以部分隐藏"——可见性是<b>整块区域</b>的属性，不存在"半块隐藏"；
+③"内容可以偷懒不写全"——XS-MEM-CONTENT 逐块校验长度。</div>
+<h3 id="c-c2">C2 · 可见与隐藏 <span class="badge b1">概念 · 内存</span></h3>
+<div class="one">一句话：可见性在 StackMaster 里是<b>布局问题</b>而不是标志位问题——公开包里列出的区域就是可见的；
+只在私有包里声明（<code>isHidden: true</code>）的区域就是隐藏的，选手侧"不存在"。</div>
+<p><b>展开。</b>三层机制：</p>
+<ul>
+  <li><b>布局即可见性</b>：公开包 <code>memoryLayout</code> 列出的区域进入初始投影，选手的字节视图能看；
+      隐藏区域只在私有包 <code>initialState.memoryRegions[]</code> 里出现（带 <code>isHidden: true</code>）。
+      公开 Schema<b>没有</b>任何隐藏表达位（D2-NO-HIDDEN-IN-PUBLIC 元检查），这不是"下发时过滤"，是"想写都写不出"；</li>
+  <li><b>隐藏 ⇒ 不相交</b>：隐藏区域与任何公开区域的地址区间不得重叠（I2-HIDDEN-NOT-PUBLIC）——否则同一地址既可见又隐藏，自相矛盾；</li>
+  <li><b>不可区分原则（I-9）</b>：选手对"隐藏区域的地址"做任何操作（读、写、调用），其可观察结果与操作"一个谁也没映射的地址"<b>完全一致</b>
+      ——同样的错误码、同样的占位符、同样不推进 revision、响应字节相同。扫描探测得不到任何边信息。</li>
+</ul>
+<p><b>为什么这样设计。</b>"窗口 + 隐藏 + 不可区分"三者合起来构成内存面的完整防侧信道：可见的部分是真数据（镜像自私有态），
+不可见的部分在浏览器里不存在，试探行为得不到 1 bit 的区别对待。选手的"看不见"是数学意义上的看不见。</p>
+<div class="misuse"><b>常见误解。</b>①"把隐藏区域地址设在可见区域旁边，选手相邻探测能摸到边界"——摸到的只有统一的
+<code>inaccessible_address</code>，窗口边界与区域边界是两套正交的机制；②"隐藏区域内容可以留空"——内容仍须稠密定义
+（XS-MEM-CONTENT），verifier 重放时它真实存在。</div>
+<h3 id="c-c3">C3 · 私有对象 <span class="badge b1">概念 · 内存</span></h3>
+<div class="one">一句话：私有对象是你给内存里的"有意义片段"打的<b>语义标签</b>（这是 buffer、这是返回地址槽、这里含秘密），
+它不改变内存内容，但驱动判题引用、审计与检查器的一致性判定。</div>
+<p><b>展开。</b>每个对象 = <code>{objectId, kind, addressHex, byteLength, visibility, containsSecret}</code>。
+kind 六选一：<code>buffer / canary / saved_rbp / return_address / file / other</code>。
+两条硬规则：<code>containsSecret ⇒ visibility = "hidden"</code>（I3-SINK-HIDDEN，"含秘密却公开"直接拒）；
+hidden 对象不得与公开区域重叠（I2-OBJ-NOT-PUBLIC）。惯例：栈教学题登记 <code>input-buffer</code>、
+<code>saved-rbp-slot</code>、<code>return-address-slot</code> 三个对象（公开、不含秘密），让审计与测试有稳定的语义锚点。
+注意对象与"语义高亮"（公开包 <code>semanticHighlights</code>）是两回事：高亮是给选手看的结构视图标注，
+对象是给判题/审计的登记——两者地址通常一致，但服务对象不同。</p>
+<div class="misuse"><b>常见误解。</b>①"对象会改变引擎行为"——不会，它是纯登记；改变行为的是你的程序与判题条件；
+②"file 对象就是虚拟文件"——虚拟文件的真身在 <code>secrets.virtualFiles</code>，对象只是指向它的语义标签之一。</div>
+<div class="pager">
+  <a class="prev" href="1B-虚拟机.html"><span class="lbl">◀ 上一篇</span>1B 虚拟机</a>
+  <a class="next" href="1D-程序.html"><span class="lbl">下一篇 ▶</span>1D 程序</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

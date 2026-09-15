@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 2 层 · 任务指南 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 2 层 · 任务指南</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a class="cur" href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>第 2 层 · 任务指南 <span class="badge b1">任务 T1–T5</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#t1">T1 · 从零做一道最小题（~30 分钟）</a>　<a href="#t2">T2 · 做一道 ret2win（栈帧教学主力）</a>　<a href="#t3">T3 · 隐藏区域 + 作者接口 flag 题（进阶）</a>　<a href="#t4">T4 · 装载失败排查手册（症状 → 规则 → 修法）</a>　<a href="#t5">T5 · 语料测试与发布上线</a></div>
+<p class="muted">五个任务从易到难。所有代码骨架以仓库真实文件为准：<b>MVP 八题</b>
+<code>apps/session-api/test/mvp-challenges/corpus.ts</code>、<b>扩展三题</b>
+<code>apps/session-api/test/extended-challenges/corpus.ts</code>（ret2win / 最小 ROP / 整数截断）。</p>
+<h3 id="t1">T1 · 从零做一道最小题（~30 分钟）</h3>
+<div class="step"><b>步骤 1 · 建语料文件。</b>新建 <code>apps/session-api/test/my-challenges/corpus.ts</code>，
+照抄 MVP corpus 的骨架（导出面：<code>interface Challenge</code> / <code>CHALLENGES</code> 数组 /
+<code>loadChallenge()</code> / <code>canonicalDigests()</code>）。核心是 <code>buildPair()</code>——
+每次调用现场构造 <code>{ publicDescriptor, privateBundle }</code> 两个对象。</div>
+<div class="step"><b>步骤 2 · 定教学目标与几何。</b>本题：选手向栈区写 4 字节标记 "STAC" 即胜。
+帧几何照抄 MVP 惯例：buffer <code>0x7ffff7f0</code>、saved RBP <code>0x7ffff800</code>、返回地址槽
+<code>0x7ffff808</code>；区域 code <code>0x400000</code>、stack <code>0x7ffff000</code>（各 4KB）。</div>
+<div class="step"><b>步骤 3 · 填最小双包。</b>公开包：<code>vmProfile</code>（寄存器 RAX/RSP/RBP/RIP + FLAG0，64 位，
+canary disabled）→ <code>memoryLayout</code>（两块可见区域）→ <code>allowedActions: ["write_bytes","step"]</code> →
+<code>hintLadder</code> 3 条 + <code>publicErrorMapping</code> 2 条 → <code>initialProjection</code>
+（<b>公开值从私有初值切片生成</b>——先写私有，再镜像）。
+私有包：身份同值 + <code>dslSchemaVersion: 2</code> + <code>vmEngineVersion</code>（照抄 MVP 值）+
+<code>seedPolicy: fixed</code> + <code>initialState</code>（寄存器初值 + 两块区域完整 contentHex）+
+<code>secrets</code> + <code>privateObjects</code>（buffer/retSlot 登记）+
+程序 <code>compiledIr: { instructions: [{op:"ret",operands:[]}], labels:[{entry,0}] }</code> +
+<code>judging: { successCondition: memory_equals(stack,0,"53544143") }</code> + 一条终态探针隐藏测试 +
+<code>judgingConfig</code>。</div>
+<div class="step"><b>步骤 4 · 写语料矩阵。</b>≥3 条：<b>success</b>（write_bytes "53544143" → won/success）、
+<b>wrong_answer</b>（写 "53544145" → wrong_answer）、<b>教学失败</b>（写 code 区 → permission_denied）、
+<b>crash</b>（写 8 字节值 + step → program_crash）。每条 = 动作脚本 + 预期终态 + 预期裁决。</div>
+<div class="step"><b>步骤 5 · 写门禁 + 裁决回归测试。</b>照抄
+<code>mvp-challenge-set.test.ts</code> 与 <code>verdict-closed-loop.test.ts</code> 的结构（后者跨目录复用
+<code>../mvp-challenges/helpers/verify-driver.js</code>）。跑：
+<code>pnpm --filter @stackmaster/session-api exec vitest run test/my-challenges</code>。
+红灯按 [规则ID] 逐条修——症状对照表见 T4。</div>
+<div class="step"><b>步骤 6 · 全量回归。</b><code>pnpm --filter @stackmaster/session-api test</code>
+确认零回归 → 按 T5 登记。</div>
+<h3 id="t2">T2 · 做一道 ret2win（栈帧教学主力）</h3>
+<p>在 T1 骨架上升级四步（完整活例：<code>sm-x01-ret2win-ir</code>）：</p>
+<div class="step"><b>① 程序换 ret2win 骨架。</b>6 指令 + win/lose 块（B3 的图）：<code>push RBP / mov RBP,RSP /
+cmp RAX,0 / jne lose / leave / ret / [win] mov FLAG0,0x1337; syscall 0x0 / [lose] syscall 0x1</code>。
+初始返回地址槽写 lose 下标（防"瞎跑赢"）；RIP 初值 = leave 的下标。win/lose 下标登记进 labels。</div>
+<div class="step"><b>② 判胜条件换 RIP 型。</b><code>RIP == win下标 ∧ stack_canary_intact</code>（win 块无门，RIP 型正确；
+若 win 块有密钥门，改用 FLAG 型——见 E1 的坑）。</div>
+<div class="step"><b>③ 结构视图标注。</b>semanticHighlights 标 buffer_start / saved_rbp_slot / return_address_slot——
+选手靠它对出 24 字节偏移。</div>
+<div class="step"><b>④ 语料矩阵换 ret2win 矩阵。</b>success（<code>41×16 + 42×8 + le64(win下标)</code> 一次写入 + step×2）、
+wrong_answer（不写直接走 lose）、program_crash（返回地址槽写 <code>0xdead</code> → invalid_rip）、
+教学失败（写 rx 代码区 → permission_denied）。</div>
+<h3 id="t3">T3 · 隐藏区域 + 作者接口 flag 题（进阶）</h3>
+<p>活例：MVP CH-07（<code>sm-ch07-hidden-vault</code>）。四个新要素：</p>
+<div class="step"><b>① 隐藏区域。</b>私有包追加 <code>{regionId:"vault", kind:"key", isHidden:true, …}</code>，
+内容头部放标记字节；公开包<b>什么都不加</b>。选手探测 vault 地址只会得到与未映射一致的 inaccessible_address。</div>
+<div class="step"><b>② 虚拟文件。</b><code>secrets.virtualFiles</code> 加 <code>{fileId:"vault-flag", content:"FLAG{…}"}</code>
+（fileId 是私有标识，公开包任何字符串出现即拒）。</div>
+<div class="step"><b>③ 作者接口。</b><code>interfaces: [{interfaceId:0x100, displayText:"vault: 读取密档",
+effects:[grant_virtual_file, virtual_file_read]}]</code>；字节模式再往编码表加一条
+<code>{tokenHex:"0xd4", op:"call", operands:[{kind:"interface",interfaceId:0x100}]}</code>（接口号是公开 ISA 引用）。</div>
+<div class="step"><b>④ 判题。</b>successCondition 合取 <code>virtual_file_read("vault-flag")</code>（+ 其余条件）。
+选手流程：触发接口 → 能力授予 → 文件已读 → 判胜。</div>
+<h3 id="t4">T4 · 装载失败排查手册（症状 → 规则 → 修法）</h3>
+<table>
+  <tr><th>症状</th><th>规则</th><th>修法</th></tr>
+  <tr><td>多写/写错字段名</td><td>Ajv strict</td><td>对照 R1/R2 字段表；公开包顶层恰 16 字段</td></tr>
+  <tr><td>缺 RSP/RBP/RIP</td><td>XS-REG-CORE</td><td>vmProfile.registers 补齐</td></tr>
+  <tr><td>FLAG 值出现在公开投影</td><td>I3-VISIBLE-REG / XS-REG-FLAG</td><td>FLAG 名不进 registers/visibleRegisters</td></tr>
+  <tr><td>公开值与私有初值不一致</td><td>XS-PROJ-VALUES / XS-PROJ-GEOM</td><td>公开 = 私有前缀切片，逐字节对齐</td></tr>
+  <tr><td>公开包出现 fileId/objectId/capability 字符串</td><td>XS-ID-NO-PRIVATE / ZR-B8-CAP-SCAN</td><td>私有标识只留私有包</td></tr>
+  <tr><td>立即数/位移超域</td><td>XS-ARCH-WIDTH</td><td>按 archBits 掩蔽；位移记得有符号</td></tr>
+  <tr><td>contentHex 长度 ≠ 2×byteLength</td><td>XS-MEM-CONTENT</td><td>补零到等长（内存稠密定义）</td></tr>
+  <tr><td>encodingTable 与 compiledIr 双给/双缺</td><td>XS-PROG-MODE</td><td>恰一：IR 删表 / 字节删 IR</td></tr>
+  <tr><td>代码区可写 / token 未登记 / 入口不在代码区</td><td>XS-CODE-WRX / XS-ENC-TOKEN / XS-ENC-PROBE</td><td>W^X、补表、入口落代码区、填充用表内 token</td></tr>
+  <tr><td>IR 引用未声明助记符 / syscall 号没着落</td><td>XS-CUSTOM-REF / XS-SYSCALL-DECL</td><td>补 customInstructions / interfaces</td></tr>
+  <tr><td>用了 leave 但没有 RBP</td><td>XS-IR-LEAVE</td><td>初始寄存器集加 RBP</td></tr>
+  <tr><td>操作数个数/形态错</td><td>XC-OPCODE-SHAPE</td><td>对照 R3 形态列</td></tr>
+  <tr><td>纯静态程序有死代码</td><td>XC-IR-REACH</td><td>删掉，或让 win 块经 ret 等动态目标到达</td></tr>
+  <tr><td>有循环没 stages / 阶段没预算</td><td>XC-IR-TERMINATE / XS-STAGE-BUDGET</td><td>补 stages + maxInstructionSteps</td></tr>
+  <tr><td>引用了不存在的寄存器/区域/fileId</td><td>XC-OPERAND-REF / XS-PRED-REFS</td><td>引用必须落在私有初始集与已声明对象里</td></tr>
+  <tr><td>启用 canary 被拒</td><td>XS-CANARY-CORR</td><td>交互题改"守护标记 + memory_equals"（B4）</td></tr>
+</table>
+<p class="muted">裁决回归阶段的红灯不是装载错误：按五元组（终态/拒绝/错误码/重放一致/隐藏测试）逐项对——
+先实跑观察实际行为，再钉<b>语义正确</b>的预期值（exit(1) 的败 path 钉 wrong_answer，不要为了让测试绿而钉 success）。</p>
+<h3 id="t5">T5 · 语料测试与发布上线</h3>
+<div class="step"><b>① 本地全绿。</b><code>pnpm --filter @stackmaster/session-api exec vitest run test/&lt;你的目录&gt;</code>
++ <code>pnpm --filter @stackmaster/session-api test</code>（全量回归）+ <code>pnpm lint</code>。</div>
+<div class="step"><b>② 登记。</b>起依赖（<code>compose:deps:up</code>）后运行登记脚本/测试——
+语料 → canonicalize 落桶字节 → 摘要自证 → Ed25519 签名 → ChallengeRegistrar.register
+（模板：<code>test/compose/mvp-challenge-set.compose.integration.test.ts</code>；
+登记脚本活例：<code>k6/seed-challenge.mjs</code>）。记住登记租户——发 token 要用同一个。</div>
+<div class="step"><b>③ 验证下发。</b><code>curl -sI http://127.0.0.1:13000/descriptors/&lt;id&gt;/&lt;version&gt;</code>
+→ 200 + ETag（= 公开包摘要）。</div>
+<div class="step"><b>④ 浏览器实测。</b>签 token → 开发壳/插件页创建会话亲手玩一遍（参考
+<code>apps/session-api/test/extended-challenges/README.md</code> 的浏览器联调节）。</div>
+<div class="step"><b>⑤ 过一遍发布检查清单。</b>见 R6 末尾；CDN 与生产密钥属生产部署面（MVP 未做，如实边界）。</div>
+<div class="pager">
+  <a class="prev" href="1G-工程链路.html"><span class="lbl">◀ 上一篇</span>1G 工程链路</a>
+  <a class="next" href="30-精确参考.html"><span class="lbl">下一篇 ▶</span>第 3 层 · 精确参考</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

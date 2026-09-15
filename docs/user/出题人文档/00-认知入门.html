@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 0 层 · 认知入门 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 0 层 · 认知入门</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a class="cur" href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>第 0 层 · 认知入门 <span class="badge b1">第 0 层</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#s01t">0.1 出题人视角的 StackMaster（3 分钟）</a>　<a href="#s02">0.2 一道题的一生（全局地图）</a>　<a href="#s03">0.3 术语速查卡（先混个脸熟）</a></div>
+<h3 id="s01t">0.1 出题人视角的 StackMaster（3 分钟）</h3>
+<p>传统 pwn 出题：你写一个二进制、藏一个 flag、丢到服务器上，选手 nc 连上来盲打。StackMaster 把这套流程换成
+<b>"看得见内部的服务端虚拟机"</b>：选手在浏览器里能看到内存的每一个字节、用受限的动作（写字节、单步、压栈……）亲手操作虚拟机，
+而每一个动作都在<b>服务端的权威虚拟机</b>里执行并被记录；提交时由<b>独立的裁决服务</b>把操作日志从头重放一遍来打分——
+所以选手改浏览器、伪造界面都拿不到成绩。</p>
+<p>作为出题人，你产出的不是二进制，而是<b>一对 JSON 包</b>，外加一组"证明这道题可解、判分正确"的自动化语料：</p>
+<table>
+  <tr><th>你交付什么</th><th>给谁看 / 用</th><th>类比传统 pwn</th></tr>
+  <tr><td><b>公开描述包</b>（一个 JSON）</td><td>选手浏览器：题面、可见的内存布局、提示阶梯、错误教学注解</td><td>题面 + 二进制文件（但内存布局是明牌）</td></tr>
+  <tr><td><b>私有判题包</b>（一个 JSON，只在服务端）</td><td>服务端：flag、随机种子、完整程序、判题条件、隐藏测试</td><td>服务器上的 flag 文件 + 判题脚本</td></tr>
+  <tr><td><b>语料模块</b>（TypeScript 代码）</td><td>发布管线：程序化地构造上面两个包 + 解法脚本 + 预期结果</td><td>出题的"源代码"</td></tr>
+</table>
+<div class="one">一句话：你设计一个"透明的栈实验室"（公开包决定选手看到什么），再配一套"自动判分规则"（私有包决定怎么算赢），
+最后用代码把它们构造出来、测试通过、登记发布。</div>
+<p>这套模型的直接推论（后面所有章节都会反复回到这三条）：</p>
+<ul>
+  <li><b>选手看到的每一个字节，都是你主动下发的</b>——没下发的东西（flag、隐藏区域、窗口外内存）结构上就不在浏览器里，不存在"被找到"；</li>
+  <li><b>题目逻辑不能写代码</b>——你的全部表达能力是三个<b>封闭词汇表</b>：20 条指令、7 个判题谓词、1 种状态机写法；
+      想写 JavaScript/Python 注入逻辑？语法上不存在这个位置。这保证了题目本身永远不会成为攻击面；</li>
+  <li><b>判分是重放，不是信任</b>——成绩由"重放操作日志 + 跑隐藏测试"合成，你只需要保证：参考解真能赢、失败路径的预期分值钉得对。</li>
+</ul>
+<h3 id="s02">0.2 一道题的一生（全局地图）</h3>
+<p>从你动笔到选手拿到成绩，一道题走完这 9 站。每一站在第 1 层都有对应的概念详解，在第 2 层有照着做的任务指南：</p>
+<pre><code> ① 构造        你写一个 TS 语料模块，进程内构造出 公开包 + 私有包 对象
+               （私有内容只在内存里，永不写盘入 git）
+                   │
+ ② 装载校验    loadChallengePair 四层管线：JSON 扫描 → Schema 校验
+               → XS 检查器（安全与一致性）→ XC 编译器（程序语义）
+               任一层违规 = 整体拒绝，你收到规则ID+消息+路径
+                   │
+ ③ 门禁与回归  门禁测试（装载全绿 + 登记摘要确定性）
+               + 裁决闭环测试（真实 vm-worker 重放你的解法 → 断言 11 值裁决）
+                   │
+ ④ 登记        ChallengeRegistrar：规范化 JSON 落桶 + Ed25519 签名验签 + PG 建档
+               （登记版本不可变；内容版本号区分迭代）
+                   │
+ ⑤ 游玩        选手浏览器拿到公开包 → 创建会话 → 逐动作操作内存
+               （每个动作服务端权威执行、记录，revision 单调 +1）
+                   │
+ ⑥ 交互判定    动作后即时求值 successCondition → 界面显示 running/paused/won/failed
+               （这只是"即时反馈"，不是成绩）
+                   │
+ ⑦ 提交        选手点提交 → 服务端把规范化操作日志入队
+                   │
+ ⑧ 独立裁决    verifier 复用同一引擎重放日志 → 跑隐藏测试 → 合成 11 值裁决
+                   │
+ ⑨ 成绩        verdict 落库并呈现（success / wrong_answer / program_crash / …）</code></pre>
+<h3 id="s03">0.3 术语速查卡（先混个脸熟）</h3>
+<p class="muted">每条一句话。看完有个印象即可，第 1 层会把每个词展开讲透。</p>
+<table>
+  <tr><th style="width:150px">术语</th><th>一句话解释</th></tr>
+  <tr><td>公开描述包</td><td>发给选手浏览器的 JSON：题面、可见内存布局、允许动作、提示、初始投影</td></tr>
+  <tr><td>私有判题包</td><td>只在服务端的 JSON：flag、种子、完整程序、判题条件、隐藏测试</td></tr>
+  <tr><td>双包模型</td><td>一道题 = 这两个包成对出现，身份三元组必须一致</td></tr>
+  <tr><td>投影</td><td>服务端按白名单发给浏览器的"状态照片"——浏览器里的一切都来自它</td></tr>
+  <tr><td>初始投影</td><td>选手打开题目看到的第一屏（区域前缀字节 + 寄存器初值 + 语义高亮）</td></tr>
+  <tr><td>寄存器</td><td>虚拟机的存储单元；RSP=栈顶指针、RBP=当前栈帧基址、RIP=执行位置，三者必选</td></tr>
+  <tr><td>FLAG 命名空间</td><td><code>FLAG</code> 开头的保留寄存器名——值永远私密，用于"到达胜利态置标记"</td></tr>
+  <tr><td>位宽 archBits</td><td>32 或 64；所有数值按此宽度截断掩蔽</td></tr>
+  <tr><td>小端序</td><td>低位字节放低地址——数值写入内存后看起来"倒着"</td></tr>
+  <tr><td>内存区域 region</td><td>一段连续内存（code/global/stack/heap/key/custom 六类），页对齐</td></tr>
+  <tr><td>隐藏区域</td><td>只在私有包声明的区域；选手探测它与探测"不存在的地址"结果完全一致</td></tr>
+  <tr><td>私有对象</td><td>给 buffer / 返回地址槽等打的语义标签，供判题与审计用</td></tr>
+  <tr><td>IR 模式</td><td>程序 = 指令数组；跳转目标是"第几条指令"；内存里的字节只是数据</td></tr>
+  <tr><td>字节模式</td><td>程序 = 真实机器码字节；内存里的代码区可执行，任意位置可开始取指（gadget 语义）</td></tr>
+  <tr><td>opcode</td><td>指令名；基线封闭 20 条（mov/push/pop/leave/add/…/syscall）</td></tr>
+  <tr><td>标志位</td><td>zf/cf/sf 三个一位寄存器，cmp 比较、条件跳转消费</td></tr>
+  <tr><td>栈帧</td><td>函数调用在栈上的记录：局部 buffer + saved RBP + 返回地址</td></tr>
+  <tr><td>返回地址劫持</td><td>溢出覆写返回地址槽，让 <code>ret</code> 跳到攻击者指定位置——pwn 教学核心</td></tr>
+  <tr><td>canary / 守护标记</td><td>栈保护哨兵；交互题用"守护标记 + memory_equals 谓词"替代真 canary</td></tr>
+  <tr><td>谓词</td><td>判题的最小判断单元，共 7 个（寄存器等于/内存相等/……/虚拟文件已读）</td></tr>
+  <tr><td>三级条件</td><td>谓词的三层布尔组合（all/any/not，每层 ≤4 分支）</td></tr>
+  <tr><td>隐藏测试</td><td>选手不可见的复核用例；v1 为"终态探针"（对照答案册）</td></tr>
+  <tr><td>交互终态</td><td>界面上的 won/failed——即时反馈，与成绩无关</td></tr>
+  <tr><td>正式裁决</td><td>verifier 重放日志 + 隐藏测试合成的 11 值成绩（success 等）</td></tr>
+  <tr><td>stages 状态机</td><td>多阶段题目编排；每个阶段必须带指令预算（循环的上限）</td></tr>
+  <tr><td>种子 seed</td><td>随机化的确定性来源；策略二选一，值永不公开</td></tr>
+  <tr><td>检查器 XS-*</td><td>安全与一致性规则集（"公开包不得含秘密"等），装载时全量执行</td></tr>
+  <tr><td>编译器 XC-*</td><td>程序语义规则集（操作数形态、死代码、循环⇒预算）</td></tr>
+  <tr><td>装载管线</td><td>四层 fail-closed 校验；装载失败方向恒为 challenge_invalid</td></tr>
+  <tr><td>规范化 JSON</td><td>同一 JSON 的确定性字节写法；登记摘要 = 其 SHA-256</td></tr>
+  <tr><td>语料模块</td><td>你写的 TS 代码：构造双包 + 解法脚本 + 预期结果</td></tr>
+</table>
+
+<!-- ======================= 第 1 层 ======================= -->
+<div class="pager">
+  <a class="prev" href="index.html"><span class="lbl">◀ 上一篇</span>文档首页</a>
+  <a class="next" href="1A-题目结构.html"><span class="lbl">下一篇 ▶</span>1A 题目结构</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

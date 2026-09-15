@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1G 工程链路 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 1 层 · 概念详解 · 1G 工程链路</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a class="cur" href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>1G 工程链路 <span class="badge b1">概念组 · 5 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-g1">G1 · 装载管线四层</a>　<a href="#c-g2">G2 · 规范化 JSON 与摘要</a>　<a href="#c-g3">G3 · 登记、签名与租户</a>　<a href="#c-g4">G4 · 语料、测试与发布</a>　<a href="#c-g5">G5 · 教学面设计</a></div>
+<h3 id="c-g1">G1 · 装载管线四层 <span class="badge b1">概念 · 工程</span></h3>
+<div class="one">一句话：<code>loadChallengePair</code> 用四层 fail-closed 校验把你构造的双包过滤一遍——
+JSON 严格扫描 → Ajv Schema → XS 检查器 → XC 编译器；任一层违规即整体拒绝（方向恒为 challenge_invalid），
+不存在"带病装载"。</div>
+<p><b>展开。</b>四层各管什么：</p>
+<table>
+  <tr><th>层</th><th>工具</th><th>抓什么</th><th>报错长相</th></tr>
+  <tr><td>0 严格扫描</td><td>字符级 JSON 扫描器</td><td>重复键、JSON.parse 观察不到的畸形</td><td>解析失败</td></tr>
+  <tr><td>1 Schema</td><td>Ajv 2020-12 严格模式</td><td>字段缺失/多余、类型/枚举/正则/数值域不符</td><td>Ajv 错误（字段路径清晰）</td></tr>
+  <tr><td>2 检查器</td><td>XS-* 全量 + 跨包规则</td><td>秘密泄漏、镜像破坏、可见性矛盾、引用悬空、模式恰一</td><td><code>[XS-XXX] 消息</code></td></tr>
+  <tr><td>3 编译器</td><td>XC-*</td><td>操作数形态、引用封闭、死代码、循环无预算、（字节模式）编码不唯一/越界/无填充</td><td><code>[XC-XXX] 消息</code></td></tr>
+</table>
+<p><b>为什么这样设计。</b>分层让报错可定位（你先修 Schema 层的笔误，再修语义层的逻辑），fail-closed 让"部分合法"不存在——
+装载产物要么完整正确、要么没有。错误分两层：<b>你看到的违规</b>（规则 ID + 消息 + 路径，面向出题人与发布管线的内部诊断）
+与<b>玩家看到的错误</b>（一律笼统的 internal_error）——你的题目缺陷永远不会向选手泄漏细节（错误两层模型）。</p>
+<div class="misuse"><b>常见误解。</b>①"violations 是警告"——是拒绝，逐条修到零；②"规则 ID 要背"——不用，按症状查 R5 速查表；
+③"我可以加一个自定义检查"——检查器规则集是冻结面，扩展走契约流程。</div>
+<h3 id="c-g2">G2 · 规范化 JSON 与摘要 <span class="badge b1">概念 · 工程</span></h3>
+<div class="one">一句话：同一份 JSON 有无数种字节写法（空格、键序、转义）；<b>规范化</b>（stackmaster-canonical-json/1）
+把它压成唯一一种字节形态——登记摘要就是"规范化字节的 SHA-256"，这让"同一道题 = 同一串哈希"成为可复现事实。</div>
+<p><b>展开。</b>你在语料里调 <code>canonicalDigests(pair)</code> 得到公开/私有两个 SHA-256。
+登记时落桶的字节就是 <code>canonicalize()</code> 的输出——所以"登记哈希 = 落桶字节哈希"是恒等式（语料门禁会自证一次）。
+它的价值在发布链的每一站：登记后任何人重放构造，算出的摘要必须逐字节相同（门禁确定性检查）；描述包下发端点的
+ETag 就是公开包摘要（缓存与一致性锚）；verifier 取双包后哈希比对（防调包）。TS 与 Rust 两侧各自实现了同一套
+规范化规则并用跨语言冒烟互证——"字节级一致"是跨语言重放的前提。</p>
+<div class="misuse"><b>常见误解。</b>①"我自己 JSON.stringify 一下也一样"——不一样：键序、空白、转义规则都不同，
+必须用 <code>canonicalize</code>；②"摘要会变"——同输入恒同摘要（这正是它的用途），内容版本变了摘要才变。</div>
+<h3 id="c-g3">G3 · 登记、签名与租户 <span class="badge b1">概念 · 工程</span></h3>
+<div class="one">一句话：登记 = 把双包的规范化字节经 <b>Ed25519 签名</b>提交给 <code>ChallengeRegistrar</code>，
+验签后落 MinIO 双桶 + PG 建档；题目版本按<b>（租户, 题目, 版本）三键</b>定位，版本不可变、重复登记确定性拒绝。</div>
+<p><b>展开。</b>签名的作用是"登记内容完整性可审计"：签名基线是
+<code>stackmaster-challenge-registration/1</code> + 五字段（题目/内容版本/VM 版本/两包摘要）的拼接，
+私钥签、公钥验——MVP 语料演示用临时密钥对，生产由发布方持钥。三键里的<b>租户</b>值得注意：
+题目是按租户隔离登记的，后续给选手签发 embed token 时 <code>tenantId</code> 必须与登记租户一致，
+否则会话创建找不到题目（联调时最常见的坑之一）。版本不可变意味着"改题 = 递增内容版本重新登记"，
+旧版本记录保留（审计与重放的历史完整性）。</p>
+<div class="misuse"><b>常见误解。</b>①"重复登记会覆盖"——不会，确定性拒绝；测试重跑前需清理旧行/旧对象（语料模板自带）；
+②"摘要我随便填"——register 内部重算哈希并验签，与落桶字节不符即拒。</div>
+<h3 id="c-g4">G4 · 语料、测试与发布 <span class="badge b1">概念 · 工程</span></h3>
+<div class="one">一句话：你的题目交付物 = <b>语料模块（TS）+ 门禁测试 + 裁决回归测试</b>；私有内容永远只在进程内构造、
+永不写入 git；"题目可解、判分正确"由真实 vm-worker 的裁决回归测试证明。</div>
+<p><b>展开。</b>三件交付物各司其职：</p>
+<ul>
+  <li><b>语料模块</b>：构造式 TS（不是手写 JSON）——一个 <code>buildPair()</code> 每次现场构造全新双包对象；
+      公开值按镜像原则从私有初值切片生成。私有语料不入 git 是红线：git 里只有"生成它们的代码"；</li>
+  <li><b>门禁测试</b>：每题跑装载管线断言全绿（违规聚合输出，红灯可读）+ 教学面齐备 + 语料矩阵覆盖
+      success / wrong_answer / 非平凡失败方向 + 摘要确定性（两次构造逐字节一致）；</li>
+  <li><b>裁决回归测试</b>：每条语料 = 一段解法动作脚本 + 预期五元组（交互终态/首动作拒绝/末动作错误码/
+      重放一致 ∧ 11 值/success 时隐藏测试全过）。跑的是<b>真实 vm-worker 进程</b> + 一次性 verifier 进程——
+      与生产同一条链，不是 mock。</li>
+</ul>
+<div class="misuse"><b>常见误解。</b>①"语料是数据文件"——是代码，这才是"私有不入 git"能成立的原因；
+②"回归测试可选"——没有它你无法证明题目可解；③"测试跑过了就能手改 JSON 上线"——登记消费的是语料产物，手改无效（且破坏确定性）。</div>
+<h3 id="c-g5">G5 · 教学面设计 <span class="badge b1">概念 · 教学</span></h3>
+<div class="one">一句话：教学面（briefing / hintLadder / publicErrorMapping）是公开包里"纯教学"的三件套——
+它们由选手本地渲染，写好它们 = 把你的教学意图铺到选手做错的每一个路口。</div>
+<p><b>展开。</b>写作要点：</p>
+<ul>
+  <li><b>briefing</b>：情境 + 目标 + "会用到什么"，<b>不剧透 payload</b>；学习目标写成可验收的能力
+      （"能解释 saved RBP 与返回地址的槽位关系"而不是"了解栈"）；</li>
+  <li><b>hintLadder</b>（≤8 级）：第一级指观察点（"看看结构视图里 buffer 和返回地址槽差多少"）、中间级给思路、
+      最后一级最多给到半步；<code>after_n_failures</code> 的 N 取 3–5 比较体面；</li>
+  <li><b>publicErrorMapping</b>：只为本题最常撞的 3–5 个错误码写注解（栈题：invalid_rip / permission_denied /
+      offset_out_of_range；接口题：invalid_action）；注解讲"这个错误意味着什么"，不讲"你应该输什么值"。</li>
+</ul>
+<div class="misuse"><b>常见误解。</b>①"提示给得越全越好"——提示是脚手架，给答案 = 拆掉教学；②"错误注解可以顺便提示判题条件"——
+注解经 E-4/E-6 扫描，禁止夹带私有标识；教学价值在解释错误语义，不在泄题。</div>
+<div class="pager">
+  <a class="prev" href="1F-编排随机与预算.html"><span class="lbl">◀ 上一篇</span>1F 编排、随机与预算</a>
+  <a class="next" href="20-任务指南.html"><span class="lbl">下一篇 ▶</span>第 2 层 · 任务指南</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

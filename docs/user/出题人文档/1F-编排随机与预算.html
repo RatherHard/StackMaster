@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1F 编排、随机与预算 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 1 层 · 概念详解 · 1F 编排、随机与预算</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a class="cur" href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>1F 编排、随机与预算 <span class="badge b1">概念组 · 4 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-f1">F1 · 多阶段状态机</a>　<a href="#c-f2">F2 · 种子与随机化</a>　<a href="#c-f3">F3 · ASLR</a>　<a href="#c-f4">F4 · 资源预算</a></div>
+<h3 id="c-f1">F1 · 多阶段状态机 <span class="badge b1">概念 · 编排</span></h3>
+<div class="one">一句话：<code>stages[]</code> 把题目切成 ≤8 个阶段，每个阶段声明"允许什么动作、何时进来、何时出去、
+有什么副作用、何时判负、最多执行多少条指令"——<b>最后一条是硬性的</b>：有循环就必须有 stages，有 stages 就必须有预算。</div>
+<p><b>展开。</b>六要素逐个说人话：<code>allowedActions</code>（本阶段选手能用哪些动作，必须是题目允许面的子集）、
+<code>preconditions</code>（进入本阶段的前置条件，恒真写 <code>{"all":[]}</code>）、<code>transitions</code>
+（什么条件迁去哪个阶段，目标必须全部可达）、<code>sideEffects</code>（v1 只有"授予虚拟文件"一种）、
+<code>failureConditions</code>（触发即 failed 终态）、<code>resourceBudget</code>（<b>maxInstructionSteps 必填</b>，
+可选 maxActions）。扩展题 x08 式的两阶段教学（先侦察阶段、后打击阶段）就是典型用法。</p>
+<p><b>为什么这样设计。</b>7.2 的原话是"循环必须有静态上限或动态指令预算"。IR 里有回边（循环）时编译器
+（XC-IR-TERMINATE）强制你声明 stages——因为"程序可能无限跑"在图灵完备的循环下无法静态排除，
+用每状态指令预算兜底（配合引擎运行期步数上限，两层合成完整终止性）。阶段数 ≤8、不可嵌套子状态机——
+保持编排面可以被一眼看懂、被静态校验。</p>
+<div class="misuse"><b>常见误解。</b>①"stages 是可选的花活"——有循环时是必选；②"阶段可以套阶段"——不可嵌套；
+③"预算给大点无所谓"——预算是侧信道审计与终止性证明的一部分，取"够用"的值是纪律。</div>
+<h3 id="c-f2">F2 · 种子与随机化 <span class="badge b1">概念 · 随机</span></h3>
+<div class="one">一句话：题目里一切随机都从一个<b>种子</b>确定性地派生；策略二选一（固定种子 / 服务端每会话随机），
+种子值永远不进公开面，你还必须声明"随机化影响了哪些公开投影叶子"。</div>
+<p><b>展开。</b><code>seedPolicy</code> 两态互斥（Schema if/then/else + XS-SEED-POLICY 双闸）：
+<code>fixed</code> ⇒ <code>seedHex</code>（16–64 hex 字符）必填——教学/测试推荐，重放逐字节可复现；
+<code>server_random_per_session</code> ⇒ <b>禁止</b>携带 seedHex（服务端每会话生成）。配套的
+<code>declaredSeedPublicPaths</code>（必填，可空数组）是<b>诚实声明</b>：列出种子会影响的公开投影叶子
+（如某区域的前缀字节）；静态题填空数组，意思是"我声明本题没有任何公开随机化面"。
+这份声明是侧信道审计的判定基准（T-SC4/ZR-P2）：发布管线的派生复算（ZR-B13）会真的换种子重放，
+验证"声明的路径之外，公开面纹丝不动"。</p>
+<p><b>为什么这样设计。</b>随机化是 pwn 教学的高级课题（ASLR 的前奏），但随机 + 重放是天然矛盾。
+"种子确定性派生 + 声明面 + 复算检查"让随机既存在又可复现可审计。</p>
+<div class="misuse"><b>常见误解。</b>①"不填 declaredSeedPublicPaths 就没有约束"——空数组是<b>显式声明无随机化面</b>，
+若你的种子实际影响了公开字节，复算会抓出不一致；②"种子写短一点没事"——16–64 hex 字符是硬校验；③"可以每会话换题面"
+——内容版本决定题面，种子只派生被声明的影响面。</div>
+<h3 id="c-f3">F3 · ASLR <span class="badge b1">概念 · 随机</span></h3>
+<div class="one">一句话：<code>aslrEnabled</code>（缺省 false）开启后，公开包里的区域地址从"绝对基址"变成"镜像内相对布局"，
+真实基址由会话种子派生——调试实例与真实实例各自派生，地址不同是<b>预期教学语义</b>。</div>
+<p><b>展开。</b>开启三件事随之发生：①<code>startAddressHex</code> 语义重定义为相对偏移（描述"谁在谁下面"）；
+②<b>必须</b>同时给出 <code>randomizationNotice</code>（1–200 字符，只声明"存在随机化"，禁止写策略与熵上界——XS-ASLR-NOTICE）；
+③会话期 SeedDeriver 为真实实例与调试实例各自派生基址（派生路径进回放元数据）。MVP 题目集全部缺省关闭
+（D-J8 定案）：v1 真实实例固定基址，ASLR 只在调试实例以兄弟形态呈现，配 what-if 横幅提醒
+"调试地址 ≠ 真实地址，硬编码跨实例失效属预期"。</p>
+<div class="misuse"><b>常见误解。</b>①"不开 ASLR 的题不真实"——教学分阶：先固定基址学栈帧，再上 ASLR 学"信息泄露"（T3 候选）；
+②"randomizationNotice 可以写策略"——禁令（只许声明存在性）。</div>
+<h3 id="c-f4">F4 · 资源预算 <span class="badge b1">概念 · 预算</span></h3>
+<div class="one">一句话：预算有三层——公开包 <code>resourceLimits</code> 管选手会话、私有包 <code>judgingConfig</code> 管判题求值、
+阶段 <code>resourceBudget</code> 管程序执行；三层都是护栏，不是难度。</div>
+<table>
+  <tr><th>层</th><th>键</th><th>域</th><th>管什么</th></tr>
+  <tr><td>公开 resourceLimits</td><td>predicateEvalBudgetPerSession</td><td>1–1,000,000</td><td>交互判定总求值量</td></tr>
+  <tr><td></td><td>rollbackBudgetPerSession</td><td>1–10,000</td><td>撤销/恢复/重启次数</td></tr>
+  <tr><td></td><td>maxWriteBytesPerAction</td><td>1–4096</td><td>单次写字节上限（协议硬顶 4096）</td></tr>
+  <tr><td>私有 judgingConfig</td><td>maxPredicateEvalSteps 等</td><td>见 E5</td><td>裁决期判题求值</td></tr>
+  <tr><td>阶段 resourceBudget</td><td>maxInstructionSteps（必填）</td><td>1–10,000,000</td><td>每阶段程序执行上限（循环预算）</td></tr>
+</table>
+<p class="muted">三层同时生效、各管一段。MVP 教学值（10000/200/64）可直接照抄；"故意设小预算让选手体验
+budget_exhausted"也是合法教学设计——错误是可解释的。</p>
+<div class="pager">
+  <a class="prev" href="1E-判题.html"><span class="lbl">◀ 上一篇</span>1E 判题</a>
+  <a class="next" href="1G-工程链路.html"><span class="lbl">下一篇 ▶</span>1G 工程链路</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

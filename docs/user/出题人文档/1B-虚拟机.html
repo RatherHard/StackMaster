@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1B 虚拟机 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 1 层 · 概念详解 · 1B 虚拟机</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a class="cur" href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>1B 虚拟机 <span class="badge b1">概念组 · 4 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-b1">B1 · 位宽、端序与页</a>　<a href="#c-b2">B2 · 寄存器与双命名空间</a>　<a href="#c-b3">B3 · 栈、栈帧与劫持</a>　<a href="#c-b4">B4 · canary 与守护标记</a></div>
+<h3 id="c-b1">B1 · 位宽、端序与页 <span class="badge b1">概念 · 虚拟机</span></h3>
+<div class="one">一句话：你声明 <code>archBits</code>（32/64）决定所有数字多宽；端序固定小端决定数字在内存里"倒着放"；
+页大小固定 4KB 的倍数决定内存的分配粒度。</div>
+<p><b>展开。</b></p>
+<ul>
+  <li><b>位宽（archBits）</b>：真实 CPU 的寄存器是 32 或 64 位宽，溢出与回绕都发生在这个宽度上。StackMaster 里你选 32 或 64，
+      之后<b>所有架构值</b>——寄存器初值、指令立即数、内存位移、公开镜像值——都按这个宽度校验：
+      立即数是无符号数，范围 <code>[0, 2^archBits−1]</code>；内存位移是有符号数，范围对称。越界直接被拒（XS-ARCH-WIDTH）。
+      一个 64 位题里写 <code>0x1FFFFFFFF</code>（33 位）的立即数 = 装载失败，没有"自动截断"的暧昧。数值内部以 64 位容器承载、
+      高位按位宽掩蔽——这保证 32 位题的行为与真 32 位机器一致。</li>
+  <li><b>小端序（little-endian）</b>：多字节数值写入内存时，<b>低位字节放低地址</b>。例如 64 位值 <code>0x0000000000400200</code>
+      写入内存后的字节序列是 <code>00 02 40 00 00 00 00 00</code>——"看起来倒着"。选手在字节视图里看到的正是这个顺序，
+      所以"把地址写进返回地址槽"必须自己按小端排列字节（这是栈教学的第一道坎，MVP 语料的 <code>le64()</code> 辅助函数就是干这个的）。
+      端序在 StackMaster 里是冻结常量，你不可选——真实 x86 就是这样。</li>
+  <li><b>页（pageSizeBytes）</b>：内存按页管理，页大小 4096–65536 且为 4096 的倍数。<b>区域长度</b>必须是页的倍数
+      （VMA 对齐）；区域<b>内部</b>的对象（如 8 字节的 canary）不受此限。</li>
+</ul>
+<p><b>为什么这样设计。</b>位宽与端序是"数值语义"的根基：pwn 的一切把戏（截断、回绕、端序错位）都建立在它们之上。
+把它们做成题目级声明而不是全局常量，是为了让你能出一道 32 位题教"指针是 4 字节"、再出一道 64 位题教"地址变长了"。</p>
+<div class="misuse"><b>常见误解。</b>①"add 溢出会回绕"——不会：基线 <code>add</code> 溢出走引擎<b>安全终止</b>（教学上明确暴露），
+静默回绕只出现在 <code>sub</code> 的借位与移位取模里；②"位移和立即数一样是无符号的"——内存位移是<b>有符号</b>的（<code>[rbp−8]</code> 需要负偏移），写错符号域直接被拒。</div>
+<h3 id="c-b2">B2 · 寄存器与双命名空间 <span class="badge b1">概念 · 虚拟机</span></h3>
+<div class="one">一句话：寄存器名字由你自由定义（1–64 个，大写），分两个结构性不相交的命名空间——一般名（选手可见）
+与 FLAG 保留区（名字可公开、值永远私密）；RSP/RBP/RIP 三个核心寄存器必须存在。</div>
+<p><b>展开。</b>寄存器是虚拟机的"工作变量"。真实 x86 的名字（RAX/RDI…）只是惯例，StackMaster 把命名权交给你：
+模式 <code>^[A-Z][A-Z0-9_]{0,15}$</code>，想叫 <code>RDI</code> 贴近真实、叫 <code>RSIZE</code> 贴近教学，都行。
+两个命名空间：</p>
+<table>
+  <tr><th>命名空间</th><th>模式</th><th>可见性</th><th>用途</th></tr>
+  <tr><td>一般寄存器</td><td><code>^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$</code>（负向前瞻排除 FLAG 开头）</td><td>值可进公开投影</td><td>题目的一切工作变量；教学题常暴露 RCFG/RBUF 这类"带含义"的名字帮选手算地址</td></tr>
+  <tr><td>FLAG 保留区</td><td><code>^FLAG[A-Z0-9_]*$</code>（如 FLAG0、FLAG_WIN）</td><td><b>名字</b>可出现在 <code>flagRegisterNames</code> 清单，<b>值</b>永不公开</td><td>"到达胜利态置一个秘密标记"——判题谓词可以读它，选手永远看不到它</td></tr>
+</table>
+<p>关键约束：<code>RSP</code>/<code>RBP</code>/<code>RIP</code> 必须在你声明的集合里（XS-REG-CORE）——它们是会话动作
+（push/pop/call/ret）、栈语义指令和整个 MVP 栈帧教学的公共底座。FLAG 名不得混进一般寄存器声明（两空间结构性不相交），
+且必须真实存在于私有初始寄存器集（XS-REG-FLAG）。</p>
+<p><b>为什么这样设计。</b>双命名空间解决一个两难：判胜需要"一个选手看不到的状态位"（否则选手从投影反推成功条件），
+但又希望把"存在胜利标记"这件事公开（题面可以提示"置位 FLAG0"）。保留区让<b>名字公开、值私密</b>成为可机检的静态事实
+——秘密汇可以静态枚举，泄漏检查才有确定的判定基准。</p>
+<div class="misuse"><b>常见误解。</b>①"FLAG 寄存器藏在寄存器列表里，选手看不到名字"——名字通过 <code>flagRegisterNames</code> 是公开的，
+隐藏的只是<b>值</b>；②"我可以在运行时动态加寄存器"——寄存器集是题目的定义性声明，静态封闭（扩展走 VM Profile 版本演进，不靠预留）。</div>
+<h3 id="c-b3">B3 · 栈、栈帧与劫持 <span class="badge b1">概念 · 虚拟机（教学核心）</span></h3>
+<div class="one">一句话：栈是从高地址向低地址生长的内存区；函数调用在栈上留下"栈帧"= 局部 buffer + saved RBP + 返回地址；
+<b>buffer 写过头会淹没返回地址，<code>ret</code> 一弹出就跳到攻击者指定的位置</b>——这就是 StackMaster MVP 要教的全部核心。</div>
+<p><b>展开。</b>三个核心寄存器各司其职：<code>RSP</code> 指向栈顶（当前栈的尽头）；<code>RBP</code> 指向当前函数栈帧的基址
+（帧的"锚点"）；<code>RIP</code> 指向下一条要执行的指令。一次典型调用：</p>
+<pre><code>   高地址
+   ┌──────────────┐
+   │ 调用者的栈帧  │
+   ├──────────────┤ ← retSlot：call 压入的返回地址（ret 弹这里跳回去）
+   │ saved RBP    │ ← 调用者的 RBP 存档（leave 时弹回 RBP）
+   ├──────────────┤ ← RBP（当前帧基址）
+   │ 局部 buffer  │ ← 函数的局部变量（向下生长；这就是"往低地址"读写的窗口）
+   ├──────────────┤ ← RSP（栈顶）
+   低地址</code></pre>
+<p><b>劫持的完整链条</b>（MVP CH-03~06 与扩展题 x01/x02 教的就是它）：
+①程序从 buffer 读入超出其长度的数据（或选手直接用 <code>write_bytes</code> 向 buffer 写）；
+②多余的字节<b>向高地址漫延</b>，依次覆盖 saved RBP、返回地址槽；
+③函数收尾执行 <code>leave</code>——<code>RSP←RBP</code> 再 <code>pop RBP</code>，此时 saved RBP 已是攻击者的值，<code>RSP</code> 被带歪；
+④执行 <code>ret</code>——弹出攻击者覆写过的返回地址进 RIP；
+⑤控制流跳到<b>任意攻击者指定的位置</b>（win 函数、一条 gadget 的中间）。这就是"缓冲区溢出"四步，
+每一步都对应界面里可观察的字节变化——这正是"可视化 pwn 实验室"的教学价值。</p>
+<p><b>为什么这样设计。</b>MVP 把指令集收窄到恰好覆盖这条链：<code>push/pop</code> 移数据、<code>call/ret</code> 构成调用、
+<code>leave</code> 补全帧收尾（它被从真实 x86 单独拎出来，因为"saved RBP 被覆写后 leave 劫持 RSP"是最教科书式的教学时刻）。
+出题人的题目只要布局出 buffer→返回地址槽的几何，就能承载这套教学。</p>
+<div class="misuse"><b>常见误解。</b>①"栈向上生长"——方向反了，向<b>低地址</b>生长，所以"溢出"是向高地址淹没返回地址；
+②"ret 之后程序就结束"——ret 只是跳转，跳到的位置继续执行；跳到非法位置才报 <code>invalid_rip</code>；
+③"选手必须拖慢节奏逐步覆盖"—— <code>write_bytes</code> 一次最多写 4096 字节（题目可再收紧），一条 payload 一次写穿是常态。</div>
+<h3 id="c-b4">B4 · canary 与守护标记 <span class="badge b1">概念 · 虚拟机</span></h3>
+<div class="one">一句话：canary（金丝雀）是放在 buffer 与返回地址之间的哨兵值——被溢出碰坏就报警；
+StackMaster 的交互题<b>当前不能启用真 canary</b>（契约冲突，挂账收口中），标准替代方案是"守护标记 +
+<code>memory_equals</code> 谓词"。</div>
+<p><b>展开。</b>真实系统的栈保护原理：函数 prologue 在 buffer 上方放一个随机值（canary），epilogue 检查它是否完好——
+连续溢出必然路过并破坏它，从而在被劫持之前终止进程。StackMaster 的 <code>vmProfile.canary</code> 字段与
+<code>stack_canary_intact</code> 谓词就是这套语义。但当前版本存在一个如实登记的契约冲突：检查器要求"启用 canary ⇒
+存在隐藏的、含秘密的 canary 对象"（XS-CANARY-CORR），而引擎装配要求 canary 槽公开（build_canary_slots）——
+两个冻结规则对同一对象提出了矛盾的可见性要求。收口走契约变更流程（挂账中），在那之前：</p>
+<p><b>守护标记替代方案</b>（MVP CH-05 先例）：在 buffer 与返回地址槽之间放一段固定标记字节（公开可见即可），
+判胜条件合取 <code>memory_equals(区域, 标记偏移, 标记字节)</code>——溢出写穿标记则判负，"精准绕过"（算准偏移跳过标记）则放行。
+教学效果等同，还能让选手<b>看到</b>哨兵长什么样，更直观。</p>
+<div class="misuse"><b>常见误解。</b>①"canary.enabled=true 试试呗"——装载直接拒绝（XS-CANARY-CORR），不要浪费时间；
+②"守护标记必须保密"——恰恰相反，公开的哨兵 + 严格的判负条件才是教学点：选手能看见墙，才要学"绕过"而不是"撞墙"。</div>
+<div class="pager">
+  <a class="prev" href="1A-题目结构.html"><span class="lbl">◀ 上一篇</span>1A 题目结构</a>
+  <a class="next" href="1C-内存.html"><span class="lbl">下一篇 ▶</span>1C 内存</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

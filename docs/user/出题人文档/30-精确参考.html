@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 3 层 · 精确参考 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 3 层 · 精确参考</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a class="cur" href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>第 3 层 · 精确参考 <span class="badge b1">参考 R1–R6</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#r1">R1 · 公开描述包字段表（顶层 16 项：13 必填 + 3 可选）</a>　<a href="#r2">R2 · 私有判题包字段表（13 必填 + 条件/可选）</a>　<a href="#r3">R3 · 基线指令集（20 opcode，封闭）</a>　<a href="#r4">R4 · 谓词 / 微算子 / 效果原语参数表</a>　<a href="#r5">R5 · 校验规则速查（XS = 检查器 34 条 / XC = 编译器 18 条）</a>　<a href="#r6">R6 · 错误码 · 版本字段 · 发布检查清单</a></div>
+<p class="muted">全部摘自 <code>packages/challenge-schema/schema/*.schema.json</code> 原文与冻结契约；
+<span class="badge b3" style="background:var(--warn)">必填</span>
+<span class="badge b3" style="background:var(--ok)">可选</span>
+<span class="badge b3" style="background:#e8590c">条件</span></p>
+<h3 id="r1">R1 · 公开描述包字段表（顶层 16 项：13 必填 + 3 可选）</h3>
+<table>
+  <tr><th style="width:185px">字段</th><th>类型与约束</th><th>语义</th></tr>
+  <tr><td><code>schemaVersion</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>const 1</td><td>双包格式信封版本</td></tr>
+  <tr><td><code>challengeId</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td><code>^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$</code></td><td>题目公开标识，与私有包同值</td></tr>
+  <tr><td><code>challengeContentVersion</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>semver</td><td>内容版本；与私有包同值</td></tr>
+  <tr><td><code>vmProfileVersion</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>semver</td><td>VM 元数据版本；与私有包同值</td></tr>
+  <tr><td><code>locale</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>enum "zh-CN"</td><td>语言（v1 单值）</td></tr>
+  <tr><td><code>briefing</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>{title 1–128, summary 1–2048, learningObjectives 1–8×≤256, teachingNotes ≤8×≤512}</td><td>题面；全字段禁 C0/C1 控制字符</td></tr>
+  <tr><td><code>vmProfile</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>见下</td><td>虚拟机画像</td></tr>
+  <tr><td><code>memoryLayout</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>regions[] 1–64</td><td>可见布局（区域项见下）</td></tr>
+  <tr><td><code>allowedActions</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>≤12 项 unique，12 动作枚举子集</td><td>选手操作面（附录见学习者指南）</td></tr>
+  <tr><td><code>resourceLimits</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>三键全可选：predicateEval 1–1e6 / rollback 1–1e4 / maxWriteBytes 1–4096</td><td>会话级预算</td></tr>
+  <tr><td><code>hintLadder</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>0–8 × {order 1–8 唯一, revealPolicy: on_request|after_n_failures, failureThreshold? 1–1e4, hintText 1–512}</td><td>提示阶梯；after_n_failures ⇒ threshold 必填</td></tr>
+  <tr><td><code>publicErrorMapping</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>0–16 × {errorCode: 16 值枚举, teachingNote 1–512}</td><td>错误教学注解</td></tr>
+  <tr><td><code>initialProjection</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>visibleRegions[]（与布局双射，bytesHex ≤512 hex 字符，truncated 必填）/ visibleRegisters[]（值大写 <code>^0x[0-9A-F]{1,16}$</code>）/ semanticHighlights? 0–32 × {kind: buffer_start|return_address_slot|saved_rbp_slot|canary_slot|custom, targetRegionId, startAddressHex, byteLength, label}</td><td>第一屏镜像</td></tr>
+  <tr><td><code>randomizationNotice</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>1–200 字符</td><td>只声明随机化存在；aslrEnabled=true 时必填</td></tr>
+  <tr><td><code>debugMode</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>boolean（缺省 true）</td><td>调试能力开关（opt-out）</td></tr>
+  <tr><td><code>aslrEnabled</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>boolean（缺省 false）</td><td>ASLR 开关；true ⇒ 布局为相对描述 + 必须带 notice</td></tr>
+</table>
+<table>
+  <tr><th style="width:185px">vmProfile / regions 嵌套</th><th>约束</th></tr>
+  <tr><td><code>vmProfile.registers[]</code></td><td>1–64 × {name: <code>^(?!FLAG)[A-Z][A-Z0-9_]{0,15}$</code>, displayLabel?}；必含 RSP/RBP/RIP</td></tr>
+  <tr><td><code>vmProfile.flagRegisterNames[]</code></td><td>1–32 × <code>^FLAG[A-Z0-9_]*$</code>；只公开名字</td></tr>
+  <tr><td><code>vmProfile.archBits</code></td><td>enum 32 | 64</td></tr>
+  <tr><td><code>vmProfile.endianness</code></td><td>const "little"</td></tr>
+  <tr><td><code>vmProfile.pageSizeBytes</code></td><td>4096–65536，4096 倍数</td></tr>
+  <tr><td><code>vmProfile.canary</code></td><td>{enabled: boolean, sizeBytes? 1–8}；enabled=true ⇒ sizeBytes 必填（交互题请 false，见 B4）</td></tr>
+  <tr><td><code>vmProfile.encodingTable[]</code></td><td>1–64 × {tokenHex: <code>^0x[0-9a-fA-F]{2}$</code> 唯一, op: 20 opcode ∪ 大写助记符, operands? ≤4 形态声明}；存在即字节模式</td></tr>
+  <tr><td><code>memoryLayout.regions[]</code></td><td>{regionId: <code>^[a-z][a-z0-9-]{0,62}$</code>, kind: code|global|stack|heap|key|custom, startAddressHex: <code>^0x[0-9a-fA-F]{1,16}$</code>, byteLength: 4096 倍数 1–16MiB, permissions: <code>^r?w?x?$</code>, publicLabel 1–128}；code ≤1 且公开；合计 ≤64MiB</td></tr>
+</table>
+<h3 id="r2">R2 · 私有判题包字段表（13 必填 + 条件/可选）</h3>
+<table>
+  <tr><th style="width:200px">字段</th><th>类型与约束</th><th>语义</th></tr>
+  <tr><td>身份四字段</td><td>同公开包，逐项同值</td><td>XS-ID-CORR</td></tr>
+  <tr><td><code>dslSchemaVersion</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>const 2</td><td>DSL 词汇版本</td></tr>
+  <tr><td><code>vmEngineVersion</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>semver</td><td>锁定执行引擎（照抄语料先例值）</td></tr>
+  <tr><td><code>engineBuildId</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td><code>^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$</code></td><td>构建 ID（判题记录项）</td></tr>
+  <tr><td><code>declaredSeedPublicPaths</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>0–32 项；段.段（≤8 段，段 <code>^[A-Za-z][A-Za-z0-9_]{0,31}$</code>）</td><td>种子影响面声明；空 = 无公开随机化面</td></tr>
+  <tr><td><code>seedPolicy</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>{strategy: fixed|server_random_per_session, seedHex? 16–64 hex}；fixed⇒必填 / random⇒禁止</td><td>种子策略（互斥双闸）</td></tr>
+  <tr><td><code>initialState.registers</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>≤256 键；键 = 一般名或 FLAG 名；值 <code>^0x[0-9a-fA-F]{1,16}$</code> 落 archBits 域</td><td>完整初始寄存器（含 FLAG 值）</td></tr>
+  <tr><td><code>initialState.memoryRegions[]</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>1–64 × {regionId, kind, startAddressHex, byteLength, permissions, contentHex, isHidden}；contentHex 长 = 2×byteLength</td><td>全部区域（含隐藏）；非隐藏与公开双射</td></tr>
+  <tr><td><code>secretSinkRegisters[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>1–256 项 unique</td><td>补充秘密汇声明（只收紧）</td></tr>
+  <tr><td><code>secrets</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>{flag 8–128 字符, virtualFiles? 0–8 × {fileId, content ≤4096}}</td><td>秘密集合</td></tr>
+  <tr><td><code>privateObjects[]</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>0–64 × {objectId, kind: buffer|canary|saved_rbp|return_address|file|other, addressHex, byteLength 1–16MiB, visibility: public|hidden, containsSecret}</td><td>语义登记；secret⇒hidden</td></tr>
+  <tr><td><code>judging</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>{successCondition: L1 必填, failureConditions? 0–8×L1, hiddenTests? 0–16 × {testId, kind: predicate_probe|reference_payload, payloadHex? ≤4096B, expectedResult: 7 值}}</td><td>判题面（见 E2/E3）</td></tr>
+  <tr><td><code>judgingConfig</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>{verdictRuleVersion semver 必填, maxPredicateEvalSteps 1–1e7 必填, timeoutMsPerAction? 1–6e4, maxTotalActionBytes? 1–1MiB}</td><td>判题配置</td></tr>
+  <tr><td><code>stages[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>0–8 × 六要素（stageId / allowedActions ⊆ 题目面 / preconditions L1 / transitions ≤8 / sideEffects ≤8（v1 仅 grant_virtual_file）/ failureConditions ≤8 / resourceBudget{maxInstructionSteps 必填 1–1e7, maxActions?}）</td><td>状态机（F1）</td></tr>
+  <tr><td><code>compiledIr</code> <span class="badge b3" style="background:#e8590c">条件</span></td><td>{irFormatVersion: 2, entrypointIndex?, instructions 1–4096, labels 0–512}；op 双形态；操作数 4 kind</td><td>IR 模式程序（字节模式省略）</td></tr>
+  <tr><td><code>entrypointAddressHex</code> <span class="badge b3" style="background:#e8590c">条件</span></td><td>hex 地址，须落代码区</td><td>字节模式入口（IR 模式不得出现）</td></tr>
+  <tr><td><code>customInstructions[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>0–16 × {mnemonic <code>^[A-Z][A-Z0-9_]{0,15}$</code>, displayText 1–120, semantics 1–16 微算子}</td><td>自定义指令（D4）</td></tr>
+  <tr><td><code>interfaces[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>0–16 × {interfaceId 0x0100–0xFFFF, displayText 1–120, effects 1–16 效果原语}</td><td>作者接口（D5）</td></tr>
+</table>
+<h3 id="r3">R3 · 基线指令集（20 opcode，封闭）</h3>
+<table>
+  <tr><th>opcode</th><th>操作数形态</th><th>语义摘要</th><th>标志</th></tr>
+  <tr><td><code>mov</code></td><td>R,I / R,R / R,M / M,R</td><td>架构值传送（按 archBits 掩蔽）</td><td>—</td></tr>
+  <tr><td><code>push</code> / <code>pop</code></td><td>R,I —— / R</td><td>压栈（RSP−=8 后写）/ 出栈（RSP+=8）</td><td>—</td></tr>
+  <tr><td><code>leave</code></td><td>—</td><td>RSP←RBP 后 pop RBP；要求初始集含 RBP；弹出值不可执行时报 invalid_rip</td><td>—</td></tr>
+  <tr><td><code>add</code> / <code>sub</code> / <code>cmp</code></td><td>R,R / R,I / R,M</td><td>加（溢出安全终止）/ 减 / 比较（不写回）</td><td>zf cf sf</td></tr>
+  <tr><td><code>and</code> / <code>or</code> / <code>xor</code></td><td>R,R / R,I</td><td>按位逻辑</td><td>zf sf</td></tr>
+  <tr><td><code>shl</code> / <code>shr</code></td><td>R,R / R,I</td><td>移位（移位量按 archBits 取模）</td><td>zf sf</td></tr>
+  <tr><td><code>jmp</code></td><td>I / R / M</td><td>无条件跳转</td><td>—</td></tr>
+  <tr><td><code>je</code> / <code>jne</code> / <code>jb</code> / <code>jae</code></td><td>I</td><td>zf=1 / zf=0 / cf=1（无符号低于）/ cf=0 跳转</td><td>—</td></tr>
+  <tr><td><code>call</code></td><td>I / R / interface</td><td>压返回地址跳转；接口形态由引擎管理调用；深度 ≤64</td><td>—</td></tr>
+  <tr><td><code>ret</code></td><td>—</td><td>弹出栈顶为新执行位置（动态目标；非法位置 → invalid_rip）</td><td>—</td></tr>
+  <tr><td><code>syscall</code></td><td>I</td><td>0x00–0xFF 内置 exit(I)；≥0x0100 走作者接口；无宿主副作用</td><td>—</td></tr>
+</table>
+<p class="muted">操作数类别：R = 寄存器（一般 ∪ FLAG）；I = 立即数（无符号，archBits 域，hex）；
+M = 内存（基址寄存器 + 有符号位移）；interface = {kind:"interface", interfaceId}。每指令 ≤4 操作数。
+IR 助记符双形态：基线小写枚举 ∪ 大写自定义助记符（须已声明、零操作数）。</p>
+<h3 id="r4">R4 · 谓词 / 微算子 / 效果原语参数表</h3>
+<table>
+  <tr><th>7 谓词</th><th>参数</th><th>语义</th></tr>
+  <tr><td><code>register_equals</code></td><td>register（一般 ∪ FLAG 名）、valueHex</td><td>寄存器值等于目标</td></tr>
+  <tr><td><code>register_bits_set</code></td><td>register、maskHex</td><td>掩码位全 1</td></tr>
+  <tr><td><code>memory_equals</code></td><td>regionId、offsetBytes ≥0、bytesHex ≤256B</td><td>固定切片相等（切片须在区域内）</td></tr>
+  <tr><td><code>memory_contains</code></td><td>regionId、bytesHex ≤64B</td><td>子串匹配</td></tr>
+  <tr><td><code>ret_target_equals</code></td><td>addressHex</td><td>ret 弹出目标判定</td></tr>
+  <tr><td><code>stack_canary_intact</code></td><td>—</td><td>守护完好（未启用时恒真）</td></tr>
+  <tr><td><code>virtual_file_read</code></td><td>fileId ∈ secrets.virtualFiles</td><td>密档已被读</td></tr>
+</table>
+<table>
+  <tr><th>6 微算子（customInstructions.semantics）</th><th>参数</th><th>语义</th></tr>
+  <tr><td><code>load_imm</code></td><td>dst（一般名）、valueHex</td><td>装载立即数</td></tr>
+  <tr><td><code>mov_reg</code></td><td>dst、src</td><td>寄存器传送</td></tr>
+  <tr><td><code>load_mem</code> / <code>store_mem</code></td><td>dst / (baseRegister、displacementHex 有符号)、src</td><td>内存读 / 写</td></tr>
+  <tr><td><code>set_flag</code></td><td>flagRegister（FLAG 名）、valueHex</td><td>唯一 FLAG 写入算子</td></tr>
+  <tr><td><code>bit_mask</code></td><td>dst、src、maskHex、logic ∈ and|or|xor</td><td>位掩蔽</td></tr>
+</table>
+<table>
+  <tr><th>5 效果原语（interfaces.effects）</th><th>参数</th><th>语义</th></tr>
+  <tr><td><code>exit</code></td><td>—</td><td>程序终止</td></tr>
+  <tr><td><code>grant_virtual_file</code></td><td>fileId</td><td>授予虚拟文件能力</td></tr>
+  <tr><td><code>virtual_file_read</code></td><td>fileId</td><td>标记已读（衔接谓词）</td></tr>
+  <tr><td><code>set_flag</code></td><td>flagRegister、valueHex</td><td>置 FLAG 寄存器</td></tr>
+  <tr><td><code>noop</code></td><td>—</td><td>占位</td></tr>
+</table>
+<h3 id="r5">R5 · 校验规则速查（XS = 检查器 34 条 / XC = 编译器 18 条）</h3>
+<p class="muted">按"什么主题"分组；逐条语义详见两份权威文档（双包 Schema 语义 §五 / 装载与编译期校验语义 §三）。</p>
+<table>
+  <tr><th>主题</th><th>规则</th></tr>
+  <tr><td>身份与唯一性</td><td>XS-ID-CORR · XS-ID-UNIQUE · XS-ID-NO-PRIVATE · XS-DUP-KEY</td></tr>
+  <tr><td>秘密与可见性</td><td>I2-PUB-PAIRWISE · I2-PRIV-PAIRWISE · I2-PUB-MIRROR · I2-HIDDEN-NOT-PUBLIC · I2-OBJ-NOT-PUBLIC · I2-HIGHLIGHT · I3-SINK-HIDDEN · I3-VISIBLE-REG · ZR-B8-CAP-SCAN · D2-NO-HIDDEN-IN-PUBLIC · D2-CODE-PUBLIC</td></tr>
+  <tr><td>投影镜像</td><td>XS-PROJ-GEOM · XS-PROJ-VALUES · XS-PROJ-REG</td></tr>
+  <tr><td>寄存器</td><td>XS-REG-CORE · XS-REG-NAMESPACE · XS-REG-FLAG</td></tr>
+  <tr><td>数值与地址</td><td>XS-ARCH-WIDTH · XS-ADDR-SPACE · XS-MEM-PAGE-ALIGN · XS-MEM-TOTAL · XS-MEM-CONTENT</td></tr>
+  <tr><td>程序形态</td><td>XS-PROG-MODE · XS-CODE-WRX · XS-ENC-TOKEN · XS-ENC-PROBE · XS-IR-LABEL · XS-IR-LEAVE · XS-CUSTOM-DEF · XS-CUSTOM-REF · XS-CUSTOM-DISPLAY · XS-SYSCALL-DECL · XS-IFACE-REF</td></tr>
+  <tr><td>判题与阶段</td><td>XS-NESTING · XS-PRED-REFS · XS-STAGE-REACH · XS-STAGE-BUDGET</td></tr>
+  <tr><td>随机化</td><td>XS-SEED-POLICY · XS-SEED-DECL · XS-ASLR-NOTICE · XS-CANARY-CORR</td></tr>
+  <tr><td>元检查</td><td>XS-1（公开 Schema 元检查，禁止 default/examples 与私有属性名）</td></tr>
+  <tr><td>编译器装载层</td><td>XC-OPCODE-SHAPE · XC-OPERAND-REF · XC-IR-TARGET · XC-IR-REACH · XC-IR-TERMINATE · XC-STAGE-SIDE-EFFECT · XC-STAGE-ACTIONS</td></tr>
+  <tr><td>编译器生成层</td><td>XC-LABEL-DUP · XC-LABEL-BOUND · XC-LABEL-REF · XC-ENTRY-BOUND · XC-ENC-NO-MATCH · XC-ENC-AMBIGUOUS · XC-ENC-VALUE-RANGE · XC-ENC-OVERFLOW · XC-ENC-PAD</td></tr>
+  <tr><td>编译器迁移层</td><td>XC-MIGRATE-VERSION · XC-MIGRATE-REMOVED-OPCODE</td></tr>
+</table>
+<h3 id="r6">R6 · 错误码 · 版本字段 · 发布检查清单</h3>
+<table>
+  <tr><th>16 错误码（publicErrorMapping 词汇）</th></tr>
+  <tr><td>输入载荷：<code>invalid_input_format</code> · <code>invalid_payload_length</code> · <code>offset_out_of_range</code> · <code>endianness_mismatch</code>　｜　内存语义：<code>permission_denied</code> · <code>inaccessible_address</code> · <code>invalid_rip</code> · <code>canary_violation</code> · <code>invalid_call_argument</code>　｜　目标预算：<code>objective_not_met</code> · <code>budget_exhausted</code>　｜　协议层：<code>stale_base_revision</code> · <code>stale_client_seq</code> · <code>idempotency_conflict</code> · <code>session_terminal</code> · <code>internal_error</code></td></tr>
+</table>
+<table>
+  <tr><th>版本字段</th><th>位置</th><th>何时动</th></tr>
+  <tr><td><code>schemaVersion</code>（=1）/ <code>dslSchemaVersion</code>（=2）</td><td>双包 / 私有</td><td>仓库级契约演进，出题人不动</td></tr>
+  <tr><td><code>vmEngineVersion</code>（必填）</td><td>私有</td><td>照抄语料先例当前值；引擎升级时评估</td></tr>
+  <tr><td><code>vmProfileVersion</code> / <code>challengeContentVersion</code></td><td>双包同值</td><td>VM 元数据演进 / 题面程序判题改动</td></tr>
+  <tr><td><code>judgingConfig.verdictRuleVersion</code></td><td>私有</td><td>判题谓词集演进</td></tr>
+</table>
+<div class="okbox"><b>发布前检查清单。</b>☐ 双包身份三元组一致、vmEngineVersion 正确　☐ 公开包零秘密（fileId/flag/seed/隐藏痕迹）
+☐ 初始投影逐字节镜像私有初始态，truncated 自洽　☐ FLAG/秘密汇不出现在公开投影　☐ IR 无死代码；循环有 stages 且有预算；
+win 块经 ret 可达　☐ 字节模式：W^X、纯指令流、填充 token 化、入口落代码区　☐ 参考解能过 successCondition + 隐藏测试；
+失败路径预期裁决已钉　☐ 教学面齐备（中文题面/提示/错误注解）　☐ 语料 ≥3 且覆盖 success/wrong_answer/非平凡失败　
+☐ 门禁 + 裁决回归 + 登记确定性全绿。</div>
+<div class="pager">
+  <a class="prev" href="20-任务指南.html"><span class="lbl">◀ 上一篇</span>第 2 层 · 任务指南</a>
+  
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

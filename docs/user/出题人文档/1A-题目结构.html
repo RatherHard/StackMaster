@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1A 题目结构 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 1 层 · 概念详解 · 1A 题目结构</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a class="cur" href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>1A 题目结构 <span class="badge b1">概念组 · 4 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-a1">A1 · 双包模型</a>　<a href="#c-a2">A2 · 公开描述包里有什么</a>　<a href="#c-a3">A3 · 私有判题包里有什么</a>　<a href="#c-a4">A4 · 镜像原则与秘密零驻留</a></div>
+<h3 id="c-a1">A1 · 双包模型 <span class="badge b1">概念 · 题目结构</span></h3>
+<div class="one">一句话：一道题 = <b>公开描述包 + 私有判题包</b>两个 JSON；公开包决定选手看到什么，私有包决定服务端怎么判，
+两个包必须同声明同一个题目身份（challengeId / 内容版本 / VM 版本）。</div>
+<p><b>展开。</b>为什么是"两个包"而不是"一个包加权限控制"？因为 StackMaster 的安全模型是<b>结构性不可达</b>，
+不是访问控制。传统思路是"敏感字段加 <code>secret: true</code> 标记，服务端下发时过滤"——过滤逻辑一旦有漏洞就泄漏。
+StackMaster 直接把公开包的 <b>Schema 写死</b>：里面<b>根本不存在</b>"隐藏区域""flag""种子"这类字段（<code>additionalProperties: false</code>
++ 元检查禁止私有属性名出现）。你想泄漏都没有语法位置。私有包则整体 SERVER_ONLY：只被后端装载，
+浏览器构建图在 CI 里被依赖规则禁止接触它，公开产物扫描还会扫描发布物确认零泄漏。</p>
+<p>两个包各自的"户口"：</p>
+<table>
+  <tr><th>信息</th><th>放哪</th><th>理由</th></tr>
+  <tr><td>题面、学习目标、提示阶梯、错误教学注解</td><td>公开包</td><td>选手要读</td></tr>
+  <tr><td>可见内存布局、寄存器名、允许动作、初始投影</td><td>公开包</td><td>选手界面据此渲染</td></tr>
+  <tr><td>flag、随机种子、虚拟文件内容</td><td>私有包</td><td>泄漏 = 题目作废</td></tr>
+  <tr><td>完整初始状态（含隐藏区域）</td><td>私有包</td><td>隐藏性即谜题</td></tr>
+  <tr><td>程序（IR 或机器码）与自定义指令语义</td><td>私有包（字节模式的编码表例外，见 D6）</td><td>语义即答案的一部分</td></tr>
+  <tr><td>判题条件、隐藏测试</td><td>私有包</td><td>判题标准不能让选手看到</td></tr>
+</table>
+<p><b>为什么这样设计。</b>这是"后端权威 VM + 浏览器公开投影"信任模型在题目层的落位：浏览器完全不可信，
+所以一切秘密留在服务端；跨域只传投影；题目包是版本化的<b>序列化格式</b>而不是共享代码——TS 与 Rust 两侧只共享 JSON Schema 这一份契约。</p>
+<p><b>例子。</b>同一道题的两个包（示意，只列关键差异）：</p>
+<pre><code>公开包（选手可见）                     私有包（仅服务端）
+{                                      {
+  "challengeId": "sm-x01-ret2win-ir",    "challengeId": "sm-x01-ret2win-ir",   ← 身份必须一致
+  "briefing": { "title": "幕间收尾…"},    "secrets": { "flag": "FLAG{...}" },  ← 秘密
+  "memoryLayout": { "regions": [          "seedPolicy": { "strategy": "fixed",
+    { "regionId": "stack", … } ]},                      "seedHex": "0011…" },
+  "initialProjection": { …可见前缀… },     "initialState": { …完整状态,含隐藏… },
+  "hintLadder": [ … ]                    "judging": { "successCondition": …,
+}                                                      "hiddenTests": [ … ] }
+                                       }</code></pre>
+<div class="misuse"><b>常见误解。</b>
+①"隐藏区域可以在公开包里标 <code>isHidden: false</code>"——公开包 Schema 里<b>没有</b> isHidden 字段，写了直接拒绝；
+②"私有包里也放一份题面方便服务端用"——可以但不该：题面的唯一真源在公开包，两份会漂移；
+③"两个包是同一份数据的不同视图"——不是，它们是<b>镜像关系</b>（见 A4）：公开值必须逐字节等于私有值的对应切片。</div>
+<h3 id="c-a2">A2 · 公开描述包里有什么 <span class="badge b1">概念 · 题目结构</span></h3>
+<div class="one">一句话：公开包回答四个问题——<b>这是道什么题</b>（briefing）、<b>机器长什么样</b>（vmProfile）、
+<b>内存哪些可见</b>（memoryLayout + initialProjection）、<b>选手能做什么、做错了我教什么</b>（allowedActions + 提示与错误注解）。</div>
+<p><b>展开。</b>逐块看（完整字段表在 R1）：</p>
+<table>
+  <tr><th>块</th><th>回答什么</th><th>关键约束</th></tr>
+  <tr><td>身份四字段</td><td>这是谁、第几版</td><td><code>challengeId</code> 小写连字符；内容/VM 版本 semver；与私有包同值</td></tr>
+  <tr><td><code>briefing</code></td><td>题面：标题/摘要/学习目标/教学备注</td><td>长度上限 128/2048/8×256/8×512；禁控制字符</td></tr>
+  <tr><td><code>vmProfile</code></td><td>虚拟机画像：寄存器集、位宽、端序、页大小、canary、（字节模式）编码表</td><td>必含 RSP/RBP/RIP；详见 1B / D6</td></tr>
+  <tr><td><code>memoryLayout</code></td><td>可见区域布局（选手能看哪些内存）</td><td>≤64 块；每块 4KB 对齐 1–16MiB；无隐藏表达位</td></tr>
+  <tr><td><code>allowedActions</code></td><td>选手能用 12 个会话动作中的哪几个</td><td>子集选择；教学建议最少 <code>["write_bytes","step"]</code></td></tr>
+  <tr><td><code>resourceLimits</code></td><td>会话级预算（谓词求值/回滚/单次写字节）</td><td>全可选，上限见 F4</td></tr>
+  <tr><td><code>hintLadder</code></td><td>提示阶梯（≤8 级）</td><td>按请求揭示或失败 N 次自动揭示</td></tr>
+  <tr><td><code>publicErrorMapping</code></td><td>错误码 → 教学注解（≤16 条）</td><td>错误码从 16 值冻结枚举里选</td></tr>
+  <tr><td><code>initialProjection</code></td><td>第一屏：区域前缀字节、寄存器初值、语义高亮</td><td>必须逐字节镜像私有初始态（A4）</td></tr>
+  <tr><td><code>randomizationNotice / debugMode / aslrEnabled</code></td><td>三个可选开关</td><td>ASLR 开 ⇒ 必须带随机化声明文案；debugMode 缺省开</td></tr>
+</table>
+<p><b>为什么这样设计。</b>注意公开包里<b>没有</b>任何"判题"信息——选手不该从题面推断出成功条件的措辞；
+也没有任何"隐藏"表达位——这是 A1 说的结构性不可达。提示与错误注解放公开包，是因为它们本来就是给选手的教学服务，
+且由<b>选手本地</b>渲染（提示揭示的失败计数也在本地进行，不发网络请求，不产生侧信道）。</p>
+<div class="misuse"><b>常见误解。</b>①"提示阶梯的服务端会拦着不让看"——揭示策略在<strong>界面本地</strong>执行，公开包本来就把提示发给选手了，
+"藏"只藏后面的级别；②"<code>debugMode</code> 关了更安全"——它只控制沙盘功能开关，与安全无关；③"错误注解会泄漏判题逻辑"——
+注解是纯教学文案，经 E-4/E-6 扫描禁止夹带隐藏区域名、测试 ID、fileId。</div>
+<h3 id="c-a3">A3 · 私有判题包里有什么 <span class="badge b1">概念 · 题目结构</span></h3>
+<div class="one">一句话：私有包 = 这道题的<b>答案与判卷标准</b>——完整初始状态、程序本体、判题条件、隐藏测试、秘密与种子，
+整体 SERVER_ONLY，永不离开服务端，也永不写入 git。</div>
+<p><b>展开。</b>七个组成部分（完整字段表在 R2）：</p>
+<table>
+  <tr><th>部分</th><th>内容</th><th>概念链接</th></tr>
+  <tr><td>身份 + 版本锚</td><td>与公开包同值的身份三元组；<code>dslSchemaVersion</code>（词汇版本）；<code>vmEngineVersion</code>（锁定执行引擎）</td><td>R6 版本表</td></tr>
+  <tr><td><code>seedPolicy</code> + <code>declaredSeedPublicPaths</code></td><td>随机化策略 + "随机化影响哪些公开面"的声明</td><td>F2</td></tr>
+  <tr><td><code>initialState</code></td><td>完整寄存器初值（含 FLAG 值）+ 全部内存区域（含隐藏，<code>contentHex</code> 逐字节）</td><td>C2</td></tr>
+  <tr><td><code>secrets</code></td><td>flag（8–128 字符）+ 虚拟文件（≤8 个，每个 ≤4096 字符）</td><td>D5</td></tr>
+  <tr><td><code>privateObjects</code></td><td>语义对象登记（buffer / saved_rbp / return_address / canary / file / other）</td><td>C3</td></tr>
+  <tr><td>程序</td><td><code>compiledIr</code>（IR 模式）或 <code>entrypointAddressHex</code>（字节模式）——恰一；可选 <code>customInstructions</code> / <code>interfaces</code> / <code>stages</code></td><td>1D / 1F</td></tr>
+  <tr><td><code>judging</code> + <code>judgingConfig</code></td><td>成功条件 / 失败条件 / 隐藏测试 + 判题配置</td><td>1E</td></tr>
+</table>
+<p><b>为什么这样设计。</b>注意 <code>vmEngineVersion</code> 是必填：题目程序会在引擎上重放（游玩一次、裁决再重放一次），
+把执行环境版本钉死是"重放确定性"的前提。同理 <code>contentHex</code> 要求长度一字节不差等于 2×byteLength——
+内存是<b>稠密定义</b>的，不存在"未初始化"的字节，重放才能逐字节一致。</p>
+<div class="misuse"><b>常见误解。</b>①"私有包是加密存储的"——纪律是<b>不落盘、不进 git</b>：语料在代码里现场构造，
+存储层另有快照加密，但你的责任是"别把它写进任何文件"；②"测试时可以用假 flag，上线再换"——flag 长度参与变体测试，
+正式发布用真实占位格式（如 <code>FLAG{...}</code>）并在内容版本递增时替换。</div>
+<h3 id="c-a4">A4 · 镜像原则与秘密零驻留 <span class="badge b1">概念 · 题目结构</span></h3>
+<div class="one">一句话：公开包里每一个值，都必须<b>逐字节等于</b>私有初始态的对应切片——公开包是私有包的"白名单前缀拷贝"，
+不是两套独立数据。</div>
+<p><b>展开。</b>镜像原则由三条检查器规则强制：</p>
+<ul>
+  <li><b>几何镜像</b>（XS-PROJ-GEOM / I2-PUB-MIRROR）：公开布局的每块区域，在私有包里有一块同名、同起点、同长度、同权限的非隐藏区域对应——公开区域是私有非隐藏区域的全集；</li>
+  <li><b>值镜像</b>（XS-PROJ-VALUES）：初始投影的 <code>bytesHex</code> 必须等于私有区域 <code>contentHex</code> 的同长<b>前缀切片</b>；寄存器公开值必须等于私有初值；</li>
+  <li><b>反向排除</b>（I3-VISIBLE-REG / XS-REG-FLAG）：FLAG 寄存器与声明为秘密汇的寄存器，禁止出现在公开投影；<code>containsSecret</code> 的对象必须 hidden 且不与公开区域重叠。</li>
+</ul>
+<p><b>为什么这样设计。</b>如果允许两套数据，"公开显示 A、私有实际是 B"会造成两类灾难：判题与展示不一致（选手做对了却判负）；
+或者更糟——两者的差集本身就是泄漏信道（T-SC1 差分测试专门断言"响应是可见状态的确定性函数"）。
+镜像原则让"初始投影 = 函数(私有初始态)"成为可机检的恒等式。</p>
+<pre><code>私有: contentHex = "53544143 4B4D 0000 …"（32 B）
+公开: bytesHex   = "53544143 4B4D"（前 6 B）, truncated: true   ← 前缀切片 + 诚实截断标记</code></pre>
+<div class="misuse"><b>常见误解。</b>①"我可以在公开包里放一份'美化过的'初始值"——拒绝（XS-PROJ-VALUES）；
+②"隐藏区域反正看不到，地址随便放"——隐藏区域地址不得与公开区域重叠（I2-HIDDEN-NOT-PUBLIC），否则重叠部分既是"隐藏的"又"可见的"，自相矛盾；③"秘密汇只是建议"——是硬检查，FLAG 命名寄存器永远进不了公开投影。</div>
+<div class="pager">
+  <a class="prev" href="00-认知入门.html"><span class="lbl">◀ 上一篇</span>第 0 层 · 认知入门</a>
+  <a class="next" href="1B-虚拟机.html"><span class="lbl">下一篇 ▶</span>1B 虚拟机</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

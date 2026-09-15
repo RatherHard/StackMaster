@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1E 判题 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 1 层 · 概念详解 · 1E 判题</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a class="cur" href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>1E 判题 <span class="badge b1">概念组 · 5 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-e1">E1 · 判题时机与交互终态</a>　<a href="#c-e2">E2 · 谓词与三级条件</a>　<a href="#c-e3">E3 · 隐藏测试</a>　<a href="#c-e4">E4 · 正式裁决与 11 值</a>　<a href="#c-e5">E5 · 判题配置</a></div>
+<h3 id="c-e1">E1 · 判题时机与交互终态 <span class="badge b1">概念 · 判题（最易踩坑）</span></h3>
+<div class="one">一句话：成功条件在<b>每个动作执行之后即时求值</b>（检查点机制）——所以判胜条件要写成
+"到达目标之后才会成立的<b>持久事实</b>"，而不是"路过了某个位置"。</div>
+<p><b>展开。</b>引擎在动作落定后求值判定，求值通过则交互状态翻 <code>won</code>。理解"即时求值"的推论：</p>
+<ul>
+  <li><b> RIP 型条件</b>：<code>register_equals RIP, win地址</code> 在"控制流落到 win"的<b>那一瞬</b>就成立——
+      win 块<b>内部</b>的指令（比如密钥校验 <code>cmp</code>）根本来不及执行。ret2win 题用它是<b>正确的</b>（win 无门，落点即胜利）；</li>
+  <li><b>FLAG 型条件</b>：如果 win 块内部还有一道门（比如 <code>cmp RDI, 密钥</code> 不等则跳走），
+      判胜必须挂在门<b>之后</b>的副作用上——典型做法是自定义指令 <code>WINFLAG</code>（set_flag FLAG0 = 0x1337），
+      判胜条件写 <code>register_equals FLAG0 0x1337</code>。门先拦，标记后置，"错密钥"的失败路径才真正存在
+      （扩展题 x02 就是这么做的）；</li>
+  <li><b>exit 不等于失败</b>：程序执行 <code>exit(1)</code> 只是"程序自己停机"，交互状态保持 running，
+      失败方向由判题给出（条件不满足 → 不判胜；正式裁决 → wrong_answer）。"failed 终态"来自
+      <code>failureConditions</code> 或教学性致命失败，不是 exit 本身。</li>
+</ul>
+<p><b>为什么这样设计。</b>即时求值给选手即时反馈（教学实验室的核心体验）；代价是出题人必须把"胜利"建模为<b>状态事实</b>
+而非<b>路径事件</b>。这其实是更好的建模习惯：事实可重放、可被隐藏测试独立复核；路径事件做不到。</p>
+<div class="misuse"><b>常见误解。</b>①"选手必须走到程序末尾才判"——不用，条件成立即终态；②"win 块里写 cmp 就有密钥校验了"——
+取决于判胜条件挂在哪（见上，这是出题人文档收到的最真实的坑）；③"交互 failed 就没成绩了"——交互终态与正式裁决独立，
+failed 提交后会得到 wrong_answer 一类的正式结果，该重来重来。</div>
+<h3 id="c-e2">E2 · 谓词与三级条件 <span class="badge b1">概念 · 判题</span></h3>
+<div class="one">一句话：判题逻辑 = 7 个内置谓词 + 固定三层的布尔组合（all / any / not，每层 ≤4 分支）——
+表达力封顶，但每一层都是静态可校验、跨语言可复现的。</div>
+<p><b>展开。</b>结构长这样（深度写死在 Schema 里，第四层直接拒）：</p>
+<pre><code>L1: { "all": [ L2, L2 ], "not": L2 }        ← 至少一个键；空 all = 恒真
+L2: { "any": [ L3, L3 ] }
+L3: { "predicate": { "type": "…", …参数 } }
+
+// 例：RIP 到达 win 且栈守护完好（ret2win 标准判胜）
+{ "all": [ { "all": [
+    { "predicate": { "type": "register_equals", "register": "RIP", "valueHex": "0x6" } },
+    { "predicate": { "type": "stack_canary_intact" } } ] } ] }</code></pre>
+<p>七个谓词各自回答一个问题（参数表在 R4）：<code>register_equals</code>（某寄存器等于某值？）、
+<code>register_bits_set</code>（某掩码位全为 1？）、<code>memory_equals</code>（区域某偏移处等于这些字节？——守护标记教学的主力）、
+<code>memory_contains</code>（区域里包含这段字节？≤64B）、<code>ret_target_equals</code>（ret 弹出的目标等于某地址？）、
+<code>stack_canary_intact</code>（守护完好？canary 未启用时恒真，可放心合取）、<code>virtual_file_read</code>（密档已读？配合作者接口）。</p>
+<p><b>为什么这样设计。</b>计划书 7.3 的原则："复杂逻辑优先沉淀为经过审计的内置谓词"。固定三层把嵌套深度变成
+Schema 静态属性（Ajv 直接拒绝深层恶意嵌套，不需要递归求值器）；封闭谓词让 TS 与 Rust 两侧求值结果天然一致
+（重放确定性）。你的判题逻辑若超出"三层 + 七谓词"，正确姿势是提议新内置谓词走审计，不是绕。</p>
+<div class="misuse"><b>常见误解。</b>①"判题能读内存任意位置"——谓词引用的区域偏移必须在区域界内（XS-PRED-REFS），
+且语义上应引用<b>非隐藏</b>区域或你自己定义的判据；②"not 可以套 not 无限深"——三层封顶；③"谓词能调用函数"——谓词是纯判断，没有副作用。</div>
+<h3 id="c-e3">E3 · 隐藏测试 <span class="badge b1">概念 · 判题</span></h3>
+<div class="one">一句话：隐藏测试是选手<b>看不到</b>的复核用例——正式裁决时 verifier 会逐条核对"这道题是否真的按你声明的
+标准判分"；v1 形态是"终态探针"（类似答案册），带输入的形态已在 Schema 预留、等输入槽开放。</div>
+<p><b>展开。</b>每个用例 = <code>{testId, kind, payloadHex?, expectedResult}</code>，≤16 条。
+kind 两种：<code>predicate_probe</code>（终态探针：对 successCondition 的终态独立复核，无输入字节——v1 全部用这个）
+与 <code>reference_payload</code>（给定输入应得什么——<b>输入槽 D-H2 尚未开放</b>，先别设计依赖它的题）。
+<code>expectedResult</code> 从 7 个可达判定值里选：<code>success / wrong_answer / invalid_action / program_crash /
+memory_fault / resource_limit / timeout</code>（后四个值 challenges_invalid 等不可授权，D6 裁决）。
+惯用配置：一条 <code>final-state-probe</code>（预期 success）作为"答案册"。</p>
+<p><b>为什么这样设计。</b>正式裁决的可信度来自"独立复核"：verifier 不信任交互过程里发生的任何事，
+它重放日志、对终态跑你的隐藏测试、再合成成绩。隐藏测试也是<b>你的自测网</b>：如果参考解过不了你自己的隐藏测试，
+说明判题声明与题目实际行为不一致——发布管线的裁决回归会替你抓出来。</p>
+<div class="misuse"><b>常见误解。</b>①"隐藏测试越多越难"——它是<b>复核</b>不是难度；难度靠题目本身设计；
+②"我可以塞一个 expected success 但实际到不了的用例增加迷惑"——裁决回归会暴露它（参考解跑不出该预期即红灯）；
+③"testId 可以写在展示文本里"——XS-CUSTOM-DISPLAY 禁止。</div>
+<h3 id="c-e4">E4 · 正式裁决与 11 值 <span class="badge b1">概念 · 判题</span></h3>
+<div class="one">一句话：选手点提交后，独立 verifier 服务<b>从零重放</b>他的操作日志、跑隐藏测试，把结果合成 11 个值之一——
+成绩是"重放出来的"，不是"交互里记录的"。</div>
+<p><b>展开。</b>合成规则（你只需要建立直觉，精确语义在 <code>docs/develop/判题语义规约.md</code> §八·一）：</p>
+<table>
+  <tr><th>你的观察</th><th>大概率裁决</th><th>原因</th></tr>
+  <tr><td>交互 won 且隐藏测试全过</td><td><code>success</code></td><td>唯一得分方向：won ∧ 全过</td></tr>
+  <tr><td>重放成立但目标没达成（含 exit(1) 停机）</td><td><code>wrong_answer</code></td><td>非终态提交记错方向</td></tr>
+  <tr><td>交互 failed（failureConditions 触发 / 教学性致命）</td><td>粗化优先方向</td><td>交互 failed 优先合成失败值</td></tr>
+  <tr><td>重放中崩溃 / 内存违规 / 超预算 / 超时</td><td><code>program_crash / memory_fault / resource_limit / timeout</code></td><td>按重放事实取值</td></tr>
+  <tr><td>日志里有违规动作</td><td><code>invalid_action</code></td><td>重放校验不过</td></tr>
+  <tr><td>重放与在线记录不一致</td><td><code>replay_mismatch</code></td><td>完整性保护（正常使用不会遇到）</td></tr>
+  <tr><td>题目包装载失败 / 引擎内部错误 / 提交被取消</td><td><code>challenge_invalid / engine_error / cancelled</code></td><td>非选手责任方向</td></tr>
+</table>
+<p><b>为什么这样设计。</b>"重放裁决"让成绩与三个东西彻底解耦：选手浏览器（改了没用）、交互界面（won 可以是假的）、
+时间（重放按锁定的引擎版本与种子复现）。对你的要求收敛为两句话：<b>参考解真的能赢；失败路径的预期裁决在语料里钉对</b>。</p>
+<div class="misuse"><b>常见误解。</b>①"交互 won = 通关"——还差隐藏测试；②"我可以让题目在特定时间判定不同结果"——
+重放确定性禁止任何时间/随机依赖（种子是唯一的随机源，见 F2）。</div>
+<h3 id="c-e5">E5 · 判题配置 <span class="badge b1">概念 · 判题</span></h3>
+<div class="one">一句话：<code>judgingConfig</code> 是判题的运行参数——规则版本（必填）+ 谓词求值步数预算（必填）
++ 可选的单动作超时与总字节预算。</div>
+<p><b>展开。</b><code>verdictRuleVersion</code>（semver）钉住"谓词集的版本"——新增内置谓词时递增，
+verifier 重放按它选择判题语义；<code>maxPredicateEvalSteps</code>（1–10,000,000）限制单会话谓词求值总量
+（防止病态条件被反复求值拖垮裁决）；可选 <code>timeoutMsPerAction</code>（≤60s）、<code>maxTotalActionBytes</code>（≤1MiB）。
+MVP 语料惯用值 predicateEval=10000、rollback=200、maxWrite=64，教学题直接照抄。</p>
+<div class="misuse"><b>常见误解。</b>①"预算是给选手的难度设计"——主要是资源护栏；难度请用题目几何与判题条件设计；
+②"verdictRuleVersion 随内容改动递增"——不，它只跟判题规则（谓词集）走，题面改动递增的是内容版本。</div>
+<div class="pager">
+  <a class="prev" href="1D-程序.html"><span class="lbl">◀ 上一篇</span>1D 程序</a>
+  <a class="next" href="1F-编排随机与预算.html"><span class="lbl">下一篇 ▶</span>1F 编排、随机与预算</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>
