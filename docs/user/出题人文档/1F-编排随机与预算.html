@@ -21,7 +21,11 @@
   <a class="cur" href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
   <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
   <h2 class="n2">第 2 层 · 任务指南</h2>
-  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
   <h2 class="n3">第 3 层 · 精确参考</h2>
   <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
   <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
@@ -33,7 +37,7 @@
 <h3 id="c-f1">F1 · 多阶段状态机 <span class="badge b1">概念 · 编排</span></h3>
 <div class="one">一句话：<code>stages[]</code> 把题目切成 ≤8 个阶段，每个阶段声明"允许什么动作、何时进来、何时出去、
 有什么副作用、何时判负、最多执行多少条指令"——<b>最后一条是硬性的</b>：有循环就必须有 stages，有 stages 就必须有预算。</div>
-<p><b>展开。</b>六要素逐个说人话：<code>allowedActions</code>（本阶段选手能用哪些动作，必须是题目允许面的子集）、
+<p><b>六要素说人话。</b>六要素逐个说人话：<code>allowedActions</code>（本阶段选手能用哪些动作，必须是题目允许面的子集）、
 <code>preconditions</code>（进入本阶段的前置条件，恒真写 <code>{"all":[]}</code>）、<code>transitions</code>
 （什么条件迁去哪个阶段，目标必须全部可达）、<code>sideEffects</code>（v1 只有"授予虚拟文件"一种）、
 <code>failureConditions</code>（触发即 failed 终态）、<code>resourceBudget</code>（<b>maxInstructionSteps 必填</b>，
@@ -47,7 +51,7 @@
 <h3 id="c-f2">F2 · 种子与随机化 <span class="badge b1">概念 · 随机</span></h3>
 <div class="one">一句话：题目里一切随机都从一个<b>种子</b>确定性地派生；策略二选一（固定种子 / 服务端每会话随机），
 种子值永远不进公开面，你还必须声明"随机化影响了哪些公开投影叶子"。</div>
-<p><b>展开。</b><code>seedPolicy</code> 两态互斥（Schema if/then/else + XS-SEED-POLICY 双闸）：
+<p><b>两种策略与一份诚实声明。</b><code>seedPolicy</code> 两态互斥（Schema if/then/else + XS-SEED-POLICY 双闸）：
 <code>fixed</code> ⇒ <code>seedHex</code>（16–64 hex 字符）必填——教学/测试推荐，重放逐字节可复现；
 <code>server_random_per_session</code> ⇒ <b>禁止</b>携带 seedHex（服务端每会话生成）。配套的
 <code>declaredSeedPublicPaths</code>（必填，可空数组）是<b>诚实声明</b>：列出种子会影响的公开投影叶子
@@ -62,7 +66,7 @@
 <h3 id="c-f3">F3 · ASLR <span class="badge b1">概念 · 随机</span></h3>
 <div class="one">一句话：<code>aslrEnabled</code>（缺省 false）开启后，公开包里的区域地址从"绝对基址"变成"镜像内相对布局"，
 真实基址由会话种子派生——调试实例与真实实例各自派生，地址不同是<b>预期教学语义</b>。</div>
-<p><b>展开。</b>开启三件事随之发生：①<code>startAddressHex</code> 语义重定义为相对偏移（描述"谁在谁下面"）；
+<p><b>开启之后发生什么。</b>开启三件事随之发生：①<code>startAddressHex</code> 语义重定义为相对偏移（描述"谁在谁下面"）；
 ②<b>必须</b>同时给出 <code>randomizationNotice</code>（1–200 字符，只声明"存在随机化"，禁止写策略与熵上界——XS-ASLR-NOTICE）；
 ③会话期 SeedDeriver 为真实实例与调试实例各自派生基址（派生路径进回放元数据）。MVP 题目集全部缺省关闭
 （D-J8 定案）：v1 真实实例固定基址，ASLR 只在调试实例以兄弟形态呈现，配 what-if 横幅提醒
@@ -72,6 +76,7 @@
 <h3 id="c-f4">F4 · 资源预算 <span class="badge b1">概念 · 预算</span></h3>
 <div class="one">一句话：预算有三层——公开包 <code>resourceLimits</code> 管选手会话、私有包 <code>judgingConfig</code> 管判题求值、
 阶段 <code>resourceBudget</code> 管程序执行；三层都是护栏，不是难度。</div>
+<p><b>三层预算表。</b></p>
 <table>
   <tr><th>层</th><th>键</th><th>域</th><th>管什么</th></tr>
   <tr><td>公开 resourceLimits</td><td>predicateEvalBudgetPerSession</td><td>1–1,000,000</td><td>交互判定总求值量</td></tr>

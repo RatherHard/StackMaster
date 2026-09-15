@@ -21,7 +21,11 @@
   <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
   <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
   <h2 class="n2">第 2 层 · 任务指南</h2>
-  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
   <h2 class="n3">第 3 层 · 精确参考</h2>
   <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
   <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
@@ -33,7 +37,7 @@
 <h3 id="c-c1">C1 · 区域六类与页对齐 <span class="badge b1">概念 · 内存</span></h3>
 <div class="one">一句话：内存由若干<b>区域</b>（region）组成，每块有类型（六选一）、起点、长度（4KB 的倍数）、权限（rwx 子集）
 和展示名；类型是给选手的"这是什么"暗示，权限才是硬约束。</div>
-<p><b>展开。</b>六类区域的传统语义（引擎不强制用途，但权限与惯例决定玩法）：</p>
+<p><b>六类区域与护栏。</b>六类区域的传统语义（引擎不强制用途，但权限与惯例决定玩法）：</p>
 <table>
   <tr><th>kind</th><th>传统用途</th><th>典型权限</th><th>出题要点</th></tr>
   <tr><td><code>code</code></td><td>程序代码</td><td>rx（IR 模式可为 r——内存字节只是数据）</td><td><b>至多 1 块、不得隐藏、必须出现在初始投影</b>（D2-CODE-PUBLIC）；字节模式下还有额外规则（D6）</td></tr>
@@ -52,7 +56,7 @@
 <h3 id="c-c2">C2 · 可见与隐藏 <span class="badge b1">概念 · 内存</span></h3>
 <div class="one">一句话：可见性在 StackMaster 里是<b>布局问题</b>而不是标志位问题——公开包里列出的区域就是可见的；
 只在私有包里声明（<code>isHidden: true</code>）的区域就是隐藏的，选手侧"不存在"。</div>
-<p><b>展开。</b>三层机制：</p>
+<p><b>三层机制。</b>三层机制：</p>
 <ul>
   <li><b>布局即可见性</b>：公开包 <code>memoryLayout</code> 列出的区域进入初始投影，选手的字节视图能看；
       隐藏区域只在私有包 <code>initialState.memoryRegions[]</code> 里出现（带 <code>isHidden: true</code>）。
@@ -69,7 +73,7 @@
 <h3 id="c-c3">C3 · 私有对象 <span class="badge b1">概念 · 内存</span></h3>
 <div class="one">一句话：私有对象是你给内存里的"有意义片段"打的<b>语义标签</b>（这是 buffer、这是返回地址槽、这里含秘密），
 它不改变内存内容，但驱动判题引用、审计与检查器的一致性判定。</div>
-<p><b>展开。</b>每个对象 = <code>{objectId, kind, addressHex, byteLength, visibility, containsSecret}</code>。
+<p><b>字段与两条硬规则。</b>每个对象 = <code>{objectId, kind, addressHex, byteLength, visibility, containsSecret}</code>。
 kind 六选一：<code>buffer / canary / saved_rbp / return_address / file / other</code>。
 两条硬规则：<code>containsSecret ⇒ visibility = "hidden"</code>（I3-SINK-HIDDEN，"含秘密却公开"直接拒）；
 hidden 对象不得与公开区域重叠（I2-OBJ-NOT-PUBLIC）。惯例：栈教学题登记 <code>input-buffer</code>、

@@ -21,7 +21,11 @@
   <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
   <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
   <h2 class="n2">第 2 层 · 任务指南</h2>
-  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
   <h2 class="n3">第 3 层 · 精确参考</h2>
   <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
   <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
@@ -33,7 +37,7 @@
 <h3 id="c-d1">D1 · IR 模式与字节模式 <span class="badge b1">概念 · 程序</span></h3>
 <div class="one">一句话：程序有两种载体——<b>IR 模式</b>（一个指令数组，跳转目标"第几条指令"，内存字节只是数据）
 与<b>字节模式</b>（真实机器码字节躺在内存里，代码区可执行，任意字节位置都可以开始取指）——二者<b>恰选其一</b>，执行语义层完全同一。</div>
-<p><b>展开。</b>用两个类比建立直觉：</p>
+<p><b>一张对照表看懂。</b>用两个类比建立直觉：</p>
 <table>
   <tr><th></th><th>IR 模式</th><th>字节模式</th></tr>
   <tr><td>类比</td><td>汇编伪代码清单：程序是编号指令表，"跳到第 7 条"</td><td>真实二进制：程序是一段字节，CPU 从某地址开始取指译码</td></tr>
@@ -54,7 +58,7 @@
 <h3 id="c-d2">D2 · 指令、操作数、标志位 <span class="badge b1">概念 · 程序</span></h3>
 <div class="one">一句话：基线指令封闭 20 条；每条指令的操作数最多 4 个、形态四选一（寄存器 R / 立即数 I / 内存 M / 接口引用）；
 三个标志位 zf/cf/sf 由算术比较置位、只被条件跳转消费。</div>
-<p><b>展开。</b>操作数四类（写语料时就是四种 JSON 形态）：</p>
+<p><b>操作数四类与三个标志位。</b>操作数四类（写语料时就是四种 JSON 形态）：</p>
 <pre><code>{ "kind": "register",  "name": "RAX" }                       // 寄存器
 { "kind": "immediate", "valueHex": "0x40" }                  // 立即数（无符号，archBits 域）
 { "kind": "memory",    "baseRegister": "RBP",
@@ -80,7 +84,7 @@
 <h3 id="c-d3">D3 · 控制流、标签与死代码 <span class="badge b1">概念 · 程序</span></h3>
 <div class="one">一句话：IR 模式的跳转目标就是"指令下标"；labels 数组只是给人看的锚点元数据；编译器会检查
 目标界内、无死代码、有循环就必须配阶段预算。</div>
-<p><b>展开。</b>写一个带分支与"不可达 win 块"的程序（ret2win 的标准骨架）：</p>
+<p><b>编译器的三条控制流规则。</b>写一个带分支与"不可达 win 块"的程序（ret2win 的标准骨架）：</p>
 <pre><code>下标  指令                        说明
  0    push RBP                    序章（教学展示面）
  1    mov RBP, RSP
@@ -111,7 +115,7 @@ labels: [ {entry,0}, {win,6}, {lose,8} ]   ← labels 只是元数据，
 <h3 id="c-d4">D4 · 自定义指令 <span class="badge b1">概念 · 程序</span></h3>
 <div class="one">一句话：自定义指令 = 你用<b>六种微算子</b>拼出的"新指令"（≤16 条，每条 1–16 步直线语义），
 给选手一个<b>助记符</b>和一句<b>展示文本</b>——它是"题目自定义指令集"的实现机制，本质是声明式数据，不是代码。</div>
-<p><b>展开。</b>六种微算子：装载立即数（load_imm）、寄存器传送（mov_reg）、内存读（load_mem）、内存写（store_mem）、
+<p><b>六种微算子怎么拼。</b>六种微算子：装载立即数（load_imm）、寄存器传送（mov_reg）、内存读（load_mem）、内存写（store_mem）、
 置 FLAG（set_flag——<b>唯一</b>能写 FLAG 寄存器的算子）、位掩蔽（bit_mask，支持 and/or/xor）。
 拼法是<b>有序组合</b>、无控制转移、步数恒定等于序列长度：</p>
 <pre><code>customInstructions: [
@@ -136,7 +140,7 @@ labels: [ {entry,0}, {win,6}, {lose,8} ]   ← labels 只是元数据，
 <div class="one">一句话：作者接口 = 题目自定义的"系统调用"——每个接口一个编号（0x0100–0xFFFF）、一句展示文本、
 一段<b>效果原语序列</b>（终止 / 发虚拟文件 / 标记已读 / 置 FLAG / 空操作）；程序里用 <code>syscall N</code> 或
 <code>call {接口引用}</code> 触发，由引擎管理调用、不占玩家栈。</div>
-<p><b>展开。</b>"flag 放在一个要靠能力才能读的文件里"是经典 pwn 叙事，作者接口就是它的正规实现通道：</p>
+<p><b>以虚拟文件 flag 为例。</b>"flag 放在一个要靠能力才能读的文件里"是经典 pwn 叙事，作者接口就是它的正规实现通道：</p>
 <pre><code>// 私有包两处配合：
 secrets: { flag: "FLAG{...}",
            virtualFiles: [ { fileId: "vault-flag", content: "FLAG{v4ult}" } ] },
@@ -159,7 +163,7 @@ interfaces: [ { interfaceId: 0x100, displayText: "vault: 读取密档",
 <h3 id="c-d6">D6 · 字节模式深潜 <span class="badge b1">概念 · 程序</span></h3>
 <div class="one">一句话：字节模式让代码区字节流成为程序本体——你在公开包里发布一张"token 字典"
 （哪个字节值 = 哪条指令），选手能在内存里直接看到自己的程序；任意 token 边界取指是合法的，gadget 教学由此成为可能。</div>
-<p><b>展开。</b>四块新知识：</p>
+<p><b>四块新知识。</b>四块新知识：</p>
 <ul>
   <li><b>编码表（公开）</b>：≤64 条 <code>{tokenHex, op, operands?}</code>。<code>tokenHex</code> 定宽 1 字节且表内唯一；
       寄存器<b>烘焙</b>进 token（<code>pop RDI</code> 和 <code>pop RAX</code> 是两个不同 token，FLAG 寄存器不可编码）；

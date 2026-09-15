@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>T3 隐藏区域 + 接口 flag · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 2 层 · T3 隐藏区域 + 接口 flag</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a class="cur" href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>T3 · 隐藏区域 + 作者接口 flag 题 <span class="badge b2">任务指南</span></h1>
+<p class="muted">本任务在 T1/T2 之上引入四个新概念：<b>隐藏区域</b>（<a href="1C-内存.html#c-c2">C2</a>）、
+<b>虚拟文件</b>、<b>作者接口</b>（<a href="1D-程序.html#c-d5">D5</a>）、<b>virtual_file_read 判胜谓词</b>。
+本页给出完整可跑的 <code>corpus.ts</code>（IR 模式，已实跑验证），分三段全文给出，无省略；
+并如实记录本页代码开发时踩到的<b>三个真实红灯</b>（见步骤 4）。</p>
+<div class="toc"><b>本页目录</b>　<a href="#t3-0">0 设计稿</a>　<a href="#t3-1">1 语料模块·类型与工具（完整）</a>　<a href="#t3-2">2 布局、区域与辅助（完整）</a>　<a href="#t3-3">3 题目本体与语料矩阵（完整）</a>　<a href="#t3-4">4 三个真实红灯（必读）</a>　<a href="#t3-5">5 测试与运行</a></div>
+
+<h4 id="t3-0">0 · 设计稿：题目叙事与机制</h4>
+<table>
+  <tr><th>要素</th><th>设计</th><th>概念</th></tr>
+  <tr><td>叙事</td><td>实验室藏着一间"密库"，里面有 flag 文件；程序定义了「读取密档」接口（接口号 0x100），只有配置区的密钥正确时程序才会调用它</td><td>—</td></tr>
+  <tr><td>隐藏区域</td><td><code>vault</code>（kind key，0x20000000，r，isHidden:true），内容 = flag 文本字节</td><td>选手探测它与探测未映射<b>完全同形</b>（I-9）</td></tr>
+  <tr><td>虚拟文件</td><td><code>secrets.virtualFiles: [{fileId:"vault-flag", content:"FLAG{v4ult}"}]</code></td><td>fileId 私有，公开包出现即拒</td></tr>
+  <tr><td>作者接口</td><td><code>interfaces: [{interfaceId:0x100, effects:[grant_virtual_file, virtual_file_read]}]</code>；程序内 <code>call {interface 0x100}</code> 触发</td><td>引擎管理调用，不占玩家栈</td></tr>
+  <tr><td>程序</td><td>IR 6 条：读配置区密钥 → cmp 0x5EC5AB1E → jne lose → <b>call 接口</b> → exit(0) / lose: exit(1)</td><td>判胜 = virtual_file_read（密钥门在 call 之前，天然不会被 E1 的即时求值绕过）</td></tr>
+  <tr><td>配置区</td><td><code>cfg</code>（global，0x600000，rw，公开）——选手把 8 字节小端密钥写进 0x600000</td><td>RCFG 寄存器公开，选手可算地址</td></tr>
+  <tr><td>失败路径</td><td>错密钥 → lose；<b>探测密库地址 → 执行前拒绝</b>（rejected，与未映射同形）；写 rx 代码区 → permission_denied</td><td>四个方向全覆盖</td></tr>
+</table>
+
+<h4 id="t3-1">1 · 语料模块：类型与工具（完整代码）</h4>
+<pre><code>/**
+ * T3 样例:隐藏区域 + 作者接口 flag 题(IR;出题人文档 T3 的配套语料)。
+ */
+import type { ActionObject } from "@stackmaster/protocol";
+import { canonicalize } from "@stackmaster/protocol";
+import { createHash } from "node:crypto";
+import { loadChallengePair, type ChallengeLoadResult } from "@stackmaster/challenge-compiler";
+
+export interface T3CorpusEntry {
+  readonly name: string;
+  readonly description: string;
+  readonly expectedFinalStatus: "running" | "won" | "failed";
+  readonly expectedVerdict: "success" | "wrong_answer" | "invalid_action" | "program_crash" | "memory_fault" | "resource_limit" | "timeout";
+  readonly actions: readonly ActionObject[];
+  readonly expectedFirstRejected?: boolean;
+  readonly expectedLastError?: string;
+}
+
+export interface T3Pair {
+  readonly publicDescriptor: unknown;
+  readonly privateBundle: unknown;
+}
+
+export interface T3Challenge {
+  readonly meta: { readonly challengeId: string; readonly title: string; readonly mode: "ir" | "byte" };
+  readonly buildPair: () =&gt; T3Pair;
+  readonly corpora: readonly T3CorpusEntry[];
+}
+
+export function canonicalDigests(pair: T3Pair) {
+  return {
+    publicDescriptorSha256: createHash("sha256").update(canonicalize(pair.publicDescriptor), "utf8").digest("hex"),
+    privateBundleSha256: createHash("sha256").update(canonicalize(pair.privateBundle), "utf8").digest("hex"),
+  };
+}
+
+export function loadT3Challenge(challenge: T3Challenge): ChallengeLoadResult {
+  return loadChallengePair(challenge.buildPair());
+}</code></pre>
+
+<h4 id="t3-2">2 · 布局、区域与辅助（完整代码）</h4>
+<p>注意：公开布局 = code + stack + <b>cfg 配置区</b>；<b>vault 不在公开布局</b>，只在私有 regions 里带 <code>isHidden: true</code>。
+密库内容是稠密定义的（flag 文本字节 + 全零填充到 4096）：</p>
+<pre><code>const CODE_BASE = "0x400000";
+const STACK_BASE = "0x7ffff000";
+const CFG_BASE = "0x600000";
+const VAULT_BASE = "0x20000000";
+const REGION_BYTES = 4096;
+const PAGE_SIZE = 4096;
+const ARCH_BITS = 64;
+
+const FRAME = {
+  buffer: "0x7ffff7f0",
+  savedRbp: "0x7ffff800",
+  retSlot: "0x7ffff808",
+  rsp: "0x7ffff800",
+  rbp: "0x7ffff800",
+} as const;
+
+/** 密钥(教学值;选手从题面/提示得知)。 */
+const VAULT_KEY = "0x5ec5ab1e";
+const VAULT_FLAG_FILE_ID = "vault-flag";
+const VAULT_FLAG_CONTENT = "FLAG{v4ult}";
+
+function le64(valueHex: string): string {
+  let value = BigInt(valueHex);
+  const bytes: string[] = [];
+  for (let index = 0; index &lt; 8; index += 1) {
+    bytes.push((value &amp; 0xffn).toString(16).padStart(2, "0"));
+    value &gt;&gt;= 8n;
+  }
+  return bytes.join("");
+}
+
+function stackContent(writes: readonly { readonly offset: number; readonly hex: string }[]): string {
+  const bytes = Buffer.alloc(REGION_BYTES, 0);
+  for (const write of writes) {
+    Buffer.from(write.hex, "hex").copy(bytes, write.offset);
+  }
+  return bytes.toString("hex");
+}
+
+function zeroRegion(): string {
+  return "00".repeat(REGION_BYTES);
+}
+
+/** 密库内容:flag 文本字节 + 全零填充(稠密定义)。 */
+function vaultContent(): string {
+  const bytes = Buffer.alloc(REGION_BYTES, 0);
+  Buffer.from(VAULT_FLAG_CONTENT, "utf8").copy(bytes, 0);
+  return bytes.toString("hex");
+}
+
+function flagFor(challengeId: string): string {
+  return `FLAG{my-${challengeId.slice(4, 6)}}`;
+}
+
+function seedFor(challengeId: string): string {
+  const serial = challengeId.slice(4, 6);
+  if (!/^[0-9a-f]{2}$/.test(serial)) throw new Error(`bad serial: ${challengeId}`);
+  return `00112233445566778899aabbccdd${serial}ee`;
+}
+
+function writeAction(addressHex: string, bytesHex: string): ActionObject {
+  return { type: "write_bytes", args: { addressHex, bytesHex } };
+}
+
+function steps(count: number): ActionObject[] {
+  return Array.from({ length: count }, () =&gt; ({ type: "step", args: {} }) as ActionObject);
+}
+
+function pubHex(valueHex: string): string {
+  return `0x${BigInt(valueHex).toString(16).toUpperCase()}`;
+}</code></pre>
+
+<h4 id="t3-3">3 · 题目本体与语料矩阵（完整代码）</h4>
+<p>判胜谓词 <code>virtual_file_read</code> 引用的 fileId 必须与接口效果、secrets.virtualFiles 三处一致（XS-IFACE-REF / XS-PRED-REFS）。
+语料里那条"探测密库"的边界尤其重要：<b>expectedFirstRejected: true</b>——执行前拒绝、revision 不前进、与未映射同形：</p>
+<pre><code>export const T3_CHALLENGE: T3Challenge = {
+  meta: { challengeId: "sm-t03-hidden-vault", title: "看不见的宝库:隐藏区域与读取接口", mode: "ir" },
+  buildPair: () =&gt; {
+    // 公开布局只有 code + stack;vault 只存在于私有包(isHidden)
+    const visibleRegions = [
+      { regionId: "code", kind: "code", startAddressHex: CODE_BASE, permissions: "rx", publicLabel: "代码段" },
+      { regionId: "stack", kind: "stack", startAddressHex: STACK_BASE, permissions: "rw", publicLabel: "栈" },
+      { regionId: "cfg", kind: "global", startAddressHex: CFG_BASE, permissions: "rw", publicLabel: "配置区" },
+    ];
+    const privateRegions = [
+      ...visibleRegions.map((region) =&gt; ({
+        regionId: region.regionId,
+        kind: region.kind,
+        startAddressHex: region.startAddressHex,
+        byteLength: REGION_BYTES,
+        permissions: region.permissions,
+        contentHex: region.regionId === "stack" ? stackContent([]) : zeroRegion(),
+        isHidden: false,
+      })),
+      {
+        regionId: "vault",
+        kind: "key",
+        startAddressHex: VAULT_BASE,
+        byteLength: REGION_BYTES,
+        permissions: "r",
+        contentHex: vaultContent(),
+        isHidden: true, // ← 隐藏区域:选手侧"不存在",探测与未映射不可区分
+      },
+    ];
+    const registers: Record&lt;string, string&gt; = {
+      RSP: FRAME.rsp,
+      RBP: FRAME.rbp,
+      RIP: "0x0",
+      RAX: "0x0",
+      FLAG0: "0x0",
+      RCFG: CFG_BASE, // 公开:选手需要知道配置区在哪(写密钥用)
+    };
+    const publicDescriptor = {
+      schemaVersion: 1,
+      challengeId: "sm-t03-hidden-vault",
+      challengeContentVersion: "1.0.0",
+      vmProfileVersion: "1.0.0",
+      locale: "zh-CN",
+      briefing: {
+        title: "看不见的宝库:隐藏区域与读取接口",
+        summary:
+          "传闻这座实验室藏着一间密库,里面有一份 flag 文件。题目为程序定义了一个「读取密档」接口" +
+          "(syscall 0x100 / call 接口 0x100):只有先在配置区写下正确的密钥,让程序带着密钥调用接口," +
+          "密档才算被读取。配置区在 0x600000,密钥是 32 位值 0x5EC5AB1E。",
+        learningObjectives: [
+          "理解'看不到的区域'在协议层不可探测",
+          "理解题目自定义接口(作者接口)的调用与判题衔接",
+        ],
+      },
+      vmProfile: {
+        registers: [
+          { name: "RAX", displayLabel: "通用累加器" },
+          { name: "RSP", displayLabel: "栈顶指针" },
+          { name: "RBP", displayLabel: "栈帧基址" },
+          { name: "RIP", displayLabel: "指令指针" },
+          { name: "RCFG", displayLabel: "配置区基址" },
+        ],
+        flagRegisterNames: ["FLAG0"],
+        endianness: "little",
+        pageSizeBytes: PAGE_SIZE,
+        archBits: ARCH_BITS,
+        canary: { enabled: false },
+      },
+      memoryLayout: {
+        regions: visibleRegions.map((region) =&gt; ({
+          regionId: region.regionId,
+          kind: region.kind,
+          startAddressHex: region.startAddressHex,
+          byteLength: REGION_BYTES,
+          permissions: region.permissions,
+          publicLabel: region.publicLabel,
+        })),
+      },
+      allowedActions: ["write_bytes", "step"],
+      resourceLimits: {
+        predicateEvalBudgetPerSession: 10000,
+        rollbackBudgetPerSession: 200,
+        maxWriteBytesPerAction: 64,
+      },
+      hintLadder: [
+        { order: 1, revealPolicy: "on_request", hintText: "程序从配置区 [0x600000] 读一个 64 位值与 0x5EC5AB1E 比较;把密钥按小端写成 8 字节:1EABC55E00000000。" },
+        { order: 2, revealPolicy: "after_n_failures", failureThreshold: 2, hintText: "密钥对上后程序会调用 0x100 接口读取密档——判胜条件就是'密档已被读取'。" },
+      ],
+      publicErrorMapping: [
+        { errorCode: "inaccessible_address", teachingNote: "地址不可见或未映射——两者不可区分是本题的设计:密库不会因探测而现形。" },
+        { errorCode: "objective_not_met", teachingNote: "程序带着错误的密钥走进了 exit(1):核对写入配置区的 8 字节密钥与其小端字节序。" },
+      ],
+      initialProjection: {
+        visibleRegions: visibleRegions.map((region) =&gt; ({
+          regionId: region.regionId,
+          label: region.publicLabel,
+          startAddressHex: region.startAddressHex,
+          byteLength: REGION_BYTES,
+          permissions: region.permissions,
+          bytesHex: region.regionId === "stack" ? stackContent([]).slice(0, 64) : zeroRegion().slice(0, 96),
+          truncated: true,
+        })),
+        visibleRegisters: [
+          { name: "RSP", valueHex: pubHex(FRAME.rsp) },
+          { name: "RBP", valueHex: pubHex(FRAME.rbp) },
+          { name: "RIP", valueHex: pubHex("0x0") },
+          { name: "RAX", valueHex: "0x0" },
+          { name: "RCFG", valueHex: pubHex(CFG_BASE) },
+        ],
+      },
+    };
+    const privateBundle = {
+      schemaVersion: 1,
+      challengeId: "sm-t03-hidden-vault",
+      challengeContentVersion: "1.0.0",
+      vmProfileVersion: "1.0.0",
+      dslSchemaVersion: 2,
+      vmEngineVersion: "0.1.0",
+      declaredSeedPublicPaths: [],
+      seedPolicy: { strategy: "fixed", seedHex: seedFor("sm-t03-hidden-vault") },
+      initialState: { registers, memoryRegions: privateRegions },
+      secrets: {
+        flag: flagFor("sm-t03-hidden-vault"),
+        virtualFiles: [{ fileId: VAULT_FLAG_FILE_ID, content: VAULT_FLAG_CONTENT }],
+      },
+      privateObjects: [
+        { objectId: "input-buffer", kind: "buffer", addressHex: FRAME.buffer, byteLength: 16, visibility: "public", containsSecret: false },
+        { objectId: "vault-flag-file", kind: "file", addressHex: VAULT_BASE, byteLength: 16, visibility: "hidden", containsSecret: true },
+      ],
+      judging: {
+        successCondition: {
+          all: [
+            { all: [{ predicate: { type: "virtual_file_read", fileId: VAULT_FLAG_FILE_ID } }] },
+          ],
+        },
+        hiddenTests: [
+          { testId: "final-state-probe", kind: "predicate_probe", expectedResult: "success" },
+        ],
+      },
+      compiledIr: {
+        irFormatVersion: 2,
+        entrypointIndex: 0,
+        instructions: [
+          // 0:从配置区读密钥
+          { op: "mov", operands: [{ kind: "register", name: "RAX" }, { kind: "memory", baseRegister: "RCFG" }] },
+          // 1:与密钥比较
+          { op: "cmp", operands: [{ kind: "register", name: "RAX" }, { kind: "immediate", valueHex: VAULT_KEY }] },
+          // 2:密钥错 → lose
+          { op: "jne", operands: [{ kind: "immediate", valueHex: "0x5" }] },
+          // 3:调用读取密档接口(引擎管理调用:授予 + 标记已读,不占玩家栈)
+          { op: "call", operands: [{ kind: "interface", interfaceId: 256 }] },
+          // 4:exit(0)
+          { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x0" }] },
+          // [lose] 5:exit(1)
+          { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x1" }] },
+        ],
+        labels: [
+          { labelId: "entry", instructionIndex: 0 },
+          { labelId: "lose", instructionIndex: 5 },
+        ],
+      },
+      interfaces: [
+        {
+          interfaceId: 256,
+          displayText: "读取密档(密钥正确时授权)",
+          effects: [
+            { effect: "grant_virtual_file", fileId: VAULT_FLAG_FILE_ID },
+            { effect: "virtual_file_read", fileId: VAULT_FLAG_FILE_ID },
+          ],
+        },
+      ],
+      customInstructions: [],
+      judgingConfig: {
+        verdictRuleVersion: "1.0.0",
+        maxPredicateEvalSteps: 10000,
+        timeoutMsPerAction: 5000,
+      },
+    };
+    return { publicDescriptor, privateBundle };
+  },
+  corpora: [
+    {
+      name: "correct key triggers vault interface and wins",
+      description: "参考解:向 0x600000 写小端密钥(1EABC55E00000000)→ step×4(mov/cmp/jne 不跳/call 接口)→ virtual_file_read 成立 → won → success。",
+      expectedFinalStatus: "won",
+      expectedVerdict: "success",
+      actions: [writeAction(CFG_BASE, le64(VAULT_KEY)), ...steps(4)],
+    },
+    {
+      name: "wrong key walks into lose",
+      description: "边界(wrong_answer 方向):写错密钥 → jne 跳 lose → exit(1) → running/wrong_answer。",
+      expectedFinalStatus: "running",
+      expectedVerdict: "wrong_answer",
+      actions: [writeAction(CFG_BASE, le64("0xbad0bad0")), ...steps(4)],
+    },
+    {
+      name: "probing the hidden vault is indistinguishable from unmapped",
+      description: "边界(拒绝方向):向隐藏密库地址写 → 执行前拒绝(rejected,revision 不前进)→ 与未映射完全同形。",
+      expectedFinalStatus: "running",
+      expectedVerdict: "wrong_answer",
+      expectedFirstRejected: true,
+      expectedLastError: "inaccessible_address",
+      actions: [writeAction(VAULT_BASE, "41")],
+    },
+    {
+      name: "write into read only code region is rejected with explanation",
+      description: "边界(教学失败方向):向 rx 代码区写 → permission_denied → running/wrong_answer。",
+      expectedFinalStatus: "running",
+      expectedVerdict: "wrong_answer",
+      expectedLastError: "permission_denied",
+      actions: [writeAction(CODE_BASE, "90")],
+    },
+  ],
+};</code></pre>
+
+<h4 id="t3-4">4 · 三个真实红灯（本页代码开发时逐一踩到，必读）</h4>
+<div class="misuse"><b>红灯 1 · <code>invalid_action</code> 不是公开错误码。</b>publicErrorMapping 想为"未声明接口号"配教学注解，
+选了 <code>invalid_action</code>——它是 11 值<b>裁决</b>，不在 16 值<b>错误码</b>枚举里，Schema 直接拒。
+修法：换枚举内的 <code>objective_not_met</code>（错误码与裁决值是两套词汇，对照 <a href="30-精确参考.html#r6">R6</a>）。</div>
+<div class="misuse"><b>红灯 2 · displayText 不得含隐藏区域名。</b>接口展示文本写了 "vault: 读取密档"，而隐藏区域 regionId 恰好叫
+<code>vault</code>——XS-CUSTOM-DISPLAY 拒绝（展示文本是公开面，不能泄露私有标识）。修法：展示文本改纯中文
+"读取密档(密钥正确时授权)"。给隐藏区域起 regionId 时就避开你将在展示文本里用的词。</div>
+<div class="misuse"><b>红灯 3 · RCFG 指向的区域忘了建。</b>寄存器 RCFG 指向 0x600000，但布局里根本没有 cfg 区域——
+选手写密钥得到 inaccessible_address，程序读配置区直接引擎失败。修法：cfg 作为 global/rw 公开区域加入布局
+（公开包 + 私有镜像同步）。<b>寄存器指向的地址必须有真实区域背书。</b></div>
+
+<h4 id="t3-5">5 · 测试与运行</h4>
+<ul>
+  <li>门禁/裁决测试沿用 T1/T2 模板（改导入与题目常量）；本页四条语料全绿：success（写密钥 + step×4）/
+      wrong_answer（错密钥）/ <b>rejected</b>（探测密库：首动作 rejected + inaccessible_address + revision 不前进）/
+      教学失败（permission_denied）；</li>
+  <li>运行：<code>pnpm --filter @stackmaster/session-api exec vitest run test/&lt;你的目录&gt;</code>；</li>
+  <li>参考成品：MVP CH-07（字节模式的同类题，含编码表接口 token）。</li>
+</ul>
+
+<div class="pager">
+  <a class="prev" href="T2-ret2win.html"><span class="lbl">◀ 上一篇</span>T2 做一道 ret2win</a>
+  <a class="next" href="T4-排查手册.html"><span class="lbl">下一篇 ▶</span>T4 排查手册</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

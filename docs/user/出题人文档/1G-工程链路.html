@@ -21,7 +21,11 @@
   <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
   <a class="cur" href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
   <h2 class="n2">第 2 层 · 任务指南</h2>
-  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
   <h2 class="n3">第 3 层 · 精确参考</h2>
   <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
   <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
@@ -34,7 +38,7 @@
 <div class="one">一句话：<code>loadChallengePair</code> 用四层 fail-closed 校验把你构造的双包过滤一遍——
 JSON 严格扫描 → Ajv Schema → XS 检查器 → XC 编译器；任一层违规即整体拒绝（方向恒为 challenge_invalid），
 不存在"带病装载"。</div>
-<p><b>展开。</b>四层各管什么：</p>
+<p><b>四层各管什么。</b>四层各管什么：</p>
 <table>
   <tr><th>层</th><th>工具</th><th>抓什么</th><th>报错长相</th></tr>
   <tr><td>0 严格扫描</td><td>字符级 JSON 扫描器</td><td>重复键、JSON.parse 观察不到的畸形</td><td>解析失败</td></tr>
@@ -50,7 +54,7 @@ JSON 严格扫描 → Ajv Schema → XS 检查器 → XC 编译器；任一层�
 <h3 id="c-g2">G2 · 规范化 JSON 与摘要 <span class="badge b1">概念 · 工程</span></h3>
 <div class="one">一句话：同一份 JSON 有无数种字节写法（空格、键序、转义）；<b>规范化</b>（stackmaster-canonical-json/1）
 把它压成唯一一种字节形态——登记摘要就是"规范化字节的 SHA-256"，这让"同一道题 = 同一串哈希"成为可复现事实。</div>
-<p><b>展开。</b>你在语料里调 <code>canonicalDigests(pair)</code> 得到公开/私有两个 SHA-256。
+<p><b>摘要用在哪。</b>你在语料里调 <code>canonicalDigests(pair)</code> 得到公开/私有两个 SHA-256。
 登记时落桶的字节就是 <code>canonicalize()</code> 的输出——所以"登记哈希 = 落桶字节哈希"是恒等式（语料门禁会自证一次）。
 它的价值在发布链的每一站：登记后任何人重放构造，算出的摘要必须逐字节相同（门禁确定性检查）；描述包下发端点的
 ETag 就是公开包摘要（缓存与一致性锚）；verifier 取双包后哈希比对（防调包）。TS 与 Rust 两侧各自实现了同一套
@@ -60,7 +64,7 @@ ETag 就是公开包摘要（缓存与一致性锚）；verifier 取双包后哈
 <h3 id="c-g3">G3 · 登记、签名与租户 <span class="badge b1">概念 · 工程</span></h3>
 <div class="one">一句话：登记 = 把双包的规范化字节经 <b>Ed25519 签名</b>提交给 <code>ChallengeRegistrar</code>，
 验签后落 MinIO 双桶 + PG 建档；题目版本按<b>（租户, 题目, 版本）三键</b>定位，版本不可变、重复登记确定性拒绝。</div>
-<p><b>展开。</b>签名的作用是"登记内容完整性可审计"：签名基线是
+<p><b>签名与三键。</b>签名的作用是"登记内容完整性可审计"：签名基线是
 <code>stackmaster-challenge-registration/1</code> + 五字段（题目/内容版本/VM 版本/两包摘要）的拼接，
 私钥签、公钥验——MVP 语料演示用临时密钥对，生产由发布方持钥。三键里的<b>租户</b>值得注意：
 题目是按租户隔离登记的，后续给选手签发 embed token 时 <code>tenantId</code> 必须与登记租户一致，
@@ -71,7 +75,7 @@ ETag 就是公开包摘要（缓存与一致性锚）；verifier 取双包后哈
 <h3 id="c-g4">G4 · 语料、测试与发布 <span class="badge b1">概念 · 工程</span></h3>
 <div class="one">一句话：你的题目交付物 = <b>语料模块（TS）+ 门禁测试 + 裁决回归测试</b>；私有内容永远只在进程内构造、
 永不写入 git；"题目可解、判分正确"由真实 vm-worker 的裁决回归测试证明。</div>
-<p><b>展开。</b>三件交付物各司其职：</p>
+<p><b>三件交付物。</b>三件交付物各司其职：</p>
 <ul>
   <li><b>语料模块</b>：构造式 TS（不是手写 JSON）——一个 <code>buildPair()</code> 每次现场构造全新双包对象；
       公开值按镜像原则从私有初值切片生成。私有语料不入 git 是红线：git 里只有"生成它们的代码"；</li>
@@ -86,7 +90,7 @@ ETag 就是公开包摘要（缓存与一致性锚）；verifier 取双包后哈
 <h3 id="c-g5">G5 · 教学面设计 <span class="badge b1">概念 · 教学</span></h3>
 <div class="one">一句话：教学面（briefing / hintLadder / publicErrorMapping）是公开包里"纯教学"的三件套——
 它们由选手本地渲染，写好它们 = 把你的教学意图铺到选手做错的每一个路口。</div>
-<p><b>展开。</b>写作要点：</p>
+<p><b>三件套写作要点。</b>写作要点：</p>
 <ul>
   <li><b>briefing</b>：情境 + 目标 + "会用到什么"，<b>不剧透 payload</b>；学习目标写成可验收的能力
       （"能解释 saved RBP 与返回地址的槽位关系"而不是"了解栈"）；</li>
@@ -99,7 +103,7 @@ ETag 就是公开包摘要（缓存与一致性锚）；verifier 取双包后哈
 注解经 E-4/E-6 扫描，禁止夹带私有标识；教学价值在解释错误语义，不在泄题。</div>
 <div class="pager">
   <a class="prev" href="1F-编排随机与预算.html"><span class="lbl">◀ 上一篇</span>1F 编排、随机与预算</a>
-  <a class="next" href="20-任务指南.html"><span class="lbl">下一篇 ▶</span>第 2 层 · 任务指南</a>
+  <a class="next" href="T1-从零做一道最小题.html"><span class="lbl">下一篇 ▶</span>T1 从零做一道最小题</a>
 </div>
 <footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
 </main>

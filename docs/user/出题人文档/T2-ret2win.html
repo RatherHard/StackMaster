@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>T2 做一道 ret2win · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 2 层 · T2 做一道 ret2win</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a class="cur" href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>T2 · 做一道 ret2win <span class="badge b2">任务指南</span></h1>
+<p class="muted">本任务是 <a href="T1-从零做一道最小题.html">T1</a> 的直接升级：把"写标记"换成<b>返回地址劫持</b>。
+本页给出完整的 <code>corpus.ts</code>（与扩展题集 <code>sm-x01-ret2win-ir</code> 同构、已实跑验证），分三段全文给出，无省略。
+建议先重读 <a href="1B-虚拟机.html#c-b3">B3 栈、栈帧与劫持</a> 与 <a href="1E-判题.html#c-e1">E1 判题时机</a>。</p>
+<div class="toc"><b>本页目录</b>　<a href="#t2-0">0 设计稿</a>　<a href="#t2-1">1 语料模块·类型与工具（完整）</a>　<a href="#t2-2">2 几何常量与辅助（完整）</a>　<a href="#t2-3">3 题目本体与语料矩阵（完整）</a>　<a href="#t2-4">4 测试与运行</a></div>
+
+<h4 id="t2-0">0 · 设计稿：四个决定</h4>
+<table>
+  <tr><th>决定</th><th>内容</th><th>为什么</th></tr>
+  <tr><td>程序骨架</td><td>9 条指令：序章 4 条（push RBP / mov RBP,RSP / cmp RAX,0 / jne lose）+ <b>leave + ret</b> + win 块（mov FLAG0,0x1337; exit(0)）+ lose 块（exit(1)）</td><td>leave;ret 是栈帧收尾的完整教学链（B3）；含 ret（动态目标）→ win 块合法（XC-IR-REACH 保守全图可达）</td></tr>
+  <tr><td>执行起点</td><td>RIP 初值 = <code>0x4</code>（leave 处）；序章 0–3 为"已执行完"的展示面</td><td>选手从收尾开始，两步引爆</td></tr>
+  <tr><td>判胜条件</td><td><code>RIP == 0x6（win）∧ stack_canary_intact</code>——<b>RIP 型</b></td><td>win 块无内部校验，落点即胜利；若要加密钥门，改 FLAG 型（见 <a href="1E-判题.html#c-e1">E1</a> 的坑）</td></tr>
+  <tr><td>初始返回槽</td><td>写 lose 下标（0x8）</td><td>防"不写 payload 瞎跑也能赢"</td></tr>
+  <tr><td>失败路径</td><td>wrong：不写直接 step×3 → lose / crash：返回槽写 0xdead → invalid_rip / 教学失败：写 rx 代码区 → permission_denied</td><td>三个方向覆盖门禁要求</td></tr>
+</table>
+<p class="muted">选手怎么知道 win 的下标？题目默认开启调试模式，指令视图能看到全部指令与地址——这本身就是教学点（真实 pwn 靠逆向，这里靠"调试器"）。</p>
+
+<h4 id="t2-1">1 · 语料模块：类型与工具（完整代码）</h4>
+<p>与 T1 同构（接口名换成 T2 前缀）。直接替换 T1 语料文件的头段即可：</p>
+<pre><code>/**
+ * T2 样例:ret2win(IR;出题人文档 T2 的配套语料——与扩展题集 sm-x01 同构)。
+ */
+import type { ActionObject } from "@stackmaster/protocol";
+import { canonicalize } from "@stackmaster/protocol";
+import { createHash } from "node:crypto";
+import { loadChallengePair, type ChallengeLoadResult } from "@stackmaster/challenge-compiler";
+
+export interface T2CorpusEntry {
+  readonly name: string;
+  readonly description: string;
+  readonly expectedFinalStatus: "running" | "won" | "failed";
+  readonly expectedVerdict: "success" | "wrong_answer" | "invalid_action" | "program_crash" | "memory_fault" | "resource_limit" | "timeout";
+  readonly actions: readonly ActionObject[];
+  readonly expectedLastError?: string;
+}
+
+export interface T2Pair {
+  readonly publicDescriptor: unknown;
+  readonly privateBundle: unknown;
+}
+
+export interface T2Challenge {
+  readonly meta: { readonly challengeId: string; readonly title: string; readonly mode: "ir" | "byte" };
+  readonly buildPair: () =&gt; T2Pair;
+  readonly corpora: readonly T2CorpusEntry[];
+}
+
+export function canonicalDigests(pair: T2Pair) {
+  return {
+    publicDescriptorSha256: createHash("sha256").update(canonicalize(pair.publicDescriptor), "utf8").digest("hex"),
+    privateBundleSha256: createHash("sha256").update(canonicalize(pair.privateBundle), "utf8").digest("hex"),
+  };
+}
+
+export function loadT2Challenge(challenge: T2Challenge): ChallengeLoadResult {
+  return loadChallengePair(challenge.buildPair());
+}</code></pre>
+
+<h4 id="t2-2">2 · 几何常量与辅助函数（完整代码）</h4>
+<p>比 T1 多两个工具：<code>le64</code>（小端编码——把 win 下标写进返回地址槽用）与 <code>overflowPayload</code>（拼装 16+8+8 的连续 payload）：</p>
+<pre><code>const CODE_BASE = "0x400000";
+const STACK_BASE = "0x7ffff000";
+const REGION_BYTES = 4096;
+const PAGE_SIZE = 4096;
+const ARCH_BITS = 64;
+
+const FRAME = {
+  buffer: "0x7ffff7f0",
+  savedRbp: "0x7ffff800",
+  retSlot: "0x7ffff808",
+  rsp: "0x7ffff808", // T2:RSP 初始指向返回地址槽(leave;ret 收尾从这里弹)
+  rbp: "0x7ffff800",
+} as const;
+
+const WIN = "0x6"; // win 块指令下标
+const LOSE = "0x8"; // lose 块指令下标
+
+function le64(valueHex: string): string {
+  let value = BigInt(valueHex);
+  const bytes: string[] = [];
+  for (let index = 0; index &lt; 8; index += 1) {
+    bytes.push((value &amp; 0xffn).toString(16).padStart(2, "0"));
+    value &gt;&gt;= 8n;
+  }
+  return bytes.join("");
+}
+
+function offsetOf(address: string): number {
+  return Number(BigInt(address) - BigInt(STACK_BASE));
+}
+
+function stackContent(writes: readonly { readonly offset: number; readonly hex: string }[]): string {
+  const bytes = Buffer.alloc(REGION_BYTES, 0);
+  for (const write of writes) {
+    Buffer.from(write.hex, "hex").copy(bytes, write.offset);
+  }
+  return bytes.toString("hex");
+}
+
+function zeroRegion(): string {
+  return "00".repeat(REGION_BYTES);
+}
+
+function flagFor(challengeId: string): string {
+  return `FLAG{my-${challengeId.slice(4, 6)}}`;
+}
+
+function seedFor(challengeId: string): string {
+  const serial = challengeId.slice(4, 6);
+  if (!/^[0-9a-f]{2}$/.test(serial)) throw new Error(`bad serial: ${challengeId}`);
+  return `00112233445566778899aabbccdd${serial}ee`;
+}
+
+function writeAction(addressHex: string, bytesHex: string): ActionObject {
+  return { type: "write_bytes", args: { addressHex, bytesHex } };
+}
+
+function steps(count: number): ActionObject[] {
+  return Array.from({ length: count }, () =&gt; ({ type: "step", args: {} }) as ActionObject);
+}
+
+function pubHex(valueHex: string): string {
+  return `0x${BigInt(valueHex).toString(16).toUpperCase()}`;
+}
+
+/** 连续 payload:16 填充 + 8 saved RBP + 8 返回槽(小端目标)。 */
+function overflowPayload(tailHex: string): string {
+  return "41".repeat(16) + "42".repeat(8) + tailHex;
+}</code></pre>
+
+<h4 id="t2-3">3 · 题目本体与语料矩阵（完整代码）</h4>
+<p>注意四个与 T1 的差异点：程序换成 9 指令骨架（下标 0–8）；初始 RIP = 0x4；返回地址槽初始写 <code>le64(LOSE)</code>；
+判胜条件 = RIP 型。语义高亮三条全开（buffer / saved RBP / 返回地址槽）：</p>
+<pre><code>export const T2_CHALLENGE: T2Challenge = {
+  meta: { challengeId: "sm-t02-ret2win", title: "收尾劫持:leave 与 ret 的回归一击", mode: "ir" },
+  buildPair: () =&gt; {
+    const visibleRegions = [
+      { regionId: "code", kind: "code", startAddressHex: CODE_BASE, permissions: "rx", publicLabel: "代码段" },
+      { regionId: "stack", kind: "stack", startAddressHex: STACK_BASE, permissions: "rw", publicLabel: "栈" },
+    ];
+    const privateRegions = visibleRegions.map((region) =&gt; ({
+      regionId: region.regionId,
+      kind: region.kind,
+      startAddressHex: region.startAddressHex,
+      byteLength: REGION_BYTES,
+      permissions: region.permissions,
+      contentHex: region.regionId === "stack"
+        ? stackContent([{ offset: offsetOf(FRAME.retSlot), hex: le64(LOSE) }])
+        : zeroRegion(),
+      isHidden: false,
+    }));
+    const registers: Record&lt;string, string&gt; = {
+      RSP: FRAME.rsp,
+      RBP: FRAME.rbp,
+      RIP: "0x4", // 执行起点 = leave(下标 4)
+      RAX: "0x0",
+      FLAG0: "0x0",
+    };
+    const publicDescriptor = {
+      schemaVersion: 1,
+      challengeId: "sm-t02-ret2win",
+      challengeContentVersion: "1.0.0",
+      vmProfileVersion: "1.0.0",
+      locale: "zh-CN",
+      briefing: {
+        title: "收尾劫持:leave 与 ret 的回归一击",
+        summary:
+          "程序停在栈帧收尾入口(leave)。leave 会把 RSP 拉回 RBP、弹回 saved RBP;紧随的 ret 弹出的" +
+          "正是返回地址槽(0x7ffff808)里的值——初始指向 lose。从 buffer(0x7ffff7f0)构造连续 payload " +
+          "漫过 saved RBP,把 win(下标 6)写进返回槽,单步两次看控制流改道。",
+        learningObjectives: [
+          "理解 leave = mov rsp,rbp; pop rbp 的栈帧收尾语义",
+          "构造连续溢出 payload 完成返回地址劫持",
+        ],
+      },
+      vmProfile: {
+        registers: [
+          { name: "RAX", displayLabel: "通用累加器" },
+          { name: "RSP", displayLabel: "栈顶指针" },
+          { name: "RBP", displayLabel: "栈帧基址" },
+          { name: "RIP", displayLabel: "指令指针" },
+        ],
+        flagRegisterNames: ["FLAG0"],
+        endianness: "little",
+        pageSizeBytes: PAGE_SIZE,
+        archBits: ARCH_BITS,
+        canary: { enabled: false },
+      },
+      memoryLayout: {
+        regions: visibleRegions.map((region) =&gt; ({
+          regionId: region.regionId,
+          kind: region.kind,
+          startAddressHex: region.startAddressHex,
+          byteLength: REGION_BYTES,
+          permissions: region.permissions,
+          publicLabel: region.publicLabel,
+        })),
+      },
+      allowedActions: ["write_bytes", "step"],
+      resourceLimits: {
+        predicateEvalBudgetPerSession: 10000,
+        rollbackBudgetPerSession: 200,
+        maxWriteBytesPerAction: 64,
+      },
+      hintLadder: [
+        { order: 1, revealPolicy: "on_request", hintText: "leave 把 RSP 拉回 RBP 并弹回 saved RBP;再一步 ret 弹出返回槽 0x7ffff808 里的值(当前指向 lose,下标 8)。" },
+        { order: 2, revealPolicy: "after_n_failures", failureThreshold: 2, hintText: "返回槽 = buffer + 24(16 缓冲区 + 8 saved RBP);payload 共 32 字节,从 0x7ffff7f0 起一次写入。" },
+        { order: 3, revealPolicy: "after_n_failures", failureThreshold: 4, hintText: "win = 指令下标 6;小端 8 字节 = 0600000000000000。" },
+      ],
+      publicErrorMapping: [
+        { errorCode: "invalid_rip", teachingNote: "ret(或 leave 的返回槽预校验)弹出的值不是界内指令索引:检查写入的目标值与端序。" },
+        { errorCode: "permission_denied", teachingNote: "代码段只读不可写(rx);数据要写进 rw 区域。" },
+      ],
+      initialProjection: {
+        visibleRegions: visibleRegions.map((region) =&gt; ({
+          regionId: region.regionId,
+          label: region.publicLabel,
+          startAddressHex: region.startAddressHex,
+          byteLength: REGION_BYTES,
+          permissions: region.permissions,
+          bytesHex: region.regionId === "stack"
+            ? stackContent([{ offset: offsetOf(FRAME.retSlot), hex: le64(LOSE) }]).slice(0, 64)
+            : zeroRegion().slice(0, 96),
+          truncated: true,
+        })),
+        visibleRegisters: [
+          { name: "RSP", valueHex: pubHex(FRAME.rsp) },
+          { name: "RBP", valueHex: pubHex(FRAME.rbp) },
+          { name: "RIP", valueHex: pubHex("0x4") },
+          { name: "RAX", valueHex: "0x0" },
+        ],
+        semanticHighlights: [
+          { kind: "buffer_start", targetRegionId: "stack", startAddressHex: FRAME.buffer, byteLength: 16, label: "输入缓冲区" },
+          { kind: "saved_rbp_slot", targetRegionId: "stack", startAddressHex: FRAME.savedRbp, byteLength: 8, label: "saved RBP 槽" },
+          { kind: "return_address_slot", targetRegionId: "stack", startAddressHex: FRAME.retSlot, byteLength: 8, label: "返回地址槽" },
+        ],
+      },
+    };
+    const privateBundle = {
+      schemaVersion: 1,
+      challengeId: "sm-t02-ret2win",
+      challengeContentVersion: "1.0.0",
+      vmProfileVersion: "1.0.0",
+      dslSchemaVersion: 2,
+      vmEngineVersion: "0.1.0",
+      declaredSeedPublicPaths: [],
+      seedPolicy: { strategy: "fixed", seedHex: seedFor("sm-t02-ret2win") },
+      initialState: { registers, memoryRegions: privateRegions },
+      secrets: { flag: flagFor("sm-t02-ret2win"), virtualFiles: [] },
+      privateObjects: [
+        { objectId: "input-buffer", kind: "buffer", addressHex: FRAME.buffer, byteLength: 16, visibility: "public", containsSecret: false },
+        { objectId: "saved-rbp-slot", kind: "saved_rbp", addressHex: FRAME.savedRbp, byteLength: 8, visibility: "public", containsSecret: false },
+        { objectId: "return-address-slot", kind: "return_address", addressHex: FRAME.retSlot, byteLength: 8, visibility: "public", containsSecret: false },
+      ],
+      judging: {
+        successCondition: {
+          all: [
+            { all: [{ predicate: { type: "register_equals", register: "RIP", valueHex: WIN } }] },
+            { all: [{ predicate: { type: "stack_canary_intact" } }] },
+          ],
+        },
+        hiddenTests: [
+          { testId: "final-state-probe", kind: "predicate_probe", expectedResult: "success" },
+        ],
+      },
+      compiledIr: {
+        irFormatVersion: 2,
+        entrypointIndex: 4,
+        instructions: [
+          { op: "push", operands: [{ kind: "register", name: "RBP" }] },
+          { op: "mov", operands: [{ kind: "register", name: "RBP" }, { kind: "register", name: "RSP" }] },
+          { op: "cmp", operands: [{ kind: "register", name: "RAX" }, { kind: "immediate", valueHex: "0x0" }] },
+          { op: "jne", operands: [{ kind: "immediate", valueHex: LOSE }] },
+          { op: "leave", operands: [] },
+          { op: "ret", operands: [] },
+          { op: "mov", operands: [{ kind: "register", name: "FLAG0" }, { kind: "immediate", valueHex: "0x1337" }] },
+          { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x0" }] },
+          { op: "syscall", operands: [{ kind: "immediate", valueHex: "0x1" }] },
+        ],
+        labels: [
+          { labelId: "entry", instructionIndex: 4 },
+          { labelId: "win", instructionIndex: 6 },
+          { labelId: "lose", instructionIndex: 8 },
+        ],
+      },
+      customInstructions: [],
+      judgingConfig: {
+        verdictRuleVersion: "1.0.0",
+        maxPredicateEvalSteps: 10000,
+        timeoutMsPerAction: 5000,
+      },
+    };
+    return { publicDescriptor, privateBundle };
+  },
+  corpora: [
+    {
+      name: "leave ret epilogue hijacks return to win",
+      description: "参考解:32 字节连续 payload(16 填充 + 8 saved RBP + 8 小端 win 下标 6)→ step×2 → won → success。",
+      expectedFinalStatus: "won",
+      expectedVerdict: "success",
+      actions: [writeAction(FRAME.buffer, overflowPayload(le64(WIN))), ...steps(2)],
+    },
+    {
+      name: "walking into lose exits with code one",
+      description: "边界(wrong_answer 方向):不写 payload 直接 step×3 → lose 的 exit(1) → running/wrong_answer。",
+      expectedFinalStatus: "running",
+      expectedVerdict: "wrong_answer",
+      actions: steps(3),
+    },
+    {
+      name: "bad return value crashes at leave slot check",
+      description: "边界(失败方向):返回槽写 0xdead → leave 的返回槽预校验即报 invalid_rip → failed/program_crash。",
+      expectedFinalStatus: "failed",
+      expectedVerdict: "program_crash",
+      actions: [writeAction(FRAME.retSlot, le64("0xdead")), ...steps(1)],
+    },
+    {
+      name: "write into read only code region is rejected with explanation",
+      description: "边界(教学失败方向):向 rx 代码区写 → permission_denied → running/wrong_answer。",
+      expectedFinalStatus: "running",
+      expectedVerdict: "wrong_answer",
+      expectedLastError: "permission_denied",
+      actions: [writeAction(CODE_BASE, "90")],
+    },
+  ],
+};</code></pre>
+
+<h4 id="t2-4">4 · 测试与运行</h4>
+<ul>
+  <li>门禁/裁决测试沿用 T1 的两个文件，把导入与规模断言改成你的题目即可；IR 布局断言建议加一条：
+      <code>entrypointIndex === 初始 RIP</code>、labels 含 entry/win/lose（T1 门禁已有同款）；</li>
+  <li>运行：<code>pnpm --filter @stackmaster/session-api exec vitest run test/&lt;你的目录&gt;</code>；</li>
+  <li>预期：success 语料 = 写 payload → step×2（leave、ret）→ won；crash 语料在 <b>leave 处即报</b> invalid_rip
+      （引擎对返回槽做前置校验，早于 ret——如实的教学锚点）。</li>
+</ul>
+<div class="warnbox"><b>出题人必懂（E1 的坑）</b>：判胜写成 <code>RIP == win</code> 时，ret 落到 win 的<b>一瞬</b>就判胜——
+win 块内部的任何校验都来不及执行。要"密钥门"就必须用 FLAG 型条件（本页 x01 无门，RIP 型正确；扩展题 x02 有门，用 FLAG 型）。</div>
+
+<div class="pager">
+  <a class="prev" href="T1-从零做一道最小题.html"><span class="lbl">◀ 上一篇</span>T1 从零做一道最小题</a>
+  <a class="next" href="T3-隐藏区域与接口.html"><span class="lbl">下一篇 ▶</span>T3 隐藏区域 + 接口 flag</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

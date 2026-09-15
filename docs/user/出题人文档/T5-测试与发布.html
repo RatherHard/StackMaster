@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>T5 测试与发布 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 2 层 · T5 测试与发布</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a class="cur" href="T5-测试与发布.html">T5 测试与发布上线</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>T5 · 测试与发布上线 <span class="badge b2">任务指南</span></h1>
+<p class="muted">T1–T3 的产物是语料 + 测试；本任务把它们推上运行拓扑：<b>本地全绿 → 登记 → 验证下发 → 浏览器实测</b>。
+登记代码与 <code>test/extended-challenges/register-extended.compose.integration.test.ts</code>（已实跑验证）同构。</p>
+<div class="toc"><b>本页目录</b>　<a href="#t5-1">1 本地全绿</a>　<a href="#t5-2">2 起拓扑</a>　<a href="#t5-3">3 登记题目（完整代码）</a>　<a href="#t5-4">4 验证下发</a>　<a href="#t5-5">5 浏览器实测</a>　<a href="#t5-6">6 检查清单</a></div>
+
+<h4 id="t5-1">1 · 本地全绿</h4>
+<pre><code>pnpm --filter @stackmaster/session-api exec vitest run test/&lt;你的目录&gt;   # 新套件
+pnpm --filter @stackmaster/session-api test                              # 全量回归
+pnpm lint                                                                # 仓库门禁</code></pre>
+
+<h4 id="t5-2">2 · 起联调拓扑</h4>
+<pre><code>pnpm --filter @stackmaster/session-api compose:deps:up   # PostgreSQL/Redis/MinIO 容器(需 Docker Desktop)
+pnpm --filter @stackmaster/session-api dev:host          # session-api:13000 + verifier:13100(开发联调启动器)</code></pre>
+<p class="muted"><code>dev:host</code> 会把开发壳 origin(http://localhost:5173)加入来源白名单并注入本地合成凭证；
+这是浏览器联调的专用启动器。</p>
+
+<h4 id="t5-3">3 · 登记题目（完整代码，拓扑就绪后执行）</h4>
+<p>新建 <code>apps/session-api/test/my-challenges/register-my-challenge.compose.integration.test.ts</code>
+（与扩展题集登记测试同构：规范化 JSON 落桶 + 摘要自证 + Ed25519 签名验签 + PG 建档；复跑自带清理）：</p>
+<pre><code>/**
+ * 我的题目登记(联调拓扑;T5 配套。与 extended-challenges/register-extended 同构,单题版)。
+ *
+ * 运行(依赖容器须已 compose:deps:up;拓扑见 extended-challenges/README.md):
+ *   SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec vitest run test/my-challenges/register-my-challenge.compose.integration.test.ts
+ *
+ * 登记链路:规范化 JSON 落桶 → 摘要自证 → Ed25519 签名验签 → PG 建档(版本不可变,
+ * 重跑前清理旧行/旧对象)。登记租户必须与后续 embed token 的租户一致。
+ */
+import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Pool } from "pg";
+import { canonicalize } from "@stackmaster/protocol";
+
+import { MY_CHALLENGE, canonicalDigests } from "./corpus.js";
+import {
+  ChallengeRegistrar,
+  MinioChallengeBundleStore,
+  PostgresChallengeRegistry,
+  createMinioClient,
+  createPostgresPool,
+  registrationSignatureBasis,
+  sha256Hex,
+} from "../../src/persistence/index.js";
+import { ensureMigrated, IT_CONFIG } from "../persistence/helpers/it.js";
+
+const COMPOSE_ENABLED = process.env["SESSION_API_COMPOSE"] === "1";
+const SKIP_REASON = "跳过原因:SESSION_API_COMPOSE != 1(先 compose:deps:up 起依赖服务)";
+const DEV_TENANT_ID = process.env["EXT_DEV_TENANT_ID"] ?? "tenant-dev-0001";
+const CONTENT_VERSION = "1.0.0";
+const VM_PROFILE_VERSION = "1.0.0";
+
+describe.skipIf(!COMPOSE_ENABLED)(`我的题目登记(联调租户 ${DEV_TENANT_ID};${SKIP_REASON})`, () =&gt; {
+  let pool: Pool | null = null;
+  let bundles: MinioChallengeBundleStore | null = null;
+
+  beforeAll(async () =&gt; {
+    pool = await createPostgresPool(IT_CONFIG.postgresUrl, 3);
+    await ensureMigrated(pool);
+    const registry = new PostgresChallengeRegistry(pool);
+    const minio = await createMinioClient({
+      endpoint: IT_CONFIG.minioEndpoint,
+      port: IT_CONFIG.minioPort,
+      accessKey: IT_CONFIG.minioAccessKey,
+      secretKey: IT_CONFIG.minioSecretKey,
+    });
+    bundles = new MinioChallengeBundleStore(minio, {
+      bucketPrivate: IT_CONFIG.minioBucketPrivate,
+      bucketPublic: IT_CONFIG.minioBucketPublic,
+    });
+    await bundles.ensureBuckets();
+
+    const challengeId = MY_CHALLENGE.meta.challengeId;
+    await pool.query(`DELETE FROM challenge_versions WHERE challenge_id = ANY($1::text[])`, [[challengeId]]);
+    const cleanup = minio as unknown as {
+      removeObject(bucket: string, objectName: string): Promise&lt;void&gt;;
+    };
+    for (const objectName of [
+      `${challengeId}/${CONTENT_VERSION}/bundle.json`,
+      `${challengeId}/${CONTENT_VERSION}/descriptor.json`,
+    ]) {
+      await cleanup.removeObject(IT_CONFIG.minioBucketPrivate, objectName).catch(() =&gt; undefined);
+      await cleanup.removeObject(IT_CONFIG.minioBucketPublic, objectName).catch(() =&gt; undefined);
+    }
+
+    const pair = MY_CHALLENGE.buildPair();
+    const digests = canonicalDigests(pair);
+    const privateBundle = Buffer.from(canonicalize(pair.privateBundle), "utf8");
+    const publicDescriptor = Buffer.from(canonicalize(pair.publicDescriptor), "utf8");
+    expect(sha256Hex(privateBundle)).toBe(digests.privateBundleSha256);
+    expect(sha256Hex(publicDescriptor)).toBe(digests.publicDescriptorSha256);
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const signature = cryptoSign(
+      null,
+      Buffer.from(
+        registrationSignatureBasis({
+          challengeId,
+          contentVersion: CONTENT_VERSION,
+          vmProfileVersion: VM_PROFILE_VERSION,
+          privateBundleSha256: digests.privateBundleSha256,
+          publicDescriptorSha256: digests.publicDescriptorSha256,
+        }),
+        "utf8",
+      ),
+      privateKey,
+    ).toString("base64");
+    await new ChallengeRegistrar({ bundles, registry, signingPublicKey: publicKey }).register({
+      tenantId: DEV_TENANT_ID,
+      challengeId,
+      contentVersion: CONTENT_VERSION,
+      vmProfileVersion: VM_PROFILE_VERSION,
+      privateBundle,
+      publicDescriptor,
+      signature,
+    });
+  }, 120_000);
+
+  afterAll(async () =&gt; {
+    if (pool !== null) await pool.end().catch(() =&gt; undefined);
+  }, 30_000);
+
+  it("登记行可查且哈希与构造摘要一致", async () =&gt; {
+    const registered = await pool!.query&lt;{ challenge_id: string }&gt;(
+      `SELECT challenge_id FROM challenge_versions WHERE tenant_id = $1 AND content_version = $2`,
+      [DEV_TENANT_ID, CONTENT_VERSION],
+    );
+    expect(registered.rows.map((row) =&gt; row.challenge_id)).toContain(MY_CHALLENGE.meta.challengeId);
+  });
+});
+</code></pre>
+<p>执行（<b>SESSION_API_COMPOSE=1 是门控开关；依赖容器须已起</b>）：</p>
+<pre><code>SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec vitest run test/my-challenges/register-my-challenge.compose.integration.test.ts</code></pre>
+<div class="warnbox">两个必须记住的纪律：<b>① 登记租户 = token 租户</b>——题目版本按（租户,题目,版本）三键定位，
+后续签发 embed token 的 <code>E2E_TENANT_ID</code> 必须与这里的租户一致，否则会话创建失败；
+<b>② 版本不可变</b>——重复登记确定性拒绝，改题后递增 <code>challengeContentVersion</code> 重新登记
+（测试模板自带旧行/旧对象清理，可直接重跑）。</div>
+
+<h4 id="t5-4">4 · 验证下发</h4>
+<pre><code>curl -sI http://127.0.0.1:13000/descriptors/sm-t01-write-marker/1.0.0
+# 200 + ETag "&lt;64 位十六进制&gt;"  = 已登记(ETag 即公开包登记摘要)
+# 404                          = 未登记 / 租户不符</code></pre>
+
+<h4 id="t5-5">5 · 浏览器实测</h4>
+<pre><code># ① 签发 embed token(每次开局一枚:单次消费,TTL 1 小时)
+SESSION_API_ORIGIN=http://127.0.0.1:13000 \
+SESSION_API_HOST_BACKEND_TOKEN=&lt;宿主共享凭证,见 dev:host 输出或联调文档&gt; \
+E2E_TENANT_ID=tenant-dev-0001  E2E_USER_ID=user-dev-0001 \
+E2E_CHALLENGE_ID=sm-t01-write-marker  E2E_CHALLENGE_VERSION=1.0.0 \
+E2E_EMBED_SESSION_ID=esid-dev-local-browser-000000001 \
+node apps/plugin-dev/scripts/issue-embed-token.mjs
+# ② 起开发壳
+pnpm --filter @stackmaster/plugin-dev dev      # http://localhost:5173</code></pre>
+<p>浏览器打开 <b>http://localhost:5173</b>（必须 localhost），表单填四元组（与签发命令一致）→「创建并连接」→
+按〈<a href="../界面帮助手册.html">界面帮助手册</a>〉§13 的完整交互链游玩 → 菜单「提交」→ 等待 verdicted。</p>
+
+<h4 id="t5-6">6 · 发布检查清单</h4>
+<div class="okbox">☐ 双包身份三元组一致、vmEngineVersion 正确　☐ 公开包零秘密（fileId/flag/seed/隐藏痕迹）
+☐ 初始投影逐字节镜像私有初始态　☐ FLAG/秘密汇不在公开投影　☐ IR 无死代码、循环有预算、win 经动态目标可达　
+☐ 字节模式：W^X、纯指令流、入口落代码区　☐ 参考解过条件 + 隐藏测试；失败路径预期已钉　☐ 教学面齐备　
+☐ 语料 ≥3 覆盖三方向　☐ 门禁 + 裁决回归 + 登记确定性全绿。<b>如实边界</b>：CDN 分发与生产密钥管理属生产部署面（MVP 未做）。</div>
+
+<div class="pager">
+  <a class="prev" href="T4-排查手册.html"><span class="lbl">◀ 上一篇</span>T4 排查手册</a>
+  <a class="next" href="30-精确参考.html"><span class="lbl">下一篇 ▶</span>第 3 层 · 精确参考</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

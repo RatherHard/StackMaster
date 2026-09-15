@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>T4 排查手册 · StackMaster 出题人文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar"><a href="index.html">出题人文档</a><span class="sep">›</span><span class="cur">第 2 层 · T4 排查手册</span></div>
+<div class="layout">
+<nav>
+  <h2 class="n0">第 0 层 · 认知入门</h2>
+  <a href="00-认知入门.html">0 认知入门（全局地图 · 术语卡）</a>
+  <h2 class="n1">第 1 层 · 概念详解</h2>
+  <a href="1A-题目结构.html">1A 题目结构（双包 · 镜像）</a>
+  <a href="1B-虚拟机.html">1B 虚拟机（位宽 · 栈帧 · canary）</a>
+  <a href="1C-内存.html">1C 内存（区域 · 可见性 · 对象）</a>
+  <a href="1D-程序.html">1D 程序（IR · 字节模式 · 接口）</a>
+  <a href="1E-判题.html">1E 判题（时机 · 谓词 · 11 值）</a>
+  <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
+  <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
+  <h2 class="n2">第 2 层 · 任务指南</h2>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a class="cur" href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
+  <h2 class="n3">第 3 层 · 精确参考</h2>
+  <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
+  <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
+</nav>
+<main>
+
+<h1>T4 · 装载 / 裁决排查手册 <span class="badge b2">任务指南 · 速查</span></h1>
+<p class="muted">红灯分两类：<b>装载红灯</b>（四层管线拒绝，报规则 ID + 消息 + 路径）与<b>裁决回归红灯</b>
+（五元组断言不符）。本页各给一张症状对照表；规则全文见 R5，裁决合成见 E4。</p>
+
+<h3>4.1 装载红灯：症状 → 规则 → 修法</h3>
+<table>
+  <tr><th>症状</th><th>规则</th><th>修法</th></tr>
+  <tr><td>多写/写错字段名</td><td>Ajv strict</td><td>对照 R1/R2 字段表；公开包顶层恰 16 字段</td></tr>
+  <tr><td>缺 RSP/RBP/RIP</td><td>XS-REG-CORE</td><td>vmProfile.registers 补齐</td></tr>
+  <tr><td>FLAG 值出现在公开投影</td><td>I3-VISIBLE-REG / XS-REG-FLAG</td><td>FLAG 名不进 registers/visibleRegisters</td></tr>
+  <tr><td>公开值与私有初值不一致</td><td>XS-PROJ-VALUES / XS-PROJ-GEOM</td><td>公开 = 私有前缀切片，逐字节对齐（A4）</td></tr>
+  <tr><td>公开包出现 fileId/objectId/capability 字符串</td><td>XS-ID-NO-PRIVATE / ZR-B8-CAP-SCAN</td><td>私有标识只留私有包</td></tr>
+  <tr><td>立即数/位移超域</td><td>XS-ARCH-WIDTH</td><td>按 archBits 掩蔽；位移是有符号数</td></tr>
+  <tr><td>区域长度/页大小不是 4KB 倍数</td><td>XS-MEM-PAGE-ALIGN</td><td>调整布局</td></tr>
+  <tr><td>contentHex 长度 ≠ 2×byteLength</td><td>XS-MEM-CONTENT</td><td>补零到等长（内存稠密定义）</td></tr>
+  <tr><td>encodingTable 与 compiledIr 双给/双缺</td><td>XS-PROG-MODE</td><td>恰一：IR 删表 / 字节删 IR</td></tr>
+  <tr><td>代码区可写 / token 未登记 / 入口不在代码区</td><td>XS-CODE-WRX / XS-ENC-TOKEN / XS-ENC-PROBE</td><td>W^X、补表、入口落代码区、填充用表内 token</td></tr>
+  <tr><td>IR 引用未声明助记符 / syscall 号没着落</td><td>XS-CUSTOM-REF / XS-SYSCALL-DECL</td><td>补 customInstructions / interfaces 声明</td></tr>
+  <tr><td>用了 leave 但没有 RBP</td><td>XS-IR-LEAVE</td><td>初始寄存器集加 RBP</td></tr>
+  <tr><td>接口/call 引用号未声明</td><td>XS-IFACE-REF / XS-SYSCALL-DECL</td><td>interfaces[] 补声明；接口号域 0x0100–0xFFFF</td></tr>
+  <tr><td>操作数个数/形态错</td><td>XC-OPCODE-SHAPE</td><td>对照 R3 形态列</td></tr>
+  <tr><td>引用了不存在的寄存器/区域/fileId</td><td>XC-OPERAND-REF / XS-PRED-REFS</td><td>引用必须落在私有初始集与已声明对象里</td></tr>
+  <tr><td>纯静态程序有死代码</td><td>XC-IR-REACH</td><td>删掉，或让 win 块经 ret 等动态目标到达</td></tr>
+  <tr><td>有循环没 stages / 阶段没预算</td><td>XC-IR-TERMINATE / XS-STAGE-BUDGET</td><td>补 stages + maxInstructionSteps</td></tr>
+  <tr><td>阶段动作超出题目允许面</td><td>XC-STAGE-ACTIONS</td><td>stage.allowedActions ⊆ 公开 allowedActions</td></tr>
+  <tr><td>displayText 夹带隐藏区域名/测试 ID/fileId</td><td>XS-CUSTOM-DISPLAY</td><td>展示文本去私有标识（T3 红灯 2 实例）</td></tr>
+  <tr><td>启用 canary 被拒</td><td>XS-CANARY-CORR</td><td>交互题改"守护标记 + memory_equals"（B4）</td></tr>
+  <tr><td>errorMapping 用了不存在的错误码</td><td>Ajv enum</td><td>错误码与 11 值裁决是两套词汇——对照 R6 的 16 错误码表</td></tr>
+  <tr><td>aslrEnabled = true 但没有 notice</td><td>XS-ASLR-NOTICE</td><td>补 randomizationNotice 文案</td></tr>
+</table>
+
+<h3>4.2 裁决回归红灯：五元组逐槽排查</h3>
+<p>裁决闭环断言五个事实。哪个槽位红了，按表排查（先实跑观察实际行为，再钉<b>语义正确</b>的预期值）：</p>
+<table>
+  <tr><th>槽位</th><th>常见原因</th><th>处置</th></tr>
+  <tr><td>① publicStatus 不符</td><td>exit(1) 不会置 failed（只停机，状态保持 running）；leave 在 ret 前预校验返回槽（crash 早于 ret）；判胜条件被 E1 即时求值提前触发</td><td>对照 E1 / B3 的语义锚点；预期值按实跑语义钉，不为绿改预期</td></tr>
+  <tr><td>② 首动作 rejected 形态</td><td>写隐藏/未映射地址 → 执行前拒绝（revision 不前进）；写 rx → 已执行教学失败（<b>不是</b> rejected）</td><td>分清"拒绝（未执行）"与"教学失败（已执行）"</td></tr>
+  <tr><td>③ 末动作错误码</td><td>错误码选出了枚举（如 invalid_action/memory_fault 不是公开错误码）</td><td>对照 R6 的 16 错误码表</td></tr>
+  <tr><td>④ verdict / replayKind 不符</td><td>重放与在线记录不一致（replay_mismatch）→ 检查是否引入不确定性（时间/未声明随机）；verdict 方向 → 对照 E4 合成规则</td><td>先修确定性，再钉预期</td></tr>
+  <tr><td>⑤ hiddenTests 不符</td><td>success 方向探针不过 = 判题声明与参考解实际行为不一致</td><td>检查 successCondition 与参考解动作是否真能相遇（E1）</td></tr>
+</table>
+
+<div class="pager">
+  <a class="prev" href="T3-隐藏区域与接口.html"><span class="lbl">◀ 上一篇</span>T3 隐藏区域 + 接口 flag</a>
+  <a class="next" href="T5-测试与发布.html"><span class="lbl">下一篇 ▶</span>T5 测试与发布</a>
+</div>
+<footer>StackMaster · 出题人文档 v2.1（分页版）· 本文档为使用文档，非冻结契约；与冻结契约/规约冲突时以后者为准。</footer>
+</main>
+</div>
+</body>
+</html>

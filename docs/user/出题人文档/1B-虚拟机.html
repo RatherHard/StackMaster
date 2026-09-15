@@ -21,7 +21,11 @@
   <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
   <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
   <h2 class="n2">第 2 层 · 任务指南</h2>
-  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
   <h2 class="n3">第 3 层 · 精确参考</h2>
   <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
   <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
@@ -33,7 +37,7 @@
 <h3 id="c-b1">B1 · 位宽、端序与页 <span class="badge b1">概念 · 虚拟机</span></h3>
 <div class="one">一句话：你声明 <code>archBits</code>（32/64）决定所有数字多宽；端序固定小端决定数字在内存里"倒着放"；
 页大小固定 4KB 的倍数决定内存的分配粒度。</div>
-<p><b>展开。</b></p>
+<p><b>三个维度。</b></p>
 <ul>
   <li><b>位宽（archBits）</b>：真实 CPU 的寄存器是 32 或 64 位宽，溢出与回绕都发生在这个宽度上。StackMaster 里你选 32 或 64，
       之后<b>所有架构值</b>——寄存器初值、指令立即数、内存位移、公开镜像值——都按这个宽度校验：
@@ -54,7 +58,7 @@
 <h3 id="c-b2">B2 · 寄存器与双命名空间 <span class="badge b1">概念 · 虚拟机</span></h3>
 <div class="one">一句话：寄存器名字由你自由定义（1–64 个，大写），分两个结构性不相交的命名空间——一般名（选手可见）
 与 FLAG 保留区（名字可公开、值永远私密）；RSP/RBP/RIP 三个核心寄存器必须存在。</div>
-<p><b>展开。</b>寄存器是虚拟机的"工作变量"。真实 x86 的名字（RAX/RDI…）只是惯例，StackMaster 把命名权交给你：
+<p><b>两个命名空间。</b>寄存器是虚拟机的"工作变量"。真实 x86 的名字（RAX/RDI…）只是惯例，StackMaster 把命名权交给你：
 模式 <code>^[A-Z][A-Z0-9_]{0,15}$</code>，想叫 <code>RDI</code> 贴近真实、叫 <code>RSIZE</code> 贴近教学，都行。
 两个命名空间：</p>
 <table>
@@ -73,7 +77,7 @@
 <h3 id="c-b3">B3 · 栈、栈帧与劫持 <span class="badge b1">概念 · 虚拟机（教学核心）</span></h3>
 <div class="one">一句话：栈是从高地址向低地址生长的内存区；函数调用在栈上留下"栈帧"= 局部 buffer + saved RBP + 返回地址；
 <b>buffer 写过头会淹没返回地址，<code>ret</code> 一弹出就跳到攻击者指定的位置</b>——这就是 StackMaster MVP 要教的全部核心。</div>
-<p><b>展开。</b>三个核心寄存器各司其职：<code>RSP</code> 指向栈顶（当前栈的尽头）；<code>RBP</code> 指向当前函数栈帧的基址
+<p><b>从一次函数调用说起。</b>三个核心寄存器各司其职：<code>RSP</code> 指向栈顶（当前栈的尽头）；<code>RBP</code> 指向当前函数栈帧的基址
 （帧的"锚点"）；<code>RIP</code> 指向下一条要执行的指令。一次典型调用：</p>
 <pre><code>   高地址
    ┌──────────────┐
@@ -101,7 +105,7 @@
 <div class="one">一句话：canary（金丝雀）是放在 buffer 与返回地址之间的哨兵值——被溢出碰坏就报警；
 StackMaster 的交互题<b>当前不能启用真 canary</b>（契约冲突，挂账收口中），标准替代方案是"守护标记 +
 <code>memory_equals</code> 谓词"。</div>
-<p><b>展开。</b>真实系统的栈保护原理：函数 prologue 在 buffer 上方放一个随机值（canary），epilogue 检查它是否完好——
+<p><b>原理、现状与替代方案。</b>真实系统的栈保护原理：函数 prologue 在 buffer 上方放一个随机值（canary），epilogue 检查它是否完好——
 连续溢出必然路过并破坏它，从而在被劫持之前终止进程。StackMaster 的 <code>vmProfile.canary</code> 字段与
 <code>stack_canary_intact</code> 谓词就是这套语义。但当前版本存在一个如实登记的契约冲突：检查器要求"启用 canary ⇒
 存在隐藏的、含秘密的 canary 对象"（XS-CANARY-CORR），而引擎装配要求 canary 槽公开（build_canary_slots）——

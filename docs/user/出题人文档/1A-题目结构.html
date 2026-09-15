@@ -21,7 +21,11 @@
   <a href="1F-编排随机与预算.html">1F 编排 · 随机 · 预算</a>
   <a href="1G-工程链路.html">1G 工程链路（装载 · 登记）</a>
   <h2 class="n2">第 2 层 · 任务指南</h2>
-  <a href="20-任务指南.html">任务 T1–T5（照着做）</a>
+  <a href="T1-从零做一道最小题.html">T1 从零做一道最小题</a>
+  <a href="T2-ret2win.html">T2 做一道 ret2win</a>
+  <a href="T3-隐藏区域与接口.html">T3 隐藏区域 + 接口 flag</a>
+  <a href="T4-排查手册.html">T4 装载/裁决排查手册</a>
+  <a href="T5-测试与发布.html">T5 测试与发布上线</a>
   <h2 class="n3">第 3 层 · 精确参考</h2>
   <a href="30-精确参考.html">参考 R1–R6（查数字）</a>
   <a class="home" href="index.html">⌂ 文档首页（使用说明）</a>
@@ -33,7 +37,7 @@
 <h3 id="c-a1">A1 · 双包模型 <span class="badge b1">概念 · 题目结构</span></h3>
 <div class="one">一句话：一道题 = <b>公开描述包 + 私有判题包</b>两个 JSON；公开包决定选手看到什么，私有包决定服务端怎么判，
 两个包必须同声明同一个题目身份（challengeId / 内容版本 / VM 版本）。</div>
-<p><b>展开。</b>为什么是"两个包"而不是"一个包加权限控制"？因为 StackMaster 的安全模型是<b>结构性不可达</b>，
+<p><b>为什么是两个包。</b>为什么是"两个包"而不是"一个包加权限控制"？因为 StackMaster 的安全模型是<b>结构性不可达</b>，
 不是访问控制。传统思路是"敏感字段加 <code>secret: true</code> 标记，服务端下发时过滤"——过滤逻辑一旦有漏洞就泄漏。
 StackMaster 直接把公开包的 <b>Schema 写死</b>：里面<b>根本不存在</b>"隐藏区域""flag""种子"这类字段（<code>additionalProperties: false</code>
 + 元检查禁止私有属性名出现）。你想泄漏都没有语法位置。私有包则整体 SERVER_ONLY：只被后端装载，
@@ -68,7 +72,7 @@ StackMaster 直接把公开包的 <b>Schema 写死</b>：里面<b>根本不存�
 <h3 id="c-a2">A2 · 公开描述包里有什么 <span class="badge b1">概念 · 题目结构</span></h3>
 <div class="one">一句话：公开包回答四个问题——<b>这是道什么题</b>（briefing）、<b>机器长什么样</b>（vmProfile）、
 <b>内存哪些可见</b>（memoryLayout + initialProjection）、<b>选手能做什么、做错了我教什么</b>（allowedActions + 提示与错误注解）。</div>
-<p><b>展开。</b>逐块看（完整字段表在 R1）：</p>
+<p><b>逐块说明。</b>逐块看（完整字段表在 R1）：</p>
 <table>
   <tr><th>块</th><th>回答什么</th><th>关键约束</th></tr>
   <tr><td>身份四字段</td><td>这是谁、第几版</td><td><code>challengeId</code> 小写连字符；内容/VM 版本 semver；与私有包同值</td></tr>
@@ -91,7 +95,7 @@ StackMaster 直接把公开包的 <b>Schema 写死</b>：里面<b>根本不存�
 <h3 id="c-a3">A3 · 私有判题包里有什么 <span class="badge b1">概念 · 题目结构</span></h3>
 <div class="one">一句话：私有包 = 这道题的<b>答案与判卷标准</b>——完整初始状态、程序本体、判题条件、隐藏测试、秘密与种子，
 整体 SERVER_ONLY，永不离开服务端，也永不写入 git。</div>
-<p><b>展开。</b>七个组成部分（完整字段表在 R2）：</p>
+<p><b>七个组成部分。</b>七个组成部分（完整字段表在 R2）：</p>
 <table>
   <tr><th>部分</th><th>内容</th><th>概念链接</th></tr>
   <tr><td>身份 + 版本锚</td><td>与公开包同值的身份三元组；<code>dslSchemaVersion</code>（词汇版本）；<code>vmEngineVersion</code>（锁定执行引擎）</td><td>R6 版本表</td></tr>
@@ -111,7 +115,7 @@ StackMaster 直接把公开包的 <b>Schema 写死</b>：里面<b>根本不存�
 <h3 id="c-a4">A4 · 镜像原则与秘密零驻留 <span class="badge b1">概念 · 题目结构</span></h3>
 <div class="one">一句话：公开包里每一个值，都必须<b>逐字节等于</b>私有初始态的对应切片——公开包是私有包的"白名单前缀拷贝"，
 不是两套独立数据。</div>
-<p><b>展开。</b>镜像原则由三条检查器规则强制：</p>
+<p><b>三条强制规则。</b>镜像原则由三条检查器规则强制：</p>
 <ul>
   <li><b>几何镜像</b>（XS-PROJ-GEOM / I2-PUB-MIRROR）：公开布局的每块区域，在私有包里有一块同名、同起点、同长度、同权限的非隐藏区域对应——公开区域是私有非隐藏区域的全集；</li>
   <li><b>值镜像</b>（XS-PROJ-VALUES）：初始投影的 <code>bytesHex</code> 必须等于私有区域 <code>contentHex</code> 的同长<b>前缀切片</b>；寄存器公开值必须等于私有初值；</li>
