@@ -29,6 +29,12 @@
  * 否则第一个区域),自由视图不重复实现行布局(FE-FV-01/02)。
  *
  * 动画纪律:样式不产生动画;如后续引入过渡,只允许 transform / opacity。
+ *
+ * 主题消费(WP-74):底色 / 前景 / 次要前景 / 锚点行选中底 / 锚点标记(琥珀)/
+ * 等宽字体栈全走既有 token;字号下限 13px(0.75rem → 0.8125rem)。
+ * 锚点标记原色 `highlight` 归 `--sm-warn`(light / dark 值逐字等于 `highlight`
+ * ⇒ 明暗零变化);锚点行底 `color-mix(highlight 14%, transparent)` 归
+ * `--sm-selection`(其 light / dark 值即该混色原样)。
  */
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -623,9 +629,9 @@ export class SmByteView extends LitElement {
       block-size: 24rem;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
-      background: canvas;
-      color: canvastext;
-      font-family: ui-monospace, "Cascadia Mono", "Source Code Pro", Menlo, Consolas, monospace;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-fg, canvastext);
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       font-size: 0.8125rem;
     }
 
@@ -658,8 +664,8 @@ export class SmByteView extends LitElement {
 
     .window-caption {
       margin: 0;
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
     }
 
     .offset-controls {
@@ -706,19 +712,19 @@ export class SmByteView extends LitElement {
     }
 
     .header-row {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
     .anchor-row {
-      background: color-mix(in srgb, highlight 14%, transparent);
+      background: var(--sm-selection, color-mix(in srgb, highlight 14%, transparent));
     }
 
     .anchor-marker {
       margin-inline-start: 0.5ch;
       font-style: normal;
       font-weight: 600;
-      color: highlight;
+      color: var(--sm-warn, highlight);
     }
 
     .hex-grouped {
@@ -732,7 +738,7 @@ export class SmByteView extends LitElement {
 
     .cell-outside,
     .hex-grouped .cell-outside {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .row-special .cell-special {
@@ -753,7 +759,7 @@ export class SmByteView extends LitElement {
     }
 
     .anchor-outside {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .anchor-name,
@@ -766,8 +772,8 @@ export class SmByteView extends LitElement {
     .search-summary {
       margin: 0;
       min-block-size: 1.1em;
-      font-size: 0.75rem;
-      color: graytext;
+      font-size: 0.8125rem;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .search-hits {
@@ -786,13 +792,13 @@ export class SmByteView extends LitElement {
     }
 
     .hit-bytes {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .empty {
       margin: 0;
       padding: 1rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
   `;
 }

@@ -91,7 +91,7 @@ export class SmCheckpoints extends LitElement {
 
     input:focus-visible,
     button:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
@@ -118,8 +118,8 @@ export class SmCheckpoints extends LitElement {
     caption {
       padding-block: 0.25rem;
       text-align: start;
-      font-size: 0.75rem;
-      color: graytext;
+      font-size: 0.8125rem;
+      color: var(--sm-fg-dim, graytext);
     }
 
     th,
@@ -130,13 +130,13 @@ export class SmCheckpoints extends LitElement {
     }
 
     thead th {
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
       font-weight: 600;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .mono {
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       font-size: 0.8125rem;
       overflow-wrap: anywhere;
     }
@@ -153,13 +153,13 @@ export class SmCheckpoints extends LitElement {
       margin: 0.25rem 0 0;
       padding: 0.25rem 0.5rem;
       font-size: 0.8125rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;

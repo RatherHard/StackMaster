@@ -81,7 +81,7 @@ export class SmHintLadder extends LitElement {
     }
 
     .locked {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-style: italic;
     }
 
@@ -96,14 +96,14 @@ export class SmHintLadder extends LitElement {
     }
 
     .reveal-button:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;

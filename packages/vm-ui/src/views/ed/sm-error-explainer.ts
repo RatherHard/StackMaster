@@ -71,8 +71,8 @@ export class SmErrorExplainer extends LitElement {
       padding: 0 0.35rem;
       border-radius: 999px;
       background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
-      font-family: ui-monospace, monospace;
-      font-size: 0.75rem;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-size: 0.8125rem;
     }
 
     dl {
@@ -84,7 +84,7 @@ export class SmErrorExplainer extends LitElement {
     }
 
     dt {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     dd {
@@ -93,7 +93,7 @@ export class SmErrorExplainer extends LitElement {
     }
 
     .mono {
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
     }
 
     .teaching-note {
@@ -106,7 +106,7 @@ export class SmErrorExplainer extends LitElement {
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;

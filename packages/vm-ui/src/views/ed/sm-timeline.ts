@@ -73,8 +73,8 @@ export class SmTimeline extends LitElement {
     .seq {
       flex: none;
       min-inline-size: 2ch;
-      font-family: ui-monospace, monospace;
-      color: graytext;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      color: var(--sm-fg-dim, graytext);
     }
 
     .kind-badge,
@@ -84,14 +84,19 @@ export class SmTimeline extends LitElement {
       padding: 0 0.35rem;
       border-radius: 999px;
       background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .status-badge {
       background: var(--sm-badge-bg-soft, rgb(0 0 0 / 4%));
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
+    /* 系统色 highlight / highlighttext:当前无对应 token(Selection 底为半透明
+       14% 混色,与这里的不透明 highlight 底不同值 ⇒ 替换会改 light / dark 渲染);
+       且二者是**配对**系统色(Highlight / HighlightText 随 color-scheme 成对自适应),
+       单拆其中一支会在 terminal(dark 菜单色)下产生白字压琥珀的对比度风险 ⇒ 逐字
+       保留,待真机 axe 判定。 */
     .current-badge {
       background: highlight;
       color: highlighttext;
@@ -104,15 +109,15 @@ export class SmTimeline extends LitElement {
 
     .meta {
       flex: none;
-      font-family: ui-monospace, monospace;
-      font-size: 0.75rem;
-      color: graytext;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-size: 0.8125rem;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;

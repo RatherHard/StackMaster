@@ -63,8 +63,8 @@ export class SmCallStack extends LitElement {
     caption {
       padding-block: 0.25rem;
       text-align: start;
-      font-size: 0.75rem;
-      color: graytext;
+      font-size: 0.8125rem;
+      color: var(--sm-fg-dim, graytext);
     }
 
     th,
@@ -75,17 +75,17 @@ export class SmCallStack extends LitElement {
     }
 
     thead th {
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
       font-weight: 600;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .index-cell {
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
     }
 
     .addr {
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
     }
 
     .innermost {
@@ -93,20 +93,20 @@ export class SmCallStack extends LitElement {
       padding: 0 0.35rem;
       border-radius: 999px;
       background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .truncated-note {
       margin: 0.25rem 0 0;
       padding: 0.25rem 0.5rem;
       font-size: 0.8125rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;

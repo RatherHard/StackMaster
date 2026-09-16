@@ -78,9 +78,9 @@ export class SmStructureView extends LitElement {
     .group > .group-label {
       display: block;
       margin-block: 0.5rem 0.25rem;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
       font-weight: 600;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .group > ul {
@@ -104,7 +104,7 @@ export class SmStructureView extends LitElement {
     }
 
     .entry-button:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
@@ -113,7 +113,7 @@ export class SmStructureView extends LitElement {
       padding: 0 0.35rem;
       border-radius: 999px;
       background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .entry-label {
@@ -121,15 +121,15 @@ export class SmStructureView extends LitElement {
     }
 
     .entry-meta {
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       font-size: 0.8125rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;

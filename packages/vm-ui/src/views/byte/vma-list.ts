@@ -142,9 +142,9 @@ export class SmVmaList extends LitElement {
       display: block;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
-      background: canvas;
-      color: canvastext;
-      font-family: ui-monospace, "Cascadia Mono", "Source Code Pro", Menlo, Consolas, monospace;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-fg, canvastext);
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       font-size: 0.8125rem;
     }
 
@@ -189,8 +189,8 @@ export class SmVmaList extends LitElement {
     }
 
     button.region.selected {
-      background: color-mix(in srgb, highlight 14%, transparent);
-      border-color: highlight;
+      background: var(--sm-selection, color-mix(in srgb, highlight 14%, transparent));
+      border-color: var(--sm-warn, highlight);
     }
 
     .region-label {
@@ -198,7 +198,7 @@ export class SmVmaList extends LitElement {
     }
 
     .region-id {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .region-address {
@@ -210,12 +210,12 @@ export class SmVmaList extends LitElement {
     }
 
     .region-window {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .empty {
       margin: 0;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
   `;
 }
