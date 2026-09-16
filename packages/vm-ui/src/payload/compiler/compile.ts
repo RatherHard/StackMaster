@@ -11,7 +11,9 @@
  *    体内表达式随编译期变量状态逐次求值——与顺序展开语义一致);
  *  - 函数(模块化积木)编译期内联展开,可携带返回值;递归受
  *    `PAYLOAD_MAX_CALL_DEPTH` 与展开上限约束;
- *  - 断点积木 → `breakpoint` 步骤标记(步进暂停点,M7 变通);
+ *  - 断点积木 → `breakpoint` 步骤标记(步进暂停点,M7 变通);调试档并入
+ *    调试断点集时携带**编译期可解析地址**(WP-76,`addressHex?`:见下方
+ *    `resolveBreakpointAddress` 的语义与边界登记;**非协议面**);
  *  - `allowedActions` 编译期裁剪:引用未授权动作的积木产出编译错误
  *    (带 blockId,UI 标红),不产出对应步骤;
  *  - 展开总量受 `PAYLOAD_MAX_EXPANDED_ACTIONS` 约束(同时约束"展开语句
@@ -60,6 +62,7 @@ import {
   registerPayloadBlocks,
 } from "./blocks.js";
 import {
+  MASK_64,
   PayloadEvalError,
   PayloadList,
   createEmptyEvalEnvironment,
@@ -129,6 +132,42 @@ interface CompileContext {
 /** 确定性失败(中断当前编译路径)。 */
 function fail(code: PayloadCompileErrorCode, message: string, blockId: string | null): never {
   throw new CompileAbort({ code, message, blockId });
+}
+
+/**
+ * 断点积木地址解析所用的公开投影寄存器名(WP-76;公开投影 `visibleRegisters`
+ * 按大小写不敏感匹配,与 `createPublicEvalEnvironment` 同口径)。
+ */
+export const PAYLOAD_BREAKPOINT_ADDRESS_REGISTER = "rip";
+
+/**
+ * 断点积木的**编译期可解析地址**(WP-76;返回值 `0x` + 小写,或 null = 无地址)。
+ *
+ * 定案(主控未给细则,本包登记设计决策):
+ *  - 断点积木**没有地址输入**(积木定义面 `blocks.ts` 不属本包边界 ⇒ 不新增
+ *    输入端口、不改既有序列化形态);唯一可承载的地址语义 = 调试断点是
+ *    **地址断点**,而客户端在编译期能诚实解析的地址只有公开投影里**当下**的
+ *    指令指针 ⇒ 取求值环境的 `rip` 寄存器值(与"公开投影读取"类积木同源,
+ *    M9 口径:隐藏数据天然不可用);
+ *  - **边界(不可解析 = 保持无地址形态)**:① 未接数据源(编译器缺省空求值
+ *    环境,任何寄存器引用抛错);② 该题投影白名单不含 `rip`;③ 值超出 64 位
+ *    地址空间(契约面不会出现,防御性收敛)。以上情形**不报错**(解题档步进
+ *    暂停语义与既有测试形态零变化),`addressHex` 缺席即"该步骤不产出地址";
+ *  - **禁止**:按动作语义推演"未来某步之后 rip 落在何处"(例如依 `call` /
+ *    `write_bytes` 参数推算返回地址)——那是从公开交付面**推断未下发信息**,
+ *    违反 ADR-DC1 what-if 纪律。事实上,按数据地址(写目标)并入断点集会
+ *    结构性空转(指令流地址断点永不命中数据地址),正是本 WP 要修的缺陷形态。
+ */
+function resolveBreakpointAddress(ctx: CompileContext): string | null {
+  try {
+    const value = ctx.environment.registerValue(PAYLOAD_BREAKPOINT_ADDRESS_REGISTER);
+    if (value < 0n || value > MASK_64) {
+      return null;
+    }
+    return addressToHex(value);
+  } catch {
+    return null;
+  }
 }
 
 /** 字段文本(field_input / field_dropdown)。 */
@@ -430,10 +469,18 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
     case PAYLOAD_STEP_TYPE:
       emitAction(ctx, block, { type: "step", args: {} }, t("compile.stepInstruction"));
       return;
-    case PAYLOAD_BREAKPOINT_TYPE:
-      // 断点(M7 变通):不是动作,是步进暂停点标记。
-      ctx.steps.push({ kind: "breakpoint", label: t("compile.stepBreakpoint"), blockId: block.id });
+    case PAYLOAD_BREAKPOINT_TYPE: {
+      // 断点(M7 变通):不是动作,是步进暂停点标记;调试档并入调试断点集时
+      // 携带编译期可解析地址(WP-76;不可解析 → 无地址形态,见解析函数注释)。
+      const addressHex = resolveBreakpointAddress(ctx);
+      ctx.steps.push({
+        kind: "breakpoint",
+        label: t("compile.stepBreakpoint"),
+        blockId: block.id,
+        ...(addressHex === null ? {} : { addressHex }),
+      });
       return;
+    }
     case PAYLOAD_IF_TYPE: {
       // 分支:编译期求值,只展开被选中的支(Q3:暂停只发生在原子动作边界)。
       const condition = evalBooleanInput(ctx, block, "COND");

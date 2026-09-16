@@ -507,3 +507,148 @@ describe("payload 标签页类型登记(defaultTabTypeRegistry)", () => {
     content?.remove();
   });
 });
+
+// ── WP-76:断点积木地址承载 / 并入广播 / 客户端步进暂停 ────────────────────
+
+/** 公开投影求值环境夹具:含 RIP(断点积木地址解析的唯一来源)。 */
+function sourceWithRip(valueHex = "0x400ABC"): FakeMemoryDataSource {
+  return new FakeMemoryDataSource(
+    [
+      {
+        regionId: "region-code",
+        label: "code",
+        startAddressHex: "0x400000",
+        byteLength: 4096,
+        permissions: "rx",
+        windowBytesHex: "c3",
+      },
+    ],
+    [{ name: "RIP", valueHex }],
+  );
+}
+
+/** 双断点程序:start → 断点 → 写字节 → 断点(去重 / 顺序断言用)。 */
+function twoBreakpointState(): BlocklySerializedState {
+  return {
+    blocks: {
+      languageVersion: 0,
+      blocks: [
+        {
+          type: "payload_start",
+          id: "start",
+          next: {
+            block: {
+              type: "payload_breakpoint",
+              id: "bp1",
+              next: {
+                block: {
+                  type: "payload_write_bytes",
+                  id: "wb",
+                  fields: { BYTES: "4142" },
+                  inputs: {
+                    ADDR: { block: { type: "payload_num", id: "addr", fields: { N: "0x1000" } } },
+                  },
+                  next: { block: { type: "payload_breakpoint", id: "bp2" } },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+describe("<sm-payload-tab> 断点积木地址与客户端步进暂停(WP-76)", () => {
+  it("breakpointAddresses():编译期可解析 → 返回真实地址集(去重、首次出现序)", async () => {
+    const element = await mountTab();
+    element.dataSource = sourceWithRip();
+    element.loadWorkspaceState(twoBreakpointState());
+    // 先让 dataSource 换绑的 willUpdate(重建求值环境 / 重编译)收敛,再显式编译。
+    await element.updateComplete;
+    const result = element.compileNow();
+    expect(result?.ok).toBe(true);
+    expect(element.breakpointAddresses()).toEqual(["0x400abc"]);
+    element.remove();
+  });
+
+  it("breakpointAddresses():不可解析(无数据源)→ 空集,且不报错", async () => {
+    const element = await mountTab();
+    element.loadWorkspaceState(twoBreakpointState());
+    await element.updateComplete;
+    const result = element.compileNow();
+    expect(result?.ok).toBe(true);
+    expect(element.breakpointAddresses()).toEqual([]);
+    element.remove();
+  });
+
+  it("编译产出即广播 payload-breakpoints-changed(地址集与 breakpointAddresses 同源)", async () => {
+    const element = await mountTab();
+    element.dataSource = sourceWithRip();
+    element.loadWorkspaceState(twoBreakpointState());
+    await element.updateComplete;
+    const events: string[][] = [];
+    element.addEventListener("payload-breakpoints-changed", (event) => {
+      events.push([...(event as CustomEvent<{ addresses: string[] }>).detail.addresses]);
+    });
+    element.compileNow();
+    expect(events).toEqual([["0x400abc"]]);
+    element.remove();
+  });
+
+  it("运行停到断点积木 → 输出区呈「客户端步进暂停」并携带地址;广播 payload-client-pause", async () => {
+    const element = await mountTab();
+    element.dataSource = sourceWithRip();
+    const sink = new FakeSink();
+    element.actionSink = sink;
+    element.loadWorkspaceState(twoStepState());
+    await element.updateComplete;
+    const pauses: { reason: string; addressHex: string | null }[] = [];
+    element.addEventListener("payload-client-pause", (event) => {
+      pauses.push(
+        (event as CustomEvent<{ reason: string; addressHex: string | null }>).detail,
+      );
+    });
+
+    element.compileNow();
+    element.runProgram();
+    await settle();
+    sink.accept(1);
+    await settle();
+    await element.updateComplete;
+
+    expect(pauses).toEqual([{ reason: "breakpoint", stepIndex: 1, addressHex: "0x400abc" }]);
+    const logText = shadowOf(element).querySelector(".output-log")?.textContent ?? "";
+    expect(logText).toContain("客户端步进暂停");
+    expect(logText).toContain("@ 0x400abc");
+    expect(shadowOf(element).querySelector(".executor-status")?.textContent).toContain("paused");
+    element.remove();
+  });
+
+  it("单步(未停断点积木)→ 客户端暂停不带地址,维持既有「已暂停于第 n 步前」形态", async () => {
+    const element = await mountTab();
+    element.dataSource = sourceWithRip();
+    const sink = new FakeSink();
+    element.actionSink = sink;
+    element.loadWorkspaceState(twoStepState());
+    await element.updateComplete;
+    const pauses: { reason: string; addressHex: string | null }[] = [];
+    element.addEventListener("payload-client-pause", (event) => {
+      pauses.push(
+        (event as CustomEvent<{ reason: string; addressHex: string | null }>).detail,
+      );
+    });
+
+    element.compileNow();
+    element.stepOnce();
+    await settle();
+    sink.accept(1);
+    await settle();
+    await element.updateComplete;
+
+    expect(pauses).toEqual([{ reason: "step", stepIndex: 1, addressHex: null }]);
+    const logText = shadowOf(element).querySelector(".output-log")?.textContent ?? "";
+    expect(logText).toContain("已暂停于第 2 步前(单步)");
+    element.remove();
+  });
+});

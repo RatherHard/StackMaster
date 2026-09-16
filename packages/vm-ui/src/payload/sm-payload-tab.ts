@@ -39,6 +39,7 @@ import * as Blockly from "blockly";
 
 import type { MemoryDataSource } from "../datasource/types.js";
 import { LocaleController, t } from "../i18n/i18n.js";
+import { addressToHex, parseAddressHex } from "../render/hex.js";
 import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
 import {
   PAYLOAD_BLOCKLY_THEME,
@@ -71,8 +72,37 @@ interface PayloadLogLine {
   readonly text: string;
 }
 
+/**
+ * `payload-breakpoints-changed` 事件 detail(WP-76;编译产出断点积木地址集)。
+ * 消费者(工作区)可直接用本 detail,也可回调 `breakpointAddresses()` 自取
+ * (两者同源)。
+ */
+export interface PayloadBreakpointsChangedDetail {
+  /** 断点积木解析出的地址集(去重、首次出现序;不可解析的断点不产出)。 */
+  readonly addresses: readonly string[];
+}
+
+/**
+ * `payload-client-pause` 事件 detail(WP-76 #4):积木执行器的**客户端**暂停
+ * (断点积木 / 单步 / 手动暂停);`addressHex` 仅断点积木且编译期可解析时非空。
+ */
+export interface PayloadClientPauseDetail {
+  readonly reason: "breakpoint" | "user" | "step";
+  readonly stepIndex: number;
+  readonly addressHex: string | null;
+}
+
 /** 日志上限(内存有界;超出丢弃最旧行)。 */
 const PAYLOAD_LOG_LIMIT = 200;
+
+/** 地址归一化兜底(编译器产物 → 归一化小写键;非法返回 null,渲染层不抛错)。 */
+function normalizeAddressSafe(addressHex: string): string | null {
+  try {
+    return addressToHex(parseAddressHex(addressHex));
+  } catch {
+    return null;
+  }
+}
 
 /** 画布预置状态:唯一起始积木(FE-PB-03;deletable=false 由组件补设)。 */
 function seedState(): BlocklySerializedState {
@@ -388,7 +418,25 @@ export class SmPayloadTab extends LitElement {
     }
     this.#applyBlockWarnings(result);
     this.requestUpdate();
+    // WP-76:编译产出新程序即广播断点积木地址集(工作区调试档据此重并入;
+    // 详情面与 `breakpointAddresses()` 同源,消费者可自取)。
+    this.#emitBreakpointsChanged();
     return result;
+  }
+
+  /**
+   * 断点积木地址集变更广播(WP-76;bubbles + composed,挂点 = 工作区
+   * `<main>`):调试档下工作区据此**重并入**地址集(add-only 幂等),使
+   * 「调试模式内改积木 → 运行到断点」不必重进调试模式;解题档工作区不消费。
+   */
+  #emitBreakpointsChanged(): void {
+    this.dispatchEvent(
+      new CustomEvent<PayloadBreakpointsChangedDetail>("payload-breakpoints-changed", {
+        detail: { addresses: this.breakpointAddresses() },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /** 运行(FE-WS-04b 运行选项的连续形态):自动编译后从当前游标推进。 */
@@ -422,21 +470,28 @@ export class SmPayloadTab extends LitElement {
   }
 
   /**
-   * 断点积木地址并入口(FE-WS-07,WP-F8 最小接线挂点):断点积木双档——
+   * 断点积木地址并入口(FE-WS-07 / WP-76 最小接线挂点):断点积木双档——
    * 解题模式 = 步进暂停(执行器现状);调试模式 = 断点集合并入调试断点
-   * (工作区切调试模式时 duck-typing 调用本面)。v1 编译器断点步骤
-   * (PayloadStep.kind "breakpoint")无地址承载 → 返回空;编译器演进携带
-   * addressHex 后由本面自动并入,零工作区改动。
+   * (工作区切调试模式时 duck-typing 调用本面)。
+   *
+   * WP-76 起编译器断点步骤携带**编译期可解析地址**(`PayloadStep.addressHex`,
+   * 见 compiler/types.ts 的语义与边界登记),本面返回**真实地址集**:
+   *  - 去重(同一编译期投影 `rip` 可被多个断点积木解析为同一地址),保持
+   *    首次出现序(与程序步序一致,便于对读输出区);
+   *  - 不可解析的断点步骤(无地址形态)**不产出**条目——不猜测、不补 0;
+   *  - 地址形态再校验一次(非法即跳过:地址来自编译器,契约面不会出现非法值,
+   *    此处只做渲染层同款的防御性收口)。
    */
   breakpointAddresses(): readonly string[] {
     const steps = this.#program?.steps ?? [];
     const addresses: string[] = [];
     for (const step of steps) {
-      if (step.kind === "breakpoint") {
-        const address = (step as { addressHex?: unknown }).addressHex;
-        if (typeof address === "string") {
-          addresses.push(address);
-        }
+      if (step.kind !== "breakpoint" || step.addressHex === undefined) {
+        continue;
+      }
+      const address = normalizeAddressSafe(step.addressHex);
+      if (address !== null && !addresses.includes(address)) {
+        addresses.push(address);
       }
     }
     return addresses;
@@ -555,13 +610,37 @@ export class SmPayloadTab extends LitElement {
     });
     executor.onPaused((event) => {
       this.#executorCursor = event.index;
-      const reason =
-        event.reason === "breakpoint"
-          ? t("payload.pauseReasonBreakpoint")
-          : event.reason === "user"
-            ? t("payload.pauseReasonUser")
-            : t("payload.pauseReasonStep");
-      this.#appendLog("info", t("payload.logPaused", { index: event.index + 1, reason }));
+      const step = this.#program?.steps[event.index] ?? null;
+      // 地址只在**真实停断点积木**时呈现(reason = breakpoint):单步 / 手动
+      // 暂停时游标可能恰好落在断点步骤上,但那是"执行完上一步"的暂停,不是
+      // 断点暂停——语义不可混同(登记)。
+      const addressHex =
+        event.reason === "breakpoint" && step !== null && step.kind === "breakpoint"
+          ? (step.addressHex ?? null)
+          : null;
+      if (event.reason === "breakpoint") {
+        // WP-76 #4:断点积木暂停 = **客户端步进暂停**(本地暂停点,不含服务端
+        // 断点语义;解题档既有变通语义原样保留)。地址可解析时一并宣读。
+        this.#appendLog(
+          "info",
+          t("payload.logPausedBreakpointClient", {
+            index: event.index + 1,
+            address: addressHex === null ? t("payload.pausedNoAddress") : ` @ ${addressHex}`,
+          }),
+        );
+      } else {
+        const reason =
+          event.reason === "user" ? t("payload.pauseReasonUser") : t("payload.pauseReasonStep");
+        this.#appendLog("info", t("payload.logPaused", { index: event.index + 1, reason }));
+      }
+      // 客户端暂停广播(工作区 → 指令视图按「客户端步进暂停」形态呈现锚点)。
+      this.dispatchEvent(
+        new CustomEvent<PayloadClientPauseDetail>("payload-client-pause", {
+          detail: { reason: event.reason, stepIndex: event.index, addressHex },
+          bubbles: true,
+          composed: true,
+        }),
+      );
       this.requestUpdate();
     });
     executor.onError((event: PayloadExecutorErrorEvent) => {

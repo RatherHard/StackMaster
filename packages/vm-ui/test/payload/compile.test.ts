@@ -422,6 +422,71 @@ describe("断点积木:标记断点位置", () => {
     expect(result.program.steps[1]?.label).toContain("断点");
     expect(result.program.steps[2]?.kind).toBe("action");
   });
+
+  // ── WP-76:断点积木携带编译期可解析地址(非协议面;见 compiler/types.ts)──
+
+  it("编译期可解析(公开投影含 rip)→ 断点步骤携带 addressHex(0x 小写)", () => {
+    const dataSource = new FakeMemoryDataSource(
+      [
+        {
+          regionId: "region-code",
+          label: "code",
+          startAddressHex: "0x400000",
+          byteLength: 4096,
+          permissions: "rx",
+          windowBytesHex: "c3",
+        },
+      ],
+      [{ name: "RIP", valueHex: "0x400ABC" }],
+    );
+    const result = compilePayload(
+      linkedProgram(block(PAYLOAD_PUSH_TYPE, { inputs: { VALUE: value(num("1")) } }), block(PAYLOAD_BREAKPOINT_TYPE)),
+      { environment: createPublicEvalEnvironment(dataSource) },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const step = result.program.steps[1];
+    expect(step?.kind).toBe("breakpoint");
+    expect(step?.kind === "breakpoint" ? step.addressHex : null).toBe("0x400abc");
+  });
+
+  it("不可解析(缺省空求值环境)→ 保持无地址形态且不报错(边界登记)", () => {
+    const result = compilePayload(linkedProgram(block(PAYLOAD_BREAKPOINT_TYPE)));
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const step = result.program.steps[0];
+    expect(step?.kind).toBe("breakpoint");
+    expect(step?.kind === "breakpoint" && "addressHex" in step).toBe(false);
+  });
+
+  it("不可解析(投影白名单不含 rip)→ 保持无地址形态", () => {
+    const dataSource = new FakeMemoryDataSource(
+      [
+        {
+          regionId: "region-stack",
+          label: "stack",
+          startAddressHex: "0x1000",
+          byteLength: 4096,
+          permissions: "rw",
+          windowBytesHex: "00",
+        },
+      ],
+      [{ name: "RSP", valueHex: "0x1004" }],
+    );
+    const result = compilePayload(linkedProgram(block(PAYLOAD_BREAKPOINT_TYPE)), {
+      environment: createPublicEvalEnvironment(dataSource),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const step = result.program.steps[0];
+    expect(step?.kind === "breakpoint" && "addressHex" in step).toBe(false);
+  });
 });
 
 // ── allowedActions 裁剪(编译期,标红反馈带 blockId)───────────────────────
