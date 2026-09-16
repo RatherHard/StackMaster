@@ -440,6 +440,58 @@ describe("<sm-payload-tab> 输出日志无障碍语义(live region × 列表语�
   });
 });
 
+// ── Blockly 画布的主题 token 消费(WP-74 前置:暗色下工具箱对比度)─────────
+
+describe("<sm-payload-tab> Blockly 画布消费主题 token(暗色可读性的机制面)", () => {
+  /**
+   * 真机事实(WP-71 起 payload 窗口常驻后进入暗色扫描面):
+   * `.blocklyToolboxCategoryLabel` 前景 #ffffff(暗色 color-scheme 的 canvastext)
+   * 落在 Blockly 默认浅色工具箱背景 #dddddd 上 = 1.35:1(axe color-contrast,
+   * serious)。修法 = 让承载文本的 Blockly 组件样式引用主题 token,使暗色下
+   * 背景随 token 转深。
+   *
+   * jsdom 无布局引擎、无法判定对比度(与既有口径一致:对比度判定以真机 axe 为
+   * 唯一权威)——此处断言**机制**:Blockly 组件样式表里必须是 `var(--sm-*)`
+   * 引用而非字面色值(字面值即「不随主题」= 缺陷根因),真机面由
+   * `e2e/axe-contrast.spec.ts` 的 dark 面承载。
+   */
+  const TOKEN_DRIVEN_COMPONENT_STYLES = [
+    "toolboxBackgroundColour",
+    "toolboxForegroundColour",
+    "flyoutBackgroundColour",
+    "flyoutForegroundColour",
+    "workspaceBackgroundColour",
+    "scrollbarColour",
+  ] as const;
+
+  it("Blockly 主题:工具箱 / 飞出 / 画布背景与前景均引用主题 token,不落地字面色值", async () => {
+    const element = await mountTab();
+    const workspace = element.workspace;
+    // 画布不可用(极端环境)时本用例无法判定 —— 直接失败而非静默跳过。
+    expect(workspace, "Blockly 未挂载:本用例无法判定 token 消费").not.toBeNull();
+    const theme = (workspace as NonNullable<typeof workspace>).getTheme();
+    for (const name of TOKEN_DRIVEN_COMPONENT_STYLES) {
+      const value = theme.getComponentStyle(name);
+      expect(String(value), `${name} 未消费主题 token(值:${String(value)})`).toMatch(/var\(--sm-[a-z-]+/);
+    }
+    element.remove();
+  });
+
+  it("工具箱容器把 token 声明为内联样式:暗色锚切换即生效(而非 Blockly 默认 #dddddd 字面量)", async () => {
+    const element = await mountTab();
+    const toolbox = element.querySelector<HTMLElement>(
+      "[data-payload-canvas] .blocklyToolbox, [data-payload-canvas] .blocklyToolboxDiv",
+    );
+    expect(toolbox, "工具箱容器未渲染:Blockly 未挂载").not.toBeNull();
+    // Blockly 经 ThemeManager.subscribe 把组件样式落到内联样式;值必须是 token 引用。
+    expect(toolbox?.style.backgroundColor).toMatch(/var\(--sm-[a-z-]+/);
+    expect(toolbox?.style.color).toMatch(/var\(--sm-[a-z-]+/);
+    // 字面 #dddddd(Blockly 默认浅色工具箱)不得再出现。
+    expect(toolbox?.style.backgroundColor).not.toMatch(/#ddd|rgb\(221,\s*221,\s*221\)/i);
+    element.remove();
+  });
+});
+
 // ── 标签页注册表登记(F5 接线形态)────────────────────────────────────────
 
 describe("payload 标签页类型登记(defaultTabTypeRegistry)", () => {

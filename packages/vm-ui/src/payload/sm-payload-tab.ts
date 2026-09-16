@@ -40,6 +40,11 @@ import * as Blockly from "blockly";
 import type { MemoryDataSource } from "../datasource/types.js";
 import { LocaleController, t } from "../i18n/i18n.js";
 import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
+import {
+  PAYLOAD_BLOCKLY_THEME,
+  PAYLOAD_CANVAS_HOST_CLASS,
+  ensurePayloadCanvasStyles,
+} from "./blockly-theme.js";
 import { createPublicEvalEnvironment } from "./compiler/eval.js";
 import {
   PAYLOAD_START_BLOCK_TYPE,
@@ -283,12 +288,16 @@ export class SmPayloadTab extends LitElement {
     // 轻 DOM 画布宿主(shadow DOM 适配定案;slot 承接布局)。
     if (this.#canvasHost === null) {
       const host = document.createElement("div");
-      host.className = "payload-canvas-host";
+      // 类名 = 画布样式作用域锚(与 blockly-theme.ts 的样式表同源,避免漂移)。
+      host.className = PAYLOAD_CANVAS_HOST_CLASS;
       host.setAttribute("slot", "canvas");
       host.setAttribute("data-payload-canvas", "");
       this.appendChild(host);
       this.#canvasHost = host;
     }
+    // 画布内部样式表(主题 token 覆盖 Blockly 自带字面色值;幂等,见
+    // blockly-theme.ts):须在 inject 前在场,避免首帧闪现 Blockly 默认浅底。
+    ensurePayloadCanvasStyles(this.#canvasHost);
     this.#mountBlockly();
   }
 
@@ -455,6 +464,9 @@ export class SmPayloadTab extends LitElement {
         toolbox: buildPayloadToolbox() as never,
         trashcan: true,
         scrollbars: true,
+        // 画布配色 = StackMaster 主题 token(WP-74 前置修复:暗色对比度;见
+        // blockly-theme.ts 的根因与映射理由)。
+        theme: PAYLOAD_BLOCKLY_THEME,
       });
       this.#workspace = workspace;
       workspace.addChangeListener((event) => {
