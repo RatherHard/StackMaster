@@ -29,6 +29,8 @@ async function mountElement(overrides: {
   handshakeTimeoutMs?: number;
   helloMaxRetries?: number;
   measureHeight?: () => number;
+  /** 挂载前就位的外部 attribute(WP-73:插件文档页预置 data-sm-theme 形态)。 */
+  hostAttributes?: Readonly<Record<string, string>>;
 } = {}) {
   const clock = new FakeClock();
   const scheduler = new FakeScheduler(clock);
@@ -42,6 +44,9 @@ async function mountElement(overrides: {
   element.clock = () => clock.now();
   element.scheduler = scheduler;
   element.frameScheduler = frames;
+  for (const [name, value] of Object.entries(overrides.hostAttributes ?? {})) {
+    element.setAttribute(name, value);
+  }
   if (overrides.bootstrapEndpoint !== undefined) {
     element.bootstrapEndpoint = overrides.bootstrapEndpoint;
   }
@@ -232,6 +237,82 @@ describe("<pwn-memory-vm>:主题 / 语言接线位(WP-53 接口锚)", () => {
   it("内置默认:未 ready 前保持 light / zh-CN(§4.4 未授予降级的缺省形态)", async () => {
     const h = await mountElement({});
     expect(h.element.appearanceSnapshot).toEqual({ theme: "light", resolvedTheme: "light", language: "zh-CN" });
+  });
+});
+
+describe("<pwn-memory-vm>:terminal 锚承载(WP-73 / D-MP-2;协议面零改动)", () => {
+  /** 派发一条宿主 → 插件帧(与既有用例同形态:jsdom 全局 window 为监听面)。 */
+  function dispatchHostMessage(h: Awaited<ReturnType<typeof mountElement>>, data: unknown): void {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: HOST_ORIGIN,
+        source: h.element.parentWindow as unknown as MessageEventSource,
+        data,
+      }),
+    );
+  }
+
+  it("插件文档页预置 data-sm-theme=terminal → 挂载后锚保留,color-scheme 落 dark", async () => {
+    const h = await mountElement({ hostAttributes: { "data-sm-theme": "terminal" } });
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
+    // terminal 属暗族:color-scheme 与 resolvedTheme 同口径落 dark(系统色不自相矛盾)。
+    expect(h.element.style.colorScheme).toBe("dark");
+  });
+
+  it("运行中外部改写锚为 terminal → 立即生效(无需等待宿主 theme_changed)", async () => {
+    const h = await mountElement({});
+    expect(h.element.getAttribute("data-sm-theme")).toBe("light");
+    h.element.setAttribute("data-sm-theme", "terminal");
+    await flushMicrotasks();
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
+    expect(h.element.style.colorScheme).toBe("dark");
+  });
+
+  it("宿主 theme_changed 到达不夺回 terminal 锚(承载优先),插件状态仍三值保持", async () => {
+    const h = await mountElement({
+      handshakeTimeoutMs: 30000,
+      hostAttributes: { "data-sm-theme": "terminal" },
+    });
+    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
+    await h.element.updateComplete;
+    dispatchHostMessage(h, controlMessage("theme_changed", TEST_ESID, 2, "light"));
+    await h.element.updateComplete;
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
+    expect(h.element.style.colorScheme).toBe("dark");
+    // terminal 不经协议:外观状态机保持协议三值语义(此处 = 宿主下发的 light)。
+    expect(h.element.appearanceSnapshot.theme).toBe("light");
+    expect(h.element.appearanceSnapshot.resolvedTheme).toBe("light");
+  });
+
+  it("移除 terminal 锚 → 交还插件控制:重新落 resolvedTheme", async () => {
+    const h = await mountElement({
+      handshakeTimeoutMs: 30000,
+      hostAttributes: { "data-sm-theme": "terminal" },
+    });
+    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
+    await h.element.updateComplete;
+    h.element.removeAttribute("data-sm-theme");
+    await flushMicrotasks();
+    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
+    expect(h.element.style.colorScheme).toBe("dark");
+  });
+
+  it("零变化回归:无 terminal 锚时照旧落二值 resolvedTheme(协议三值路径不变)", async () => {
+    const h = await mountElement({ handshakeTimeoutMs: 30000 });
+    expect(h.element.getAttribute("data-sm-theme")).toBe("light");
+    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
+    await h.element.updateComplete;
+    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
+    expect(h.element.style.colorScheme).toBe("dark");
+  });
+
+  it("边界:外部写入协议三值不夺锚(light / dark / auto 的权威仍是宿主 appearance)", async () => {
+    const h = await mountElement({ handshakeTimeoutMs: 30000 });
+    h.element.setAttribute("data-sm-theme", "light");
+    await flushMicrotasks();
+    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
+    await h.element.updateComplete;
+    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
   });
 });
 

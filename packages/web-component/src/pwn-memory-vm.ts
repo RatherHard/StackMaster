@@ -25,6 +25,13 @@
  * `color-scheme`;三值状态与语言字符串经 `appearanceSnapshot` 可读。主题双套
  * 变量与 i18n 抽取面归 WP-53,在本接口上增量。
  *
+ * M1 `terminal` 承载增量(WP-73 / D-MP-2;嵌入协议零改动):`terminal` 不经
+ * 冻结协议传达,而由宿主元素上的 `data-sm-theme="terminal"` 扩展锚承载
+ * (插件文档页预置 / 集成方直接设置)。插件自身只写二值 `resolvedTheme`,故
+ * 该锚出现即视为**外部显式锚优先**——保留锚、`color-scheme` 落 dark、
+ * 宿主 `theme_changed` 不夺锚;锚被移除或改写为协议三值即交还插件控制。
+ * `EmbedAppearanceController` 与协议值域**零改动**(appearance 三值语义保持)。
+ *
  * M2 描述包正式下发接入(WP-54 增量面):引导配置就绪即并行获取公开描述包
  * (`fetchChallengeDescriptor`,GET /descriptors/:challengeId/:version;哈希 +
  * 尺寸护栏双闸的客户端侧),**不阻塞 workspace 就绪**——hintLadder /
@@ -71,7 +78,7 @@ import {
 import { fetchEmbedBootstrapConfig, type EmbedBootstrapConfig } from "./plugin/bootstrap.js";
 import { readEmbedSessionIdFromFragment } from "./plugin/esid.js";
 import { HeightReporter, type FrameSchedulerLike } from "./plugin/height-reporter.js";
-import { SessionClient, SmWorkspace } from "@stackmaster/vm-ui";
+import { SessionClient, SM_TERMINAL_THEME_VALUE, SM_THEME_ATTRIBUTE, SmWorkspace } from "@stackmaster/vm-ui";
 
 /** 降级原因(静态文案键;零反射面)。 */
 export type PwnDegradedReason =
@@ -198,6 +205,9 @@ export class PwnMemoryVm extends LitElement {
   #resizeObserver: ResizeObserverLike | null = null;
   #localCounters: Record<string, number> = {};
   #appearanceDisposer: (() => void) | null = null;
+  // WP-73(D-MP-2 承载增量):外部锚观察 + 自身落锚回环过滤。
+  #anchorObserver: MutationObserver | null = null;
+  #lastAnchoredTheme: string | null = null;
 
   // M2 描述包接入状态(WP-54;晚到注入,变更点手动 requestUpdate)。
   #descriptorView: ChallengeDescriptorView | null = null;
@@ -300,10 +310,13 @@ export class PwnMemoryVm extends LitElement {
     this.#appearanceDisposer ??= this.#appearance.onChange((snapshot) => {
       this.#applyAppearanceToHost(snapshot);
     });
+    this.#observeAnchor();
     this.#applyAppearanceToHost(this.#appearance.snapshot);
   }
 
   public override disconnectedCallback(): void {
+    this.#anchorObserver?.disconnect();
+    this.#anchorObserver = null;
     this.#teardown();
     super.disconnectedCallback();
   }
@@ -597,14 +610,51 @@ export class PwnMemoryVm extends LitElement {
     this.requestUpdate();
   };
 
-  /* ── 外观落地面(WP-53 接线位)────────────────────────────────────────── */
+  /* ── 外观落地面(WP-53 接线位;WP-73 terminal 承载增量)────────────────── */
 
+  /**
+   * 外观落锚(元素 `data-sm-theme` / `data-sm-language` / `color-scheme` 的唯一
+   * 写面):
+   *  - 插件自身只写**二值 resolvedTheme**——协议三值(light / dark / auto)的
+   *    权威在宿主 appearance,`terminal` 不经嵌入协议(D-MP-2;冻结面
+   *    `EMBED_THEMES` 零改动);
+   *  - **外部显式 terminal 锚优先**:插件从不写 terminal,故自身锚等于
+   *    `SM_TERMINAL_THEME_VALUE` 时该值必为外部写入(插件文档页预置 /
+   *    集成方直接设置),此时保留锚并把 `color-scheme` 落 dark(terminal 属
+   *    暗族,系统色不自相矛盾),宿主 `theme_changed` 亦不夺锚;
+   *  - 集成方移除该锚或改写为协议三值后,插件在下一次外观应用(或锚变更)时
+   *    重新掌握锚 —— light / dark / auto 路径与既有行为逐字一致(零变化)。
+   */
   #applyAppearanceToHost(snapshot: EmbedAppearanceSnapshot): void {
-    // 二值解析结果落 attribute 与 color-scheme(功能对比度层面;主题双套变量
-    // 归 WP-53 在此锚点上增量)。三值状态经 appearanceSnapshot 可读。
-    this.setAttribute("data-sm-theme", snapshot.resolvedTheme);
+    const externalTerminal = this.getAttribute(SM_THEME_ATTRIBUTE) === SM_TERMINAL_THEME_VALUE;
+    if (!externalTerminal) {
+      this.setAttribute(SM_THEME_ATTRIBUTE, snapshot.resolvedTheme);
+    }
+    this.#lastAnchoredTheme = this.getAttribute(SM_THEME_ATTRIBUTE);
     this.setAttribute("data-sm-language", snapshot.language);
-    this.style.colorScheme = snapshot.resolvedTheme;
+    this.style.colorScheme = externalTerminal ? "dark" : snapshot.resolvedTheme;
+  }
+
+  /**
+   * 外部锚变更观察(WP-73 增量):集成方在宿主元素上直接改 / 删
+   * `data-sm-theme`(含 terminal)即生效,无需等待宿主 `theme_changed`;
+   * 自身落锚经 `#lastAnchoredTheme` 过滤,零回环(仅观察锚属性,
+   * 语言锚的自写不触发)。
+   */
+  #observeAnchor(): void {
+    if (this.#anchorObserver !== null || typeof MutationObserver === "undefined") {
+      return;
+    }
+    this.#anchorObserver = new MutationObserver(() => {
+      if (this.getAttribute(SM_THEME_ATTRIBUTE) === this.#lastAnchoredTheme) {
+        return;
+      }
+      this.#applyAppearanceToHost(this.#appearance.snapshot);
+    });
+    this.#anchorObserver.observe(this, {
+      attributes: true,
+      attributeFilter: [SM_THEME_ATTRIBUTE],
+    });
   }
 
   /* ── 释放 ───────────────────────────────────────────────────────────── */

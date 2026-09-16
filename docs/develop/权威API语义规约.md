@@ -1094,6 +1094,20 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **检查器修正(机检实现对齐已登记槽序,零契约变更)**:`debug-variant-derivation-checker.ts` 原实现对"隐藏区域 + canary 槽同区域"组合存在假阳性(阶段 A 以纯派生内容比对隐藏区域,而 canary 叠加后的真值是阶段 B;阶段四单测两者分属不同区域,未触发)。修正 = canary 属主区域的逐字节比对推迟到阶段 B,纯隐藏区域维持阶段 A 归因;与 WP-40 §七.2 冻结槽序(基址 → 隐藏区域 → canary 叠加)一致。
 - **canary 契约现状登记(制作期发现,冲突如实报告)**:XS-CANARY-CORR(检查器:启用 canary ⇒ 存在 hidden + containsSecret 的 canary 对象且与公开区域不相交)与引擎装配 `build_canary_slots`(canary 对象必须 `visibility = public`,且 canary 对象存在时公开包必须启用 canary)在冻结契约下结构性不相容 ⇒ **交互可玩题不能启用引擎 canary**(canary 启用的题目无法同时通过装载管线与交互装配)。处置:①CH-05 以"守护标记 + `memory_equals` 谓词"承担金丝雀教学(引擎 `stack_canary_intact` 在无槽题目上恒真,谓词词汇面保持覆盖);②CH-07 派生面携带真实 canary 槽声明承载 ZR-B13;③契约收口(canary 槽可见性语义的两侧对齐)按 WP-1 §1.3 流程另行登记,本包不改任何契约面。
 
+## 三·二十一、中期 M1「可用性地基」(中期 WP-70 ~ WP-73;D-API-110 ~)
+
+本段承载《[中期任务分解](./../phases/中期任务分解.md)》里程碑 M1 的实现期决策。M1 的默认基线 = **冻结契约零改动**(12 动作 / 16 错误码 / 嵌入协议 v1 / 投影七字段 / 11 值裁决结果类型 / 审计 kind 十值封闭集),故本段条目以「承载路径与呈现层定案」为主,不新增契约面。
+
+### D-API-110 `terminal` 主题承载路径:插件锚让位增量与协议零改动(中期 WP-73;决策点 D-MP-2)
+
+- **触发 WP**:WP-73(主题机制扩展:`terminal` token 集);决策点 = 中期任务分解 §4.1 D-MP-2 行。
+- **裁决**:嵌入协议外观主题载荷维持冻结三值 `EMBED_THEMES = ["light","dark","auto"]`(V-1~V-13 不动,`packages/protocol` 零 diff);`terminal` 由插件宿主元素上的 `data-sm-theme="terminal"` 扩展锚承载(插件文档页预置 / 同文档集成方直接设置),宿主 appearance 映射为 dark(`resolvedTheme` 保持二值语义)。`EmbedAppearanceController` 与 `SM_THEME_VALUES` 的 `auto` 语义**零改动**;`SM_THEME_VALUES` 扩为 `["light","dark","terminal","auto"]`(预设集 + auto 同源展开),锚样式表仍由变量记录**同源生成**(零手写 CSS 块)。
+- **承载路径增量(为什么"无需接线"不成立)**:插件落锚面原为无条件下写 `data-sm-theme = resolvedTheme`,集成方预置的 `terminal` 锚会在 `connectedCallback` 被 `light` 覆盖;且经机检证明「最近锚优先」下**祖先元素承载不可达**(祖先 `terminal` 锚 + 自身 `dark` 锚 ⇒ 自身命中 dark 值)。故在 `<pwn-memory-vm>` 落锚面做**窄口径最小增量**:①自身锚已为 `terminal` 时保留该锚(插件自身从不写该值 ⇒ 必为外部写入)并把 `color-scheme` 落 dark,其余形态逐字落 `resolvedTheme`(light / dark / auto 既有路径零变化);②新增锚变更观察(`MutationObserver`,`attributeFilter: ["data-sm-theme"]`,`connectedCallback` 挂 / `disconnectedCallback` 断,自身写入经 `#lastAnchoredTheme` 过滤 ⇒ 零回环),外部改 / 删锚即时生效。
+- **边界(明确不对称)**:仅 `terminal` 享有「外部显式锚优先」;外部写入协议三值(`light|dark|auto`)不夺锚(三值权威仍在宿主 appearance)。锚被移除或改写为协议三值时,插件在下一次外观应用 / 锚变更时重新掌握锚。**零秘密面**:锚为公开呈现层属性,不承载任何服务端状态。
+- **否决候选与理由**:①协议 additive 扩值(`EMBED_THEMES` 增 `terminal`)——否决:触及冻结 V 规则与 golden fixture,且与 WP-73「协议零改动」义务直接冲突;终端外观是渲染层预设,不是宿主 ↔ 插件协议语义。②插件宿主零让位 / 只写祖先锚——否决:机检证据表明最近锚优先下 `terminal` 不可达。③仅以 CSS 变量覆盖承载——否决:跨源宿主无法触达 iframe 文档内的变量,与 D-MP-2「`data-sm-theme` additive 扩值承载」口径不一致。
+- **红灯承载位置**:`packages/web-component/test/pwn-memory-vm.test.ts` → 「terminal 锚承载(WP-73 / D-MP-2;协议面零改动)」(实现前 4 failed / 2 passed:锚被覆盖、`color-scheme` 未随 terminal 映射 dark、宿主 `theme_changed` 夺锚、移除锚未交还控制);`packages/vm-ui/test/theming/theme-terminal.test.ts`(三预设结构 / terminal 锚计算值 / 最近锚优先遮蔽证据);light / dark 逐值冻结语料 = `packages/vm-ui/test/theming/theme.test.ts` 的 `FROZEN_CONTRAST_VARIABLES`。
+- **遗留(如实登记)**:①跨源宿主无法直接写插件文档内的锚(同源策略),承载面 = 插件文档页 / 部署配置;若需宿主侧可达的配置面(如 `PWN_MEMORY_VM_CONFIG` 的 additive 主题项),属 WP-74 / WP-77 决策点,本包未越界新增公开配置面。②jsdom 不跨 shadow 边界传播自定义属性的计算值(实测),组件 shadow 内的主题计算值机检与真机 axe 校准归 WP-74。③扫描线 / 光标闪烁的**实装**与 `aria-hidden` / `prefers-reduced-motion` / 字号下限 13px 归 WP-74;本包只落效果类变量且 light / dark 下取值恒为关闭(`--sm-scanline-opacity: 0` / `--sm-caret-blink: 0s`)。
+
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:
