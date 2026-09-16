@@ -11,10 +11,16 @@
  * 展开行为(宿主层)在本组件内闭环——展开态由组件自持,无需与工作区同步。
  *
  * 动画纪律:零动画;语义化 DOM(button + 展开 detail 列表)。
+ *
+ * 主题消费(WP-74):标注面原色 `highlight` 归 `--sm-warn`(其 light / dark 值
+ * 即 `highlight` 原样 ⇒ 明暗零变化,terminal 下转为琥珀);前景 / 焦点环 / 等宽
+ * 字体同走 token。该标注**不可归入 `--sm-accent`(青绿 = 可点击地址)**:其
+ * light 值为 `linktext`,替换会改变 light / dark 渲染(与「零变化」硬约束冲突)。
  */
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
 import { renderRegisterAnnotationCell, type RegisterHit } from "../views/register/cross-annotation.js";
 
 @customElement("sm-register-annotation")
@@ -27,6 +33,13 @@ export class SmRegisterAnnotation extends LitElement {
   @state()
   private expanded = false;
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // 主题锚样式表(幂等,WP-74):变量经 data-sm-theme 宿主锚继承穿透 shadow DOM
+    // (独立使用形态亦正确;宿主层形态下与 sm-workspace 的注入同源无害)。
+    ensureSmThemeStyles(this.ownerDocument ?? document);
+  }
+
   static override styles = css`
     :host {
       display: inline-flex;
@@ -34,22 +47,22 @@ export class SmRegisterAnnotation extends LitElement {
       align-items: flex-start;
       margin-inline-end: 0.5ch;
       vertical-align: baseline;
-      font-family: ui-monospace, monospace;
-      font-size: 0.75rem;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-size: 0.8125rem;
     }
 
     .reg-annotation {
       padding: 0 0.25rem;
-      border: 1px solid color-mix(in srgb, highlight 40%, transparent);
+      border: 1px solid color-mix(in srgb, var(--sm-warn, highlight) 40%, transparent);
       border-radius: 4px;
-      background: color-mix(in srgb, highlight 10%, transparent);
-      color: highlight;
+      background: color-mix(in srgb, var(--sm-warn, highlight) 10%, transparent);
+      color: var(--sm-warn, highlight);
       font: inherit;
       cursor: pointer;
     }
 
     .reg-annotation:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
@@ -65,7 +78,7 @@ export class SmRegisterAnnotation extends LitElement {
     }
 
     .reg-values li {
-      color: canvastext;
+      color: var(--sm-fg, canvastext);
     }
 
     .reg-value {

@@ -34,6 +34,12 @@
  *
  * 本组件是纯呈现 + 事件出站面:动作语义由宿主(sm-workspace)执行。
  * 动画纪律:零动画;语义化 DOM(nav / button / role=status / role=alert)。
+ *
+ * 主题消费(WP-74):底色 / 内嵌底(`--sm-bg-base` / `--sm-bg-inset`)、前景 /
+ * 次要前景、焦点环、琥珀(警告族)全走既有 token;字号下限 13px
+ * (0.75rem → 0.8125rem)。本组件无等宽字体声明(UI 正文 / 标签字体不属本包范围)。
+ * 系统色 `mark`(拒绝错误条底)当前**无对应 token** ⇒ 逐字保留,待 axe 真机
+ * 判定后由主控决定是否立 token。
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -202,27 +208,27 @@ export class SmWorkspaceMenu extends LitElement {
     }
 
     .group-label {
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
     }
 
     button {
       padding: 0.125rem 0.5rem;
       border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 6px;
-      background: canvas;
-      color: canvastext;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-fg, canvastext);
       font: inherit;
       cursor: pointer;
     }
 
     button:disabled {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       cursor: not-allowed;
     }
 
     button:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
@@ -232,8 +238,8 @@ export class SmWorkspaceMenu extends LitElement {
       align-items: center;
       gap: 0.375rem;
       margin-inline-start: auto;
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
     }
 
     .status dd {
@@ -241,11 +247,14 @@ export class SmWorkspaceMenu extends LitElement {
     }
 
     .status strong {
-      color: canvastext;
+      color: var(--sm-fg, canvastext);
       font-weight: 600;
     }
 
-    /* 断线横幅:整体呈现"最近一次公开投影 + 重连中"(零本地 VM 降级)。 */
+    /* 断线横幅:整体呈现"最近一次公开投影 + 重连中"(零本地 VM 降级)。
+       底 = 内嵌底 + 警告色淡染:两枚 token 的 light / dark 值即现行 field /
+       highlight 原样 ⇒ 明暗逐像素不变,terminal 下自动换档(归 --sm-bg-panel
+       会把它改成 canvas 基底、dark 下明显变暗,已否决)。 */
     .banner {
       display: flex;
       flex-wrap: wrap;
@@ -253,9 +262,9 @@ export class SmWorkspaceMenu extends LitElement {
       gap: 0.5rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      background: color-mix(in srgb, field 92%, highlight 8%);
+      background: color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%);
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     /* what-if 纪律横幅(F8):调试模式常驻(ADR-DC1 条款 7)。 */
@@ -266,19 +275,21 @@ export class SmWorkspaceMenu extends LitElement {
       gap: 0.25rem 0.75rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      background: color-mix(in srgb, field 94%, accentcolor 6%);
+      background: color-mix(in srgb, var(--sm-bg-inset, field) 94%, var(--sm-focus-ring, accentcolor) 6%);
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .whatif-banner strong {
-      color: canvastext;
+      color: var(--sm-fg, canvastext);
     }
 
     .whatif-banner span {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
+    /* 系统色 mark:无对应 token(新增会打红 test/theming 的 20 名固定清单),
+       light / dark 随 color-scheme 自适应,本轮逐字保留(待真机 axe 判定)。 */
     .banner[role="alert"] {
       background: color-mix(in srgb, mark 12%, canvas);
     }
@@ -292,11 +303,11 @@ export class SmWorkspaceMenu extends LitElement {
       gap: 0.5rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .guidance {
-      background: color-mix(in srgb, field 92%, highlight 8%);
+      background: color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%);
     }
 
     .error {
