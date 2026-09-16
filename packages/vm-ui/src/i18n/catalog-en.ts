@@ -274,6 +274,7 @@ export const en: Record<SmMessageKey, string> = {
   "instr.hitsTruncated": "Hit count exceeded the limit; truncated",
   "instr.textHitsSummary": "Instruction text search hits (pushed coverage)",
   "instr.functionTable": "Function table ({count})",
+  "instr.clientStepPause": "Client-side step pause @ {address}",
 
   // ── chain ─────────────────────────────────────────────────────────────────
   "chain.jumpTitle": "Jump to {address}",
@@ -290,6 +291,10 @@ export const en: Record<SmMessageKey, string> = {
   "chain.value": "value {value}",
   "chain.loopMark": "(loop)",
   "chain.outsideMark": "(outside window)",
+  "chain.pseudoAsmTitle": "Pseudo-assembly at chain end {address} (instruction pushed by the debug channel)",
+  "chain.pseudoAsmTitleFallback": "Chain end {address} (no pseudo-assembly data yet)",
+  "chain.pseudoAsmSolveHint": "Switch to debug mode to see the instruction",
+  "chain.pseudoAsmNoCoverage": "No instruction stream coverage yet (pushed after single-step / run-to-breakpoint)",
 
   // ── ed ────────────────────────────────────────────────────────────────────
   "ed.structureEmpty":
@@ -397,6 +402,9 @@ export const en: Record<SmMessageKey, string> = {
   "payload.pauseReasonUser": "pause request",
   "payload.pauseReasonStep": "single step",
   "payload.logPaused": "Paused before step {index} ({reason})",
+  "payload.logPausedBreakpointClient":
+    "Paused before step {index}: client-side step pause (breakpoint block{address}; local pause point, no server-side breakpoint semantics)",
+  "payload.pausedNoAddress": "(address not resolvable at compile time)",
   "payload.logRejected": "#{index} {label} → rejected [{code}] {detail}",
   "payload.unknownError": "Unknown error",
   "payload.logNoSink": "No session connected: actions cannot be submitted (waiting for workspace wiring)",

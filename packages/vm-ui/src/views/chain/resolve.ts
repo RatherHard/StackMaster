@@ -121,6 +121,64 @@ export function chainLimitReached(
   return last !== undefined && last.targetAddressHex !== undefined && last.loopBack !== true;
 }
 
+/**
+ * 链延伸落到代码区的落点地址(WP-76 §2.3 #2 / FE-ST-08 伪汇编延伸)——纯函数。
+ *
+ * 口径:按链序(段地址 → 段目标地址,段内目标在段地址之后)**取最后一个落在
+ * 可执行区域(`permissions` 含 `x`)范围内的地址**;不存在则返回 null。
+ * 即"链延伸的最深处落进了代码区"才产出落点——链尾在数据区 / 未映射 / 窗口外
+ * 一律不产出(组件渲染层据此决定是否追加伪汇编 chip)。
+ *
+ * 为什么不是"末段地址":0x1000 → 0x400100(代码区)→ 该处再解引用已是代码字节,
+ * 通常不再构成指针 ⇒ 链的**末段地址**就是代码地址,而**末段目标**可能缺席;反之
+ * 末段目标也可能是代码地址。两者都是"链延伸落到代码区"的真实形态,故统一按
+ * 链序取最后一个命中可执行区域的地址。
+ *
+ * 纯函数:不读数据源、不做 IO;区域范围判定与 `resolveJumpChain` 的
+ * `findOwningRegionExtent` 同口径(`[startAddressHex, startAddressHex + byteLength)`)。
+ */
+export function chainCodeEndAddress(
+  segments: readonly JumpChainSegment[],
+  regions: VmaList,
+): string | null {
+  let candidate: bigint | null = null;
+  for (const segment of segments) {
+    for (const addressHex of [segment.addressHex, segment.targetAddressHex]) {
+      if (addressHex === undefined) {
+        continue;
+      }
+      const address = tryParseAddress(addressHex);
+      if (address !== null && isExecutableAddress(address, regions)) {
+        candidate = address;
+      }
+    }
+  }
+  return candidate === null ? null : addressToHex(candidate);
+}
+
+/** 地址解析兜底(链段地址为归一化形态;异常输入按"非落点"处理,不抛错)。 */
+function tryParseAddress(addressHex: string): bigint | null {
+  try {
+    return parseAddressHex(addressHex);
+  } catch {
+    return null;
+  }
+}
+
+/** 地址是否落在某可执行区域范围内(`permissions` 含 `x`;区域不重叠为投影不变量)。 */
+function isExecutableAddress(address: bigint, regions: VmaList): boolean {
+  for (const region of regions) {
+    if (!region.permissions.includes("x")) {
+      continue;
+    }
+    const base = parseAddressHex(region.startAddressHex);
+    if (address >= base && address < base + BigInt(region.byteLength)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** 值 → 契约 valueHex 形态:`0x` + 大写、无前导零(0n → "0x0")。 */
 function formatValueHex(value: bigint): string {
   return `0x${value.toString(16).toUpperCase()}`;

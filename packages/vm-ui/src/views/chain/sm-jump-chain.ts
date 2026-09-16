@@ -25,6 +25,7 @@ import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
 import {
   JUMP_CHAIN_EXPANDED_LIMIT,
   JUMP_CHAIN_HORIZONTAL_LIMIT,
+  chainCodeEndAddress,
   chainLimitReached,
   resolveJumpChain,
   type JumpChainSegment,
@@ -67,6 +68,19 @@ export class SmJumpChain extends LitElement {
    */
   @property({ attribute: false })
   extendHandler: ((addressHex: string) => Promise<void>) | null = null;
+
+  /**
+   * 伪汇编查询面(WP-76 §2.3 #2;宿主注入,**无第二数据通道**):
+   * 链延伸落点落在代码区时,组件向本面查该地址的伪汇编展示条目
+   * (调试档 = 宿主按调试通道**已下发**的指令流缓存查表;返回值缺席 = 该地址
+   * 不在已推送覆盖面内)。**属性面缺席 = 解题档**:无指令流数据,组件按登记
+   * 形态降级为引导文案(不伪造指令、不推断)。
+   *
+   * 登记语义(本 WP):chip **不可点击**——链上地址芯片已承载跳转,伪汇编 chip
+   * 只做展示(避免与既有链段跳转语义重叠,且不新增可交互面)。
+   */
+  @property({ attribute: false })
+  pseudoAsmProvider: ((addressHex: string) => { readonly text: string } | null) | null = null;
 
   /** 延伸进行中(按钮 aria-busy;防重入)。 */
   #extending = false;
@@ -184,6 +198,27 @@ export class SmJumpChain extends LitElement {
       margin-inline-start: 0.25rem;
       color: colortext;
     }
+
+    /* 伪汇编 chip(WP-76 §2.3 #2):链延伸落到代码区时追加一条指令语句展示。
+       只读展示面(非交互):链上地址芯片已承载跳转。 */
+    .pseudo-asm {
+      margin-inline-start: 0.375rem;
+      padding: 0 0.25rem;
+      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border-radius: 4px;
+      background: color-mix(in srgb, canvas 92%, highlight 8%);
+      color: canvastext;
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    /* 降级形态(解题档无指令流 / 调试档推送覆盖面外):灰字引导,不冒充指令。 */
+    .pseudo-asm[data-pseudo-asm-source="solve"],
+    .pseudo-asm[data-pseudo-asm-source="no-coverage"] {
+      color: graytext;
+      font-family: system-ui, sans-serif;
+    }
   `;
 
   protected override render(): TemplateResult | typeof nothing {
@@ -205,6 +240,7 @@ export class SmJumpChain extends LitElement {
           ${limitReached ? this.#renderTrailingTarget(horizontal) : nothing}
         </span>
         ${this.#renderExtendEntry(horizontal)} ${visibleRun === "" ? nothing : renderVisibleRun(visibleRun)}
+        ${this.#renderPseudoAsmChip(full ?? horizontal)}
         ${limitReached ? this.#renderExpandToggle() : nothing}
         ${full === null ? nothing : this.#renderVertical(full)}
       </div>
@@ -379,6 +415,61 @@ export class SmJumpChain extends LitElement {
         </li>`,
       )}
     </ol>`;
+  }
+
+  /**
+   * 伪汇编延伸 chip(WP-76 §2.3 #2;FE-ST-08 伪汇编落点):
+   *  - 落点判定 = `chainCodeEndAddress`(链序中最后一个落在可执行区域的地址);
+   *    不在代码区 → 不追加(返回 nothing);
+   *  - `pseudoAsmProvider` 缺席(**解题档**)= 无指令流数据 ⇒ 登记降级形态:
+   *    引导文案「切换调试模式查看指令」(`data-pseudo-asm-source="solve"`);
+   *  - provider 返回 null(**调试档** · 该地址不在已推送覆盖面内)⇒ 引导文案
+   *    「暂无指令流覆盖」(source = `no-coverage`);
+   *  - provider 命中 ⇒ 真实伪汇编展示文本(`地址 语句`;source = `debug`,
+   *    数据来源 = 调试通道已下发的 `debug_instruction_stream`,零新增通道)。
+   */
+  #renderPseudoAsmChip(segments: readonly JumpChainSegment[]): TemplateResult | typeof nothing {
+    const dataSource = this.dataSource;
+    if (dataSource === null) {
+      return nothing;
+    }
+    let addressHex: string | null;
+    try {
+      addressHex = chainCodeEndAddress(segments, dataSource.regions());
+    } catch {
+      return nothing; // 区域面异常按"非代码区落点"处理,不阻塞链渲染。
+    }
+    if (addressHex === null) {
+      return nothing;
+    }
+    const provider = this.pseudoAsmProvider;
+    let source: "debug" | "no-coverage" | "solve";
+    let text: string;
+    if (provider === null) {
+      source = "solve";
+      text = t("chain.pseudoAsmSolveHint");
+    } else {
+      const entry = provider(addressHex);
+      if (entry === null) {
+        source = "no-coverage";
+        text = t("chain.pseudoAsmNoCoverage");
+      } else {
+        source = "debug";
+        text = `${addressHex} ${entry.text}`;
+      }
+    }
+    const title =
+      source === "debug"
+        ? t("chain.pseudoAsmTitle", { address: addressHex })
+        : t("chain.pseudoAsmTitleFallback", { address: addressHex });
+    return html`<span
+      class="pseudo-asm"
+      data-pseudo-asm
+      data-pseudo-asm-address=${addressHex}
+      data-pseudo-asm-source=${source}
+      title=${title}
+      >${text}</span
+    >`;
   }
 
   /** 链末可见字符延伸(FE-ST-10):按展示链末段地址读取;不可读 → 空串。 */

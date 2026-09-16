@@ -158,6 +158,20 @@ function rowsOf(view: SmInstructionView): HTMLElement[] {
   return queryAllShadow(view, "sm-window-list .instruction-row:not(.header-row)");
 }
 
+/** 滚动调用面替身:记录 `scrollToIndex` 请求(jsdom 无布局,滚动实现不可观测)。 */
+function spyScrollToIndex(view: SmInstructionView): number[] {
+  const calls: number[] = [];
+  const list = queryShadow(view, "sm-window-list") as unknown as {
+    scrollToIndex: (index: number, align?: string) => void;
+  } | null;
+  if (list !== null) {
+    list.scrollToIndex = (index: number) => {
+      calls.push(index);
+    };
+  }
+  return calls;
+}
+
 // ── 套件 ─────────────────────────────────────────────────────────────────────
 
 describe("FE-IN-01/02:默认形态与三段布局(缺席语义)", () => {
@@ -399,6 +413,99 @@ describe("暂停原因文案(debug_paused 封闭四值)", () => {
     const source = new FakeDebugSource(ENTRIES);
     const view = await mountView(source);
     expect(queryShadow(view, ".paused-line")?.textContent).toContain("尚未 attach");
+  });
+});
+
+// ── WP-75 #6:行左缘寄存器交叉标注(复用 <sm-register-annotation>)──────────
+
+describe("WP-75 #6:指令行左缘寄存器交叉标注", () => {
+  function hit(targetAddressHex: string, registerName = "RIP", valueHex = "0x401004") {
+    return { registerName, valueHex, targetAddressHex, regionId: "region-code", offset: 0 };
+  }
+
+  it("命中地址与本行指令地址相等 → 该行左缘出现标注;其余行不出现", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    const view = await mountView(source);
+    expect(queryAllShadow(view, "sm-register-annotation")).toHaveLength(0);
+
+    view.registerHits = [hit("0x401004"), hit("0x999999", "RAX", "0x1")];
+    await view.updateComplete;
+    await settleFrames(3);
+
+    const annotations = queryAllShadow(view, "sm-register-annotation");
+    expect(annotations).toHaveLength(1);
+    // 标注挂在该行左缘(地址列内),不是行尾 / 伪汇编列。
+    const row = queryShadow(view, '.instruction-row[data-instruction-address="0x401004"]');
+    expect(row?.querySelector(".row-address > sm-register-annotation")).not.toBeNull();
+    expect(row?.querySelector(".row-text sm-register-annotation")).toBeNull();
+  });
+
+  it("命中集为空 → 零标注节点(加性;不改既有行结构)", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    const view = await mountView(source);
+    expect(view.registerHits).toEqual([]);
+    expect(queryAllShadow(view, "sm-register-annotation")).toHaveLength(0);
+  });
+});
+
+// ── WP-75 #7:伪汇编列右对齐 + 初始视角锚定(未暂停也可回锚)────────────────
+
+describe("WP-75 #7:伪汇编列右对齐与初始视角锚定", () => {
+  it("伪汇编列右对齐(text-align: end;单元格带 data-col-align=end)", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    const view = await mountView(source);
+
+    const cssText = SmInstructionView.styles.cssText.replace(/\s+/g, " ");
+    expect(cssText).toMatch(/\.row-text\s*\{[^}]*text-align:\s*end/);
+    const cell = queryShadow(view, '.instruction-row[data-instruction-address="0x401004"] .row-text');
+    expect(cell?.getAttribute("data-col-align")).toBe("end");
+  });
+
+  it("进入视图即按 rip 锚定一次(初始锚定标记可观测)", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    const view = await mountView(source);
+    expect(view.anchorAddressHex).toBe("0x401004");
+    expect(view.initialAnchorApplied).toBe(true);
+    expect(queryShadow(view, ".anchor-value")?.textContent).toContain("0x00401004");
+  });
+
+  it("未暂停(无 debug_paused / 无 pausedAddressHex)也回锚到 RIP 公开值", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    source.paused = null;
+    source.pausedAddressHex = null; // 未暂停:锚点回退到 RIP 寄存器公开值。
+    const view = await mountView(source);
+
+    expect(view.anchorAddressHex).toBe("0x401004");
+    expect(source.paused).toBeNull();
+    const list = queryShadow(view, "sm-window-list");
+    expect(list).not.toBeNull();
+    // 未暂停也可回锚:回锚按钮点击即请求滚动到锚点行(jsdom 无布局,滚动实现
+    // 由 sm-window-list 兜底吞错,故以调用面为断言锚)。
+    const scrollCalls = spyScrollToIndex(view);
+    queryShadow(view, ".anchor-rewind")?.dispatchEvent(
+      new Event("click", { bubbles: true, composed: true }),
+    );
+    await view.updateComplete;
+    expect(scrollCalls).toEqual([1]); // ENTRIES[1] = 0x401004
+  });
+
+  it("客户端步进暂停:独立一行呈现,不冒充服务端暂停原因;视角跟到该地址", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    source.paused = { reason: "breakpoint", addressHex: "0x401004" };
+    const view = await mountView(source);
+    expect(queryShadow(view, ".client-step-pause")).toBeNull();
+
+    const scrollCalls = spyScrollToIndex(view);
+    view.clientPauseAddressHex = "0x401010";
+    await view.updateComplete;
+    await settleFrames(3);
+
+    const clientLine = queryShadow(view, ".client-step-pause");
+    expect(clientLine?.textContent).toContain("客户端步进暂停");
+    expect(clientLine?.textContent).toContain("0x00401010");
+    // 服务端暂停原因行独立保留(两处分面,互不覆盖)。
+    expect(queryShadow(view, ".paused-line:not(.client-step-pause)")?.textContent).toContain("断点");
+    expect(scrollCalls).toContain(2); // ENTRIES[2] = 0x401010
   });
 });
 

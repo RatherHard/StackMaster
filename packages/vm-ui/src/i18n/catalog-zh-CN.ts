@@ -264,6 +264,7 @@ export const zhCN = {
   "instr.hitsTruncated": "命中数超出上限,已截断",
   "instr.textHitsSummary": "指令文本检索命中(已推送覆盖面)",
   "instr.functionTable": "函数表({count})",
+  "instr.clientStepPause": "客户端步进暂停 @ {address}",
 
   // ── chain(<sm-jump-chain> 跳转链)─────────────────────────────────────────
   "chain.jumpTitle": "跳转到 {address}",
@@ -280,6 +281,10 @@ export const zhCN = {
   "chain.value": "值 {value}",
   "chain.loopMark": "(回环)",
   "chain.outsideMark": "(窗口外)",
+  "chain.pseudoAsmTitle": "链延伸落点 {address} 的伪汇编(调试通道已下发指令)",
+  "chain.pseudoAsmTitleFallback": "链延伸落点 {address}(暂无伪汇编数据)",
+  "chain.pseudoAsmSolveHint": "切换调试模式查看指令",
+  "chain.pseudoAsmNoCoverage": "暂无指令流覆盖(单步 / 运行到断点后推送)",
 
   // ── ed(ED 七组件 + 教学类型校验面)───────────────────────────────────────
   "ed.structureEmpty": "暂无结构标注(semanticHighlights 随初始公开投影或同步下发)",
@@ -380,6 +385,9 @@ export const zhCN = {
   "payload.pauseReasonUser": "暂停请求",
   "payload.pauseReasonStep": "单步",
   "payload.logPaused": "已暂停于第 {index} 步前({reason})",
+  "payload.logPausedBreakpointClient":
+    "已暂停于第 {index} 步前:客户端步进暂停(断点积木{address};本地暂停点,不含服务端断点语义)",
+  "payload.pausedNoAddress": "(编译期不可解析地址)",
   "payload.logRejected": "#{index} {label} → 被拒绝 [{code}] {detail}",
   "payload.unknownError": "未知错误",
   "payload.logNoSink": "尚未连接会话:动作无法提交(等待工作区接线)",

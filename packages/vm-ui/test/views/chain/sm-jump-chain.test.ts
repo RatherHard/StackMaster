@@ -299,3 +299,104 @@ describe("SmJumpChain 链末可见字符延伸(FE-ST-10)", () => {
     element.remove();
   });
 });
+
+// ── 伪汇编延伸 chip(WP-76 §2.3 #2:链延伸落到代码区)─────────────────────────
+
+/** 区域夹具:栈区(rw,链起点)+ 代码区(rx),栈首 8 字节 = 代码地址。 */
+function codeChainDataSource(spans: Array<[offset: number, hex: string]>): MemoryDataSource {
+  const projection: PublicStateProjection = {
+    revision: 0,
+    visibleRegions: [
+      {
+        regionId: "region-stack",
+        label: "stack",
+        startAddressHex: "0x1000",
+        byteLength: 4096,
+        permissions: "rw",
+        bytesHex: windowHexFrom(spans, 16),
+        truncated: true,
+      },
+      {
+        regionId: "region-code",
+        label: "code",
+        startAddressHex: "0x400000",
+        byteLength: 4096,
+        permissions: "rx",
+        bytesHex: "c3",
+        truncated: true,
+      },
+    ],
+    visibleRegisters: [],
+    callStackSummary: [],
+    controlFlow: {
+      currentInstruction: { addressHex: "0x400000", text: "ret" },
+      pausedOn: null,
+    },
+    semanticHighlights: [],
+    status: "paused",
+  };
+  const store = new ProjectionStore();
+  store.replaceProjection(projection);
+  return new ProjectionDataSource(store);
+}
+
+function pseudoAsm(element: SmJumpChain): HTMLElement | null {
+  return element.shadowRoot?.querySelector<HTMLElement>("[data-pseudo-asm]") ?? null;
+}
+
+describe("SmJumpChain 伪汇编延伸 chip(WP-76 调试档 / 解题档双形态)", () => {
+  it("链延伸落到代码区 + 调试档指令流命中 → 呈现真实伪汇编 chip(地址 + 语句)", async () => {
+    const dataSource = codeChainDataSource([[0, littleEndianHex(0x400000)]]);
+    const element = await mountedElement("0x1000", dataSource);
+    element.pseudoAsmProvider = (addressHex) =>
+      addressHex === "0x400000" ? { text: "push rbp" } : null;
+    await element.updateComplete;
+
+    const chip = pseudoAsm(element);
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute("data-pseudo-asm-address")).toBe("0x400000");
+    expect(chip?.getAttribute("data-pseudo-asm-source")).toBe("debug");
+    expect(chip?.textContent?.trim()).toBe("0x400000 push rbp");
+    // 登记语义:chip 只读展示,不可点击(不新增可交互面)。
+    expect(chip?.tagName).toBe("SPAN");
+    expect(chip?.querySelector("button")).toBeNull();
+
+    element.remove();
+  });
+
+  it("调试档指令流未覆盖该地址 → 降级为「暂无指令流覆盖」引导(source=no-coverage)", async () => {
+    const dataSource = codeChainDataSource([[0, littleEndianHex(0x400000)]]);
+    const element = await mountedElement("0x1000", dataSource);
+    element.pseudoAsmProvider = () => null;
+    await element.updateComplete;
+
+    const chip = pseudoAsm(element);
+    expect(chip?.getAttribute("data-pseudo-asm-source")).toBe("no-coverage");
+    expect(chip?.textContent).toContain("暂无指令流覆盖");
+
+    element.remove();
+  });
+
+  it("解题档(provider 缺席)= 无指令流数据 → 引导文案「切换调试模式查看指令」", async () => {
+    const dataSource = codeChainDataSource([[0, littleEndianHex(0x400000)]]);
+    const element = await mountedElement("0x1000", dataSource);
+
+    const chip = pseudoAsm(element);
+    expect(chip?.getAttribute("data-pseudo-asm-source")).toBe("solve");
+    expect(chip?.textContent?.trim()).toBe("切换调试模式查看指令");
+    expect(chip?.getAttribute("title")).toContain("0x400000");
+
+    element.remove();
+  });
+
+  it("链未落到代码区 → 不追加 chip", async () => {
+    const dataSource = codeChainDataSource([[0, littleEndianHex(0x1008)]]);
+    const element = await mountedElement("0x1000", dataSource);
+    element.pseudoAsmProvider = () => ({ text: "push rbp" });
+    await element.updateComplete;
+
+    expect(pseudoAsm(element)).toBeNull();
+
+    element.remove();
+  });
+});

@@ -12,6 +12,7 @@ import { ProjectionDataSource } from "../../../src/datasource/projection-data-so
 import type { PublicStateProjection } from "@stackmaster/protocol";
 import {
   JUMP_CHAIN_HORIZONTAL_LIMIT,
+  chainCodeEndAddress,
   chainLimitReached,
   resolveJumpChain,
 } from "../../../src/views/chain/resolve.js";
@@ -258,5 +259,65 @@ describe("resolveJumpChain 段数上限(FE-ST-07 横向 ≤3 段)", () => {
   it("非法起始地址抛错(渲染层自行捕获为空链)", () => {
     const dataSource = singleRegionDataSource([], 16);
     expect(() => resolveJumpChain("nothex", dataSource)).toThrow();
+  });
+});
+
+// ── 伪汇编延伸落点判定(WP-76 §2.3 #2)───────────────────────────────────────
+
+describe("chainCodeEndAddress:链延伸落到代码区的落点", () => {
+  /** 区域夹具:栈区(rw)+ 代码区(rx),链起点在栈区。 */
+  function twoRegionDataSource(spans: Array<[number, string]>): ProjectionDataSource {
+    return dataSourceWith([
+      {
+        regionId: "region-stack",
+        label: "stack",
+        startAddressHex: "0x1000",
+        byteLength: 4096,
+        permissions: "rw",
+        bytesHex: windowHexFrom(spans, 16),
+        truncated: true,
+      },
+      {
+        regionId: "region-code",
+        label: "code",
+        startAddressHex: "0x400000",
+        byteLength: 4096,
+        permissions: "rx",
+        bytesHex: "c3",
+        truncated: true,
+      },
+    ]);
+  }
+
+  it("末段目标落在可执行区域 → 返回该地址", () => {
+    // 0x1000 → 0x400000(代码区);该处 8 字节窗口外 → 链末段地址即代码地址。
+    const dataSource = twoRegionDataSource([[0, littleEndianHex(0x400000)]]);
+    const segments = resolveJumpChain("0x1000", dataSource);
+    expect(chainCodeEndAddress(segments, dataSource.regions())).toBe("0x400000");
+  });
+
+  it("链全程在数据区 → 不产出落点", () => {
+    const dataSource = twoRegionDataSource([[0, littleEndianHex(0x1008)]]);
+    const segments = resolveJumpChain("0x1000", dataSource);
+    expect(chainCodeEndAddress(segments, dataSource.regions())).toBeNull();
+  });
+
+  it("链中途经过代码区但末段落回数据区 → 落点 = 链序中最后一个代码区地址", () => {
+    // 0x1000 → 0x400000(代码区)→ 0x1008(数据区,链在此终止)。
+    const dataSource = twoRegionDataSource([
+      [0, littleEndianHex(0x400000)],
+      [8, littleEndianHex(0x1008)],
+    ]);
+    const segments = resolveJumpChain("0x1000", dataSource);
+    expect(segments.map((segment) => segment.addressHex)).toEqual(["0x1000", "0x400000"]);
+    expect(chainCodeEndAddress(segments, dataSource.regions())).toBe("0x400000");
+  });
+
+  it("空链 → null;区域权限无 x → null", () => {
+    expect(chainCodeEndAddress([], [])).toBeNull();
+    const dataSource = twoRegionDataSource([[0, littleEndianHex(0x400000)]]);
+    const segments = resolveJumpChain("0x1000", dataSource);
+    const rwOnly = dataSource.regions().filter((region) => region.permissions === "rw");
+    expect(chainCodeEndAddress(segments, rwOnly)).toBeNull();
   });
 });

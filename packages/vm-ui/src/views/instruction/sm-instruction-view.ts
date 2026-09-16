@@ -23,6 +23,16 @@
  *
  * 暂停原因呈现(debug_paused):step = 单步落点;breakpoint = 断点命中;
  * program_halt = 程序自行停机;budget = 预算耗尽确定性暂停(各自文案)。
+ * **客户端步进暂停**(WP-76 #4;payload 积木执行器停在断点积木上)以**独立
+ * 一行**呈现——不写 `debug_paused`、不伪造服务端暂停原因(分面登记)。
+ *
+ * 标注面(WP-75 #6):行左缘复用 `<sm-register-annotation>`(与字节视图
+ * 行左缘**同一份** `crossAnnotateRegisters` 命中集,工作区注入)——寄存器值
+ * 落在本行指令地址 → 该行标注,点击展开寄存器值。
+ *
+ * 视角锚定(WP-75 #7):进入视图(首次取得指令流)即按 rip 锚定一次;锚点三级
+ * 回退(debug_paused → attach 携带 paused → RIP 寄存器公开值)⇒ **未暂停时
+ * 也可回锚**;用户拖动过的视角不因后续刷新被重置(回锚入口常驻)。
  *
  * 数据纪律:只依赖 MemoryDataSource 接口 + DebugDataSource 调试档扩展面
  * (duck-typing 探测 `instructionStream` / `instructions` / `prefetchWindow`);
@@ -46,6 +56,9 @@ import {
   parseAddressHex,
 } from "../../render/hex.js";
 import { ensureSmThemeStyles } from "../../theme/theme-tokens.js";
+import type { RegisterHit } from "../register/cross-annotation.js";
+// 行左缘寄存器标注组件(WP-75 #6 复用面;与字节视图行左缘同一实现)。
+import "../../workspace/sm-register-annotation.js";
 
 /** 十六进制段分组宽度(4 字节一组,与字节视图一致)。 */
 const HEX_GROUP_BYTES = 4;
@@ -97,6 +110,22 @@ export class SmInstructionView extends LitElement {
   @property({ attribute: false })
   dataSource: MemoryDataSource | null = null;
 
+  /**
+   * 寄存器交叉标注命中集(WP-75 #6;工作区注入,与字节视图行左缘**同一份**
+   * `crossAnnotateRegisters` 结果):命中地址 = 本行指令地址 → 该行左缘标注。
+   * 空数组 = 无标注(不渲染任何标注节点)。
+   */
+  @property({ attribute: false })
+  registerHits: readonly RegisterHit[] = [];
+
+  /**
+   * payload 客户端步进暂停落点(WP-76 #4;工作区注入):非 null 时呈现独立的
+   * 「客户端步进暂停」行并把视角滚到该地址。**与调试通道暂停严格分面**——
+   * 不写 `debug_paused` 语义、不冒充服务端断点命中(解题档既有变通语义保留)。
+   */
+  @property({ attribute: false })
+  clientPauseAddressHex: string | null = null;
+
   // ── 内部状态(rebuild 填充;非响应式)──
   #debug: DebugDataSource | null = null;
   #rows: readonly DebugInstructionEntry[] = [];
@@ -110,6 +139,8 @@ export class SmInstructionView extends LitElement {
   #textHits: readonly DebugInstructionEntry[] = [];
   /** 待消费滚动地址(updated 里消费;行索引由 rebuild 后重查)。 */
   #pendingScrollAddress: string | null = null;
+  /** 初始视角锚定是否已应用(WP-75 #7;数据源换绑即复位)。 */
+  #initialAnchorApplied = false;
   #unsubscribe: (() => void) | null = null;
 
   /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
@@ -215,6 +246,15 @@ export class SmInstructionView extends LitElement {
 
     .row-text {
       white-space: pre-wrap;
+      /* WP-75 #7(设计文档 §指令视图):伪汇编列**右侧单独对齐** —— 列自身
+         右缘对齐成组,与左侧地址列 / 中间伪机器码列互不牵连。 */
+      text-align: end;
+    }
+
+    /* payload 客户端步进暂停行(WP-76 #4;与调试通道暂停严格分面:不同文案,
+       不改 paused-row 高亮语义)。 */
+    .client-step-pause {
+      color: linktext;
     }
 
     .jump-target {
@@ -308,7 +348,17 @@ export class SmInstructionView extends LitElement {
       this.#detachSourceListener();
       this.#debug = asDebugDataSource(this.dataSource);
       this.#attachSourceListener();
+      // 数据源换绑 = 新视角:初始锚定重新生效(WP-75 #7)。
+      this.#initialAnchorApplied = false;
       this.#rebuild();
+    }
+    if (changed.has("clientPauseAddressHex")) {
+      // 新的客户端步进暂停:视角跟到该地址(呈现行由 render 承担)。
+      this.#rebuild();
+      const clientPause = this.clientPauseAddressHex;
+      if (clientPause !== null) {
+        this.#pendingScrollAddress = normalizeAddressSafe(clientPause);
+      }
     }
   }
 
@@ -389,6 +439,24 @@ export class SmInstructionView extends LitElement {
     this.#pausedAddress =
       (debug.pausedAddressHex ?? normalizeAddressSafe(ripFromRegister?.valueHex ?? null)) ?? null;
     this.#attachedStatus = debug.attached?.status ?? null;
+    // WP-75 #7 初始视角锚定:首次取得指令流且锚点可解析 → 按 rip 锚定一次
+    // (之后的数据刷新不重置用户拖动过的视角;回锚入口常驻,未暂停也能回锚)。
+    if (!this.#initialAnchorApplied && this.#pausedAddress !== null && this.#rows.length > 0) {
+      this.#initialAnchorApplied = true;
+      this.#pendingScrollAddress = this.#pausedAddress;
+    }
+  }
+
+  // ── 诊断 / 测试面(只读)──────────────────────────────────────────────────
+
+  /** 当前 rip 锚点地址(三级回退结果;`null` = 无锚点)。 */
+  get anchorAddressHex(): string | null {
+    return this.#pausedAddress;
+  }
+
+  /** 初始视角锚定是否已应用(WP-75 #7 语义的可观测面)。 */
+  get initialAnchorApplied(): boolean {
+    return this.#initialAnchorApplied;
   }
 
   // ── 交互 ─────────────────────────────────────────────────────────────────
@@ -551,16 +619,21 @@ export class SmInstructionView extends LitElement {
 
   #renderRows(): TemplateResult {
     const breakpoints = new Set(this.#debug?.breakpoints ?? []);
+    const clientPause = normalizeAddressSafe(this.clientPauseAddressHex ?? "");
     return html`<sm-window-list
       class="instruction-list"
       role="rowgroup"
       .items=${this.#rows}
       .renderItem=${(entry: DebugInstructionEntry) =>
-        this.#renderRow(entry, breakpoints.has(entry.addressHex))}
+        this.#renderRow(entry, breakpoints.has(entry.addressHex), clientPause === entry.addressHex)}
     ></sm-window-list>`;
   }
 
-  #renderRow(entry: DebugInstructionEntry, isBreakpoint: boolean): TemplateResult {
+  #renderRow(
+    entry: DebugInstructionEntry,
+    isBreakpoint: boolean,
+    isClientPause: boolean,
+  ): TemplateResult {
     const pausedRow = this.#pausedAddress !== null && entry.addressHex === this.#pausedAddress;
     const jumpTargetHex = entry.jumpTargetHex;
     return html`
@@ -568,8 +641,10 @@ export class SmInstructionView extends LitElement {
         class="instruction-row${pausedRow ? " paused-row" : ""}"
         role="row"
         data-instruction-address=${entry.addressHex}
+        data-client-step-pause=${isClientPause ? "true" : nothing}
       >
         <span class="row-address" role="cell">
+          ${this.#renderRowRegisterAnnotation(entry)}
           <button
             type="button"
             class="breakpoint-toggle"
@@ -589,7 +664,7 @@ export class SmInstructionView extends LitElement {
             ? html`<span class="bytes-absent">—</span>`
             : formatBytesHexGroupedSafe(entry.bytesHex, HEX_GROUP_BYTES)}
         </span>
-        <span class="row-text" role="cell"
+        <span class="row-text" role="cell" data-col-align="end"
           >${entry.text}${jumpTargetHex === undefined
             ? nothing
             : html`<button
@@ -604,6 +679,22 @@ export class SmInstructionView extends LitElement {
         >
       </div>
     `;
+  }
+
+  /**
+   * 行左缘寄存器交叉标注(WP-75 #6):命中地址与本行指令地址相等才产出
+   * (复用 `<sm-register-annotation>`;命中集 = 工作区注入的同一份缓存)。
+   * 按**地址精确匹配**(指令流一行 = 一条指令,不存在"行区间"语义)。
+   */
+  #renderRowRegisterAnnotation(entry: DebugInstructionEntry): unknown {
+    if (this.registerHits.length === 0) {
+      return nothing;
+    }
+    const hits = this.registerHits.filter((hit) => hit.targetAddressHex === entry.addressHex);
+    if (hits.length === 0) {
+      return nothing;
+    }
+    return html`<sm-register-annotation .hits=${hits}></sm-register-annotation>`;
   }
 
   protected override render(): unknown {
@@ -658,7 +749,7 @@ export class SmInstructionView extends LitElement {
               <button type="submit">${t("instr.textSearchButton")}</button>
             </form>
           </div>
-          ${this.#renderPausedLine()}
+          ${this.#renderPausedLine()} ${this.#renderClientPauseLine()}
           <p class="status-line" role="status">${this.#status ?? ""}</p>
         </header>
         ${this.#rows.length === 0
@@ -699,6 +790,21 @@ export class SmInstructionView extends LitElement {
         </button>
       </span>
     `;
+  }
+
+  /**
+   * 客户端步进暂停行(WP-76 #4):payload 积木执行器停在断点积木上的**本地**
+   * 暂停;仅在落点可解析时呈现(不可解析 = 无地址,不呈现空锚)。文案与调试
+   * 通道暂停原因分开(不伪造服务端语义)。
+   */
+  #renderClientPauseLine(): unknown {
+    const clientPause = this.clientPauseAddressHex;
+    if (clientPause === null) {
+      return nothing;
+    }
+    return html`<p class="paused-line client-step-pause" role="status">
+      ${t("instr.clientStepPause", { address: safeFormat(clientPause, ADDRESS_MIN_DIGITS) })}
+    </p>`;
   }
 
   #renderPausedLine(): unknown {
