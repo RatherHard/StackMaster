@@ -75,8 +75,17 @@ function withRole(url: string, user: string, password: string): string {
   return parsed.toString();
 }
 
-/** 角色就绪(幂等执行 compose 角色治理 init;host 拓扑亦生效——角色由本套件确保存在)。 */
-async function ensureRoles(admin: Pool): Promise<void> {
+/**
+ * 应用授权面就绪(幂等执行 compose 两个治理 init 的 GRANT / REVOKE)。
+ *
+ * 角色(session_app / verifier)由 deps 拓扑的 db-roles-init 保证存在
+ * (服务定义 compose/deps.yaml;脚本 compose/db-roles-init.sql;PG 角色是
+ * **集群级**对象,与具体 database 无关,故本函数对共享库与 scratch 库同样
+ * 成立)——WP-79 后本套件只补齐授权面,不再创建角色(角色单一来源)。
+ * 角色缺席时本函数以 `ERROR: role "..." does not exist` 确定性失败,即
+ * 引导缺席的显式红灯。
+ */
+async function ensureRoleGrants(admin: Pool): Promise<void> {
   const composeDir = fileURLToPath(new URL("../../compose/", import.meta.url));
   for (const file of ["session-api-db-init.sql", "verifier-db-init.sql"]) {
     const sql = await readFile(`${composeDir}${file}`, "utf8");
@@ -119,7 +128,7 @@ describe.skipIf(!IT_ENABLED)(`行级租户策略(PG RLS)双层红灯矩阵(容�
   beforeAll(async () => {
     admin = await createPostgresPool(IT_CONFIG.postgresUrl, 3);
     await ensureMigrated(admin);
-    await ensureRoles(admin);
+    await ensureRoleGrants(admin);
     // 播种双租户数据(admin 连接 = 超级用户,RLS 旁路属管理面凭证形态,
     // D-API-93 降级登记;行级断言只经角色连接承载)。
     await seedTenant(admin, tenantA, sessionA);
@@ -566,7 +575,7 @@ describe.skipIf(!IT_ENABLED)(`行级租户策略(PG RLS)双层红灯矩阵(容�
       const scratchAdmin = await createPostgresPool(scratch.url, 2);
       try {
         await ensureMigrated(scratchAdmin);
-        await ensureRoles(scratchAdmin);
+        await ensureRoleGrants(scratchAdmin);
         const t1 = uniqueIds("rlsp1");
         const t2 = uniqueIds("rlsp2");
         await seedTenant(scratchAdmin, t1.tenantId, t1.sessionId);

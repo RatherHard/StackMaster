@@ -36,26 +36,53 @@ pnpm --filter @stackmaster/session-api compose:app:down   # down -v(含数据卷
   dev / CI 专用合成值,**严禁用于任何真实环境**;
 - 纯依赖服务(不含 session-api):`compose:deps:up` / `compose:deps:down`。
 
-**角色创建顺序(WP-78 收口;全新数据卷一次收敛)**:迁移 007 以
+**角色引导 = deps 面(WP-78 / WP-79 收口;全新数据卷一次收敛)**:迁移 007 以
 `CREATE POLICY ... TO session_app / TO verifier` 引用两个应用连接角色,故
-**角色必须先于 session-api 启动时的迁移存在**。拓扑内角色创建的唯一来源 =
-一次性服务 `db-roles-init`(`compose/db-roles-init.sql`,镜像 `postgres:16`,
-`restart: "no"`,零授权语句),三处 `depends_on` 构成无环执行序:
+**任何执行迁移的路径都必须先有角色**。拓扑内角色创建的唯一来源 =
+`db-roles-init`(**服务定义在 `compose/deps.yaml`**,脚本
+`compose/db-roles-init.sql`,镜像 `postgres:16`,`restart: "no"` **零授权语句**)
+—— 它只依赖 `postgres`,又为「跑迁移的两条路径」共用,故属 deps 面;`app.yaml`
+**只引用不重复定义**该服务。分层:
+
+| 面 | 文件 | 职责 |
+|---|---|---|
+| deps 面 | `compose/deps.yaml` → `db-roles-init`(`db-roles-init.sql`) | **角色创建**(session_app / verifier;口令唯一来源;只读属性断言:非 superuser / 非 bypassrls) |
+| deps 面 | postgres / redis / minio | 依赖服务本体 |
+| app 面 | `session-api-db-init.sql` / `verifier-db-init.sql` | **授权面**(GRANT / REVOKE 按角色分域;已零 `CREATE ROLE`) |
+| app 面 | session-api / verifier / vm-worker | 应用与执行域 |
+
+两条路径都一次收敛(`--wait` 语义见下方注):
 
 ```text
-postgres(healthy) → db-roles-init(completed) → session-api(healthy)
-  → session-api-db-init(completed) → verifier-db-init(completed) → verifier
+# ① deps-only(host 拓扑 / test:integration / SESSION_API_IT=1 pnpm test:coverage 完整门禁形态)
+docker compose -f compose/deps.yaml up -d --wait        # postgres healthy → db-roles-init healthy(角色在场),exit 0
+
+# ② app 全拓扑(无环执行序)
+postgres(healthy) → db-roles-init(healthy) → session-api(healthy)
+  → session-api-db-init(exit 0) → verifier-db-init(exit 0) → verifier
 ```
 
-- `session-api` → `db-roles-init: service_completed_successfully`(迁移前置);
+- **`db-roles-init` 的形态 = 引导 + 健康锚**:引导语句(`psql -f
+  db-roles-init.sql`)执行完即 `exec sleep infinity`,健康探针语义 = 两个角色
+  在场且非 superuser / 非 bypassrls。这不是「跑完即退」的一次性容器,原因是
+  compose `up --wait` 对**无依赖方**的一次性容器判为失败(实测 compose
+  2.40.3:`container session-api-deps-db-roles-init-1 exited (0)` → exit 1),
+  而 deps-only 的 `up -d --wait` 有四个消费方(session-api / verifier 的 IT
+  `globalSetup`、`test:compose` host 形态、文档化的 `compose:deps:up`);
+- `session-api` → `db-roles-init: service_healthy`(迁移前置;强于
+  `service_completed_successfully`:校验角色属性而非仅校验 psql 退出码);
 - `verifier-db-init` → `session-api-db-init: service_completed_successfully`
   —— 两个角色治理 init 的 `GRANT` / `REVOKE` 会写同一批 PG 目录行(public
   schema `nspacl` + 动作 / 审计账 `relacl`),并发执行偶发
   `ERROR: tuple concurrently updated`(症状 = 同一次 `up` 中随机一方失败),
   串行化后同一 `up` 内不存在并发目录写;
-- 两个治理 init 的授权语义零变化;host 拓扑(`compose:deps:up` + 宿主进程)
-  与容器门控套件不经 `db-roles-init`,它们执行的两个治理脚本里保留
-  `IF NOT EXISTS` 角色守卫作为幂等兜底(角色属性不由它们治理)。
+- 两个治理 init 的授权语义零变化;角色缺席时它们以
+  `ERROR: role "..." does not exist` 确定性失败(引导缺席的显式红灯,不再有
+  兜底守卫掩盖)。PG 角色是**集群级**对象,故 deps 面引导对测试的 scratch 库
+  同样成立;
+- **host 降级形态的判据随之变化**:deps-only 下角色在场但**授权面缺席**
+  (两个治理 init 属 app 面)⇒ `test:compose` host 形态的两条角色/RLS 红灯
+  用例按「授权面未就位」跳过并如实登记;container 形态(全拓扑)实跑。
 
 ### 环境变量
 

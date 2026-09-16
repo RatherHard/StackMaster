@@ -8,6 +8,20 @@
 #   PostgreSQL 15432 / Redis 16379 / MinIO 19000(控制台 19001)。
 # 与 compose/.env.example、compose/integration.env 的 SESSION_API_* 值一一对应。
 # 凭据为本地开发专用值,严禁用于任何真实环境。
+#
+# ── WP-79:角色引导属本文件(deps 面),授权面属 app 面 ───────────────────
+# 迁移 007 以 `CREATE POLICY ... TO session_app / TO verifier` 引用两个应用
+# 连接角色,故**任何执行迁移的路径都必须先有角色**——两条路径共用同一引导:
+#   - deps-only(host 拓扑 / test:integration / test:coverage 完整门禁形态):
+#     本文件的 db-roles-init 保证角色在场,测试套件随后自行跑迁移;
+#   - app 全拓扑(compose:app:up):app.yaml 以
+#     `session-api.depends_on: db-roles-init: condition: service_healthy`
+#     引用本服务(探针语义 = 两个角色在场且属性合规),保证角色先于
+#     session-api 启动迁移。
+# 角色创建的唯一来源 = compose/db-roles-init.sql(服务定义仅此一处,app.yaml
+# 只引用不重复定义)。授权(GRANT / REVOKE)不属本面,由 app 面的
+# session-api-db-init.sql / verifier-db-init.sql 承载;PG 角色是**集群级**
+# 对象(与具体 database 无关),故 deps 面引导对测试的 scratch 库同样成立。
 
 name: session-api-deps
 
@@ -60,6 +74,59 @@ services:
       interval: 3s
       timeout: 5s
       retries: 30
+
+  # ── WP-79:拓扑级角色引导(两条路径共用的部署面前置;单一来源)───────────
+  # deps 面角色引导:幂等创建两个应用连接角色 session_app / verifier,使
+  # deps-only 与 app 全拓扑都满足「任何迁移之前角色必已存在」。
+  # 与 app 面两个治理 init 同镜像 / 同管理面凭据 / 同 restart:"no",
+  # 但零 GRANT —— 授权面全部由 app 面的两个治理脚本承载。
+  #
+  # ── 形态:引导 + 健康锚(不是「跑完即退」的一次性容器)────────────────
+  # compose `up --wait` 对**无依赖方**的一次性容器的判定 = 失败,原文(实测
+  # compose 2.40.3-desktop.1,deps-only 形态):
+  #     container session-api-deps-db-roles-init-1 exited (0)
+  #     → up_exit=1
+  # 即:deps-only 拓扑里没有任何服务会以
+  # `service_completed_successfully` 依赖它,`--wait` 便把它当作「中途退出的
+  # 服务」判为失败 —— 而 deps-only 的 `up -d --wait` 有四个消费方
+  # (session-api / verifier 的 IT globalSetup、test:compose host 形态的
+  # execFile、文档化的 compose:deps:up),任一非 0 退出都会打断它们。
+  # 故本服务改为「引导语句执行完即挂起(exec sleep infinity)+ 健康探针」,
+  # 探针语义 = **两个角色在场且非 superuser / 非 bypassrls**:
+  #   - deps-only:`up -d --wait` 等其 healthy ⇒ 角色就位后才返回 0;
+  #   - app 全拓扑:session-api 以
+  #     `depends_on: db-roles-init: condition: service_healthy` 前置,
+  #     比 service_completed_successfully 更强(校验角色属性,而非仅校验
+  #     psql 退出码)。
+  # 该容器只占极小内存:psql 执行完即退出,常驻进程仅 `sleep`。
+  db-roles-init:
+    image: postgres:16
+    environment:
+      PGHOST: postgres
+      PGUSER: stackmaster
+      PGPASSWORD: stackmaster-dev
+      PGDATABASE: session_api
+    volumes:
+      - ./db-roles-init.sql:/init/db-roles-init.sql:ro
+    entrypoint:
+      - sh
+      - -c
+      - psql -v ON_ERROR_STOP=1 -f /init/db-roles-init.sql && exec sleep infinity
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          psql -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM pg_roles
+          WHERE rolname IN ('session_app', 'verifier')
+          AND NOT rolsuper AND NOT rolbypassrls" | grep -qx 2
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
 volumes:
   pgdata:

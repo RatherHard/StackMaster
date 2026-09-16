@@ -1064,6 +1064,32 @@ describe.skipIf(!COMPOSE_ENABLED)(
       }
     }
 
+    /**
+     * 角色治理授权面是否就位(host 降级形态判据;WP-79)。
+     *
+     * 角色本身由 **deps 面** 的 db-roles-init 保证存在(compose/deps.yaml),
+     * 故「角色能否连接」不再是 host / 容器形态的分界;分界现在是**授权面**:
+     * 两个治理 init(session-api-db-init.sql / verifier-db-init.sql)属 **app
+     * 面**(compose/app.yaml),只在全拓扑下运行。host 降级形态(仅 deps 拓扑
+     * + 宿主进程)⇒ 角色在场但零授权 ⇒ 用例跳过并如实登记(CI / container
+     * 形态走全拓扑,授权面在场,红灯矩阵实跑)。
+     */
+    async function authorizationSurfaceInPlace(admin: Pool): Promise<boolean> {
+      try {
+        const result = await admin.query<{ ok: boolean }>(
+          `SELECT has_table_privilege('session_app', 'audit_log', 'INSERT')
+              AND has_table_privilege('session_app', 'submissions', 'SELECT')
+              AND has_table_privilege('session_app', 'audit_log', 'UPDATE') = false
+              AND has_table_privilege('verifier', 'audit_log', 'INSERT')
+              AND has_table_privilege('verifier', 'submissions', 'INSERT') = false AS ok`,
+        );
+        return result.rows[0]?.ok === true;
+      } catch {
+        // 角色缺失 / 关系缺失(引导或迁移未就位)⇒ 视为降级形态,交调用方跳过。
+        return false;
+      }
+    }
+
     it("审计 PG 落库(真实进程):create_session 链路的审计事件经 PgAuditSink 入 audit_log", async () => {
       const auditEmbedSessionId = embedSessionId();
       const auditIssuance = await postJson(recorder, "/auth/embed-tokens", {
@@ -1192,8 +1218,14 @@ describe.skipIf(!COMPOSE_ENABLED)(
     it("角色治理红灯(D-API-93):session_app 对 audit_log 零 UPDATE/DELETE、禁触发器被拒;verifier 仅 INSERT 预留", async (ctx) => {
       const sessionApp = await tryConnect(withRole(IT_CONFIG.postgresUrl, "session_app", "session-app-dev"));
       const verifierRole = await tryConnect(withRole(IT_CONFIG.postgresUrl, "verifier", "verifier-dev"));
-      if (sessionApp === null || verifierRole === null) {
-        // host 降级形态:init 服务未运行,角色不存在——如实登记(CI 完整容器拓扑实跑)。
+      if (
+        sessionApp === null ||
+        verifierRole === null ||
+        !(await authorizationSurfaceInPlace(pool!))
+      ) {
+        // host 降级形态:**授权面**未就位(两个治理 init 属 app 面,仅全拓扑运行;
+        // 角色本身由 deps 面的 db-roles-init 保证存在,WP-79)——如实登记
+        // (CI 完整容器拓扑实跑)。
         ctx.skip();
         return;
       }
@@ -1242,9 +1274,14 @@ describe.skipIf(!COMPOSE_ENABLED)(
     it("行级租户策略红灯(D-API-101):session_app 跨租户零行 / fail-closed;verifier 跨租户可读、零写越权", async (ctx) => {
       const sessionApp = await tryConnect(withRole(IT_CONFIG.postgresUrl, "session_app", "session-app-dev"));
       const verifierRole = await tryConnect(withRole(IT_CONFIG.postgresUrl, "verifier", "verifier-dev"));
-      if (sessionApp === null || verifierRole === null) {
-        // host 降级形态:init 服务未运行,角色不存在——如实登记(CI 完整容器拓扑实跑;
-        // 行级红灯全矩阵由 test/persistence/row-security.integration.test.ts 双拓扑承载)。
+      if (
+        sessionApp === null ||
+        verifierRole === null ||
+        !(await authorizationSurfaceInPlace(pool!))
+      ) {
+        // host 降级形态:**授权面**未就位(判据与角色治理红灯同源,WP-79)——如实登记
+        // (CI 完整容器拓扑实跑;行级红灯全矩阵由
+        // test/persistence/row-security.integration.test.ts 双拓扑承载)。
         ctx.skip();
         return;
       }

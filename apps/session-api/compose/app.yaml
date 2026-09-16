@@ -4,14 +4,16 @@
 # 缺省 process = 本文件形态零回退;容器池显式启用路径见
 # compose/worker-container-override.yaml 与 D-API-105,Q4 定案)。
 #
-# 完整拓扑 = PostgreSQL + Redis + MinIO(deps.yaml 三服务)+ session-api
-# + vm-worker + verifier(+ 拓扑级角色创建 + 两个角色治理 init 服务)。
+# 完整拓扑 = PostgreSQL + Redis + MinIO + db-roles-init(deps.yaml 四服务)
+# + session-api + vm-worker + verifier(+ 两个角色治理 init 服务)。
 #
-# ── 角色创建顺序(WP-78 收口;全新数据卷确定性收敛)─────────────────────
+# ── 角色创建顺序(WP-78 / WP-79 收口;全新数据卷确定性收敛)───────────
 # 迁移 007 以 CREATE POLICY ... TO session_app / TO verifier 引用两个应用角色,
-# 故 **角色必须先于 session-api 迁移存在**。角色创建的唯一拓扑级来源 =
-# db-roles-init(compose/db-roles-init.sql,一次性),执行序:
-#   postgres(healthy) → db-roles-init(completed) → session-api(healthy)
+# 故 **角色必须先于 session-api 迁移存在**。角色创建的唯一来源 =
+# db-roles-init(服务定义在 compose/deps.yaml,脚本 = compose/db-roles-init.sql;
+# WP-79 下沉到 deps 面 —— 容器门控集成测试走 deps-only 拓扑,同样需要角色),
+# 本文件只引用该服务。app 全拓扑执行序:
+#   postgres(healthy) → db-roles-init(healthy) → session-api(healthy)
 #   → session-api-db-init(completed) → verifier-db-init(completed) → verifier
 # 两个角色治理 init 串行(session-api-db-init 先于 verifier-db-init):二者都要
 # 更新同一 public schema 的 ACL(pg_namespace.nspacl)与动作 / 审计账的
@@ -90,9 +92,11 @@ services:
         condition: service_healthy
       # 迁移 007 的 CREATE POLICY ... TO session_app / TO verifier 要求角色
       # 已存在(否则 PersistenceError: 迁移 007_row_level_security 执行失败);
-      # 角色由 db-roles-init 创建,故迁移前置 = 角色创建完成。
+      # 角色由 db-roles-init(deps.yaml)创建,其健康探针语义 = 两个角色在场
+      # 且非 superuser / 非 bypassrls ⇒ 迁移前置 = 该探针转 healthy(强于
+      # service_completed_successfully:校验角色属性而非仅校验 psql 退出码)。
       db-roles-init:
-        condition: service_completed_successfully
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -160,25 +164,12 @@ services:
       start_period: 10s
     restart: "no"
 
-  # ── WP-78:拓扑级角色创建(全新数据卷收敛前置;单一来源)────────────────
-  # 一次性 init:幂等创建两个应用连接角色(session_app / verifier),先于
-  # session-api 迁移执行(见文件头「角色创建顺序」)。与两个角色治理 init
-  # 的服务形态一致(同镜像 / 同管理面凭据 / restart:"no"),但不涉及任何
-  # GRANT —— 授权面仍由 session-api-db-init.sql / verifier-db-init.sql 承载。
-  db-roles-init:
-    image: postgres:16
-    environment:
-      PGHOST: postgres
-      PGUSER: stackmaster
-      PGPASSWORD: stackmaster-dev
-      PGDATABASE: session_api
-    volumes:
-      - ./db-roles-init.sql:/init/db-roles-init.sql:ro
-    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init/db-roles-init.sql"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
+  # ── WP-78 / WP-79:拓扑级角色创建(全新数据卷收敛前置;单一来源)────────
+  # 服务定义在 compose/deps.yaml(db-roles-init —— 角色引导是 deps 面:
+  # 迁移路径与容器门控测试路径共用同一前置),本文件**只引用不重复定义**,
+  # 以免 compose 多文件 merge 出现同名服务冲突。
+  # 角色创建脚本 = compose/db-roles-init.sql;授权面仍由下方两个治理 init
+  # (session-api-db-init.sql / verifier-db-init.sql)按角色分域承载。
 
   verifier-db-init:
     # 一次性角色治理(幂等 SQL;执行前置 = session-api 迁移已应用)。

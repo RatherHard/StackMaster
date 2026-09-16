@@ -17,24 +17,17 @@
 -- 重复运行安全)。执行前置:session-api 已完成迁移(004 / 005 已应用)。
 -- 凭据为本地开发 / CI 专用合成值,严禁用于任何真实环境。
 --
--- ── 角色创建来源与执行序(WP-78 收口;单一来源登记)───────────────────
--- 角色创建权威来源 = compose/db-roles-init.sql(一次性服务,早于 session-api
--- 迁移);本文件的 CREATE ROLE 只是 host 拓扑 / 容器门控套件 ensureRoles 的
--- 幂等兜底(compose 全拓扑下必已存在 ⇒ 零目录写)。
--- 执行序:compose 全拓扑下本服务 depends_on session-api-db-init
+-- ── 角色来源与执行序(WP-78 / WP-79 收口;单一来源)────────────────────
+-- 角色创建的唯一来源 = compose/db-roles-init.sql(服务 db-roles-init,定义在
+-- compose/deps.yaml;deps-only 与 app 全拓扑都在任何迁移之前完成创建)。
+-- 本文件**不含 CREATE ROLE**:角色缺席时 `GRANT ... TO verifier` 以
+-- `ERROR: role "verifier" does not exist` 确定性失败(ON_ERROR_STOP=1),
+-- 即引导缺席的显式红灯。
+-- 执行序:app 全拓扑下本服务 depends_on session-api-db-init
 -- service_completed_successfully —— 两个治理 init 的 GRANT / REVOKE 会写同
 -- 一批 PG 目录行(public schema nspacl + 动作 / 审计账 relacl),并发执行会
 -- 偶发 `ERROR: tuple concurrently updated`,故串行化(依赖方向无环,见
 -- compose/app.yaml 文件头)。授权面语义零变化。
-
--- ── 角色兜底守卫(权威创建 = db-roles-init.sql;见文件头)──
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'verifier') THEN
-    CREATE ROLE verifier LOGIN PASSWORD 'verifier-dev';
-  END IF;
-END
-$$;
 
 GRANT USAGE ON SCHEMA public TO verifier;
 

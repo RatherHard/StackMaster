@@ -14,23 +14,15 @@
 -- 执行前置:session-api 已完成迁移(006 / 007 已应用,audit_log 与 RLS 政策在场)。
 -- 凭据为本地开发 / CI 专用合成值,严禁用于任何真实环境。
 --
--- ── 角色创建来源(WP-78 收口;单一来源登记)───────────────────────────
--- 拓扑内角色创建 = compose/db-roles-init.sql(一次性 db-roles-init 服务,
--- 早于 session-api 迁移完成)。本文件里的 CREATE ROLE 只是 **幂等兜底**:
--- host 拓扑(compose:deps:up + 宿主进程)与容器门控套件的 ensureRoles
--- (test/persistence/row-security.integration.test.ts)只执行本文件与
--- verifier-db-init.sql,不经 db-roles-init。compose 全拓扑下角色必已存在
--- ⇒ 该守卫零目录写,不会与并发执行者争 pg_authid。
--- 授权面(GRANT / REVOKE)是本文件的唯一职责;角色属性不在本文件治理。
-
--- ── 角色兜底守卫(权威创建 = db-roles-init.sql;见文件头)──
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'session_app') THEN
-    CREATE ROLE session_app LOGIN PASSWORD 'session-app-dev';
-  END IF;
-END
-$$;
+-- ── 角色来源(WP-78 / WP-79 收口;单一来源)────────────────────────────
+-- 角色创建的唯一来源 = compose/db-roles-init.sql(服务 db-roles-init,定义在
+-- compose/deps.yaml):deps-only 拓扑(host 拓扑 / test:integration /
+-- test:coverage 完整门禁形态)与 app 全拓扑(session-api.depends_on:
+-- db-roles-init: service_completed_successfully)都在任何迁移之前完成角色
+-- 创建。本文件**不含 CREATE ROLE**:它只治理授权面(GRANT / REVOKE),
+-- 角色不存在时 `GRANT ... TO session_app` 会立即以
+-- `ERROR: role "session_app" does not exist` 确定性失败(ON_ERROR_STOP=1),
+-- 这正是「引导缺席」的显式红灯,不再以兜底守卫掩盖。
 
 GRANT USAGE ON SCHEMA public TO session_app;
 
