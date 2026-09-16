@@ -1094,7 +1094,7 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **检查器修正(机检实现对齐已登记槽序,零契约变更)**:`debug-variant-derivation-checker.ts` 原实现对"隐藏区域 + canary 槽同区域"组合存在假阳性(阶段 A 以纯派生内容比对隐藏区域,而 canary 叠加后的真值是阶段 B;阶段四单测两者分属不同区域,未触发)。修正 = canary 属主区域的逐字节比对推迟到阶段 B,纯隐藏区域维持阶段 A 归因;与 WP-40 §七.2 冻结槽序(基址 → 隐藏区域 → canary 叠加)一致。
 - **canary 契约现状登记(制作期发现,冲突如实报告)**:XS-CANARY-CORR(检查器:启用 canary ⇒ 存在 hidden + containsSecret 的 canary 对象且与公开区域不相交)与引擎装配 `build_canary_slots`(canary 对象必须 `visibility = public`,且 canary 对象存在时公开包必须启用 canary)在冻结契约下结构性不相容 ⇒ **交互可玩题不能启用引擎 canary**(canary 启用的题目无法同时通过装载管线与交互装配)。处置:①CH-05 以"守护标记 + `memory_equals` 谓词"承担金丝雀教学(引擎 `stack_canary_intact` 在无槽题目上恒真,谓词词汇面保持覆盖);②CH-07 派生面携带真实 canary 槽声明承载 ZR-B13;③契约收口(canary 槽可见性语义的两侧对齐)按 WP-1 §1.3 流程另行登记,本包不改任何契约面。
 
-## 三·二十一、中期 M1「可用性地基」(中期 WP-70 ~ WP-73;D-API-110 ~)
+## 三·二十一、中期 M1「可用性地基」(中期 WP-70 ~ WP-73;D-API-110 ~ 115)
 
 本段承载《[中期任务分解](./../phases/中期任务分解.md)》里程碑 M1 的实现期决策。M1 的默认基线 = **冻结契约零改动**(12 动作 / 16 错误码 / 嵌入协议 v1 / 投影七字段 / 11 值裁决结果类型 / 审计 kind 十值封闭集),故本段条目以「承载路径与呈现层定案」为主,不新增契约面。
 
@@ -1140,6 +1140,20 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **裁决**:把目标列数组取值移到 `#removeFromPosition(from)` **之后**(列序修正的前提即「源列已删除」)。落点语义(索引 / 夹取 / 原地 no-op / 开新列尾插)**零变更**,既有 WP-F5 测试全绿。
 - **否决候选与理由**:①保留缺陷并只在组件层回避该拖拽方向——否决:模型不变量必须自洽;②改回「摘除前取数组 + 不做列序修正」——否决:那会写进将被删除的列,语义错误。
 - **红灯承载位置**:`test/workspace/workspace-model.test.ts` →「跨列移动到『源列为独窗且位于目标列之前』的列:目标列序前移(源列删除)」(以 `isWindowSetComplete` 守住不变量)+ `<sm-workspace>` 拖拽换位 E2E 断言。
+
+### D-API-115 工作区 Niri 式布局交互承载面(预设 / 阈值 / 状态 / 相机 / 降级;中期 WP-72)
+
+- **触发 WP**:WP-72(M1,L 档;前置 WP-71);决策点 = 中期计划 §2.2 Niri 交互设计 1~8 + D-MP-1(默认列排布 P0 与断点减列策略的微调由主控在 WP-72 评审时定 ⇒ 本条即该定案)。
+- **定案**:
+  1. **默认列排布唯一来源** = `packages/vm-ui/src/workspace/layout-presets.ts` 三张常量表:**P0**(宽屏 5 列)`[stack, registers] / [debug, free] / [payload] / [call-stack, structure] / [timeline, checkpoints, memory-diff]`;**P1**(中宽 3 列)`[stack, registers, free] / [debug, structure, call-stack] / [payload, timeline, checkpoints, memory-diff]`;**P2**(窄条单列,登记序)`[stack, free, registers, payload, debug, structure, call-stack, memory-diff, timeline, checkpoints]`。`selectLayoutPreset(viewportWidth)` 纯函数按两级阈值选档;预设经 `WorkspaceLayoutModel.bindWindows(entries, columns)` 的 `columns` **单点注入**(工作区层不得持有第二份默认布局;模型层「登记序每列一窗」仅为不变量兜底)。三表「10 个登记类型各恰一次、无重无漏」由机检固定(权威来源 = `createDefaultTabTypeRegistry()`)。
+  2. **可读性阈值推导式**(登记于模块头注释 + README):字符宽 = 13px(`font-size: 0.8125rem`,对齐「字号下限 13px」)× 0.6em(等宽字体 advance 通用近似)= **7.8px**;行字符数 = **58ch**(地址列 16 + 列间距 1 + 字节组列 26 + 列间距 1 + 特殊显示列 10 + 行内边距 0.75rem×2 折算 4);⇒ `MIN_COLUMN_WIDTH` = **452.4px**;**`NARROW_MAX_PX`** = 452.4 + 容器水平内边距 16 = **468.4px**;**`WIDE_MIN_PX`** = 2 × 452.4 + 真实列间空隙(列间距 8 ×2 + 分隔条宽 12)= **932.8px**。判定:`w ≥ WIDE_MIN_PX → P0`;`NARROW_MAX_PX ≤ w < WIDE_MIN_PX → P1`;`w < NARROW_MAX_PX → P2`。自洽机检:`NARROW_MAX_PX ≥ MIN_COLUMN_WIDTH` 且 `WIDE_MIN_PX > NARROW_MAX_PX`。
+  3. **布局状态进快照面**:`columns[].widthRatio`(列宽视口占比)/ `columns[].rowHeights`(同列窗高比例,和恒 1、单窗列恒 `[1]`)/ `viewportWidth`(护栏基准)进入 `layoutSnapshot`(纯状态机、无 DOM);语义 `setViewportWidth` / `setColumnWidth` / `setRowHeights` / `applyPreset` / `resetLayout` / `openColumnAt`;不变量机检 `isLayoutStateValid`。**「重置布局」= 清空尺寸调整 + 应用当前视口宽对应预设**(宽屏即回 P0,窄屏回该宽度降级形态),焦点保持。
+  4. **焦点列相机纯函数**:`cameraScrollLeft(columnBox, viewportWidth, {scrollWidth})`(焦点列居中 / 端部夹取 / 非法输入回落 0)+ `columnBoxFromRects`;`ensureTabVisible` 保留纵向 nearest 兜底,相机横向居中最后执行;平滑滚动按 `prefers-reduced-motion` 降级为即时。
+  5. **视口外降级渲染择一**:面板 `content-visibility: auto` + `contain-intrinsic-size: auto 9rem` + `data-render-degrade` 标记。判据:零 JS、零浮动层、零新增依赖,浏览器原生跳过离屏子树的渲染与绘制(重点覆盖 `payload`(Blockly 挂载即 inject)与 `debug` 指令视图)。
+  6. **列宽预设档入口择一**:仅菜单「布局」组(档位标识 `data-layout-preset` + 五档 1/4、1/3、1/2、2/3、全宽 + 「重置布局」),五档以**视口占比**表达并作用于**焦点列**(Niri 口径);**未**在窗口标题栏加控件(WP-71「标题栏零按钮」口径与既有 E2E 断言保持不破)。
+- **已登记偏差(主控采纳,以本条为准)**:`WIDE_MIN_PX` 取「2 × MIN + 真实列间空隙(列间距 ×2 + 分隔条宽)」= 932.8px,而非定案字面的「2 × MIN + 单个列间距」(= 912.8px)。理由:分隔条是 `.columns` 的 flex item,真实列间空隙为 8 + 12 + 8 = 28px;按字面会高估 912.8~932.8 区间的「2 列并排可读」。
+- **否决候选与理由**:①预设表放入组件内联常量——否决:违反单一来源,且 WP-71 已登记预设必须经 `bindWindows(columns)` 注入;②`WIDE_MIN_PX` 只计单个列间距——否决:见上偏差;③交叉观察降级渲染——否决:引入 JS 观察者与额外可见性状态,与「零 JS / 零新依赖」相悖;④列宽档入口置于窗口标题栏——否决:破坏 WP-71「标题栏零按钮」与既有 E2E 断言;⑤列宽 / 窗高持久化到 IndexedDB——否决:中期计划 §2.2 第 8 条,持久化不属本计划义务(本次布局状态随会话内存保持);⑥删除面板 `aria-label` 以消除 landmark 重名——否决:可达性退化,该面改由独立 a11y 包在保留名称的前提下差异化处理(见后续登记)。
+- **红灯承载位置**:`packages/vm-ui/test/workspace/{layout-presets,layout-camera,layout-divider,workspace-layout-model,sm-workspace-layout}.test.ts`(共 95 例:16 + 12 + 11 + 23 + 33)、`apps/plugin-dev/e2e/workspace-layout.spec.ts`(8 例)。实现前红灯 = 三个新模块与两个新测试文件 import 解析失败(`Failed to resolve import "../../src/workspace/layout-presets.js"` 等 5 例);实现期真实红灯 = 拖拽态顺序错(`expected [ 'stack', 'registers' ] to deeply equal [ 'registers', 'stack' ]`)+ 窗高呈现断链(E2E `expect(...).toBeGreaterThan(271)` received 231)。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
