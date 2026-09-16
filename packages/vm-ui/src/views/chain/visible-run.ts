@@ -4,16 +4,22 @@
  * 口径:
  *  - 可见字符 = 可见 ASCII 0x20–0x7E(与 render/special-display.ts 的可见
  *    ASCII 口径一致,字符生成复用 `specialDisplayChar`);
- *  - 行内判定(`visibleRunOfRow`):**全部** cell 均为窗口内可见字符才产出
- *    字符串,否则 null(交回调用方的常规特殊显示渲染);
  *  - 链末延伸(`visibleRunAt`):自某地址起读连续可见字符,遇不可见字节、
  *    窗口外字节或字节上限即止——空串表示"无可见字符延伸"(不占位、不报错,
  *    D3 窗口外语义);
- *  - 供字节视图(F5 集成)右段与寄存器特殊显示消费;任意长度全量字符串
+ *  - 供字节视图右段(经链组件)与寄存器特殊显示消费;任意长度全量字符串
  *    延伸归 WP-F8 调试档。
+ *
+ * WP-75#11 登记(**清理**):本模块曾有 `visibleRunOfRow(cells)`(行内**全部**
+ * cell 均可见才产出字符串)。它自 M1 起无生产调用方——栈 / 自由视图行右段的
+ * 行级需求由 `byte-view` 的逐 cell 特殊显示(`renderSpecialDisplayCell`,
+ * 每字节一格)承担,链末延伸由 `visibleRunAt` 承担,故该函数连同其出口面与
+ * 用例一并删除(死导出面=漂移风险;接线需改 `views/byte/byte-view.ts` 行槽位
+ * 或 `workspace/sm-workspace.ts` 的行装饰,属跨文件行为扩展,与本项"最小改动"
+ * 口径不符)。见 `docs/phases/中期M2核查表草稿.md`。
  */
 import { html, type TemplateResult } from "lit";
-import type { AddrRange, ByteCell, MemoryDataSource } from "../../datasource/types.js";
+import type { AddrRange, MemoryDataSource } from "../../datasource/types.js";
 import { addressToHex, parseAddressHex } from "../../render/hex.js";
 import { specialDisplayChar } from "../../render/special-display.js";
 
@@ -26,25 +32,6 @@ export type VisibleRunDataSource = Pick<MemoryDataSource, "bytesRows">;
 /** 可见 ASCII 口径(0x20–0x7E,与 render/special-display.ts 一致)。 */
 function isVisibleByte(byte: number): boolean {
   return byte >= 0x20 && byte <= 0x7e;
-}
-
-/**
- * 行内可见字符判定(FE-ST-10 第一句):全部 cell 均为窗口内可见字符时返回
- * 对应字符串;含不可见字节 / 窗口外 cell / 空 cell 序列 → null。
- */
-export function visibleRunOfRow(cells: readonly ByteCell[]): string | null {
-  if (cells.length === 0) {
-    return null;
-  }
-  let text = "";
-  for (const cell of cells) {
-    const byte = cell.byte;
-    if (byte === null || !isVisibleByte(byte)) {
-      return null;
-    }
-    text += specialDisplayChar(byte);
-  }
-  return text;
 }
 
 /**

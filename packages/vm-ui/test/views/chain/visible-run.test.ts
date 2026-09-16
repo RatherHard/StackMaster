@@ -1,56 +1,33 @@
 /**
- * 可见字符延伸渲染测试(WP-F4 / FE-ST-10 窗口内部分):行内全可见字符判定、
- * 链末可见字符延伸读取、Lit 渲染辅助。
+ * 可见字符延伸渲染测试(WP-F4 / FE-ST-10 窗口内部分):链末可见字符延伸读取、
+ * Lit 渲染辅助;WP-75#11 清理登记(`visibleRunOfRow` 退场,出口面同步)。
  */
 import { describe, expect, it } from "vitest";
 import { render } from "lit";
 import { html } from "lit";
 
-import type { ByteCell } from "../../../src/datasource/types.js";
 import {
   VISIBLE_RUN_MAX_BYTES,
   renderVisibleRun,
   visibleRunAt,
-  visibleRunOfRow,
 } from "../../../src/views/chain/visible-run.js";
 import { ProjectionStore } from "../../../src/client/projection-store.js";
 import { ProjectionDataSource } from "../../../src/datasource/projection-data-source.js";
 import type { PublicStateProjection } from "@stackmaster/protocol";
 
-/** 单字节 cell 快捷构造。 */
-function cell(byte: number | null): ByteCell {
-  return {
-    addressHex: "0x1000",
-    regionId: byte === null ? null : "region-x",
-    offset: byte === null ? null : 0,
-    byteHex: byte === null ? null : byte.toString(16).padStart(2, "0"),
-    byte,
-  };
-}
-
-describe("visibleRunOfRow(行内全可见字符 → 字符串)", () => {
-  it("8 字节全为可见 ASCII 时返回对应字符串", () => {
-    const text = "ABCDEFGH";
-    const cells = [...text].map((ch) => cell(ch.charCodeAt(0)));
-    expect(visibleRunOfRow(cells)).toBe("ABCDEFGH");
-  });
-
-  it("含不可见字节(0x00 / 控制字符 / 高位字节)→ null", () => {
-    expect(visibleRunOfRow([cell(0x41), cell(0x00)])).toBeNull();
-    expect(visibleRunOfRow([cell(0x41), cell(0x0a)])).toBeNull();
-    expect(visibleRunOfRow([cell(0x41), cell(0xff)])).toBeNull();
-  });
-
-  it("含窗口外 cell(byte = null)→ null(D3 窗口外语义)", () => {
-    expect(visibleRunOfRow([cell(0x41), cell(null)])).toBeNull();
-  });
-
-  it("空 cell 序列 → null(无内容可判定)", () => {
-    expect(visibleRunOfRow([])).toBeNull();
-  });
-
-  it("空格与打印边界字符(0x20 / 0x7E)按可见口径参与", () => {
-    expect(visibleRunOfRow([cell(0x20), cell(0x7e)])).toBe(" ~");
+describe("visibleRunOfRow 退场(WP-75#11:清理)", () => {
+  it("模块出口面不再导出该函数(保留 visibleRunAt / renderVisibleRun)", async () => {
+    const moduleExports = (await import("../../../src/views/chain/visible-run.js")) as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(moduleExports["visibleRunOfRow"]).toBeUndefined();
+    expect(moduleExports["visibleRunAt"]).toBeTypeOf("function");
+    expect(moduleExports["renderVisibleRun"]).toBeTypeOf("function");
+    expect(moduleExports["VISIBLE_RUN_MAX_BYTES"]).toBe(32);
+    // 包出口面(`src/index.ts`)对本模块为整模块再导出(`export *`),故随模块面
+    // 同步退场;包级导出形状由 `test/public-api.test.ts` 固定(此处不整包
+    // import:该入口会连带加载全部组件,与并发改动耦合)。
   });
 });
 
