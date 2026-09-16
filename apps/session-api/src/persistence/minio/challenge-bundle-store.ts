@@ -103,15 +103,31 @@ export class MinioChallengeBundleStore implements ChallengeBundleStore {
     return new Uint8Array(await collect(stream));
   }
 
-  /** 幂等建桶(部署 / 测试引导;桶名来自 config,非用户输入)。 */
+  /**
+   * 幂等建桶(部署 / 测试引导;桶名来自 config,非用户输入)。
+   *
+   * check-then-act 竞态:`bucketExists` 返回 false 后到 `makeBucket` 之间,同批引导的
+   * 另一进程 / 另一测试文件可能已经建好同名桶 —— 此时 S3 / MinIO 在「桶已存在且归本
+   * 账号所有」时返回 `BucketAlreadyOwnedByYou`(部分实现 / 跨账号返回
+   * `BucketAlreadyExists`)。这是**正常结果**而非失败:桶就在那里,引导目标已达成,
+   * 故显式容忍;其余错误(权限 / 不可达等)仍 fail-closed 并转成契约错误类型。
+   */
   async ensureBuckets(): Promise<void> {
     for (const bucket of [this.options.bucketPrivate, this.options.bucketPublic]) {
       const exists = await this.client.bucketExists(bucket).catch((error: unknown) => {
         throw new PersistenceError("store_unavailable", "对象存储不可达(fail-closed)", { cause: error });
       });
-      if (!exists) {
-        await this.client.makeBucket(bucket, "us-east-1");
+      if (exists) {
+        continue;
       }
+      await this.client.makeBucket(bucket, "us-east-1").catch((error: unknown) => {
+        const code = (error as { code?: string }).code;
+        if (code === "BucketAlreadyOwnedByYou" || code === "BucketAlreadyExists") {
+          // 他人先建好:桶已存在,引导目标达成(幂等)。
+          return;
+        }
+        throw new PersistenceError("store_unavailable", "对象存储建桶失败(fail-closed)", { cause: error });
+      });
     }
   }
 
