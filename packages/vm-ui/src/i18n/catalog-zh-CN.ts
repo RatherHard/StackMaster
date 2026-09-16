@@ -163,6 +163,9 @@ export const zhCN = {
   "debug.connecting": "调试通道连接中(attach 重放对齐后可用)……",
 
   // ── byte(<sm-byte-view> 字节视图)─────────────────────────────────────────
+  // WP-74 前置修复:字节区地标名带**所属窗口维度**(窗口面板名 = 窗口标题,
+  // 内层 region 若同名即 axe landmark-unique 违规;窗口集常驻后同场可比)。
+  "byte.viewAria": "{view} · 字节区",
   "byte.tableAria": "内存十六进制字节(8 字节一行,高地址在下)",
   "byte.colAddress": "地址",
   "byte.colHex": "十六进制",
@@ -195,6 +198,9 @@ export const zhCN = {
 
   // ── vma(<sm-vma-list> VMA 侧栏)───────────────────────────────────────────
   "vma.aria": "VMA 列表",
+  // WP-74 前置修复:所属窗口维度前缀(两个常驻字节窗口的 VMA 列表原有同名
+  // landmark 冲突;独立使用形态仍走 "vma.aria")。
+  "vma.ariaScoped": "{view} · VMA 列表",
   "vma.heading": "内存区域",
   "vma.permissionsAria": "权限",
   "vma.windowCaption": "窗口 {bytes} B{state}",
@@ -215,7 +221,10 @@ export const zhCN = {
   "annot.aria": "寄存器标注:{detail}",
 
   // ── instr(<sm-instruction-view> 指令视图)─────────────────────────────────
-  "instr.aria": "指令视图",
+  // WP-74 前置修复:内层 region 名带**窗口标题维度**(与注册表 tab.instruction
+  // 同源,窗口改标题即同步),不再与「指令视图」窗口面板地标同名;原
+  // "instr.aria"(= tab.instruction 同文案)随之退场,避免双源漂移。
+  "instr.viewAria": "{view} · 指令流",
   "instr.guide":
     "指令视图由调试通道承载(伪指令流 / 函数表 / 地址断点)。当前为解题模式——请通过菜单「切换到调试模式」启用后使用。",
   "instr.jumpAria": "跳转地址",

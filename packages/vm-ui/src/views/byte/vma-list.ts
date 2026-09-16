@@ -46,6 +46,15 @@ export class SmVmaList extends LitElement {
   @property({ type: String, attribute: "selected-region-id" })
   selectedRegionId: string | null = null;
 
+  /**
+   * 所属窗口维度名(宿主注入 = 该侧栏所在窗口标题;WP-74 前置修复)。
+   * 两个常驻字节窗口各带一个侧栏,缺该维度即出现同名 region 地标
+   * (axe landmark-unique);独立使用形态(无宿主注入)保持 null → 回落
+   * 通用名 "vma.aria"。
+   */
+  @property({ type: String, attribute: "view-label" })
+  viewLabel: string | null = null;
+
   #regions: VmaEntry[] = [];
 
   /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
@@ -70,15 +79,22 @@ export class SmVmaList extends LitElement {
     this.requestUpdate();
   }
 
+  /** 侧栏地标名:有窗口维度即带前缀(WP-74 前置修复:同名地标唯一化)。 */
+  get #landmarkLabel(): string {
+    return this.viewLabel === null || this.viewLabel === ""
+      ? t("vma.aria")
+      : t("vma.ariaScoped", { view: this.viewLabel });
+  }
+
   protected override render(): unknown {
     if (this.#regions.length === 0) {
-      return html`<section class="vma-list" aria-label=${t("vma.aria")}>
+      return html`<section class="vma-list" aria-label=${this.#landmarkLabel}>
         <h3 class="heading">${t("vma.heading")}</h3>
         <p class="empty" role="status">${t("common.noRegions")}</p>
       </section>`;
     }
     return html`
-      <section class="vma-list" aria-label=${t("vma.aria")}>
+      <section class="vma-list" aria-label=${this.#landmarkLabel}>
         <h3 class="heading">${t("vma.heading")}</h3>
         <ul class="regions">
           ${this.#regions.map((region) => this.#renderRegion(region))}

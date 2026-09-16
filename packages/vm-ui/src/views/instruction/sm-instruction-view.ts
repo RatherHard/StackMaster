@@ -607,9 +607,12 @@ export class SmInstructionView extends LitElement {
   }
 
   protected override render(): unknown {
+    // 地标名带窗口维度(WP-74 前置修复):窗口面板 region 名 = 窗口标题
+    // (「指令视图」),内层同名即 axe landmark-unique 违规;可见标题 h3 不变。
+    const landmarkLabel = t("instr.viewAria", { view: t("tab.instruction") });
     if (this.#debug === null) {
       return html`
-        <section class="instruction-view" aria-label=${t("instr.aria")}>
+        <section class="instruction-view" aria-label=${landmarkLabel}>
           <header class="toolbar">
             <h3 class="heading">${t("tab.instruction")}</h3>
           </header>
@@ -620,7 +623,7 @@ export class SmInstructionView extends LitElement {
       `;
     }
     return html`
-      <section class="instruction-view" aria-label=${t("instr.aria")}>
+      <section class="instruction-view" aria-label=${landmarkLabel}>
         <header class="toolbar">
           <div class="toolbar-row">
             <h3 class="heading">${t("tab.instruction")}</h3>

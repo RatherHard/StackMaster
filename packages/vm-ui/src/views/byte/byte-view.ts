@@ -385,9 +385,13 @@ export class SmByteView extends LitElement {
 
   protected override render(): unknown {
     const heading = this.viewKind === "free" ? t("tab.free") : t("tab.stack");
+    // 地标名带窗口维度(WP-74 前置修复):窗口面板 region 名 = 窗口标题,
+    // 内层字节区若同名即 axe landmark-unique 违规(窗口集常驻后同场可比);
+    // 可见标题 h3 保持原样(视觉零变化)。
+    const landmarkLabel = t("byte.viewAria", { view: heading });
     if (this.#region === null) {
       return html`
-        <section class="byte-view" aria-label="${heading}">
+        <section class="byte-view" aria-label="${landmarkLabel}">
           <header class="toolbar" part="toolbar">
             <h3 class="heading">${heading}</h3>
           </header>
@@ -396,7 +400,7 @@ export class SmByteView extends LitElement {
       `;
     }
     return html`
-      <section class="byte-view" aria-label="${heading}">
+      <section class="byte-view" aria-label="${landmarkLabel}">
         <header class="toolbar" part="toolbar">${this.#renderToolbar(heading)}</header>
         <div class="table" role="table" aria-label=${t("byte.tableAria")}>
           <div class="byte-row header-row" role="row">

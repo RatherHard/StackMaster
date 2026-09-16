@@ -21,6 +21,17 @@
  *
  * **FE-WS-04b 接线**:工作区菜单「积木步进」→ `stepOnce()`(编译 + 单步);
  * 组件实现 `refresh?()` 约定:投影更新 → 重建求值环境并重编译。
+ *
+ * **执行日志的无障碍语义(WP-74 前置修复;WP-71 固定窗口集后真机 axe 抓出)**:
+ * live region 语义由 `<ol class="output-log" aria-live="polite">` 承载——
+ * 在其上声明 `role="log"` 对 `<ol>` 非法(axe `aria-allowed-role`,minor),
+ * 且 role=log 会覆盖 `<ol>` 的隐式 list 角色,使每一行 `<li>` 失去 list 父级
+ * (axe `listitem`,serious,逐行命中)。日志行的列表语义是更真实的读屏收益
+ * (逐行可定位、条数可报),故以「去掉 role=log、保留 aria-live」定案;
+ * 备选修法(外层包 `<div role="log">` 保留 role=log)被否决的理由见
+ * WP-74 前置修复报告:输出区为 flex 布局且 `<ol>` 自身即滚动容器
+ * (`.pane ol { flex: 1; overflow: auto }`),引入包裹元素须连带改 CSS 几何,
+ * 与「本包只调语义属性、视觉零变化」相冲突。
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -694,7 +705,7 @@ export class SmPayloadTab extends LitElement {
             ${this.#log.length === 0
               ? html`<p class="empty">${t("payload.outputEmpty")}</p>`
               : html`
-                  <ol class="output-log" role="log" aria-live="polite">
+                  <ol class="output-log" aria-live="polite">
                     ${this.#log.map(
                       (line) => html`<li class=${line.kind === "error" ? "error" : nothing}>${line.text}</li>`,
                     )}

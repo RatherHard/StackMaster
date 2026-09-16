@@ -9,6 +9,11 @@
  *    见 sm-workspace.ts;本组件只做转发,不理解装饰语义);
  *  - `refresh()`:投影变更驱动(工作区 onProjectionChanged 时调用)。
  *
+ * **地标维度注入(WP-74 前置修复)**:本组件是「窗口标题 → 内层视图地标名」
+ * 的唯一转发点:VMA 侧栏地标名 = `viewLabel`(栈视图 / 自由视图)+ 侧栏部件名,
+ * 使两个常驻字节窗口的侧栏不再同名(axe `landmark-unique`);窗口面板自身的
+ * 可达名称仍是窗口标题(WP-71「标题栏与 aria-label 同源」承诺不动)。
+ *
  * 数据纪律:只依赖 `MemoryDataSource` 接口;不接触 SessionClient。
  * 动画纪律:零动画(如引入过渡只允许 transform / opacity)。
  */
@@ -21,6 +26,7 @@ import {
   type ByteViewKind,
 } from "../views/byte/byte-view.js";
 import { SmVmaList } from "../views/byte/vma-list.js";
+import { LocaleController, t } from "../i18n/i18n.js";
 import type { MemoryDataSource, Row } from "../datasource/types.js";
 
 /** 行装饰回调形态(与 SmByteView.rowDecorator 一致的透传面)。 */
@@ -42,6 +48,20 @@ export class SmByteTab extends LitElement {
   /** 行装饰回调(工作区注入;透传字节视图)。 */
   @property({ attribute: false })
   rowDecorator: ByteTabRowDecorator | null = null;
+
+  /** i18n:窗口维度名(标签页标题)随 locale 求值 → 侧栏地标名前缀同步刷新。 */
+  readonly #i18n = new LocaleController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // LocaleController 经构造副作用注册;显式读点满足 lint(同 vma-list 惯例)。
+    void this.#i18n;
+  }
+
+  /** 窗口维度名(= 该字节标签页对应窗口的标题;WP-74 前置修复的地标去重维度)。 */
+  get viewLabel(): string {
+    return this.viewKind === "free" ? t("tab.free") : t("tab.stack");
+  }
 
   static override styles = css`
     :host {
@@ -135,6 +155,7 @@ export class SmByteTab extends LitElement {
         ></sm-byte-view>
         <sm-vma-list
           class="aside"
+          .viewLabel=${this.viewLabel}
           @vma-select=${(event: CustomEvent<{ regionId: string }>) => {
             // VMA 跳转回路:点击侧栏条目 → 字节视图切区域并锚定区域头部。
             this.#viewElement()?.showRegion(event.detail.regionId);

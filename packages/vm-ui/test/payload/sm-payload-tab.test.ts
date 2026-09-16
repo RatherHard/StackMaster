@@ -5,6 +5,7 @@
  * jsdom 实测:Blockly inject 可运行(无布局引擎,渲染退化不影响结构断言);
  * 真实渲染验证归 WP-F7 Playwright。
  */
+import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 import type { ActionObject, ActionResponse, PublicError } from "@stackmaster/protocol";
 
@@ -367,6 +368,74 @@ describe("<sm-payload-tab> 工具栏与执行交互", () => {
     element.runProgram();
     await settle();
     expect(sink.sent).toHaveLength(1);
+    element.remove();
+  });
+});
+
+// ── 输出日志无障碍语义(WP-74 前置:live region 与列表语义共存)──────────────
+
+describe("<sm-payload-tab> 输出日志无障碍语义(live region × 列表语义)", () => {
+  /** 跑满一条执行日志(编译 → 运行 → 接受;输出区进入非空形态)。 */
+  async function mountWithLogLines(): Promise<SmPayloadTab> {
+    const element = await mountTab();
+    element.loadWorkspaceState(twoStepState());
+    const sink = new FakeSink();
+    element.actionSink = sink;
+    await element.updateComplete;
+    element.compileNow();
+    element.runProgram();
+    await settle();
+    sink.accept(1);
+    await settle();
+    await element.updateComplete;
+    return element;
+  }
+
+  it("新增日志行落在 polite live region 内,且每行 <li> 保有 list 父级", async () => {
+    const element = await mountWithLogLines();
+    const pane = shadowOf(element).querySelector(".output-pane");
+    expect(pane).not.toBeNull();
+
+    // 行为一:日志行必须处于 polite live region 内部 —— 否则新增行不被播报。
+    const liveRegions = [...(pane as HTMLElement).querySelectorAll('[aria-live="polite"]')];
+    expect(liveRegions).toHaveLength(1);
+    const live = liveRegions[0] as HTMLElement;
+
+    const logLines = [...(pane as HTMLElement).querySelectorAll("li")];
+    expect(logLines.length).toBeGreaterThan(0);
+    for (const line of logLines) {
+      expect(live.contains(line), `日志行不在 live region 内:${line.textContent ?? ""}`).toBe(true);
+      // 行为二:承载 <li> 的元素必须暴露 list 角色(list 父级是 listitem 规则
+      // 的前提;显式声明 role=log 会覆盖 <ol> 的隐式 list 角色,使全部 <li>
+      // 失去 list 父级)。
+      const parent = line.parentElement as HTMLElement;
+      const parentRole = parent.getAttribute("role");
+      expect(
+        parentRole === null || parentRole === "list",
+        `<li> 的父级显式角色为 ${String(parentRole)},破坏了 list 父级`,
+      ).toBe(true);
+    }
+    element.remove();
+  });
+
+  it("axe:输出日志形态零 aria-allowed-role / listitem 违规", async () => {
+    const element = await mountWithLogLines();
+    expect(shadowOf(element).querySelectorAll("ol.output-log li").length).toBeGreaterThan(0);
+
+    // 扫描上下文收敛到输出区子树:同文档内 Blockly 注入的 SVG 会生成含特殊字符
+    // 的 id,axe 在 jsdom 下为其生成选择器时会被 jsdom 选择器引擎以
+    // SyntaxError 拒绝(环境伪影,与日志语义无关;真机门禁不受影响)。
+    const pane = shadowOf(element).querySelector(".output-pane") as HTMLElement;
+    const results = await axe.run(pane, {
+      runOnly: { type: "rule", values: ["aria-allowed-role", "listitem"] },
+    });
+    expect(
+      results.violations.map((violation) => ({
+        id: violation.id,
+        impact: violation.impact,
+        targets: violation.nodes.map((node) => node.target),
+      })),
+    ).toEqual([]);
     element.remove();
   });
 });

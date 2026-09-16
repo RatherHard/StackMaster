@@ -168,6 +168,10 @@ export const en: Record<SmMessageKey, string> = {
   "debug.connecting": "Connecting the debug channel (available once attach replay alignment completes)…",
 
   // ── byte ──────────────────────────────────────────────────────────────────
+  // WP-74 pre-fix: the byte-area landmark name carries its owning window
+  // dimension (the window panel name is the window title; an identically named
+  // nested region violates axe landmark-unique once all windows stay resident).
+  "byte.viewAria": "{view} · bytes",
   "byte.tableAria": "Memory bytes in hexadecimal (8 bytes per row, high addresses at the bottom)",
   "byte.colAddress": "Address",
   "byte.colHex": "Hex",
@@ -201,6 +205,9 @@ export const en: Record<SmMessageKey, string> = {
 
   // ── vma ───────────────────────────────────────────────────────────────────
   "vma.aria": "VMA list",
+  // WP-74 pre-fix: owning-window dimension prefix (the two resident byte windows
+  // used to expose identically named landmarks; standalone usage keeps "vma.aria").
+  "vma.ariaScoped": "{view} · VMA list",
   "vma.heading": "Memory regions",
   "vma.permissionsAria": "Permissions",
   "vma.windowCaption": "window {bytes} B{state}",
@@ -221,7 +228,11 @@ export const en: Record<SmMessageKey, string> = {
   "annot.aria": "Register annotation: {detail}",
 
   // ── instr ─────────────────────────────────────────────────────────────────
-  "instr.aria": "Instruction view",
+  // WP-74 pre-fix: the nested region name carries the window-title dimension
+  // (same source as the registry's tab.instruction key, so a retitled window
+  // stays in sync) and no longer collides with the "Instructions" window panel
+  // landmark; the former "instr.aria" (duplicating tab.instruction) is retired.
+  "instr.viewAria": "{view} · instruction stream",
   "instr.guide":
     "The instruction view is carried by the debug channel (pseudo instruction stream / function table / address breakpoints). Solve mode is active — enable it via \"Switch to debug mode\" in the menu.",
   "instr.jumpAria": "Address",
