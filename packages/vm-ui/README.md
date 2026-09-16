@@ -30,7 +30,7 @@ src/
 │   │                               可用才显示)/ 重启 reset(终态禁用+引导)/
 │   │                               会话状态与断线横幅 / what-if 纪律横幅 /
 │   │                               拒绝错误呈现
-│   ├── tab-registry.ts             标签页类型注册表(stack / free / registers /
+│   ├── tab-registry.ts             窗口类型注册表(stack / free / registers /
 │   │                               payload / debug=指令视图 带工厂;ED 组件面
 │   │                               五类(structure/call-stack/memory-diff/
 │   │                               timeline/checkpoints)登记;可扩展;WP-71 /
@@ -470,9 +470,11 @@ src/views/
     │                         {maxSegments}) → JumpChainSegment[]({addressHex,
     │                         valueHex?, targetAddressHex?, loopBack?, outsideWindow?})+
     │                         chainLimitReached;横向 3 段上限 / 展开 32 段上限常量
-    ├── visible-run.ts        FE-ST-10 纯函数:visibleRunOfRow(行内全可见字符)、
-    │                         visibleRunAt(链末可见字符延伸,≤32 字节)+
-    │                         renderVisibleRun(引号字符段)
+    ├── visible-run.ts        FE-ST-10 纯函数:visibleRunAt(链末可见字符延伸,
+    │                         ≤32 字节)+ renderVisibleRun(引号字符段)
+    │                         (WP-75#11 登记:模块原导出 visibleRunOfRow(行内
+    │                         全可见字符)无调用方,已于 M2 清理;行级需求由
+    │                         byte-view 的逐 cell 特殊显示承载)
     └── sm-jump-chain.ts      <sm-jump-chain>:横向 ≤3 段地址芯片 + SVG 回环箭头 +
                               尾随目标芯片 + "展开完整链"(竖向,可收起);
                               点击地址发 viewport-jump 事件(组件只发事件)
@@ -512,7 +514,7 @@ src/views/
 ## WP-F5:工作区容器与菜单(src/workspace,2026-09-11;WP-71 起固定窗口集;WP-72 Niri 式布局交互)
 
 M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)、
-`<sm-workspace-menu>` 顶部菜单、标签页类型注册表、布局模型纯状态机、
+`<sm-workspace-menu>` 顶部菜单、窗口类型注册表、布局模型纯状态机、
 `<sm-byte-tab>` 字节页组合、`<sm-register-annotation>` 行左缘交叉标注。
 
 ### 定案规则(主控已裁决,同时登记于源码注释)
@@ -530,7 +532,7 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
   列由**相机**居中(`cameraScrollLeft` 纯函数 → `scrollLeft`,相邻列两侧探出);
   **列内按窗高比例分配列高**(Hyprland 式,面板内联 `flex-grow` 唯一呈现路径)。
   **平铺不变量:不存在空列**;`moveTab` 落点语义(WP-F5 定案)原样保留。
-- **标签页类型注册表(Q2 起四类,WP-71 起单实例常驻)**:`stack`(栈视图)/
+- **窗口类型注册表(Q2 起四类,WP-71 起单实例常驻)**:`stack`(栈视图)/
   `free`(自由视图)共用 `<sm-byte-tab>`(view-kind 只决定标题)/`registers`
   (寄存器视图)/`payload`/`debug`(WP-F8 起 = 指令视图真工厂)带工厂;
   `register()` 为开放扩展点(Map 保序覆盖语义:宿主可替换工厂 / 文案);
@@ -828,7 +830,7 @@ M3 交付面:`<sm-payload-tab>` 三区布局(FE-PB-01)、积木 → 12 动作编
 
 ### 工作区接线(F5 形态)
 
-- **标签页注册**:`tab-registry.ts` 增 `PAYLOAD_TAB_TYPE("payload")` 登记,
+- **窗口注册**:`tab-registry.ts` 增 `PAYLOAD_TAB_TYPE("payload")` 登记,
   「打开」菜单出现「Payload 搭建」;内容元素实现 `refresh?()`(投影更新 →
   重建求值环境并重编译)与可赋值 `dataSource` 属性(workspace 约定)。
 - **组合根注入**:`dataSource` 经工厂上下文;动作提交面 `actionSink`
@@ -836,12 +838,12 @@ M3 交付面:`<sm-payload-tab>` 三区布局(FE-PB-01)、积木 → 12 动作编
   约定注入(`"actionSink" in content` 即绑,与 dataSource 同法,client 换
   绑经 `#rebindContents` 重绑)。
 - **菜单「积木步进」(FE-WS-04b)**:`payload-step` 菜单动作,**仅 payload
-  标签页激活(焦点)时可用**(工作区按焦点页类型计算 `payloadStepEnabled`
+  窗口激活(焦点)时可用**(工作区按焦点页类型计算 `payloadStepEnabled`
   注入菜单);点击 → 焦点 payload 页 `stepOnce()` = 自动编译 + 推进一个原子
   动作并暂停。
 - **FE-WS-07(payload 状态两模式共用)归 WP-F8**:本 WP 已保证 payload 元
-  素状态不被标签页切换销毁(照 workspace `#contents` 生命周期约定,关闭页
-  才弃置)。
+  素状态不被窗口切换销毁(照 workspace `#contents` 生命周期约定;固定窗口集
+  下窗口**常驻、无关闭入口**,弃置只发生在工作区整体卸载)。
 
 ### 测试面
 
@@ -915,7 +917,7 @@ run-to-breakpoint(FE-IN-08 / FE-WS-04c)、跳转链全延伸(FE-ST-08/10)、
      `pausedAddressHex` / `attached` / `connectionStatus`)与 `onChange`
      (缓存 / 暂停 / 断点 / 连接变更事件;调试推送异步到达,视图自订阅后
      refresh——公开投影的 rAF 合帧仍归 SessionClient)。
-2. **指令视图 FE-IN 全量口径**:`<sm-instruction-view>` 挂在 `debug` 标签页
+2. **指令视图 FE-IN 全量口径**:`<sm-instruction-view>` 挂在 `debug` 窗口
    类型(F5 占位替换为真工厂,FE-IN-01"替换 debug 占位的同时新增");
    FE-IN-02 三段布局(地址 / 伪机器码 bytesHex 可缺席呈现"—"/文本 +
    jumpTargetHex 延展);FE-IN-03 jumpTarget 延展显示 + 点击跳转;FE-IN-04
@@ -939,7 +941,7 @@ run-to-breakpoint(FE-IN-08 / FE-WS-04c)、跳转链全延伸(FE-ST-08/10)、
    (公开档 ProjectionDataSource ↔ DebugDataSource,`debugDataSourceFactory`
    测试接缝,缺省 `createDebugDataSource(client)` 组合根装配),字节视图换绑
    即重建 = 锚点/滚动重置(F5 既有行为,验收口径);client 换绑(新会话)
-   确定性退回解题模式。**payload 标签页状态两模式共用**(切换不销毁 payload
+   确定性退回解题模式。**payload 窗口状态两模式共用**(切换不销毁 payload
    元素,`#contents` 生命周期不变);断点积木双档:解题模式 = 步进暂停
    (WP-F6 现状),调试模式 = 断点集合并入调试断点——挂点 = 内容元素
    `breakpointAddresses()` 声明面(sm-payload-tab 已实现,v1 编译器断点步骤
@@ -957,14 +959,14 @@ run-to-breakpoint(FE-IN-08 / FE-WS-04c)、跳转链全延伸(FE-ST-08/10)、
    false)维持窗口外截断现状。工作区 viewport-jump / highlight-jump 的窗口外
    落点在调试模式下同样自动 prefetch 后重试一次。
 6. **ED 组件挂接(轨道 C 收口)**:ED 七组件按 F9 README 契约挂入工作区——
-   新增标签页类型 structure(FE-ED-01,highlights = 快照 semanticHighlights,
+   新增窗口类型 structure(FE-ED-01,highlights = 快照 semanticHighlights,
    highlight-jump → 字节视图 showRegion/scrollToAddress + 调试档 prefetch
    重试)、call-stack(FE-ED-02)、timeline(FE-ED-04,entries =
    buildTimeline(动作账本, checkpoints);动作账本 = 宿主自 onActionResponse
    记录(发送侧 FIFO 配对,响应不携带动作本体;payload 运行期不混用其他
    动作入口的既有取舍沿用),公开投影 + UI 状态,合规)、checkpoints
    (FE-ED-05,sendAction 注入;create/checkout 响应到达且未拒 → 重拉
-   `list_checkpoints` 刷新)、memory-diff(FE-ED-03,取简 = 独立标签页;宿主
+   `list_checkpoints` 刷新)、memory-diff(FE-ED-03,取简 = 独立窗口;宿主
    经 `client.store.subscribe` 维护"前一投影 visibleRegions + 最新 delta")
    ——注入机制 = 组合根 `#syncEdContents` duck-typing(同 dataSource /
    actionSink 约定);FE-ED-06 提示 ladder + FE-ED-07 错误解释挂工作区
