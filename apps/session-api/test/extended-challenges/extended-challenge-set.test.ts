@@ -62,7 +62,13 @@ describe("扩展题目集:发布前编译管线门禁(每题必过)", () => {
             readonly compiledIr: { readonly entrypointIndex: number };
           };
           // 执行起点 = 初始 RIP(IR 模式引擎语义;两者按构造同源)。
-          expect(BigInt(bundle.initialState.registers.RIP)).toBe(BigInt(program.entrypointIndex));
+          // 显式守卫而非非空断言:`registers` 为 Record<string, string>,在
+          // noUncheckedIndexedAccess 下缺失键即 undefined,报错须可解释。
+          const initialRipHex = bundle.initialState.registers.RIP;
+          if (initialRipHex === undefined) {
+            throw new Error("IR 模式私有包必须声明 initialState.registers.RIP(执行起点同源前提)");
+          }
+          expect(BigInt(initialRipHex)).toBe(BigInt(program.entrypointIndex));
           expect(program.entrypointIndex).toBe(bundle.compiledIr.entrypointIndex);
           expect(program.instructions.length).toBeGreaterThan(program.entrypointIndex);
           const labelIds = program.labels.map((label) => label.labelId);
