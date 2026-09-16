@@ -1108,6 +1108,39 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **红灯承载位置**:`packages/web-component/test/pwn-memory-vm.test.ts` → 「terminal 锚承载(WP-73 / D-MP-2;协议面零改动)」(实现前 4 failed / 2 passed:锚被覆盖、`color-scheme` 未随 terminal 映射 dark、宿主 `theme_changed` 夺锚、移除锚未交还控制);`packages/vm-ui/test/theming/theme-terminal.test.ts`(三预设结构 / terminal 锚计算值 / 最近锚优先遮蔽证据);light / dark 逐值冻结语料 = `packages/vm-ui/test/theming/theme.test.ts` 的 `FROZEN_CONTRAST_VARIABLES`。
 - **遗留(如实登记)**:①跨源宿主无法直接写插件文档内的锚(同源策略),承载面 = 插件文档页 / 部署配置;若需宿主侧可达的配置面(如 `PWN_MEMORY_VM_CONFIG` 的 additive 主题项),属 WP-74 / WP-77 决策点,本包未越界新增公开配置面。②jsdom 不跨 shadow 边界传播自定义属性的计算值(实测),组件 shadow 内的主题计算值机检与真机 axe 校准归 WP-74。③扫描线 / 光标闪烁的**实装**与 `aria-hidden` / `prefers-reduced-motion` / 字号下限 13px 归 WP-74;本包只落效果类变量且 light / dark 下取值恒为关闭(`--sm-scanline-opacity: 0` / `--sm-caret-blink: 0s`)。
 
+### D-API-111 窗口集绑定替代开 / 关生命周期(固定窗口工作区模型;中期 WP-71)
+
+- **触发 WP**:WP-71(M1 关键路径中心件);决策点 = 中期计划 §五 D-MP-1(已定案)+ §2.2 模型 1~3。
+- **裁决**:工作区窗口集合 = 注册表 `list()` 的收敛形态,**每种登记类型恰一实例、常驻**;窗口无开 / 关状态,只有「视口内 / 暂离(条带滚出视野)」两种呈现态。模型层以 `bindWindows(bindings, columns?)` 一次性绑定替换生命周期:窗口 **id ≡ 类型键**(单实例的结构性保证,同类型重复实例无法表达)、标题 = 绑定时刻注册表 label(当前 locale 求值固化,无类型内序号)。缺省 `columns` = **登记序、每列一窗** = WP-72 落 P0 精确预设前的「最小形态」;WP-72 经同一方法的 `columns` 单点参数注入预设(工作区层无需再改,登记为零第二处默认布局)。聚焦导航 = `WorkspaceLayoutModel.focusWindow(type): boolean`(未登记 → `false` 且布局零变化)+ 组件 `focusWindow(type)`(聚焦 + 滚动,**不创建实例**)。
+- **删除面**:`openTab` / `closeTab` / `formatTabTitle` / `#neighborFocus` / `#ordinalCounters` / `WorkspaceTabInfo.ordinal` / 组件 `#renderEmptyState` 与空态分支 / 标题栏关闭钮与 `.tab-close` 样式。**保留面**:`moveTab` 落点语义(含 `target.column ≥ 列数` = 开新列尾插与同列 / 跨列索引修正)、`activateTab`、`snapshot`、焦点唯一不变量、列式平铺不变量(不存在空列)、`register()` 扩展点。
+- **绑定点**:工作区接入(首帧前 `connectedCallback`)+ `tabTypes` 属性换绑;与「接入会话」解耦 ⇒ **模式切换只换绑 `dataSource`,布局零副作用**(`layoutSnapshot` 深度相等为断言,e2e 与单测双面)。
+- **否决候选与理由**:①保留 `openTab(type): string | null` 只改语义——否决:命名与语义不符,且返回 id 诱导调用方以为可开新实例;②窗口 id 用独立生成器(`win-1…`)而非类型键——否决:单实例下 id 与类型键一一对应,独立生成器徒增映射层与「同类型两实例」的可表达空间;③保留模型侧开 / 关 API 供宿主自控窗口集——否决:与 D-MP-1「常驻、不提供关闭」直接冲突;④默认按 P0 预设建列(把 WP-72 的预设提前落本包)——否决:越界 WP-72(其评审还要微调 P0 与断点减列策略)。
+- **红灯承载位置**:`packages/vm-ui/test/workspace/workspace-model.test.ts`(窗口集绑定 / 列分组 / `focusWindow` / 开·关 API 退场)、`sm-workspace.test.ts`(「固定窗口集」describe 6 例 + 首帧前接入会话回归例)、`sm-workspace-mode.test.ts`(模式切换 `layoutSnapshot` 深度相等)、`tab-registry.test.ts`(单实例常驻语义 3 例);实现前实跑 8 files failed / 60 tests failed(`model.bindWindows is not a function`、`expected [Function closeTab] to be undefined`、`expected <p class="empty" role="status"> to be null` 等原文见 WP-71 交付报告)。
+
+### D-API-112 单实例语义承载方式 = 工作区统一解释(注册表不增字段;中期 WP-71)
+
+- **触发 WP**:WP-71 条目「注册表」项二选一。
+- **裁决**:`WorkspaceTabTypeDescriptor` **不增补**单实例语义字段;「每种登记类型恰一常驻窗口」由**工作区统一解释**,并以「窗口 id ≡ 类型键」在 `bindWindows` 内**结构性保证**。运行中追加登记的类型在窗口集**重新绑定**时进入(宿主需重新赋值 `tabTypes` 或重挂载)。
+- **理由**:字段化会引入模型无法表达的取值(如 `cardinality: "multi"`),形成「声明可多开但模型不支持」的悬空契约;同时 `register()` 的宿主调用形态保持不变,零迁移。
+- **否决候选与理由**:①`readonly instances: "single"` 字段——否决:死字段且模型不支持另一取值;②`readonly multiOpen: boolean` 默认 false——否决:语义反转,对宿主扩展点是纯噪声。
+- **红灯承载位置**:`packages/vm-ui/test/workspace/tab-registry.test.ts`(类型键唯一 / 登记集合 → 窗口集 1:1 / 运行中追加登记经重绑建窗)。
+
+### D-API-113 `data-window-type` 锚点同步替换(不留兼容别名;中期 WP-71)
+
+- **触发 WP**:WP-71 菜单层「保留 `data-tab-type` 兼容别名或同步替换,择一」。
+- **裁决**:**同步替换**。规范锚点 = `data-window-type`,按钮 class = `.focus-window`;**删除** `data-tab-type` 与 `.open-tab`,不保留兼容别名。全部消费点同批替换并**单点收敛**于 `apps/plugin-dev/e2e/fixtures.ts`(`focusWindowButton` / `workspaceWindow(s)` / `workspaceWindowTypes`)与 `e2e/helpers/embed.ts`(`pluginFocusWindowButton` / `pluginWindow`);额外消费点 `apps/plugin-dev/host-mock/smoke-embed.mjs:74` 同步(手动冒烟脚本,仓库无门禁引用)。窗口面板锚仍为 `[data-tab-id]`(窗口 id ≡ 类型键),词面统一归 WP-77。
+- **理由**:两者均为仓内内部标记(非嵌入协议面,V-1~V-13 零涉及),留别名 = 长期债,且会与「窗口」语义并存造成两套锚。
+- **否决候选与理由**:①保留 `data-tab-type` 兼容别名——否决:内部标记无需兼容窗口;②只改 class 不改锚——否决:class 是呈现细节,锚才是注册表契约键。
+- **红灯承载位置**:`test/workspace/sm-workspace-menu.test.ts`(断言 `data-window-type` 且 `data-tab-type` 为 `null`、`button.open-tab` 与 `[data-tab-type]` 零命中)、`test/i18n/locale-anchor.test.ts`(新锚选择器)、`apps/plugin-dev/e2e/workspace-windows.spec.ts`(E2E 面锚点契约)。
+
+### D-API-114 `moveTab` 目标列取用时序修正(既有 WP-F5 实现缺陷;中期 WP-71 修复)
+
+- **触发 WP**:WP-71(落地「每列一窗」缺省布局后该分支成为常见路径,红灯承载体 = 窗口集不变量)。
+- **缺陷**:`moveTab` 中「源列为独窗且位于目标列之前」的分支,原实现在**摘除前**读取 `this.#columns[column]`(列序已按「源列将被删除」预先 −1),读到的是**源列自身的数组**;随后的 `splice` 落进已脱离列序列的数组 ⇒ 被移动窗口从布局消失(仍留在窗口集 ⇒ 破坏 `isWindowSetComplete` 不变量)。不修则任何「单窗列 → 更右列」拖拽都会让窗口从布局消失;WP-72 的拖拽落点将大量复用该分支。
+- **裁决**:把目标列数组取值移到 `#removeFromPosition(from)` **之后**(列序修正的前提即「源列已删除」)。落点语义(索引 / 夹取 / 原地 no-op / 开新列尾插)**零变更**,既有 WP-F5 测试全绿。
+- **否决候选与理由**:①保留缺陷并只在组件层回避该拖拽方向——否决:模型不变量必须自洽;②改回「摘除前取数组 + 不做列序修正」——否决:那会写进将被删除的列,语义错误。
+- **红灯承载位置**:`test/workspace/workspace-model.test.ts` →「跨列移动到『源列为独窗且位于目标列之前』的列:目标列序前移(源列删除)」(以 `isWindowSetComplete` 守住不变量)+ `<sm-workspace>` 拖拽换位 E2E 断言。
+
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:
