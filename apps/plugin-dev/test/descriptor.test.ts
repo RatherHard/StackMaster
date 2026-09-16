@@ -4,6 +4,8 @@
  *    齐备;**零代码依赖**——只复制公开描述包数据形态,数据占位无秘密);
  *  - applyChallengeDescriptor:debugModeAvailable / challengeDescriptor 注入
  *    工作区装配(未升级元素同样落属性,升级后 Lit 初始化消费);
+ *    debugMode 走**归一化**(opt-out:缺省即启用,WP-75#9)——
+ *    `normalizeDebugMode` / `DEBUG_MODE_DEFAULT` 与正式通道口径一致;
  *  - boot 的描述包 fail-soft 加载(缺失 → 状态行降级明示,切换项隐藏);
  *  - WP-54 双通道:通道解析(`?descriptor=formal`)、静态面投影、正式通道
  *    成功注入与失败缺席明示(夹具通道为缺省,开发态零依赖正式部署)。
@@ -13,12 +15,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  DEBUG_MODE_DEFAULT,
   applyChallengeDescriptor,
   applyDescriptorState,
   boot,
   descriptorStaticFace,
   loadDevDescriptor,
   mountWorkspaceShell,
+  normalizeDebugMode,
   resolveDescriptorChannel,
   wireSessionDemo,
   type DevDescriptor,
@@ -93,11 +97,27 @@ describe("applyChallengeDescriptor:工作区装配注入", () => {
     expect(handles.status.textContent).toContain("调试模式可用");
   });
 
-  it("debugMode 缺省/false → debugModeAvailable=false(切换项隐藏口径)", () => {
+  it("debugMode 缺省 → debugModeAvailable=true(opt-out:缺省即启用,与正式通道同口径)", () => {
+    const handles = mount();
+    applyChallengeDescriptor(handles, {});
+    const workspace = handles.workspace as unknown as Record<string, unknown>;
+    expect(workspace["debugModeAvailable"]).toBe(true);
+    expect(handles.status.textContent).toContain("调试模式可用");
+  });
+
+  it("debugMode=false(显式关闭)→ debugModeAvailable=false(切换项隐藏口径)", () => {
     const handles = mount();
     applyChallengeDescriptor(handles, { debugMode: false });
     const workspace = handles.workspace as unknown as Record<string, unknown>;
     expect(workspace["debugModeAvailable"]).toBe(false);
+    expect(handles.status.textContent).not.toContain("调试模式可用");
+  });
+
+  it("normalizeDebugMode:缺席 = true,显式布尔原样(与 vm-ui 归一化口径一致)", () => {
+    expect(normalizeDebugMode(undefined)).toBe(true);
+    expect(normalizeDebugMode(true)).toBe(true);
+    expect(normalizeDebugMode(false)).toBe(false);
+    expect(DEBUG_MODE_DEFAULT).toBe(true);
   });
 
   it("缺省数组兜底:descriptor 无教学面时不传 undefined", () => {
@@ -151,6 +171,20 @@ describe("boot:夹具描述包加载时机", () => {
       "夹具描述包未加载",
     );
     void statusFail;
+  });
+
+  it("夹具通道描述包未声明 debugMode → 调试模式启用(缺省即启用,WP-75#9)", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const controller = await boot(
+      root,
+      async () => ({ SessionClient: FakeSessionClient }),
+      async () => ({}),
+    );
+    expect(controller).not.toBeNull();
+    const workspace = root.querySelector("sm-workspace") as unknown as Record<string, unknown>;
+    // 夹具通道与正式通道缺省语义一致(vm-ui 归一化:debugMode 缺省 true)。
+    expect(workspace["debugModeAvailable"]).toBe(true);
   });
 
   it("loadDevDescriptor:相对 URL 缺省指向本地夹具(浏览器联调面;Node 缺 fetch 语义此处不测网络)", async () => {

@@ -197,7 +197,7 @@ export function readSessionForm(handles: WorkspaceShellHandles): SessionCreateIn
  * WP-54 起同时承载正式下发通道的返回视图(结构兼容,全字段可选)。
  */
 export interface DevDescriptor {
-  /** debugMode 声明(opt-out;true = 工作区菜单呈现解题/调试模式切换项)。 */
+  /** debugMode 声明(opt-out:**缺省即启用**,仅显式 false 关闭;归一化见 `normalizeDebugMode`)。 */
   readonly debugMode?: boolean;
   /** 提示 ladder(FE-ED-06;透传 <sm-hint-ladder>.hints)。 */
   readonly hintLadder?: readonly unknown[];
@@ -287,22 +287,54 @@ export function descriptorStaticFace(descriptor: DevDescriptor): DevStaticFace |
 }
 
 /**
+ * 描述包 debugMode 的归一化缺省值(opt-out 语义;WP-75#9)。
+ *
+ * 单一口径来源 = 正式通道的归一化实现
+ * `packages/vm-ui/src/descriptor/challenge-descriptor.ts:451-452`
+ * (`debugMode: input["debugMode"] === undefined ? true : value`,注释即「opt-out
+ * 语义」),与 session-api 调试通道编排器的门控
+ * (`apps/session-api/src/debug/debug-channel-orchestrator.ts` 的
+ * `descriptor.debugMode === false` 判否)一致:**缺省 = 启用调试模式,只有描述包
+ * 显式 `debugMode: false` 才关闭**。开发壳夹具通道此前按 `=== true` 判真
+ * (缺省 false),与正式通道缺省语义相反 —— 本常量与 `normalizeDebugMode`
+ * 即两条通道对齐后的同一口径。
+ *
+ * 形态说明:plugin-dev 不得**静态导入**浏览器可达包(dependency-cruiser
+ * `no-backend-dependency-on-browser-packages`;`@stackmaster/vm-ui` 仅以
+ * devDependencies 声明供 turbo 构建序,不 import,见 README「加载模型」),
+ * 故常量在此就地声明并与上述两处同源维护。
+ */
+export const DEBUG_MODE_DEFAULT = true;
+
+/**
+ * 归一化描述包 debugMode 声明:缺席 → `DEBUG_MODE_DEFAULT`(true);显式布尔原样。
+ * 夹具通道与正式通道注入工作区的 `debugModeAvailable` 一律经此归一化。
+ */
+export function normalizeDebugMode(debugMode: boolean | undefined): boolean {
+  return debugMode ?? DEBUG_MODE_DEFAULT;
+}
+
+/**
  * 把夹具描述包注入工作区装配(debugModeAvailable / hintLadder /
  * publicErrorMapping;sm-workspace 未升级(产物未加载)时至少落
  * debugModeAvailable 属性——自定义元素升级后 Lit 初始化消费该值)。
+ *
+ * `debugModeAvailable` = `normalizeDebugMode(descriptor.debugMode)`
+ * (opt-out:缺省即启用;见 `DEBUG_MODE_DEFAULT`)。
  */
 export function applyChallengeDescriptor(handles: WorkspaceShellHandles, descriptor: DevDescriptor): void {
   const workspace = handles.workspace as {
     debugModeAvailable?: boolean;
     challengeDescriptor?: unknown;
   };
-  workspace.debugModeAvailable = descriptor.debugMode === true;
+  const debugModeEnabled = normalizeDebugMode(descriptor.debugMode);
+  workspace.debugModeAvailable = debugModeEnabled;
   workspace.challengeDescriptor = {
     hintLadder: descriptor.hintLadder ?? [],
     publicErrorMapping: descriptor.publicErrorMapping ?? [],
   };
-  if (descriptor.debugMode === true) {
-    handles.status.textContent = `${handles.status.textContent} 调试模式可用(描述包 debugMode=true)。`;
+  if (debugModeEnabled) {
+    handles.status.textContent = `${handles.status.textContent} 调试模式可用(描述包 debugMode 未显式关闭)。`;
   }
 }
 
