@@ -316,6 +316,14 @@ export class SmWorkspace extends LitElement {
 
   // 交叉标注缓存(投影变更重建;行装饰按行区间过滤)。
   #registerHits: readonly RegisterHit[] = [];
+  /**
+   * 跳转链伪汇编提供者缓存(WP-76):按调试数据源实例缓存,避免每次渲染产生
+   * 新函数标识(属性面绑定换标识会无谓触发子组件重渲染)。
+   */
+  #chainPseudoAsmProviderCache: {
+    readonly source: DebugDataSource;
+    readonly provider: (addressHex: string) => { readonly text: string } | null;
+  } | null = null;
 
   // ── 模式切换与调试档状态(FE-WS-06/07,WP-F8)──
   #mode: WorkspaceMode = "solve";
@@ -324,6 +332,12 @@ export class SmWorkspace extends LitElement {
   #debugChangeDisposer: (() => void) | null = null;
   /** 调试交互反馈(暂停原因 / attach / 通道错误;菜单下方状态行)。 */
   #debugFeedback: string | null = null;
+  /**
+   * payload 客户端步进暂停落点(WP-76 #4;`payload-client-pause` 事件驱动)。
+   * 「客户端步进暂停」= 积木执行器停在断点积木上的**本地**暂停,不含服务端
+   * 暂停语义 ⇒ 与调试通道 `debug_paused` 严格分面呈现(不伪造服务端原因)。
+   */
+  #clientPauseAddressHex: string | null = null;
 
   // ── 正式裁决呈现(阶段六 WP-63;D-API-83 / D-API-84)──
   /**
@@ -875,6 +889,8 @@ export class SmWorkspace extends LitElement {
     }
     // ED 组件面:绑定即注入当前投影 / 账本切面(不等下一次投影事件)。
     this.#syncEdContents();
+    // WP-75 #6 / WP-76:指令视图注解与客户端暂停注入面同样绑定即注入。
+    this.#syncInstructionViewBindings();
     this.requestUpdate();
   }
 
@@ -1194,6 +1210,27 @@ export class SmWorkspace extends LitElement {
     const dataSource = this.dataSource;
     this.#registerHits =
       dataSource === null ? [] : crossAnnotateRegisters(dataSource.registers(), dataSource.regions());
+    // WP-75 #6:同一份命中集同步进指令视图行左缘标注(WP-76 落点)。
+    this.#syncInstructionViewBindings();
+  }
+
+  /**
+   * 指令视图注入面(WP-75 #6 / WP-76 #4;duck-typing 约定同 `dataSource` /
+   * `actionSink`,不动 `tab-registry` 的工厂签名——工厂上下文只携带数据源):
+   * 内容元素声明 `registerHits` / `clientPauseAddressHex` 即接收工作区注解
+   * 缓存与 payload 客户端暂停落点。命中集是**同一份缓存**(单一来源),指令
+   * 视图按行地址精确匹配,不做第二次交叉标注计算。
+   */
+  #syncInstructionViewBindings(): void {
+    for (const content of this.#contents.values()) {
+      if ("registerHits" in content) {
+        (content as { registerHits?: readonly RegisterHit[] }).registerHits = this.#registerHits;
+      }
+      if ("clientPauseAddressHex" in content) {
+        (content as { clientPauseAddressHex?: string | null }).clientPauseAddressHex =
+          this.#clientPauseAddressHex;
+      }
+    }
   }
 
   #tabTypeDescriptor(type: string): WorkspaceTabTypeDescriptor | undefined {
@@ -1312,6 +1349,8 @@ export class SmWorkspace extends LitElement {
     this.#debugDataSource = debugSource;
     this.#debugChangeDisposer = debugSource.onChange((event) => this.#onDebugSourceChange(event));
     this.#mode = "debug";
+    // 模式切换 = 呈现面重置:payload 客户端暂停落点不跨模式保留(新档无该语义)。
+    this.#clientPauseAddressHex = null;
     // 断点积木双档(FE-WS-07):payload 断点集合并入调试断点(最小接线挂点)。
     this.#mergePayloadBreakpoints(debugSource);
     // 换绑数据源(字节视图换绑即重建 = 锚点/滚动重置,F5 既有验收口径)。
@@ -1320,6 +1359,7 @@ export class SmWorkspace extends LitElement {
     this.#debugFeedback = t("debug.connecting");
     this.#rebindContents();
     this.#syncEdContents();
+    this.#syncInstructionViewBindings();
     this.requestUpdate();
   }
 
@@ -1328,6 +1368,7 @@ export class SmWorkspace extends LitElement {
     this.#teardownDebugSource();
     this.#mode = "solve";
     this.#debugFeedback = null;
+    this.#clientPauseAddressHex = null;
     const client = this.client;
     this.dataSource = client === null ? null : new ProjectionDataSource(client.store);
     this.#lastRegionsSnapshot = client?.store.snapshot?.visibleRegions;
@@ -1342,14 +1383,23 @@ export class SmWorkspace extends LitElement {
     this.#debugChangeDisposer = null;
     this.#debugDataSource?.dispose();
     this.#debugDataSource = null;
+    this.#chainPseudoAsmProviderCache = null;
   }
 
   /**
-   * 断点积木双档(FE-WS-07):payload 断点积木在解题模式 = 步进暂停(WP-F6
-   * 现状);调试模式 = 断点集合并入调试断点。v1 编译器断点步骤无地址承载
-   * (PayloadStep.kind "breakpoint" 无 addressHex 字段),本挂点消费内容元素
-   * `breakpointAddresses()` 声明面——v1 payload 页返回空,编译器演进携带地址
-   * 后即自动并入(最小接线登记)。
+   * 断点积木双档(FE-WS-07 / WP-76):payload 断点积木在解题模式 = 步进暂停
+   * (WP-F6 现状);调试模式 = 断点集合并入调试断点。挂点 = 内容元素
+   * `breakpointAddresses()` 声明面(WP-76 起编译器断点步骤携带 `addressHex`)
+   * ——payload 页返回**真实地址集**,并入即生效。
+   *
+   * 并入语义(登记):
+   *  - **只并入可解析地址**:编译器不可解析(无公开投影 / 无 `rip`)的断点
+   *    步骤不产出地址,此处自然跳过(不伪造地址、不推断);
+   *  - **add-only 幂等**:`DebugDataSource.addBreakpoint` 对重复地址为 no-op;
+   *    payload 程序变更后**不自动移除**旧地址(避免误删用户在指令视图手动添加
+   *    的同地址断点)——移除入口 = 指令视图行断点(FE-IN-08);
+   *  - 触发点 = 进入调试模式 + payload 程序编译完成事件
+   *    (`payload-breakpoints-changed`),两处都是幂等调用。
    */
   #mergePayloadBreakpoints(debugSource: DebugDataSource): void {
     for (const content of this.#contents.values()) {
@@ -1362,6 +1412,66 @@ export class SmWorkspace extends LitElement {
         debugSource.addBreakpoint(address);
       }
     }
+  }
+
+  /**
+   * payload 页编译产出新程序(WP-76):调试档下重并入断点积木地址(add-only
+   * 幂等),使「调试模式内改积木 → 运行到断点」不必重进调试模式。
+   */
+  #onPayloadBreakpointsChanged(): void {
+    const debugSource = this.#debugDataSource;
+    if (this.#mode !== "debug" || debugSource === null) {
+      return;
+    }
+    this.#mergePayloadBreakpoints(debugSource);
+    this.requestUpdate();
+  }
+
+  /**
+   * payload 客户端步进暂停(WP-76 #4):积木执行器停在断点积木上 = **客户端
+   * 本地暂停**,不含服务端断点语义 ⇒ 只作"客户端步进暂停"分面呈现(指令视图
+   * 锚点 + 文案),不写调试通道暂停态、不伪造 `debug_paused`。
+   */
+  #onPayloadClientPause(event: Event): void {
+    const detail = (event as CustomEvent<{ readonly addressHex?: string | null }>).detail;
+    const addressHex = detail?.addressHex ?? null;
+    if (this.#clientPauseAddressHex === addressHex) {
+      return;
+    }
+    this.#clientPauseAddressHex = addressHex;
+    this.#syncInstructionViewBindings();
+    this.requestUpdate();
+  }
+
+  /**
+   * 指令视图行断点增删(FE-IN-08)回流:断点集合的**所有者是调试数据源**
+   * (视图直接 `toggleBreakpoint`——同一实例,无第二份状态),本挂点只刷新
+   * 「运行到断点」可用性与相关呈现(不重放集合、不重复并入 payload 地址)。
+   */
+  #onBreakpointsChanged(): void {
+    this.requestUpdate();
+  }
+
+  /**
+   * 跳转链伪汇编提供者(WP-76 §2.3 #2):调试档注入 = 调试通道已下发的指令流
+   * 查表(`instructionAt`,推送覆盖面内命中);解题档 = null ⇒ 组件按登记形态
+   * 降级为引导文案(**无第二数据通道**:仅消费既有调试通道推送)。
+   */
+  #chainPseudoAsmProvider(
+    dataSource: MemoryDataSource,
+  ): ((addressHex: string) => { readonly text: string } | null) | null {
+    const debugSource = this.#debugDataSource;
+    if (debugSource === null || dataSource !== debugSource) {
+      return null;
+    }
+    const cached = this.#chainPseudoAsmProviderCache;
+    if (cached !== null && cached.source === debugSource) {
+      return cached.provider;
+    }
+    const provider = (addressHex: string): { readonly text: string } | null =>
+      debugSource.instructionAt(addressHex);
+    this.#chainPseudoAsmProviderCache = { source: debugSource, provider };
+    return provider;
   }
 
   /** 「运行到断点」可用性:调试模式 && 断点集合非空 && 会话通道可用且未终态。 */
@@ -1682,6 +1792,14 @@ export class SmWorkspace extends LitElement {
   /**
    * 行右段(.row-special 槽位):8 字节小端解释形似地址(可解引用且落回
    * 某可见区域范围)才挂载 `<sm-jump-chain>`(FE-ST-07;窗口外 / 非地址不挂)。
+   *
+   * **既有缺陷修复登记(M2 / WP-75 #5 交叉核对发现,WP-76 修复)**:链起始
+   * 地址此前以裸属性面 `start-address-hex` 绑定,而 `<sm-jump-chain>` 的
+   * `startAddressHex` 未声明 `attribute:`,Lit 观察的属性名是其**全小写**形态
+   * (`startaddresshex`)⇒ 组件 `startAddressHex` 恒为空、`render()` 直接空渲染:
+   * 栈视图 / 自由视图行右段跳转链**恒不出现**(调试档「延伸」入口随之不可达,
+   * 伪汇编延伸亦无宿主)。修法 = 与同模板 `dataSource` / `extendable` /
+   * `extendHandler` 一致改**属性面**绑定(组件对外属性面 API 与既有测试不变)。
    */
   #renderRowJumpChain(row: Row, dataSource: MemoryDataSource): unknown {
     // 调试档(FE-ST-08/10):DebugDataSource 时呈现「延伸」入口——prefetch
@@ -1704,7 +1822,8 @@ export class SmWorkspace extends LitElement {
       .extendHandler=${extendable && debugSource !== null
         ? (addressHex: string) => debugSource.prefetchWindow(addressHex)
         : null}
-      start-address-hex=${row.addressHex}
+      .startAddressHex=${row.addressHex}
+      .pseudoAsmProvider=${this.#chainPseudoAsmProvider(dataSource)}
     ></sm-jump-chain>`;
   }
 
@@ -2222,7 +2341,9 @@ export class SmWorkspace extends LitElement {
         aria-label=${t("workspace.columnsAria")}
         @viewport-jump=${this.#onViewportJump}
         @highlight-jump=${this.#onHighlightJump}
-        @breakpoints-changed=${() => this.requestUpdate()}
+        @breakpoints-changed=${this.#onBreakpointsChanged}
+        @payload-breakpoints-changed=${this.#onPayloadBreakpointsChanged}
+        @payload-client-pause=${this.#onPayloadClientPause}
       >
         ${snapshot.columns.map((column, columnIndex) => this.#renderColumn(column, columnIndex, snapshot.columns.length))}
       </main>

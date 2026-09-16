@@ -18,6 +18,7 @@ import { SessionClient } from "../../src/client/session-client.js";
 import { SmWorkspace } from "../../src/workspace/sm-workspace.js";
 import { isWindowSetComplete } from "../../src/workspace/workspace-model.js";
 import { PAYLOAD_TAB_TYPE, defaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
+import type { SmJumpChain } from "../../src/views/chain/sm-jump-chain.js";
 import {
   CREATE_INPUT,
   FakeFrames,
@@ -867,9 +868,16 @@ describe("<sm-workspace> 跨视图集成接线", () => {
     const view = firstByteView(workspace);
 
     const addressRow = view.shadowRoot.querySelector('.byte-row[data-row-address="0x1000"]');
-    const chain = addressRow?.querySelector("sm-jump-chain");
+    const chain = addressRow?.querySelector("sm-jump-chain") as SmJumpChain | null;
     expect(chain).not.toBeNull();
-    expect(chain?.getAttribute("start-address-hex")).toBe("0x1000");
+    // ① 属性面绑定真的生效(既有缺陷:裸属性 `start-address-hex` 从未被组件观察
+    //    ⇒ `startAddressHex` 恒空、链恒空渲染;此处断言属性值本身)。
+    expect(chain?.startAddressHex).toBe("0x1000");
+    // ② 链真的渲染出内容(能抓住「链恒空渲染」回归的断言;裸属性断言测不到)。
+    await (chain as SmJumpChain).updateComplete;
+    const chainShadow = (chain as SmJumpChain).shadowRoot as ShadowRoot;
+    expect(chainShadow.querySelector(".chain")).not.toBeNull();
+    expect(chainShadow.querySelector('.chain-address[data-address="0x1000"]')).not.toBeNull();
 
     const plainRow = view.shadowRoot.querySelector('.byte-row[data-row-address="0x1008"]');
     expect(plainRow?.querySelector("sm-jump-chain")).toBeNull();
