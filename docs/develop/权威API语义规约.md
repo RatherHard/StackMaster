@@ -1164,6 +1164,19 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **红灯承载位置**:`packages/vm-ui/test/payload/sm-payload-tab.test.ts`(live region 行 + list 父级合法 + axe `runOnly: ["aria-allowed-role","listitem"]` 零违规;Blockly 主题六项必须引用 `var(--sm-*)` 且工具箱容器内联样式不得再出现 `#ddd` / `rgb(221,221,221)`)、`packages/vm-ui/test/workspace/sm-workspace-landmarks.test.ts`(新增;region 名全局唯一 + axe `runOnly: ["landmark-unique"]` 零违规)。实现前红灯 = 4 failed / 42 passed + 2 failed / 15 skipped(原文见两次交付报告)。jsdom 无布局 ⇒ **对比度不可判定**(沿既有口径:真机 axe 为唯一权威面),真机红/绿 = `e2e/axe-contrast.spec.ts` 修复前 `:293`(插件面 light-registers)/ `:347`(壳面)/ `:311`(插件面 dark-registers)红 ⇒ 修复后 **3/3 例、6 个可达面 0 违规**。
 - **遗留(移交 WP-74)**:①深色画布上**垃圾桶 / 缩放光栅精灵**的可见性(修法 = 把主题锚镜像进 shadow 树,或新增「深底精灵处理」token);②`color-contrast: incomplete ×7`(Blockly 类目标签 `bgOverlap`)沿 WP-55 口径属人工复核项(修复前 light 面即为 ×7),建议不新增豁免;③`terminal` 预设未进真机 axe 面(宿主模拟页主题选择器只提供 light / dark,`EMBED_THEMES` 为冻结两值);④`shell dark` 面沿既有登记不可达。
 
+## 三·二十二、中期 M2「终端风格与交互补全」(中期 WP-74 ~ WP-77;D-API-117 ~)
+
+### D-API-117 跳转链宿主绑定面死特性(既有 WP-F5 实现缺陷;中期 WP-75#5 暴露 / WP-76 同路径)
+
+- **触发 WP**:WP-75#5(寄存器特殊显示复用 `<sm-jump-chain>` 只读形态时实证该组件的绑定面语义)+ WP-76(伪汇编延伸挂在同一条链上,故该缺陷直接决定 WP-76 延伸入口是否可达)。发现路径 = **实现方(另一 agent)在写 #5 时实测上报,主控独立复核确认**(登记口径:越界缺陷由发现方报告、由文件 owner 修复,不互相改文件)。
+- **缺陷**:`packages/vm-ui/src/workspace/sm-workspace.ts` 在栈 / 自由视图的行右段以**裸特性面**绑定跳转链 —— `start-address-hex=${row.addressHex}`;而组件 `packages/vm-ui/src/views/chain/sm-jump-chain.ts` 的 `@property({ type: String }) startAddressHex` **未声明 `attribute:`**。Lit 的缺省观察特性名是属性名的**全小写形态**(`startaddresshex`),故宿主写入的 `start-address-hex` **落不进属性面** ⇒ `startAddressHex` 恒为空串 ⇒ `render()` 首行 `if (this.dataSource === null || this.startAddressHex === "") return nothing;` **直接空渲染**。后果:栈 / 自由视图的跳转链**整条不渲染**,连带 `extendable` / `extendHandler` 两个已就绪的属性成为**不可达路径**(WP-76 的「跳转链伪汇编延伸」即建立在该路径上)。
+- **长期未被发现的原因(登记)**:组件自测 `test/views/chain/sm-jump-chain.test.ts` 全程用**属性赋值**(`element.startAddressHex = …`)驱动,与宿主侧的**特性面**缺陷正交 —— 组件绿、宿主绿,**只有真实装配路径是坏的**。宿主侧原有断言 `chain?.getAttribute("start-address-hex") === "0x1000"` 测的是一个**双向都不存在的特性**(属性绑定不写特性;组件亦未 `reflect: true`),故既不红也不能发现问题。此属「测试绕开真实绑定形态」类漏网,与本中期 WP-70 已登记的「装配路径集成测试缺失」同族。
+- **裁决**:修**宿主绑定侧**为属性面 —— `.startAddressHex=${row.addressHex}`。理由:①与同模板既有的 `dataSource` / `extendable` / `extendHandler` **三个兄弟绑定同形**(该模板一律用属性面);②`startAddressHex` 是组件**既有公开属性面**,`test/views/chain/*` 已按属性消费,改绑定不动任何组件 API 与既有测试语义;③组件特性面保持「只有一个全小写观察名」的现状,不扩张。
+- **否决候选与理由**:①给组件补 `attribute: "start-address-hex"` —— 否决:为迁就宿主笔误扩张组件特性面,且同模板三处兄弟绑定皆为属性面,会造成同一组件两种宿主写法并存;②给 `@property` 加 `reflect: true` —— 否决:反射只影响「属性 → 特性」方向,不解决「宿主写入了未被观察的特性」,且会引入与属性赋值不同步的特性写入面;③改断言迁就现状(断言裸特性或断言链为空)—— 否决:那会把缺陷固化成契约,并使 WP-76 的延伸入口永久不可达。
+- **同批加固(防复发)**:`test/workspace/sm-workspace.test.ts` 的该例由「裸特性存在」升级为**两段断言**:①属性值 `chain.startAddressHex === "0x1000"`(绑定面真的生效);②`await chain.updateComplete` 后其 shadow 内 `.chain` 容器与 `.chain-address[data-address="0x1000"]` 芯片存在(链**真的渲染出内容**,这才是能抓住「恒空渲染」回归的断言)。非地址行**不挂**链的既有反例保留,两者合起来封闭该路径。
+- **同族扫描(全仓,已做)**:扫描全部自定义组件的 kebab 特性绑定 —— **仅此一例为死绑定**;`packages/vm-ui/src/workspace/byte-tab.ts` 的 `view-kind=${this.viewKind}` **合法**(其消费方 `views/byte/byte-view.ts` 显式声明了 `attribute: "view-kind"`,即「显式特性名」是仓库既有惯例,本例是唯一漏用者)。
+- **红灯承载位置**:`packages/vm-ui/test/workspace/sm-workspace.test.ts` →「跳转链:8 字节小端解释形似地址的行挂载 `<sm-jump-chain>`,非地址行不挂(FE-ST-07)」(修复前实测红灯原文:`expected null to be '0x1000'`,即旧断言在新绑定下必然为 null)。运行证据:该文件 29 例全绿;`test/workspace` + `test/views/chain` 合跑 **20 files / 261 passed**。
+
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:
