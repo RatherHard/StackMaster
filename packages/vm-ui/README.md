@@ -509,7 +509,7 @@ src/views/
 (与生产同一语义路径)。jsdom 的 Selection 不支持影子根内选区(rangeCount 恒 0,
 真实浏览器无此限制),降级路径测试以 `Selection.addRange` 侦察验证。
 
-## WP-F5:工作区容器与菜单(src/workspace,2026-09-11;WP-71 起固定窗口集)
+## WP-F5:工作区容器与菜单(src/workspace,2026-09-11;WP-71 起固定窗口集;WP-72 Niri 式布局交互)
 
 M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)、
 `<sm-workspace-menu>` 顶部菜单、标签页类型注册表、布局模型纯状态机、
@@ -519,18 +519,17 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
 
 - **固定窗口集(D-MP-1,WP-71)**:窗口集合 = 注册表登记的**全部类型、各恰
   一个实例、常驻**;窗口**没有开 / 关状态**,只有「视口内 / 暂离(条带滚出
-  视野)」——管理动作收敛为**移动位置**(WP-F5 拖拽)、**调整大小**(WP-72)、
-  **聚焦导航**(`focusWindow(type)` / 菜单「窗口」分组)。工作区接入(首帧前)
-  按登记序一次性绑定(`WorkspaceLayoutModel.bindWindows`;缺省布局 = 登记序、
-  每列一窗,WP-72 落 P0 精确预设前的最小形态,预设经同方法 `columns` 参数
-  单点注入);无关闭入口、无空态引导;解题 ↔ 调试模式切换**只换绑数据源**
-  (`layoutSnapshot` 深度相等),布局零副作用。
-- **平铺(Q1 v1)**:工作区 = 列的有序序列,**列间水平滚动**(Niri 式,
-  `scrollToColumn` / 聚焦跟随滚动可达任意列);**列内二叉分割**(Hyprland 式:
-  同列窗口均分列高);拖拽排布 = pointer 事件(标题栏按下 → 位移 >3px 进入
-  拖拽 → 落点:目标窗口上/下半 = 前/后、目标列 = 尾插、列区空白 = 开新列;
-  拖拽反馈只用 opacity)。**平铺不变量:不存在空列**;`moveTab` 落点语义
-  (WP-F5 定案)原样保留。
+  视野)」——管理动作收敛为**移动位置**(拖拽,WP-72 三类落点)、**调整大小**
+  (列宽 / 窗高,WP-72)、**聚焦导航**(`focusWindow(type)` / 菜单「窗口」分组)。
+  工作区接入(首帧前)按**当前宽度档预设**一次性绑定(`WorkspaceLayoutModel
+  .bindWindows(entries, columns)`;WP-72 起 `columns` = `layout-presets.ts` 的
+  P0 / P1 / P2 表,**默认列排布的唯一来源**;模型层缺省(登记序每列一窗)只是
+  未被预设覆盖类型的不变量兜底);无关闭入口、无空态引导;解题 ↔ 调试模式
+  切换**只换绑数据源**(`layoutSnapshot` 深度相等),布局零副作用。
+- **平铺(Q1 v1)**:工作区 = 列的有序序列,**列间水平滚动**(Niri 式);聚焦
+  列由**相机**居中(`cameraScrollLeft` 纯函数 → `scrollLeft`,相邻列两侧探出);
+  **列内按窗高比例分配列高**(Hyprland 式,面板内联 `flex-grow` 唯一呈现路径)。
+  **平铺不变量:不存在空列**;`moveTab` 落点语义(WP-F5 定案)原样保留。
 - **标签页类型注册表(Q2 起四类,WP-71 起单实例常驻)**:`stack`(栈视图)/
   `free`(自由视图)共用 `<sm-byte-tab>`(view-kind 只决定标题)/`registers`
   (寄存器视图)/`payload`/`debug`(WP-F8 起 = 指令视图真工厂)带工厂;
@@ -554,8 +553,79 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
   `client.onProjectionChanged(() => 各内容 refresh())` 驱动刷新;视图组件
   本身仍只依赖 `MemoryDataSource` 接口(§四纪律不破)。
 
-### 跨视图集成接线(本 WP 落地点)
+### WP-72:Niri 式布局交互(src/workspace 三新模块 + 组件层,**2026-09-11**)
 
+**默认列排布的唯一来源 = `layout-presets.ts` 的三张常量表**(P0 宽屏 5 列 /
+P1 中宽 3 列预设合并 / P2 窄条单列纵向),`selectLayoutPreset(viewportWidth)`
+纯函数按两级阈值选档;预设经 `WorkspaceLayoutModel.bindWindows(entries,
+columns)` 的 `columns` 参数**单点注入**工作区(不得在别处再写一份默认布局)。
+三表「十个登记类型各恰一次、无重无漏」以机检固定(`test/workspace/
+layout-presets.test.ts`,权威来源 = `createDefaultTabTypeRegistry()`)。
+
+**阈值推导(登记式,不得随意取整;来源 = `src/views/byte/byte-view.ts` 行形态)**:
+
+| 段 | 来源(CSS / 数据) | 字符数 |
+|---|---|---|
+| 地址列 | `grid-template-columns: 16ch` | 16 |
+| 列间距 / 字节组列 / 列间距 | `1ch` / `26ch` / `1ch` | 1 + 26 + 1 |
+| 特殊显示列 | 8 cell × (1ch + `margin-inline-end: 0.25ch`) | 10 |
+| 行内边距 | `padding-inline: 0.75rem` ÷ 7.8px 上取整 | 4 |
+| **合计** | | **58ch** |
+
+- 字符宽 = 13px(组件既有字号 0.8125rem,与「字号下限 13px」一致)× 0.6em
+  (等宽字体 advance 通用近似,登记理由见源码注释)= **7.8px**;
+- `MIN_COLUMN_WIDTH` = 58ch × 7.8px = **452.4px**(十六进制行不折行的最小可读宽度;
+  列宽护栏,模型按 `MIN_COLUMN_WIDTH ÷ 视口宽` 夹取占比下限);
+- `WIDE_MIN_PX` = 2 × 452.4 + 列间空隙(列间距 × 2 + 分隔条宽 12)= **932.8px**(≥2 列并排可读);
+- `NARROW_MAX_PX` = 452.4 + 容器水平内边距 16 = **468.4px**(单列可读下限);
+- 判定:`w ≥ WIDE_MIN_PX` → P0;`NARROW_MAX_PX ≤ w < WIDE_MIN_PX` → P1;`w < NARROW_MAX_PX` → P2。
+
+**尺寸状态进模型(可断言、可重置)**:`layoutSnapshot.columns[]` 增
+`widthRatio`(列宽**视口占比**;缺省 = 视口等分并夹取护栏)与 `rowHeights`
+(同列窗高**比例**,和恒为 1;单窗列恒 `[1]`),快照增 `viewportWidth`
+(护栏基准;`setViewportWidth` 登记,≤0 = 未知则不夹取);新增语义
+`setColumnWidth` / `setRowHeights`(相对比例归一化)/ `applyPreset` /
+`resetLayout` / `openColumnAt`(Niri「列间空隙新建列位」落点,`moveTab` 的
+`column ≥ 列数` 只表达尾插),不变量机检 `isLayoutStateValid`。
+**「重置布局」= 清空列宽 / 窗高调整 + 应用当前视口宽对应预设**(宽屏即回 P0,
+窄屏回该宽度降级形态,避免「回 P0 后立即被降级覆盖」的矛盾);焦点保持。
+
+**交互面(组件层)**:
+
+- **列宽可调**:相邻列间分隔条(`role="separator"` + `tabindex=0`,pointer 拖拽
+  复用 `DRAG_THRESHOLD_PX` 阈值语义;方向键 ±32px)与菜单「布局」组五档
+  (1/4、1/3、1/2、2/3、全宽,作用于**焦点列**)。**入口择一登记:列宽档入口只在
+  菜单「布局」组**,标题栏保持零控件(WP-71「标题栏零按钮」口径不破);
+- **窗高可调**:同列窗间分隔条(单窗列无分隔条);面板 `flex-grow` = 模型比例
+  (仅容器比例变化,**虚拟列表 `sm-window-list` 不重排**);
+- **焦点列居中(相机)**:`layout-camera.ts` 的 `cameraScrollLeft(columnBox,
+  viewportWidth, { scrollWidth })` 纯函数 → `scrollLeft`(内容坐标居中、端部
+  夹取、非法输入回落 0);`ensureTabVisible` = 纵向 `scrollIntoView(nearest)`
+  兜底 + 相机横向居中(相机最后执行,权威归相机);平滑滚动按
+  `prefers-reduced-motion` 降级为即时定位(jsdom 无 `Element.scrollTo` 时直接赋
+  `scrollLeft`,同一目标值便于结构断言);
+- **拖拽重排三类落点**(`DropTarget`:`stack` / `cross-column` / `new-column`):
+  落到同列窗口上 / 下半 = 同列堆叠;落到另一列窗口 = 跨列移动;落到列间空隙
+  (分隔条 `data-gap-index`)= 在该列序位置新建列位;列区之外 = 不移动。落点指示 =
+  目标元素的**静态** `drop-target` 轮廓(零浮动层、零重叠、零动画);落点语义与
+  布局变更经**常驻** `role="status"` 状态行(`.layout-status`)宣读;
+- **键盘可达兜底**:窗口标题栏 `tabindex=0`(Tab 巡回 = 窄条形态的窗口切换条),
+  方向键列内重排 / 跨列移动、Enter / Space 激活;分隔条方向键调整列宽 / 窗高;
+- **响应式降级**:`#measureViewportWidth()`(自身内联尺寸优先,嵌入形态 = iframe
+  宽;无布局环境回落 `window.innerWidth`)→ 档位跨断点即按新档预设重绑列结构,
+  同档内只更新列宽基准;驱动 = 宿主 `window resize`(iframe 尺寸变化即其 window
+  resize;不引入 ResizeObserver);
+- **视口外降级渲染(择一登记)**:面板声明 `content-visibility: auto` +
+  `contain-intrinsic-size: auto 9rem`(语义标记 `data-render-degrade=
+  "content-visibility"`)。判据:零 JS、零浮动层、浏览器原生跳过离屏子树的渲染与
+  绘制,payload(Blockly 挂载即 inject)与指令视图的挂载成本随之推迟到进入视口;
+  行级虚拟列表维持、拖拽期间只改容器比例。真机观测(2026-09-11 E2E):10 窗口常驻
+  时工作区 shadow 节点数 250、聚焦交互 RTT 68–83ms;
+- **性能护栏**:零新增运行时依赖(纯 CSS token + 既有 Lit 组件);布局状态随会话
+  内存保持(不落 IndexedDB);主 chunk 实测 1,350.55 kB / gzip 328.65 kB
+  (WP-71 基线 1,327.59 kB ⇒ +22.96 kB;>1.3MB 判据已由 WP-71 触发并登记拆分评估)。
+
+### 跨视图集成接线(本 WP 落地点)
 - **VMA 回路**:`vma-select` → `byteView.showRegion(regionId)`;
   `region-change` → 回写 `vmaList.selectedRegionId`(在 `<sm-byte-tab>` 内闭环)。
 - **寄存器交叉标注(FE-RG-04)**:投影变更后 `crossAnnotateRegisters` 缓存;

@@ -39,6 +39,24 @@ const REGISTERED_WINDOW_TYPES = [
   "checkpoints",
 ] as const;
 
+/**
+ * P0 预设(WP-72:宽屏 5 列)下的**呈现序** —— 窗口 DOM 序随列分组而非登记序:
+ * 列 1 = 栈视图 + 寄存器视图;列 2 = 指令视图 + 自由视图;列 3 = Payload 搭建;
+ * 列 4 = 调用栈 + 结构视图;列 5 = 时间线 + checkpoint + 内存 diff。
+ */
+const P0_PRESENTATION_ORDER = [
+  "stack",
+  "registers",
+  "debug",
+  "free",
+  "payload",
+  "call-stack",
+  "structure",
+  "timeline",
+  "checkpoints",
+  "memory-diff",
+] as const;
+
 /** 窗口标题文案(注册表 label;无类型内序号)。 */
 const WINDOW_TITLES: Record<string, string> = {
   stack: "栈视图",
@@ -56,10 +74,13 @@ const WINDOW_TITLES: Record<string, string> = {
 test.describe("固定窗口集(WP-71 / D-MP-1:全部常驻、各恰一实例、无关闭)", () => {
   test("全部窗口类型常驻可见、各类型唯一、无任何关闭入口", async ({ createdSession }) => {
     const page = createdSession;
+    // 宽屏视口(WP-72:窗口集与列分组由当前宽度档预设决定;此用例锚定 P0)。
+    await page.setViewportSize({ width: 1440, height: 900 });
 
-    // ① 窗口集 ≡ 注册表登记集合(登记序),各类型恰一实例(无重无漏)。
+    // ① 窗口集 ≡ 注册表登记集合(各恰一实例;无重无漏);DOM 序 = P0 列分组序。
     const types = await workspaceWindowTypes(page);
-    expect(types).toEqual([...REGISTERED_WINDOW_TYPES]);
+    expect([...types].sort()).toEqual([...REGISTERED_WINDOW_TYPES].sort());
+    expect(types).toEqual([...P0_PRESENTATION_ORDER]);
     expect(new Set(types).size).toBe(REGISTERED_WINDOW_TYPES.length);
     await expect(workspaceWindows(page)).toHaveCount(REGISTERED_WINDOW_TYPES.length);
 
@@ -99,6 +120,7 @@ test.describe("固定窗口集(WP-71 / D-MP-1:全部常驻、各恰一实例、�
     createdSession,
   }) => {
     const page = createdSession;
+    await page.setViewportSize({ width: 1440, height: 900 });
     const lastWindowType = REGISTERED_WINDOW_TYPES[REGISTERED_WINDOW_TYPES.length - 1] as string;
     const lastButton = focusWindowButton(page, lastWindowType);
 
@@ -117,7 +139,7 @@ test.describe("固定窗口集(WP-71 / D-MP-1:全部常驻、各恰一实例、�
     await expect(workspaceWindow(page, lastWindowType)).toHaveClass(/focused/);
 
     // 聚焦不是开窗:窗口集不变(实例数恒定)。
-    expect(await workspaceWindowTypes(page)).toEqual([...REGISTERED_WINDOW_TYPES]);
+    expect(await workspaceWindowTypes(page)).toEqual([...P0_PRESENTATION_ORDER]);
 
     // 聚焦另一窗口 → aria-pressed 单点跟随。
     const firstWindowType = REGISTERED_WINDOW_TYPES[0] as string;
@@ -131,6 +153,7 @@ test.describe("固定窗口集(WP-71 / D-MP-1:全部常驻、各恰一实例、�
     createdSession,
   }) => {
     const page = createdSession;
+    await page.setViewportSize({ width: 1440, height: 900 });
     // 开发壳夹具描述包 debugMode=true → 模式切换项可见(plugin-dev 缺省通道)。
     const modeToggle = page.locator("sm-workspace-menu button.mode-toggle-button");
     await expect(modeToggle).toBeVisible();

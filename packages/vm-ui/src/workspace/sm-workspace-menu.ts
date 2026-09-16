@@ -42,6 +42,7 @@ import type { ConnectionStatus, DisconnectReason } from "../client/session-clien
 import type { PublicError } from "@stackmaster/protocol";
 import { LocaleController, t } from "../i18n/i18n.js";
 import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
+import { COLUMN_WIDTH_PRESETS } from "./layout-presets.js";
 import type { WorkspaceTabTypeDescriptor } from "./tab-registry.js";
 
 /** 菜单动作(出站事件 detail;执行归宿主)。 */
@@ -65,7 +66,18 @@ export type WorkspaceMenuAction =
    * 窗口聚焦导航(D-MP-1,WP-71):聚焦 + 滚动到指定类型窗口——窗口集常驻,
    * 本动作**不创建实例**(替代原 `open-tab`)。
    */
-  | { readonly action: "focus-window"; readonly windowType: string };
+  | { readonly action: "focus-window"; readonly windowType: string }
+  /**
+   * 列宽预设档(WP-72):作用于**焦点列**(1/4、1/3、1/2、2/3、全宽,视口占比);
+   * 夹取到最小可读宽护栏由宿主(模型)承担。菜单「布局」组为**唯一**列宽档入口
+   * (标题栏保持零控件)。
+   */
+  | { readonly action: "set-column-width"; readonly ratio: number }
+  /**
+   * 重置布局(WP-72 逃生门):清空列宽 / 窗高调整并回到**当前宽度档**预设
+   * (宽屏 = P0;窄屏 = 该宽度的降级形态)。
+   */
+  | { readonly action: "reset-layout" };
 
 /** `workspace-menu-action` 事件 detail。 */
 export interface WorkspaceMenuActionDetail {
@@ -140,6 +152,21 @@ export class SmWorkspaceMenu extends LitElement {
   /** 当前是否处于调试模式(what-if 横幅显隐 + 切换项文案)。 */
   @property({ type: Boolean, attribute: "debug-mode-active" })
   debugModeActive = false;
+
+  /**
+   * 当前布局档位(WP-72;宽屏 P0 / 中宽 P1 / 窄条 P2,宿主按视口宽判定注入)。
+   * 呈现于「布局」组状态位(档标识为登记 id,不译)。
+   */
+  @property({ type: String, attribute: "layout-preset-id" })
+  layoutPresetId = "P0";
+
+  /**
+   * 焦点列当前列宽占比(宿主注入;`null` = 无焦点列)。
+   * 用于列宽档按钮的 `aria-pressed`(按**生效**占比比对:护栏夹取后可能与
+   * 所选档不一致,此时无按钮呈按下态)。
+   */
+  @property({ type: Number, attribute: false })
+  focusedColumnWidthRatio: number | null = null;
 
   /** 最近一次被拒动作的用户可见错误(onActionRejected 呈现)。 */
   @property({ type: Object, attribute: false })
@@ -309,6 +336,7 @@ export class SmWorkspaceMenu extends LitElement {
           <span class="group-label window-group-label">${t("menu.windowGroup")}</span>
           ${this.tabTypes.map((descriptor) => this.#renderFocusButton(descriptor))}
         </span>
+        ${this.#renderLayoutGroup()}
         <span class="group">
           <span class="group-label">${t("menu.modeGroup")}</span>
           <strong class="mode-indicator"
@@ -434,6 +462,45 @@ export class SmWorkspaceMenu extends LitElement {
   /** 展示名解析:登记了 labelKey(默认注册表)的按当前 locale 取词。 */
   #tabLabel(descriptor: WorkspaceTabTypeDescriptor): string {
     return descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label;
+  }
+
+  /**
+   * 「布局」组(WP-72;紧邻「窗口」组):当前档位标识 + 五档列宽预设(作用于
+   * **焦点列**)+ 「重置布局」。列宽档为**唯一**入口(标题栏零控件口径保持);
+   * 每档以 `aria-pressed` 表达焦点列当前是否恰为该档(生效占比比对)。
+   */
+  #renderLayoutGroup(): unknown {
+    const ratio = this.focusedColumnWidthRatio;
+    return html`
+      <span class="group layout-group" data-layout-preset=${this.layoutPresetId}>
+        <span class="group-label">${t("menu.layoutGroup")}</span>
+        <strong class="layout-preset">${this.layoutPresetId}</strong>
+        ${COLUMN_WIDTH_PRESETS.map((preset) => {
+          const label = t(preset.labelKey);
+          const pressed = ratio !== null && Math.abs(ratio - preset.ratio) < 1e-3;
+          return html`
+            <button
+              type="button"
+              class="width-preset"
+              data-width-ratio=${String(preset.ratio)}
+              aria-pressed=${pressed ? "true" : "false"}
+              title=${t("menu.widthPresetTitle", { ratio: label })}
+              @click=${() => this.#emit({ action: "set-column-width", ratio: preset.ratio })}
+            >
+              ${label}
+            </button>
+          `;
+        })}
+        <button
+          type="button"
+          class="reset-layout-button"
+          title=${t("menu.resetLayoutTitle")}
+          @click=${() => this.#emit({ action: "reset-layout" })}
+        >
+          ${t("menu.resetLayout")}
+        </button>
+      </span>
+    `;
   }
 
   #renderStatus(): unknown {

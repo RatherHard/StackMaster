@@ -199,3 +199,138 @@ export function disconnectBanner(page: Page): Locator {
 export function byteRows(page: Page): Locator {
   return page.locator("sm-byte-view .byte-row[data-row-address]");
 }
+
+// ── 工作区布局定位帮手(WP-72:Niri 式布局交互;选择器唯一登记点)─────────────
+//
+// 锚一律取**结构属性 / 语义 role**(`data-column-index` / `data-column-divider` /
+// `data-row-divider` / `data-width-ratio` / `data-layout-preset` / `role=separator`),
+// 不依赖文案排版与像素几何。
+
+/** 列容器(横向条带 `.columns`;相机滚动的滚动容器)。 */
+export function layoutStrip(page: Page): Locator {
+  return page.locator("sm-workspace [data-columns]");
+}
+
+/** 全部列(列序锚 = `data-column-index`)。 */
+export function layoutColumns(page: Page): Locator {
+  return page.locator("sm-workspace .column[data-column-index]");
+}
+
+/** 指定列序的列。 */
+export function layoutColumn(page: Page, columnIndex: number): Locator {
+  return page.locator(`sm-workspace .column[data-column-index="${columnIndex}"]`);
+}
+
+/** 列间分隔条(`data-column-divider` = 该空隙右侧列的列序 = 新建列位插入位置)。 */
+export function columnDivider(page: Page, gapIndex: number): Locator {
+  return page.locator(`sm-workspace .column-divider[data-column-divider="${gapIndex}"]`);
+}
+
+/** 同列窗间分隔条(`data-row-divider` = `列序:上侧窗口序号`)。 */
+export function rowDivider(page: Page, columnIndex: number, index: number): Locator {
+  return page.locator(`sm-workspace .row-divider[data-row-divider="${columnIndex}:${index}"]`);
+}
+
+/** 菜单「布局」组:列宽预设档按钮(1/4、1/3、1/2、2/3、全宽)。 */
+export function widthPresetButton(page: Page, ratio: string): Locator {
+  return menu(page).locator(`button.width-preset[data-width-ratio="${ratio}"]`);
+}
+
+/** 菜单「布局」组:「重置布局」按钮。 */
+export function resetLayoutButton(page: Page): Locator {
+  return menu(page).locator("button.reset-layout-button");
+}
+
+/** 菜单「布局」组的当前档位标识(P0 / P1 / P2;布局档位唯一呈现面)。 */
+export function layoutPresetBadge(page: Page): Locator {
+  return menu(page).locator("[data-layout-preset] .layout-preset");
+}
+
+/** 布局状态行(常驻 `role=status`;布局变更宣读面)。 */
+export function layoutStatus(page: Page): Locator {
+  return page.locator("sm-workspace .layout-status");
+}
+
+/** 列分组呈现(逐列窗口类型键数组;布局断言主面)。 */
+export async function layoutColumnGroups(page: Page): Promise<string[][]> {
+  return page.locator("sm-workspace").evaluate((element) =>
+    [...(element.shadowRoot?.querySelectorAll(".column[data-column-index]") ?? [])].map((column) =>
+      [...column.querySelectorAll(".tab-panel[data-tab-id]")].map(
+        (panel) => panel.getAttribute("data-tab-id") ?? "",
+      ),
+    ),
+  );
+}
+
+/** 逐列像素宽(列宽护栏与列宽档断言的几何面)。 */
+export async function layoutColumnWidthPx(page: Page): Promise<number[]> {
+  return page.locator("sm-workspace .column[data-column-index]").evaluateAll((columns) =>
+    columns.map((column) => column.getBoundingClientRect().width),
+  );
+}
+
+/**
+ * 真实鼠标拖拽:在目标元素中心按下,位移 (deltaX, deltaY) 后抬起。
+ * 与组件层 `DRAG_THRESHOLD_PX`(3px)阈值语义一致——位移过阈值即进入拖拽。
+ *
+ * **先等相机收敛**:焦点列居中是平滑滚动动画,几何读取与鼠标按下之间若条带仍在
+ * 滚动,落点会错位(拖拽失效)。收敛后再取几何。
+ */
+export async function dragBy(
+  page: Page,
+  target: Locator,
+  deltaX: number,
+  deltaY: number,
+): Promise<void> {
+  await waitForCameraSettled(page);
+  const box = await target.boundingBox();
+  if (box === null) {
+    throw new Error("拖拽目标无可测几何(元素未渲染?)");
+  }
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 8 });
+  await page.mouse.up();
+  await waitForCameraSettled(page);
+}
+
+/**
+ * 窗口拖拽落点(WP-72 三类落点):自 `from` 的标题栏按下,移动到 `to` 的
+ * 上半 / 下半区后抬起(落点语义由组件按 clientY 判定)。同样先等相机收敛。
+ */
+export async function dragWindowTo(
+  page: Page,
+  from: Locator,
+  to: Locator,
+  at: "upper" | "lower",
+): Promise<void> {
+  await waitForCameraSettled(page);
+  const fromBox = await from.locator(".tab-bar").boundingBox();
+  const toBox = await to.boundingBox();
+  if (fromBox === null || toBox === null) {
+    throw new Error("窗口拖拽几何不可测(窗口未渲染?)");
+  }
+  await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+  await page.mouse.down();
+  const targetY = at === "upper" ? toBox.y + toBox.height * 0.25 : toBox.y + toBox.height * 0.75;
+  await page.mouse.move(toBox.x + toBox.width / 2, targetY, { steps: 10 });
+  await page.mouse.up();
+  await waitForCameraSettled(page);
+}
+
+/** 相机滚动收敛等待(平滑滚动为动画;轮询 scrollLeft 稳定)。 */
+export async function waitForCameraSettled(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const before = await layoutStrip(page).evaluate((element) => element.scrollLeft);
+        await page.waitForTimeout(60);
+        const after = await layoutStrip(page).evaluate((element) => element.scrollLeft);
+        return before === after;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+}

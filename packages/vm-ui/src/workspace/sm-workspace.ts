@@ -6,17 +6,33 @@
  *
  *  - **固定窗口集(D-MP-1,WP-71)**:窗口集合 = 注册表登记的全部类型、
  *    **各恰一个实例、常驻**;窗口没有开 / 关状态,只有「视口内 / 暂离
- *    (条带滚出视野)」;窗口集在工作区接入(首帧前)按登记序一次性绑定
- *    (`#bindWindows`),`tabTypes` 换绑即重绑。**无关闭入口、无空态引导**
- *    (窗口集恒非空);窗口管理动作 = 聚焦导航(本包)+ 移动位置 / 调整大小
- *    (WP-72);
- *  - **列式滚动平铺**(Q1 定案 v1):工作区 = 列的有序序列,列间水平滚动
- *    (Niri 式,`scrollToColumn` / 聚焦时滚动可达任意列);列内二叉分割
- *    (Hyprland 式:同列窗口均分列高);
- *  - **拖拽排布**(pointer 事件):窗口标题栏按下拖动,落到目标窗口
- *    (上/下半 = 前/后)、目标列(尾插)或列区空白(开新列);
- *  - **聚焦导航**:`focusWindow(type)` = 聚焦 + 滚动到该窗口(菜单「窗口」
- *    分组逐个入口,详见 sm-workspace-menu);
+ *    (条带滚出视野)」;窗口集在工作区接入(首帧前)按**当前宽度档预设**
+ *    一次性绑定(`#bindWindows`),`tabTypes` 换绑即重绑。**无关闭入口、
+ *    无空态引导**(窗口集恒非空);窗口管理动作 = 聚焦导航(本包)+ 移动位置 /
+ *    调整大小(WP-72);
+ *  - **默认列排布的唯一来源 = `layout-presets.ts` 的三张预设表**(P0 宽屏 5 列 /
+ *    P1 中宽 3 列 / P2 窄条单列),经 `WorkspaceLayoutModel.bindWindows(entries,
+ *    columns)` 的 `columns` 参数**单点注入**——本文件不持有任何预设字面量;
+ *  - **列式滚动平铺**(Q1 定案 v1 + WP-72 相机):工作区 = 列的有序序列,列间
+ *    水平滚动(Niri 式);**焦点列居中**由显式相机计算承担(`layout-camera.ts`
+ *    纯函数 → `scrollLeft`),相邻列两侧探出;列内按**窗高比例**分配列高
+ *    (Hyprland 式);
+ *  - **尺寸可调(WP-72)**:列间分隔条(pointer 拖拽 + 方向键)调列宽,同列窗间
+ *    分隔条调窗高(单窗列自动占满列高);列宽夹取到 `MIN_COLUMN_WIDTH`
+ *    可读性护栏;菜单「布局」组提供 1/4、1/3、1/2、2/3、全宽五档(作用于**焦点
+ *    列**)与「重置布局」(清空调整 + 回**当前宽度档**预设);
+ *  - **拖拽排布(Niri 三类落点显式化)**:落到同列窗口上 / 下半 = 同列堆叠;
+ *    落到另一列窗口 = 跨列移动;落到列间空隙 = 在该列序位置**新建列位**
+ *    (`openColumnAt`);落点以 `drop-target` 静态标记指示(零浮动层、零重叠);
+ *  - **聚焦导航**:`focusWindow(type)` = 聚焦 + 相机居中到该窗口(菜单「窗口」
+ *    分组逐个入口,详见 sm-workspace-menu);标题栏可聚焦,方向键提供列内 /
+ *    跨列移动的键盘可达兜底(不承诺全局快捷键);
+ *  - **视口外降级渲染**:窗口面板声明 `content-visibility: auto` +
+ *    `contain-intrinsic-size`(语义标记 `data-render-degrade="content-visibility"`),
+ *    离屏窗口子树由浏览器跳过渲染与绘制,payload / 指令视图等重窗口的挂载成本
+ *    随之推迟到进入视口;行级虚拟列表 `sm-window-list` 维持不变;
+ *  - **响应式降级**:视口宽变化(宿主 window resize)重测宽度 → 档位变化即按新
+ *    档预设重绑列结构(宽度回到宽档即回到 P0);同档内只更新列宽基准。
  *  - **组合根装配**(README §双档数据源纪律):`client` 换绑即
  *    `new ProjectionDataSource(client.store)` 注入各窗口内容;
  *    `client.onProjectionChanged(() => 各内容 refresh())` 驱动视图刷新;
@@ -33,9 +49,11 @@
  *    明示,不中断会话);重询经插件 ↔ session-api 直连 HTTP,宿主
  *    postMessage 零权威语义不破(V-9,裁决数据不经嵌入协议帧)。
  *
- * 纪律(CLAUDE.md 第十章):浏览器只保存公开投影与 UI 状态;动画只用
- * transform / opacity(拖拽反馈 = opacity);语义化 DOM;窗口标题栏不带
- * 关闭入口,可达性由菜单「窗口」聚焦入口承担(键盘可达 + aria-pressed)。
+ * 纪律(CLAUDE.md 第十章 / 中期任务分解 §1.3 硬门槛):浏览器只保存公开投影与
+ * UI 状态;动画只用 transform / opacity(拖拽反馈 = opacity,落点指示 = 静态
+ * outline);`prefers-reduced-motion` 由相机滚动行为尊重;语义化 DOM;拖拽落点
+ * 指示不引入浮动层与重叠;分隔条是可聚焦的 `role="separator"`(方向键可调);
+ * 屏幕阅读器信息不只在视觉中(布局变更经 `role="status"` 状态行宣读)。
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -109,7 +127,26 @@ import {
   type WorkspaceTabTypeDescriptor,
   type WorkspaceTabTypeRegistry,
 } from "./tab-registry.js";
-import { WorkspaceLayoutModel, type MoveTarget, type WorkspaceLayoutSnapshot } from "./workspace-model.js";
+import {
+  cameraScrollLeft,
+  columnBoxFromRects,
+  defaultMatchMedia,
+  prefersReducedMotion,
+} from "./layout-camera.js";
+import {
+  columnWidthAfterDrag,
+  rowHeightsAfterDrag,
+  DIVIDER_KEY_STEP_PX,
+  MIN_ROW_HEIGHT_PX,
+  ROW_DIVIDER_KEY_STEP,
+} from "./layout-divider.js";
+import { MIN_COLUMN_WIDTH, selectLayoutPreset, type LayoutPresetId } from "./layout-presets.js";
+import {
+  WorkspaceLayoutModel,
+  type DropTarget,
+  type MoveTarget,
+  type WorkspaceLayoutSnapshot,
+} from "./workspace-model.js";
 
 /** 拖拽启动的位移阈值(px):超过才算拖拽(否则视为激活点击)。 */
 const DRAG_THRESHOLD_PX = 3;
@@ -128,6 +165,26 @@ const SCORE_VERDICTS: ReadonlySet<string> = new Set([
   "resource_limit",
   "timeout",
 ]);
+
+/** 分隔条拖拽态(WP-72;与窗口拖拽共用 `DRAG_THRESHOLD_PX` 阈值语义与挂点)。 */
+type DividerDrag =
+  | {
+      readonly kind: "column";
+      /** 空隙索引 = 该空隙右侧列序(新建列位的插入位置);左列 = gapIndex − 1。 */
+      readonly gapIndex: number;
+      readonly startX: number;
+      readonly startRatio: number;
+      moved: boolean;
+    }
+  | {
+      readonly kind: "row";
+      readonly column: number;
+      /** 分隔条上侧窗口序号(调整 index 与 index + 1 两窗)。 */
+      readonly index: number;
+      readonly startY: number;
+      readonly startHeights: readonly number[];
+      moved: boolean;
+    };
 
 /** 工作区模式(FE-WS-06):解题(公开投影)与调试(调试通道)双档。 */
 export type WorkspaceMode = "solve" | "debug";
@@ -294,9 +351,26 @@ export class SmWorkspace extends LitElement {
 
   // 拖拽态(pointer 事件;标题栏按下 → 阈值外位移 = 拖拽,否则 = 激活)。
   #drag: { tabId: string; startX: number; startY: number; moved: boolean } | null = null;
+  /** 当前落点候选(拖拽中实时更新;渲染为 `drop-target` 静态指示 + 状态行宣读)。 */
+  #dropTarget: { readonly tabId: string; readonly target: DropTarget } | null = null;
+  /**
+   * 分隔条拖拽态(WP-72;与窗口拖拽共用 `DRAG_THRESHOLD_PX` 阈值语义与
+   * renderRoot 上的 pointer 监听挂点):列宽只改左侧列占比,窗高改同列相邻两窗。
+   */
+  #dividerDrag: DividerDrag | null = null;
   #lastVisibleTabId: string | null = null;
   /** 首帧前建窗 ⇒ 未渲染内容元素的 refresh 延后到首帧之后(WP-71 时序)。 */
   #contentRefreshDeferred = false;
+
+  // ── 布局档位与反馈(WP-72)──
+  /** 当前宽度档(接入与 resize 时按视口宽重算;宽屏 = P0)。 */
+  #presetId: LayoutPresetId = "P0";
+  /**
+   * 布局变更反馈(分隔条调整 / 列宽档 / 重置布局 / 落点)。
+   * 承载于**常驻** `role="status"` 状态行:live region 必须预先存在于
+   * 无障碍树中才可靠宣读(拖拽 / 调整是瞬时事件,故不做条件渲染)。
+   */
+  #layoutFeedback: string | null = null;
 
   /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
   readonly #i18n = new LocaleController(this);
@@ -315,28 +389,102 @@ export class SmWorkspace extends LitElement {
       overflow: hidden;
     }
 
-    /* 列式滚动平铺:列间水平滚动(Niri 式),滚动可达任意列。 */
+    /* 列式滚动平铺:列间水平滚动(Niri 式),滚动可达任意列。
+       纵向设为 auto(P2 单列纵向 10 窗时列高不足,条带自身承担纵向滚动)。 */
     .columns {
       flex: 1;
       display: flex;
       align-items: stretch;
       gap: 0.5rem;
       padding: 0.5rem;
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
+      overflow: auto;
+      overscroll-behavior: contain;
       min-block-size: 0;
+      /* 动效纪律:不引入 CSS 平滑滚动——条带滚动语义由相机(JS)独占,
+         prefers-reduced-motion 在相机侧降级为即时定位。 */
+      scroll-behavior: auto;
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      .columns {
+        scroll-behavior: auto;
+      }
+    }
+
+    /* 列宽由模型快照的占比即时计算为像素(内联 inline-size);缺省兜底 100%
+       (首帧 / 无测量环境时不塌陷)。 */
     .column {
       flex: 0 0 auto;
-      inline-size: min(100%, 36rem);
-      min-inline-size: 18rem;
+      inline-size: 100%;
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
     }
 
-    /* 列内二叉分割(Hyprland 式):同列标签页均分列高。 */
+    /* 列间分隔条(相邻列间;pointer 拖拽 + 方向键调整列宽)。 */
+    .column-divider {
+      flex: 0 0 auto;
+      inline-size: 0.75rem;
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: col-resize;
+      touch-action: none;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0;
+    }
+
+    .column-divider::before {
+      content: "";
+      inline-size: 2px;
+      block-size: 100%;
+      background: var(--sm-divider, rgb(0 0 0 / 12%));
+    }
+
+    .column-divider:hover::before,
+    .column-divider:focus-visible::before {
+      background: highlight;
+    }
+
+    .column-divider:focus-visible,
+    .row-divider:focus-visible {
+      outline: 2px solid accentcolor;
+      outline-offset: 1px;
+    }
+
+    /* 同列窗间分隔条(调整窗高比例)。 */
+    .row-divider {
+      flex: 0 0 auto;
+      block-size: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: row-resize;
+      touch-action: none;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0;
+    }
+
+    .row-divider::before {
+      content: "";
+      block-size: 2px;
+      inline-size: 100%;
+      background: var(--sm-divider, rgb(0 0 0 / 12%));
+    }
+
+    .row-divider:hover::before,
+    .row-divider:focus-visible::before {
+      background: highlight;
+    }
+
+    /* 列内按窗高比例分配列高(Hyprland 式):面板 flex-grow 由模型比例内联给值
+       (flex: 比例 1 0 ⇒ 高度按比例分配,拖拽期间只改容器比例、列表不重排);
+       面板最小高 9rem 兜底(超限时条带纵向滚动)。 */
     .tab-panel {
       flex: 1 1 0;
       min-block-size: 9rem;
@@ -346,15 +494,37 @@ export class SmWorkspace extends LitElement {
       border-radius: 8px;
       overflow: hidden;
       background: canvas;
+      /* 视口外窗口降级渲染(WP-72):离屏子树跳过渲染与绘制;语义标记
+         data-render-degrade="content-visibility"(结构断言面)。
+         contain-intrinsic-size 以面板最小高为占位,auto 关键字记住上次尺寸,
+         避免进入视口时的布局跳动。零新增依赖、零浮动层、零 JS 观察者。 */
+      content-visibility: auto;
+      contain-intrinsic-size: auto 9rem;
     }
 
     .tab-panel.focused {
       border-color: highlight;
     }
 
-    /* 拖拽反馈:opacity(compositor 友好;零 transform 之外的动画属性)。 */
+    /* 拖拽反馈:opacity(compositor 友好;零 CSS 动画)。 */
     .tab-panel.dragging {
       opacity: 0.5;
+    }
+
+    /* 落点指示(WP-72):静态轮廓 / 背景,不引入浮动层与重叠,不做动画。 */
+    .tab-panel.drop-target {
+      outline: 2px dashed highlight;
+      outline-offset: -2px;
+    }
+
+    .column-divider.drop-target,
+    .row-divider.drop-target {
+      background: color-mix(in srgb, highlight 22%, transparent);
+    }
+
+    .columns.drop-target {
+      outline: 2px dashed highlight;
+      outline-offset: -2px;
     }
 
     .tab-bar {
@@ -398,6 +568,16 @@ export class SmWorkspace extends LitElement {
       padding: 0.25rem 0.75rem;
       color: graytext;
       font-size: 0.75rem;
+      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+    }
+
+    /* 布局状态行(WP-72):常驻 role=status 的 live region(布局变更宣读)。 */
+    .layout-status {
+      margin: 0;
+      padding: 0.25rem 0.75rem;
+      color: graytext;
+      font-size: 0.75rem;
+      min-block-size: 1.1em;
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
@@ -586,8 +766,11 @@ export class SmWorkspace extends LitElement {
     // 主题锚样式表(幂等)+ 独立使用形态的 theme 属性转写(最近锚优先)。
     ensureSmThemeStyles(this.ownerDocument ?? document);
     this.#syncThemeAnchor();
-    // 窗口集绑定(D-MP-1:登记集合各恰一实例、常驻;首帧前建窗)。
+    // 窗口集绑定(D-MP-1:登记集合各恰一实例、常驻;首帧前按当前宽度档预设建列)。
     this.#bindWindows();
+    // 响应式降级驱动:宿主 window resize(嵌入形态 iframe 尺寸变化即宿主 window
+    // resize);同档内只更新列宽基准,跨档才重绑列结构。
+    (this.ownerDocument?.defaultView ?? null)?.addEventListener("resize", this.#onViewportResize);
     // pointer 拖拽监听挂在 shadow root 内:避免跨 shadow 边界的 target 重定向。
     this.renderRoot.addEventListener("pointermove", this.#onPointerMove as EventListener);
     this.renderRoot.addEventListener("pointerup", this.#onPointerUp as EventListener);
@@ -622,6 +805,7 @@ export class SmWorkspace extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    (this.ownerDocument?.defaultView ?? null)?.removeEventListener("resize", this.#onViewportResize);
     this.renderRoot.removeEventListener("pointermove", this.#onPointerMove as EventListener);
     this.renderRoot.removeEventListener("pointerup", this.#onPointerUp as EventListener);
     this.renderRoot.removeEventListener("pointercancel", this.#onPointerCancel as EventListener);
@@ -639,13 +823,23 @@ export class SmWorkspace extends LitElement {
     return this.#model.snapshot;
   }
 
+  /** 当前宽度档(WP-72:宽屏 P0 / 中宽 P1 / 窄条 P2;诊断与 E2E 断言面)。 */
+  get layoutPresetId(): LayoutPresetId {
+    return this.#presetId;
+  }
+
+  /** 焦点窗口所在列(无焦点为 null;诊断 / 断言面)。 */
+  get focusedColumnIndex(): number | null {
+    return this.#model.focusedColumnIndex;
+  }
+
   /**
-   * 窗口集绑定(D-MP-1 固定窗口集,WP-71):按注册表登记集合一次性建窗——
+   * 窗口集绑定(D-MP-1 固定窗口集,WP-71;WP-72 起按**当前宽度档预设**)——
    *
    *  - 每种登记类型恰一实例(窗口 id ≡ 类型键;单实例为结构性保证);
-   *  - 缺省布局 = 登记序、每列一窗(WP-72 落 P0 精确预设前的**最小形态**;
-   *    WP-72 经 `WorkspaceLayoutModel.bindWindows(entries, columns)` 的单点
-   *    入口换成 P0 预设,工作区层无需再改);
+   *  - **列排布 = `layout-presets.ts` 的预设表**(宽屏 P0 / 中宽 P1 / 窄条 P2),
+   *    经 `WorkspaceLayoutModel.bindWindows(entries, columns)` 的 `columns`
+   *    参数**单点注入**——默认列排布不在本文件出现第二份字面量;
    *  - 内容元素按各描述项 `createContent` 产出(字节窗口注入行装饰挂点;
    *    声明 `actionSink` 的内容按 duck-typing 注入会话客户端);
    *  - 触发点 = 工作区接入(connectedCallback,首帧前)+ `tabTypes` 换绑;
@@ -656,6 +850,10 @@ export class SmWorkspace extends LitElement {
     this.#boundTabTypes = this.tabTypes;
     const descriptors = this.tabTypes.list();
     this.#contents.clear();
+    const viewportWidth = this.#measureViewportWidth();
+    const preset = selectLayoutPreset(viewportWidth);
+    this.#presetId = preset.id;
+    this.#model.setViewportWidth(viewportWidth);
     this.#model.bindWindows(
       descriptors.map((descriptor) => ({
         type: descriptor.type,
@@ -663,6 +861,7 @@ export class SmWorkspace extends LitElement {
         // (窗口标题不随语言切换追溯——WP-F5 登记口径保留)。
         label: descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label,
       })),
+      preset.columns,
     );
     for (const descriptor of descriptors) {
       const content = descriptor.createContent?.({ dataSource: this.dataSource }) ?? null;
@@ -680,29 +879,42 @@ export class SmWorkspace extends LitElement {
   }
 
   /**
-   * 聚焦指定类型窗口(D-MP-1 三类管理动作之「聚焦导航」):聚焦 + 滚动到该
-   * 窗口;未登记类型返回 false(不改变布局与焦点)。窗口集常驻,本方法
+   * 聚焦指定类型窗口(D-MP-1 三类管理动作之「聚焦导航」):聚焦 + 相机居中到
+   * 该窗口;未登记类型返回 false(不改变布局与焦点)。窗口集常驻,本方法
    * **不创建实例**——窗口实例数在绑定后恒定。
    */
   focusWindow(type: string): boolean {
     if (!this.#model.focusWindow(type)) {
       return false;
     }
-    // 聚焦即滚动可达(jsdom 无布局环境静默;updated() 亦按焦点变化滚动)。
+    // 焦点滚动由本方法独占触发(置 `#lastVisibleTabId` 让 `updated()` 不重复
+    // 计算相机;平滑滚动途中重复计算会与自身竞争)。
+    this.#lastVisibleTabId = type;
     this.ensureTabVisible(type);
     this.requestUpdate();
     return true;
   }
 
-  /** 激活窗口(焦点跟随 + 滚动可见;不存在的 id 为 no-op)。 */
+  /** 激活窗口(焦点跟随 + 相机居中;不存在的 id 为 no-op)。 */
   activateTab(tabId: string): void {
     this.#model.activateTab(tabId);
     this.requestUpdate();
   }
 
-  /** 滚动使标签页可见(jsdom 无布局环境静默)。 */
+  /**
+   * 使标签页可达(WP-72 起 = 相机):
+   *  1. **纵向兜底** —— 焦点窗口在列内超出可视高时滚到最近边
+   *     (`scrollIntoView` 只管纵向;P2 单列 10 窗形态必需);
+   *  2. **横向权威** —— 相机计算把焦点列居中(相邻列两侧探出),相机在最后
+   *     执行以免被纵向兜底的即时滚动覆盖。
+   * jsdom 无布局环境:两路均静默(结构断言由纯函数单测承载)。
+   */
   ensureTabVisible(tabId: string): void {
-    const panel = this.renderRoot.querySelector(`[data-tab-id="${tabId}"]`);
+    const column = this.#model.columnIndexOfTab(tabId);
+    if (column === null) {
+      return;
+    }
+    const panel = this.#panelOf(tabId);
     if (panel !== null && typeof panel.scrollIntoView === "function") {
       try {
         panel.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -710,15 +922,117 @@ export class SmWorkspace extends LitElement {
         // 无布局环境(jsdom):滚动增强失败静默,不影响可达性语义。
       }
     }
+    this.#centerColumnOnFocus(column);
   }
 
-  /** 列间水平滚动到目标列(Niri 式可达任意列)。 */
+  /** 列间水平滚动到目标列(Niri 式可达任意列;相机把该列居中)。 */
   scrollToColumn(column: number): void {
     const firstTabId = this.#model.tabIdsInColumn(column)[0];
     if (firstTabId !== undefined) {
       this.ensureTabVisible(firstTabId);
     }
   }
+
+  /**
+   * 焦点列居中(相机跟随;`layout-camera.ts` 纯函数 → `scrollLeft`)。
+   * 平滑滚动按 `prefers-reduced-motion` 降级为即时定位;无 `scrollTo` 的环境
+   * (jsdom)直接赋 `scrollLeft`(同一目标值,便于结构断言)。
+   */
+  #centerColumnOnFocus(column: number): void {
+    const container = this.renderRoot.querySelector("[data-columns]");
+    const target = this.renderRoot.querySelector(`[data-column-index="${column}"]`);
+    if (!(container instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+      return;
+    }
+    try {
+      const box = columnBoxFromRects(
+        container.getBoundingClientRect(),
+        target.getBoundingClientRect(),
+        container.scrollLeft,
+      );
+      const left = cameraScrollLeft(box, container.clientWidth, { scrollWidth: container.scrollWidth });
+      if (typeof container.scrollTo === "function") {
+        container.scrollTo({
+          left,
+          behavior: prefersReducedMotion(defaultMatchMedia()) ? "auto" : "smooth",
+        });
+        return;
+      }
+      container.scrollLeft = left;
+    } catch {
+      // 无布局环境:相机静默(不影响可达性语义)。
+    }
+  }
+
+  // ── 布局尺寸动作(WP-72:列宽 / 窗高 / 重置)──────────────────────────────
+
+  /**
+   * 设置**焦点列**列宽(视口占比;菜单列宽预设档入口的公共 API 同路)。
+   * 夹取护栏由模型承担;返回 false(无焦点列 / 非法占比)时零变化。
+   */
+  setFocusedColumnWidth(widthRatio: number): boolean {
+    const column = this.#model.focusedColumnIndex;
+    if (column === null) {
+      return false;
+    }
+    if (!this.#model.setColumnWidth(column, widthRatio)) {
+      return false;
+    }
+    const effective = this.#model.snapshot.columns[column]?.widthRatio ?? widthRatio;
+    this.#layoutFeedback = t("workspace.layoutWidthPresetApplied", {
+      percent: Math.round(effective * 100),
+    });
+    this.requestUpdate();
+    return true;
+  }
+
+  /**
+   * 重置布局(WP-72 逃生门):清空列宽 / 窗高调整并应用**当前视口宽对应的
+   * 预设**(宽屏下即回到 P0;窄屏下回到该宽度的降级形态)。焦点保持。
+   */
+  resetLayout(): void {
+    this.#model.setViewportWidth(this.#measureViewportWidth());
+    this.#model.resetLayout();
+    this.#presetId = selectLayoutPreset(this.#model.viewportWidth).id;
+    this.#layoutFeedback = t("workspace.layoutResetDone", { preset: this.#presetId });
+    this.requestUpdate();
+  }
+
+  /** 视口宽测量(px):优先自身内联尺寸(嵌入形态 = iframe 宽);无布局环境回落 window 视口宽。 */
+  #measureViewportWidth(): number {
+    const own = this.clientWidth;
+    if (Number.isFinite(own) && own > 0) {
+      return own;
+    }
+    const view = this.ownerDocument?.defaultView ?? null;
+    const inner = view?.innerWidth ?? 0;
+    return Number.isFinite(inner) && inner > 0 ? inner : 0;
+  }
+
+  /**
+   * 响应式降级(WP-72):重测视口宽 → 档位变化(跨断点)即按新档预设重绑列
+   * 结构;同档内只更新列宽基准(占比语义 ⇒ 列宽随容器按比例随动)。
+   */
+  #syncViewportLayout(): void {
+    const width = this.#measureViewportWidth();
+    const preset = selectLayoutPreset(width);
+    const crossedBand = preset.id !== this.#presetId;
+    this.#model.setViewportWidth(width);
+    if (crossedBand) {
+      this.#presetId = preset.id;
+      this.#model.applyPreset(preset.columns);
+      this.#layoutFeedback = t("workspace.layoutDegraded", {
+        preset: preset.id,
+        count: preset.columns.length,
+      });
+    }
+    this.requestUpdate();
+  }
+
+  readonly #onViewportResize = (): void => {
+    this.#syncViewportLayout();
+  };
+
 
   // ── 组合根接线(client 事件面)──────────────────────────────────────────
 
@@ -1121,6 +1435,15 @@ export class SmWorkspace extends LitElement {
         // (替代原「打开标签」;窗口集常驻,不存在开 / 关语义)。
         this.focusWindow(action.windowType);
         break;
+      case "set-column-width":
+        // WP-72 列宽预设档(1/4、1/3、1/2、2/3、全宽):作用于焦点列,
+        // 夹取到最小可读宽护栏(菜单入口为唯一入口,标题栏不再新增控件)。
+        this.setFocusedColumnWidth(action.ratio);
+        break;
+      case "reset-layout":
+        // WP-72 「重置布局」:清空列宽 / 窗高调整 + 回当前宽度档预设。
+        this.resetLayout();
+        break;
     }
   }
 
@@ -1446,30 +1769,232 @@ export class SmWorkspace extends LitElement {
     void this.#handleViewportJump(detail.addressHex, view, addressText);
   };
 
-  // ── 拖拽排布(pointer 事件;动画只用 opacity)────────────────────────────
+  // ── 拖拽排布(pointer 事件;动画只用 opacity)+ 分隔条(WP-72)──────────────
 
   #onTabBarPointerDown(event: PointerEvent, tabId: string): void {
-    // 标题栏 = 拖拽把手(无关闭钮等交互子元素;WP-72 落大小控件时在此放行)。
+    // 标题栏 = 拖拽把手(无关闭钮等交互子元素;尺寸控件在菜单「布局」组,
+    // 不移入标题栏 —— 保持 WP-71「标题栏零按钮」口径)。
     this.#drag = { tabId, startX: event.clientX, startY: event.clientY, moved: false };
   }
 
-  readonly #onPointerMove = (event: PointerEvent): void => {
-    const drag = this.#drag;
-    if (drag === null || drag.moved) {
+  /** 列间分隔条按下(WP-72;gapIndex = 空隙右侧列序 = 新建列位插入位置)。 */
+  #onColumnDividerPointerDown(event: PointerEvent, gapIndex: number): void {
+    const left = this.#model.snapshot.columns[gapIndex - 1];
+    if (left === undefined) {
       return;
     }
-    const moved =
-      Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD_PX ||
-      Math.abs(event.clientY - drag.startY) > DRAG_THRESHOLD_PX;
-    if (moved) {
+    this.#dividerDrag = {
+      kind: "column",
+      gapIndex,
+      startX: event.clientX,
+      startRatio: left.widthRatio,
+      moved: false,
+    };
+  }
+
+  /** 同列窗间分隔条按下(index = 上侧窗口序号;调整 index 与 index+1 两窗)。 */
+  #onRowDividerPointerDown(event: PointerEvent, column: number, index: number): void {
+    const heights = this.#model.snapshot.columns[column]?.rowHeights;
+    if (heights === undefined) {
+      return;
+    }
+    this.#dividerDrag = {
+      kind: "row",
+      column,
+      index,
+      startY: event.clientY,
+      startHeights: [...heights],
+      moved: false,
+    };
+  }
+
+  readonly #onPointerMove = (event: PointerEvent): void => {
+    const divider = this.#dividerDrag;
+    if (divider !== null) {
+      this.#onDividerPointerMove(event, divider);
+      return;
+    }
+    const drag = this.#drag;
+    if (drag === null) {
+      return;
+    }
+    if (!drag.moved) {
+      const moved =
+        Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD_PX ||
+        Math.abs(event.clientY - drag.startY) > DRAG_THRESHOLD_PX;
+      if (!moved) {
+        return;
+      }
       drag.moved = true;
       this.#panelOf(drag.tabId)?.classList.add("dragging");
     }
+    // 拖拽中实时解析落点(三类 Niri 落点显式化 + 静态指示 + 状态行宣读)。
+    this.#updateDropTarget(event, drag.tabId);
   };
 
+  /** 分隔条拖拽(与窗口拖拽共用阈值语义:位移未过阈值 = 不算拖拽)。 */
+  #onDividerPointerMove(event: PointerEvent, divider: DividerDrag): void {
+    const deltaPx =
+      divider.kind === "column" ? event.clientX - divider.startX : event.clientY - divider.startY;
+    if (Math.abs(deltaPx) <= DRAG_THRESHOLD_PX) {
+      return;
+    }
+    divider.moved = true;
+    if (divider.kind === "column") {
+      const ratio = columnWidthAfterDrag({
+        startRatio: divider.startRatio,
+        deltaPx,
+        viewportWidth: this.#model.viewportWidth,
+        minWidthPx: MIN_COLUMN_WIDTH,
+      });
+      if (this.#model.setColumnWidth(divider.gapIndex - 1, ratio)) {
+        this.#layoutFeedback = t("workspace.layoutWidthAdjusted", { percent: this.#columnWidthPercent(divider.gapIndex - 1) });
+        this.requestUpdate();
+      }
+      return;
+    }
+    const columnHeightPx = this.#columnElement(divider.column)?.clientHeight ?? 0;
+    const heights = rowHeightsAfterDrag({
+      heights: divider.startHeights,
+      index: divider.index,
+      deltaPx,
+      columnHeightPx,
+      minHeightPx: MIN_ROW_HEIGHT_PX,
+    });
+    if (this.#model.setRowHeights(divider.column, heights)) {
+      this.#layoutFeedback = t("workspace.layoutHeightAdjusted", {
+        percent: this.#columnHeightPercent(divider.column, divider.index),
+      });
+      this.requestUpdate();
+    }
+  }
+
+  /** 列宽百分比(四舍五入整数;状态行与分隔条 aria-valuenow 共用)。 */
+  #columnWidthPercent(column: number): number {
+    return Math.round((this.#model.snapshot.columns[column]?.widthRatio ?? 0) * 100);
+  }
+
+  /** 窗高百分比(四舍五入整数;上侧窗口）。 */
+  #columnHeightPercent(column: number, index: number): number {
+    return Math.round((this.#model.snapshot.columns[column]?.rowHeights[index] ?? 0) * 100);
+  }
+
+  /**
+   * 分隔条方向键(WP-72 键盘可达兜底):列宽分隔条左右键 ±`DIVIDER_KEY_STEP_PX`;
+   * 窗高分隔条上下键 ±`ROW_DIVIDER_KEY_STEP`。真实可聚焦元素 + `role="separator"`,
+   * 反馈经常驻 `role="status"` 状态行宣读(不只在视觉中)。
+   */
+  #onColumnDividerKeyDown(event: KeyboardEvent, gapIndex: number): void {
+    const step = event.key === "ArrowLeft" ? -DIVIDER_KEY_STEP_PX : event.key === "ArrowRight" ? DIVIDER_KEY_STEP_PX : 0;
+    if (step === 0) {
+      return;
+    }
+    event.preventDefault();
+    const left = gapIndex - 1;
+    const startRatio = this.#model.snapshot.columns[left]?.widthRatio ?? 0;
+    const ratio = columnWidthAfterDrag({
+      startRatio,
+      deltaPx: step,
+      viewportWidth: this.#model.viewportWidth,
+      minWidthPx: MIN_COLUMN_WIDTH,
+    });
+    if (this.#model.setColumnWidth(left, ratio)) {
+      this.#layoutFeedback = t("workspace.layoutWidthAdjusted", { percent: this.#columnWidthPercent(left) });
+      this.requestUpdate();
+    }
+  }
+
+  #onRowDividerKeyDown(event: KeyboardEvent, column: number, index: number): void {
+    const step = event.key === "ArrowUp" ? -ROW_DIVIDER_KEY_STEP : event.key === "ArrowDown" ? ROW_DIVIDER_KEY_STEP : 0;
+    if (step === 0) {
+      return;
+    }
+    event.preventDefault();
+    const heights = this.#model.snapshot.columns[column]?.rowHeights;
+    if (heights === undefined) {
+      return;
+    }
+    // 比例步进成对调整(上窗 +step / 下窗 −step,和恒为 1);列高已知时以
+    // `MIN_ROW_HEIGHT_PX` 为窗高下限,未知(jsdom / 未布局)时退化为纯比例步进。
+    const columnHeightPx = this.#columnElement(column)?.clientHeight ?? 0;
+    const known = Number.isFinite(columnHeightPx) && columnHeightPx > 0;
+    const next = rowHeightsAfterDrag({
+      heights,
+      index,
+      deltaPx: step * (known ? columnHeightPx : 1),
+      columnHeightPx: known ? columnHeightPx : 1,
+      minHeightPx: known ? MIN_ROW_HEIGHT_PX : 0,
+    });
+    if (this.#model.setRowHeights(column, next)) {
+      this.#layoutFeedback = t("workspace.layoutHeightAdjusted", {
+        percent: this.#columnHeightPercent(column, index),
+      });
+      this.requestUpdate();
+    }
+  }
+
+  /**
+   * 标题栏键盘兜底(WP-72 键盘可达性):标题栏可聚焦(`tabindex=0`),
+   * 方向键 = 列内上下重排 / 跨列移动(至少保证焦点可移动与顺序可达,
+   * **不承诺**全局快捷键增量);Enter / Space = 激活该窗口(与点击同义)。
+   */
+  #onTabBarKeyDown(event: KeyboardEvent, tabId: string): void {
+    const position = this.#model.positionOfTab(tabId);
+    if (position === null) {
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      this.activateTab(tabId);
+      return;
+    }
+    const columnLength = this.#model.tabIdsInColumn(position.column).length;
+    let target: MoveTarget | null;
+    switch (event.key) {
+      case "ArrowUp":
+        // 列内上移一位:插入位 = 自身序号 − 1(moveTab 语义)。
+        target = position.index > 0 ? { column: position.column, index: position.index - 1 } : null;
+        break;
+      case "ArrowDown":
+        // 列内下移一位:插入位 = 自身序号 + 2(先摘除后插入的位序修正)。
+        target = position.index < columnLength - 1 ? { column: position.column, index: position.index + 2 } : null;
+        break;
+      case "ArrowLeft":
+        target =
+          position.column > 0
+            ? { column: position.column - 1, index: this.#model.tabIdsInColumn(position.column - 1).length }
+            : null;
+        break;
+      case "ArrowRight":
+        target =
+          position.column < this.#model.columnCount - 1 ? { column: position.column + 1, index: 0 } : null;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    if (target === null) {
+      return;
+    }
+    this.#model.moveTab(tabId, target);
+    this.#lastVisibleTabId = tabId;
+    const landed = this.#model.positionOfTab(tabId);
+    this.#layoutFeedback = t("workspace.windowMoved", {
+      title: this.#model.tab(tabId)?.title ?? tabId,
+      column: (landed?.column ?? 0) + 1,
+      index: (landed?.index ?? 0) + 1,
+    });
+    this.requestUpdate();
+  }
+
   readonly #onPointerUp = (event: PointerEvent): void => {
+    // 先取态再收尾(收尾会清空拖拽态)。
+    const divider = this.#dividerDrag;
     const drag = this.#drag;
     this.#cancelDrag();
+    if (divider !== null) {
+      return; // 分隔条拖拽在 pointerup 只收尾(调整已在 move 中生效)。
+    }
     if (drag === null) {
       return;
     }
@@ -1480,10 +2005,14 @@ export class SmWorkspace extends LitElement {
       return;
     }
     const target = this.#resolveDropTarget(event);
-    if (target !== null) {
-      this.#model.moveTab(drag.tabId, target);
+    if (target === null) {
+      // 列区之外松开:不移动,状态行明示(拖拽取消的可宣读反馈)。
+      this.#layoutFeedback = t("workspace.dropOutside");
       this.requestUpdate();
+      return;
     }
+    this.#applyDrop(drag.tabId, target);
+    this.requestUpdate();
   };
 
   readonly #onPointerCancel = (): void => {
@@ -1493,20 +2022,87 @@ export class SmWorkspace extends LitElement {
   #cancelDrag(): void {
     const drag = this.#drag;
     this.#drag = null;
+    this.#dropTarget = null;
+    this.#dividerDrag = null;
     if (drag !== null) {
       this.#panelOf(drag.tabId)?.classList.remove("dragging");
     }
+    this.requestUpdate();
   }
 
   #panelOf(tabId: string): Element | null {
     return this.renderRoot.querySelector(`[data-tab-id="${tabId}"]`);
   }
 
-  /** 指针落点 → 移动目标(列区外 = null 不动;列区空白 = 开新列)。 */
-  #resolveDropTarget(event: PointerEvent): MoveTarget | null {
+  #columnElement(column: number): HTMLElement | null {
+    const element = this.renderRoot.querySelector(`[data-column-index="${column}"]`);
+    return element instanceof HTMLElement ? element : null;
+  }
+
+  /** 落点候选实时更新(指示 + 状态行宣读;拖拽未过阈值时不解析)。 */
+  #updateDropTarget(event: PointerEvent, tabId: string): void {
+    if (this.#drag?.moved !== true) {
+      return;
+    }
+    const target = this.#resolveDropTarget(event);
+    const previous = this.#dropTarget;
+    if (target === null) {
+      // 落点在列区之外(条带外 / 无落点):不留残留指示,状态行明示「不移动」。
+      this.#dropTarget = null;
+      this.#layoutFeedback = t("workspace.dropOutside");
+      if (previous !== null) {
+        this.requestUpdate();
+      }
+      return;
+    }
+    this.#dropTarget = { tabId, target };
+    this.#layoutFeedback = this.#dropFeedback(target);
+    const changed =
+      previous === null ||
+      previous.target.kind !== target.kind ||
+      previous.target.column !== target.column ||
+      previous.target.index !== target.index;
+    if (changed) {
+      this.requestUpdate();
+    }
+  }
+
+  /** 落点语义 → 状态行文案(屏幕阅读器信息不只在视觉中)。 */
+  #dropFeedback(target: DropTarget): string {
+    if (target.kind === "new-column") {
+      return t("workspace.dropNewColumn", { column: target.column + 1 });
+    }
+    const ids = this.#model.tabIdsInColumn(target.column);
+    const before = ids[target.index];
+    if (before !== undefined) {
+      return t("workspace.dropBefore", { title: this.#model.tab(before)?.title ?? before });
+    }
+    const last = ids.at(-1);
+    return last === undefined
+      ? t("workspace.dropNewColumn", { column: target.column + 1 })
+      : t("workspace.dropAfter", { title: this.#model.tab(last)?.title ?? last });
+  }
+
+  /**
+   * 指针落点 → 三类 Niri 落点(WP-72 显式化):
+   *  - **列间空隙**(分隔条)/ 列区空白 → `new-column`(在该列序位置新建列位);
+   *  - 落到窗口上 / 下半 = 插到其前 / 后;同列 → `stack`(同列堆叠),
+   *    跨列 → `cross-column`(跨列移动);
+   *  - 落到列(非窗口)→ 该列尾插(同列 / 跨列同上);列区之外 → null(不移动)。
+   */
+  #resolveDropTarget(event: PointerEvent): DropTarget | null {
     const element = event.target;
     if (!(element instanceof Element) || element.closest("[data-columns]") === null) {
       return null;
+    }
+    const draggedId = this.#drag?.tabId ?? null;
+    const from = draggedId === null ? null : this.#model.positionOfTab(draggedId);
+    const gapElement = element.closest("[data-gap-index]");
+    if (gapElement !== null) {
+      const gap = Number(gapElement.getAttribute("data-gap-index"));
+      if (Number.isFinite(gap)) {
+        return { kind: "new-column", column: gap, index: 0 };
+      }
     }
     const tabElement = element.closest("[data-tab-id]");
     if (tabElement !== null) {
@@ -1517,17 +2113,60 @@ export class SmWorkspace extends LitElement {
         // clientY 判定;真实浏览器同语义)。
         const rect = tabElement.getBoundingClientRect();
         const after = event.clientY >= rect.top + rect.height / 2;
-        return { column: position.column, index: after ? position.index + 1 : position.index };
+        return {
+          kind: from !== null && from.column === position.column ? "stack" : "cross-column",
+          column: position.column,
+          index: after ? position.index + 1 : position.index,
+        };
       }
     }
     const columnElement = element.closest("[data-column-index]");
     if (columnElement !== null) {
       const column = Number(columnElement.getAttribute("data-column-index"));
       if (Number.isFinite(column)) {
-        return { column, index: this.#model.tabIdsInColumn(column).length };
+        return {
+          kind: from !== null && from.column === column ? "stack" : "cross-column",
+          column,
+          index: this.#model.tabIdsInColumn(column).length,
+        };
       }
     }
-    return { column: this.#model.columnCount, index: 0 };
+    // 列区空白(条带末尾)= 在末位新建列位(Niri 语义,与此前「开新列尾插」等价)。
+    return { kind: "new-column", column: this.#model.columnCount, index: 0 };
+  }
+
+  /** 落点应用:同列堆叠 / 跨列移动 → `moveTab`;新建列位 → `openColumnAt`。 */
+  #applyDrop(tabId: string, target: DropTarget): void {
+    if (target.kind === "new-column") {
+      this.#model.openColumnAt(tabId, target.column);
+      return;
+    }
+    this.#model.moveTab(tabId, { column: target.column, index: target.index });
+  }
+
+  /** 指定渲染位置的落点标记(仅静态 class / data 属性;零浮动层)。 */
+  #dropMarkingForPanel(column: number, index: number, columnLength: number): string | null {
+    const target = this.#dropTarget?.target;
+    if (target === undefined || target.kind === "new-column" || target.column !== column) {
+      return null;
+    }
+    if (target.index === index) {
+      return "before";
+    }
+    if (target.index >= columnLength && index === columnLength - 1) {
+      return "after";
+    }
+    return null;
+  }
+
+  #isGapDropTarget(gapIndex: number): boolean {
+    const target = this.#dropTarget?.target;
+    return target !== undefined && target.kind === "new-column" && target.column === gapIndex;
+  }
+
+  #isTailDropTarget(columnCount: number): boolean {
+    const target = this.#dropTarget?.target;
+    return target !== undefined && target.kind === "new-column" && target.column >= columnCount;
   }
 
   // ── 渲染 ─────────────────────────────────────────────────────────────────
@@ -1550,6 +2189,10 @@ export class SmWorkspace extends LitElement {
         .runToBreakpointEnabled=${this.#runToBreakpointEnabled}
         .debugModeAvailable=${this.debugModeAvailable}
         .debugModeActive=${this.#mode === "debug"}
+        .layoutPresetId=${this.#presetId}
+        .focusedColumnWidthRatio=${this.#model.focusedColumnIndex === null
+          ? null
+          : (snapshot.columns[this.#model.focusedColumnIndex]?.widthRatio ?? null)}
         .lastError=${this.#lastError}
         @workspace-menu-action=${this.#onMenuAction}
       ></sm-workspace-menu>
@@ -1572,20 +2215,103 @@ export class SmWorkspace extends LitElement {
       ${this.#jumpFeedback === null
         ? nothing
         : html`<p class="jump-feedback" role="status">${this.#jumpFeedback}</p>`}
+      <p class="layout-status" role="status" data-layout-feedback>${this.#layoutFeedback ?? ""}</p>
       <main
-        class="columns"
+        class="columns${this.#isTailDropTarget(snapshot.columns.length) ? " drop-target" : ""}"
         data-columns
         aria-label=${t("workspace.columnsAria")}
         @viewport-jump=${this.#onViewportJump}
         @highlight-jump=${this.#onHighlightJump}
         @breakpoints-changed=${() => this.requestUpdate()}
       >
-        ${snapshot.columns.map((column, columnIndex) => html`
-          <div class="column" data-column-index=${columnIndex}>
-            ${column.tabIds.map((tabId) => this.#renderPanel(tabId))}
-          </div>
-        `)}
+        ${snapshot.columns.map((column, columnIndex) => this.#renderColumn(column, columnIndex, snapshot.columns.length))}
       </main>
+    `;
+  }
+
+  /** 单列渲染(列宽内联为像素 + 列内窗口 / 窗高分隔条交替)。 */
+  #renderColumn(
+    column: WorkspaceLayoutSnapshot["columns"][number],
+    columnIndex: number,
+    columnCount: number,
+  ): unknown {
+    const children: unknown[] = [];
+    column.tabIds.forEach((tabId, index) => {
+      if (index > 0) {
+        children.push(this.#renderRowDivider(columnIndex, index - 1, column));
+      }
+      children.push(
+        this.#renderPanel(tabId, columnIndex, index, column.tabIds.length, column.rowHeights[index] ?? 1),
+      );
+    });
+    return html`
+      <div class="column" data-column-index=${columnIndex} style="inline-size: ${this.#columnWidthPx(column.widthRatio)}px">
+        ${children}
+      </div>
+      ${columnIndex < columnCount - 1 ? this.#renderColumnDivider(columnIndex + 1, column) : nothing}
+    `;
+  }
+
+  /**
+   * 列宽像素(列宽占比 × 视口宽,**不低于最小可读宽护栏**):
+   * 护栏在此再兜一次(模型已夹取;视口宽未知时占比可能小于护栏的像素等价)。
+   */
+  #columnWidthPx(widthRatio: number): number {
+    const viewportWidth = this.#model.viewportWidth;
+    const raw = viewportWidth > 0 ? widthRatio * viewportWidth : MIN_COLUMN_WIDTH;
+    const bounded = Math.max(raw, MIN_COLUMN_WIDTH);
+    return Math.round(bounded * 100) / 100;
+  }
+
+  /**
+   * 列间分隔条(相邻列之间;`data-gap-index` = 新建列位的插入列序)。
+   * 真实可聚焦元素 + `role="separator"` + aria 值;方向键调整(键盘可达)。
+   */
+  #renderColumnDivider(gapIndex: number, leftColumn: WorkspaceLayoutSnapshot["columns"][number]): unknown {
+    const percent = Math.round(leftColumn.widthRatio * 100);
+    const minPercent = Math.round(
+      (this.#model.viewportWidth > 0 ? Math.min(1, MIN_COLUMN_WIDTH / this.#model.viewportWidth) : 0) * 100,
+    );
+    return html`
+      <div
+        class="column-divider${this.#isGapDropTarget(gapIndex) ? " drop-target" : ""}"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label=${t("workspace.columnDividerAria")}
+        aria-valuemin=${minPercent}
+        aria-valuemax="100"
+        aria-valuenow=${percent}
+        tabindex="0"
+        data-column-divider=${gapIndex}
+        data-gap-index=${gapIndex}
+        data-drop-kind=${this.#isGapDropTarget(gapIndex) ? "new-column" : nothing}
+        @pointerdown=${(event: PointerEvent) => this.#onColumnDividerPointerDown(event, gapIndex)}
+        @keydown=${(event: KeyboardEvent) => this.#onColumnDividerKeyDown(event, gapIndex)}
+      ></div>
+    `;
+  }
+
+  /** 同列窗间分隔条(`data-row-divider` = `列序:上侧窗口序号`;调整窗高比例)。 */
+  #renderRowDivider(
+    columnIndex: number,
+    index: number,
+    column: WorkspaceLayoutSnapshot["columns"][number],
+  ): unknown {
+    const percent = Math.round((column.rowHeights[index] ?? 0) * 100);
+    return html`
+      <div
+        class="row-divider"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label=${t("workspace.rowDividerAria")}
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow=${percent}
+        tabindex="0"
+        data-row-divider="${columnIndex}:${index}"
+        @pointerdown=${(event: PointerEvent) => this.#onRowDividerPointerDown(event, columnIndex, index)}
+        @keydown=${(event: KeyboardEvent) => this.#onRowDividerKeyDown(event, columnIndex, index)}
+      ></div>
     `;
   }
 
@@ -1683,7 +2409,24 @@ export class SmWorkspace extends LitElement {
     }
   }
 
-  #renderPanel(tabId: string): unknown {
+  /**
+   * 窗口面板渲染:
+   *  - `data-render-degrade="content-visibility"` = 视口外降级渲染语义标记
+   *    (样式侧 `content-visibility: auto` + `contain-intrinsic-size`);
+   *  - `style="flex-grow: <窗高比例>; …"` = **窗高比例的唯一呈现路径**(Hyprland 式:
+   *    同列窗口按比例分配列高;单窗列比例恒 1 = 占满列高)。拖拽分隔条只改这个
+   *    内联比例,不重建面板内容(虚拟列表维持);
+   *  - 落点指示(`drop-target` + `data-drop-kind` / `data-drop-position`)只在
+   *    拖拽中出现在**命中落点的那一个**面板上(静态 class,零浮动层);
+   *  - 标题栏 = 拖拽把手 + 键盘可达入口(`tabindex=0`,方向键重排 / 移动)。
+   */
+  #renderPanel(
+    tabId: string,
+    columnIndex: number,
+    index: number,
+    columnLength: number,
+    rowHeight: number,
+  ): unknown {
     const info = this.#model.tab(tabId);
     if (info === null) {
       return nothing;
@@ -1691,15 +2434,23 @@ export class SmWorkspace extends LitElement {
     const content = this.#contents.get(info.id) ?? null;
     const descriptor = this.#tabTypeDescriptor(info.type);
     const focused = this.#model.focusedTabId === info.id;
+    const dropPosition = this.#dropMarkingForPanel(columnIndex, index, columnLength);
+    const dropKind = dropPosition === null ? undefined : this.#dropTarget?.target.kind;
     return html`
       <section
-        class="tab-panel${focused ? " focused" : ""}"
+        class="tab-panel${focused ? " focused" : ""}${dropPosition === null ? "" : " drop-target"}"
         data-tab-id=${info.id}
+        data-render-degrade="content-visibility"
+        data-drop-position=${dropPosition ?? nothing}
+        data-drop-kind=${dropPosition === null ? nothing : dropKind}
+        style="flex-grow: ${rowHeight}; flex-shrink: 1; flex-basis: 0"
         aria-label=${info.title}
       >
         <header
           class="tab-bar"
+          tabindex="0"
           @pointerdown=${(event: PointerEvent) => this.#onTabBarPointerDown(event, info.id)}
+          @keydown=${(event: KeyboardEvent) => this.#onTabBarKeyDown(event, info.id)}
         >
           <span class="tab-title">${info.title}</span>
         </header>

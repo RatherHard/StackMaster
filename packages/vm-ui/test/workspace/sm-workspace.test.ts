@@ -1,9 +1,11 @@
 /**
- * <sm-workspace> 工作区容器集成测试(WP-F5 平铺 × WP-71 固定窗口集 / D-MP-1):
+ * <sm-workspace> 工作区容器集成测试(WP-F5 平铺 × WP-71 固定窗口集 / D-MP-1 ×
+ * WP-72 Niri 布局交互):
  *  - 固定窗口集:挂载即按注册表登记集合建窗(各恰一实例、常驻)、无任何关闭
- *    入口、无空态引导、聚焦导航(focusWindow 聚焦 + 滚动,不改变实例数);
- *  - 平铺(FE-WS-02,Q1 v1):列间滚动可达(scrollToColumn)、拖拽换位
- *    (pointer 事件模拟)、拖到列区空白开新列;
+ *    入口、无空态引导、聚焦导航(focusWindow 聚焦 + 相机居中,不改变实例数);
+ *  - 平铺(FE-WS-02,Q1 v1;WP-72 起默认列排布 = **当前宽度档预设** P0):列间
+ *    滚动可达(scrollToColumn → 相机),列宽 / 窗高与三类落点见
+ *    `sm-workspace-layout.test.ts`;
  *  - 菜单动作(真实 SessionClient mock 全链路):step / reset 帧形态、
  *    终态禁用 + 引导、断线横幅、connection-replaced 手动重连、
  *    rejected 错误呈现(含 explanation);
@@ -40,6 +42,23 @@ import { FakeMemoryDataSource } from "../views/byte/fake-data-source.js";
 const REGISTERED_TYPES: readonly string[] = defaultTabTypeRegistry
   .list()
   .map((descriptor) => descriptor.type);
+
+/**
+ * P0 预设(宽屏 5 列)下的窗口呈现序(WP-72 起默认列排布 = 预设表):
+ * DOM 序随**列分组**而非登记序。
+ */
+const P0_PRESENTATION_ORDER: readonly string[] = [
+  "stack",
+  "registers",
+  "debug",
+  "free",
+  "payload",
+  "call-stack",
+  "structure",
+  "timeline",
+  "checkpoints",
+  "memory-diff",
+];
 
 /** 等待若干渲染帧(virtualizer 可见范围计算收敛)。 */
 async function settleFrames(frames: number): Promise<void> {
@@ -245,7 +264,9 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
     await workspace.updateComplete;
 
     const types = windowTypesOf(workspace);
-    expect(types).toEqual([...REGISTERED_TYPES]);
+    // 窗口集 ≡ 注册表登记集合(各恰一实例);DOM 序 = P0 预设列分组序。
+    expect([...types].sort()).toEqual([...REGISTERED_TYPES].sort());
+    expect(types).toEqual([...P0_PRESENTATION_ORDER]);
     expect(new Set(types).size).toBe(REGISTERED_TYPES.length);
     expect(workspace.layoutSnapshot.tabs).toHaveLength(REGISTERED_TYPES.length);
     // 结构性不变量:窗口集 ≡ 注册表类型集,各恰一实例(无重无漏、无空列)。
@@ -259,15 +280,15 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
     const labels = panelsOf(workspace).map((panel) => panel.getAttribute("aria-label"));
     expect(labels).toEqual([
       "栈视图",
-      "自由视图",
       "寄存器视图",
-      "Payload 搭建",
       "指令视图",
-      "结构视图",
+      "自由视图",
+      "Payload 搭建",
       "调用栈",
-      "内存 diff",
+      "结构视图",
       "时间线",
       "checkpoint",
+      "内存 diff",
     ]);
     expect(panelOf(workspace, "stack").querySelector(".tab-title")?.textContent?.trim()).toBe("栈视图");
     workspace.remove();
@@ -376,17 +397,17 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
     await settleFrames(3);
 
     // 窗口集常驻且内容已渲染(字节窗口刷新后仍可查字节视图)。
-    expect(windowTypesOf(workspace)).toEqual([...REGISTERED_TYPES]);
+    expect([...windowTypesOf(workspace)].sort()).toEqual([...REGISTERED_TYPES].sort());
     expect(firstByteView(workspace)).not.toBeUndefined();
     workspace.remove();
     harness.client.dispose();
   });
 });
 
-// ── 平铺(FE-WS-02 / FE-WS-01)──────────────────────────────────────────────
+// ── 平铺(FE-WS-02 / FE-WS-01;WP-72 起默认列排布 = 宽度档预设)─────────────
 
 describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
-  it("缺省布局 = 登记序、每列一窗;列容器承载横向滚动(Niri 式可达任意列)", async () => {
+  it("缺省布局 = 当前宽度档预设(jsdom 1024 → P0);列容器承载横向滚动", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -403,13 +424,20 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
     );
     await workspace.updateComplete;
 
-    const columns = workspace.layoutSnapshot.columns;
-    expect(columns.map((column) => column.tabIds)).toEqual(REGISTERED_TYPES.map((type) => [type]));
+    // WP-72:预设经 `bindWindows(entries, columns)` 单点注入(此处 P0 五列)。
+    expect(workspace.layoutPresetId).toBe("P0");
+    expect(workspace.layoutSnapshot.columns.map((column) => [...column.tabIds])).toEqual([
+      ["stack", "registers"],
+      ["debug", "free"],
+      ["payload"],
+      ["call-stack", "structure"],
+      ["timeline", "checkpoints", "memory-diff"],
+    ]);
     expect(shadowOf(workspace).querySelector("[data-columns]")).not.toBeNull();
     workspace.remove();
   });
 
-  it("列间滚动可达任意列:scrollToColumn 让目标列面板调用 scrollIntoView", async () => {
+  it("列间滚动可达任意列:scrollToColumn 经相机计算把目标列居中", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -426,23 +454,23 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
     );
     await workspace.updateComplete;
 
-    // jsdom 无 scrollIntoView:临时替换原型实现收集调用者(测试后还原)。
-    const original = Element.prototype.scrollIntoView;
-    const scrolledTo: Element[] = [];
-    Element.prototype.scrollIntoView = function scrollIntoViewStub(this: Element): void {
-      scrolledTo.push(this);
-    };
-    try {
-      workspace.scrollToColumn(1);
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-    expect(scrolledTo).toHaveLength(1);
-    expect(scrolledTo[0]?.getAttribute("data-tab-id")).toBe("free");
+    // jsdom 无布局:桩列区几何 + 目标列矩形,断言相机算出的滚动位。
+    const columns = shadowOf(workspace).querySelector("[data-columns]") as HTMLElement;
+    const rect = (left: number, width: number): DOMRect =>
+      ({ left, width, top: 0, height: 300, right: left + width, bottom: 300, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(columns, "clientWidth", { configurable: true, value: 1000 });
+    Object.defineProperty(columns, "scrollWidth", { configurable: true, value: 4000 });
+    columns.getBoundingClientRect = () => rect(0, 1000);
+    const target = shadowOf(workspace).querySelector('[data-column-index="1"]') as HTMLElement;
+    target.getBoundingClientRect = () => rect(600, 500);
+
+    workspace.scrollToColumn(1);
+    // 居中:600 + 250 − 500 = 350。
+    expect(columns.scrollLeft).toBe(350);
     workspace.remove();
   });
 
-  it("拖拽换位:pointer 事件模拟——源窗拖到目标窗下半 → 插到其后(源列删除)", async () => {
+  it("拖拽换位:pointer 事件模拟——源窗拖到另一列窗口下半 → 跨列插到其后(源列仍在)", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -467,14 +495,16 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
     panelB.dispatchEvent(pointer("pointerup", 10, 999));
     await workspace.updateComplete;
 
-    // stack 的独窗列被删除,目标列序前移:列 0 = [free, stack]。
-    expect(workspace.layoutSnapshot.columns[0]?.tabIds).toEqual(["free", "stack"]);
-    expect(workspace.layoutSnapshot.columns).toHaveLength(REGISTERED_TYPES.length - 1);
+    // 源列(P0 列 0 = [stack, registers])未空 → 列数不变;
+    // 目标列(列 1 = [debug, free])在 free 之后插入 stack。
+    expect(workspace.layoutSnapshot.columns[0]?.tabIds).toEqual(["registers"]);
+    expect(workspace.layoutSnapshot.columns[1]?.tabIds).toEqual(["debug", "free", "stack"]);
+    expect(workspace.layoutSnapshot.columns).toHaveLength(5);
     expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
     workspace.remove();
   });
 
-  it("拖到列区空白 → 开新列(尾插)", async () => {
+  it("拖到列区空白 → 在末位新建列位(尾插)", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -498,11 +528,11 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
     columns.dispatchEvent(pointer("pointerup", 10, 10));
     await workspace.updateComplete;
 
-    // stack 摘除后开新列:原列删除,新列追加在末尾(尾插)。
+    // stack 摘除后开新列:原列仍在(registers),新列追加在末尾(尾插)。
     const snapshot = workspace.layoutSnapshot;
-    expect(snapshot.columns).toHaveLength(REGISTERED_TYPES.length);
+    expect(snapshot.columns).toHaveLength(6);
     expect(snapshot.columns.at(-1)?.tabIds).toEqual(["stack"]);
-    expect(snapshot.columns[0]?.tabIds).toEqual(["free"]);
+    expect(snapshot.columns[0]?.tabIds).toEqual(["registers"]);
     expect(isWindowSetComplete(snapshot)).toBe(true);
     workspace.remove();
   });
