@@ -36,6 +36,27 @@ pnpm --filter @stackmaster/session-api compose:app:down   # down -v(含数据卷
   dev / CI 专用合成值,**严禁用于任何真实环境**;
 - 纯依赖服务(不含 session-api):`compose:deps:up` / `compose:deps:down`。
 
+**角色创建顺序(WP-78 收口;全新数据卷一次收敛)**:迁移 007 以
+`CREATE POLICY ... TO session_app / TO verifier` 引用两个应用连接角色,故
+**角色必须先于 session-api 启动时的迁移存在**。拓扑内角色创建的唯一来源 =
+一次性服务 `db-roles-init`(`compose/db-roles-init.sql`,镜像 `postgres:16`,
+`restart: "no"`,零授权语句),三处 `depends_on` 构成无环执行序:
+
+```text
+postgres(healthy) → db-roles-init(completed) → session-api(healthy)
+  → session-api-db-init(completed) → verifier-db-init(completed) → verifier
+```
+
+- `session-api` → `db-roles-init: service_completed_successfully`(迁移前置);
+- `verifier-db-init` → `session-api-db-init: service_completed_successfully`
+  —— 两个角色治理 init 的 `GRANT` / `REVOKE` 会写同一批 PG 目录行(public
+  schema `nspacl` + 动作 / 审计账 `relacl`),并发执行偶发
+  `ERROR: tuple concurrently updated`(症状 = 同一次 `up` 中随机一方失败),
+  串行化后同一 `up` 内不存在并发目录写;
+- 两个治理 init 的授权语义零变化;host 拓扑(`compose:deps:up` + 宿主进程)
+  与容器门控套件不经 `db-roles-init`,它们执行的两个治理脚本里保留
+  `IF NOT EXISTS` 角色守卫作为幂等兜底(角色属性不由它们治理)。
+
 ### 环境变量
 
 session-api 的配置走 `SESSION_API_*` 环境变量,三道闸校验(必备键缺失 /

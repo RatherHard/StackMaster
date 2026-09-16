@@ -13,7 +13,17 @@
 -- 幂等形态:角色与授权均可重复执行(一次性 init 服务在既有卷上重复运行安全)。
 -- 执行前置:session-api 已完成迁移(006 / 007 已应用,audit_log 与 RLS 政策在场)。
 -- 凭据为本地开发 / CI 专用合成值,严禁用于任何真实环境。
+--
+-- ── 角色创建来源(WP-78 收口;单一来源登记)───────────────────────────
+-- 拓扑内角色创建 = compose/db-roles-init.sql(一次性 db-roles-init 服务,
+-- 早于 session-api 迁移完成)。本文件里的 CREATE ROLE 只是 **幂等兜底**:
+-- host 拓扑(compose:deps:up + 宿主进程)与容器门控套件的 ensureRoles
+-- (test/persistence/row-security.integration.test.ts)只执行本文件与
+-- verifier-db-init.sql,不经 db-roles-init。compose 全拓扑下角色必已存在
+-- ⇒ 该守卫零目录写,不会与并发执行者争 pg_authid。
+-- 授权面(GRANT / REVOKE)是本文件的唯一职责;角色属性不在本文件治理。
 
+-- ── 角色兜底守卫(权威创建 = db-roles-init.sql;见文件头)──
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'session_app') THEN

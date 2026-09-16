@@ -5,7 +5,20 @@
 # compose/worker-container-override.yaml 与 D-API-105,Q4 定案)。
 #
 # 完整拓扑 = PostgreSQL + Redis + MinIO(deps.yaml 三服务)+ session-api
-# + vm-worker + verifier(+ 两个 verifier 角色治理 init 服务)。vm-worker 不是常驻服务:由编排器按会话 spawn(ADR-3 单会话
+# + vm-worker + verifier(+ 拓扑级角色创建 + 两个角色治理 init 服务)。
+#
+# ── 角色创建顺序(WP-78 收口;全新数据卷确定性收敛)─────────────────────
+# 迁移 007 以 CREATE POLICY ... TO session_app / TO verifier 引用两个应用角色,
+# 故 **角色必须先于 session-api 迁移存在**。角色创建的唯一拓扑级来源 =
+# db-roles-init(compose/db-roles-init.sql,一次性),执行序:
+#   postgres(healthy) → db-roles-init(completed) → session-api(healthy)
+#   → session-api-db-init(completed) → verifier-db-init(completed) → verifier
+# 两个角色治理 init 串行(session-api-db-init 先于 verifier-db-init):二者都要
+# 更新同一 public schema 的 ACL(pg_namespace.nspacl)与动作 / 审计账的
+# relacl,并发执行会偶发 `ERROR: tuple concurrently updated`;串行化后同一 up
+# 内不存在并发目录写。
+#
+# vm-worker 不是常驻服务:由编排器按会话 spawn(ADR-3 单会话
 # 单进程),拓扑第五元素以"session-api 镜像内二进制 + 会话期子进程"形态
 # 交付;本文件的 vm-worker 服务是一次性冒烟(linux 二进制可执行 + stdio
 # EOF 优雅退出),供 test:compose 在 up --wait 之后以
@@ -75,6 +88,11 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      # 迁移 007 的 CREATE POLICY ... TO session_app / TO verifier 要求角色
+      # 已存在(否则 PersistenceError: 迁移 007_row_level_security 执行失败);
+      # 角色由 db-roles-init 创建,故迁移前置 = 角色创建完成。
+      db-roles-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -142,6 +160,26 @@ services:
       start_period: 10s
     restart: "no"
 
+  # ── WP-78:拓扑级角色创建(全新数据卷收敛前置;单一来源)────────────────
+  # 一次性 init:幂等创建两个应用连接角色(session_app / verifier),先于
+  # session-api 迁移执行(见文件头「角色创建顺序」)。与两个角色治理 init
+  # 的服务形态一致(同镜像 / 同管理面凭据 / restart:"no"),但不涉及任何
+  # GRANT —— 授权面仍由 session-api-db-init.sql / verifier-db-init.sql 承载。
+  db-roles-init:
+    image: postgres:16
+    environment:
+      PGHOST: postgres
+      PGUSER: stackmaster
+      PGPASSWORD: stackmaster-dev
+      PGDATABASE: session_api
+    volumes:
+      - ./db-roles-init.sql:/init/db-roles-init.sql:ro
+    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init/db-roles-init.sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   verifier-db-init:
     # 一次性角色治理(幂等 SQL;执行前置 = session-api 迁移已应用)。
     image: postgres:16
@@ -158,6 +196,12 @@ services:
     depends_on:
       session-api:
         condition: service_healthy
+      # 串行化(WP-78):两个治理 init 的 GRANT / REVOKE 会写同一批目录行
+      # (public schema nspacl / audit_log、submissions 等 relacl),并发即
+      # 偶发 `tuple concurrently updated`。session-api-db-init 先完成,
+      # 本服务再进入(PG 目录写零并发;依赖方向无环,见文件头)。
+      session-api-db-init:
+        condition: service_completed_successfully
     restart: "no"
 
   # ── 阶段六 WP-64:session-api 应用连接角色治理(D-API-93;D-API-22 第二层)──
