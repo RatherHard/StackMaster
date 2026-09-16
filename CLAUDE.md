@@ -150,6 +150,17 @@ stackmaster/
 - **覆盖率入口**:仓库根 `pnpm test:coverage`(vitest projects 聚合 apps + packages,整体门槛 ≥ 80%;完整门禁形态 `SESSION_API_IT=1 pnpm test:coverage`,纳入容器门控集成测试;配置文件为根 `vitest.coverage.config.ts`——不得改名 `vitest.config.ts`,包级 vitest 会误读);
 - **TS 测试规模**(阶段三末):session-api 345 passed / 30 skipped(容器门控);集成 75 passed(`test:integration` + compose 套件);Rust 基线 318 × debug / release 双 profile 全绿。
 
+## 中期 M1「可用性地基」落地事实(2026-09-16,WP-70 ~ WP-73 收口;只登记事实,纪律仍以上文与计划书为准)
+
+- **工作区模型 = 固定窗口集(D-MP-1)**:窗口集合 = 注册表登记的全部类型(10 类)**各恰一实例、常驻**;窗口**没有开 / 关状态**,只有「视口内 / 暂离(条带滚出视野)」。模型层 `WorkspaceLayoutModel.bindWindows(bindings, columns?)` 一次性绑窗(**窗口 id ≡ 类型键** ⇒ 单实例结构性保证),`focusWindow(type)` 聚焦(不创建实例),`isWindowSetComplete` 不变量机检;`openTab` / `closeTab` / `formatTabTitle` / 类型内序号 / 关闭入口 / 空态引导**全部退场**。绑定点 = 工作区接入(首帧前)+ `tabTypes` 换绑,与「接入会话」解耦 ⇒ **模式切换只换绑数据源、布局零副作用**(`layoutSnapshot` 深度相等有断言)。菜单「打开」组 → **「窗口」聚焦组**(锚点 `data-window-type` + class `.focus-window` + `aria-pressed`,无禁用态,不留 `data-tab-type` 兼容别名)。
+- **布局 = Niri 式,预设单一来源**:`src/workspace/layout-presets.ts` 三张常量表(**P0** 宽屏 5 列 / **P1** 中宽 3 列 / **P2** 窄条单列)为默认列排布**唯一来源**,经 `bindWindows(entries, columns)` **单点注入**(工作区层不得持有第二份默认布局);`selectLayoutPreset(viewportWidth)` 纯函数选档。三表「10 类型各恰一次、无重无漏」机检固定。阈值推导:字符宽 7.8px(13px × 0.6em)× 行 58ch ⇒ `MIN_COLUMN_WIDTH` **452.4px**、`NARROW_MAX_PX` **468.4px**、`WIDE_MIN_PX` **932.8px**(含真实列间空隙 = 列间距 ×2 + 分隔条宽 12;此处按实现侧推导登记,已由主控采纳为定案口径)。布局状态进快照面:`columns[].widthRatio` / `columns[].rowHeights`(和恒 1、单窗列恒 `[1]`)/ `viewportWidth`;「重置布局」= 清空尺寸调整 + 应用**当前视口宽对应预设**。分隔条(`role=separator` + `tabindex=0`,pointer + 方向键)、焦点列相机纯函数 `cameraScrollLeft`(按 `prefers-reduced-motion` 降级)、三类拖拽落点(`stack` / `cross-column` / `new-column`)、列宽五档 + 重置入口**仅在菜单「布局」组**(标题栏保持零控件)。视口外降级渲染 = `content-visibility: auto` + `contain-intrinsic-size: auto 9rem`(择一登记;零 JS)。
+- **主题 = 20 token × 3 预设**:`SM_THEME_PRESET_VALUES = ["light","dark","terminal"]`(light / dark 新增值取系统色关键字 ⇒ 零视觉变化;effect 面在 light / dark 取 `0` / `0s`)。**嵌入协议 `EMBED_THEMES` 三值零改动**(冻结面);`terminal` 由 `data-sm-theme="terminal"` 承载 + 宿主 appearance 映射为 dark(`#applyAppearanceToHost` 保留外部锚 + `#observeAnchor()` 锚变更观察)。决策登记 D-API-110。
+- **调试档投影接线(WP-70)**:工厂 `createDebugDataSource` 的 options 扩为 `DebugDataSourceAssemblyOptions`(运输面 & 数据源面,显式解构),工作区缺省装配传 `projectionProvider: () => session.store.snapshot ?? null`;未提供 provider 时 `regions()` / `registers()` 恒空的行为保留(以反例固定)。**装配路径集成测试**已补(既有测试经 `debugDataSourceFactory` 测试接缝绕开真实装配路径 = 缺陷漏网原因,已登记在测试文件头)。
+- **台账**:中期决策登记于 `docs/develop/权威API语义规约.md` §三·二十一(**D-API-110 ~ 115**);WP 勾选与证据行在 `docs/phases/中期任务分解.md` §二;用户面文档 `docs/user/界面帮助手册.html` 已同步固定窗口模型(§1.1 / §1.3 / §2.1;列宽窗高 / 预设 / 重置 / 响应式降级等待 WP-72 后由 WP-77 回填)。
+- **测试规模(M1 收口)**:vm-ui **62 files / 764 passed**(M1 前 54/624,零 skip / todo);E2E chromium 全量含新增 `e2e/workspace-layout.spec.ts`(8 例)与 `e2e/workspace-windows.spec.ts`(3 例)。
+- **主 chunk 体积**:`dist/sm-workspace-*.js` 实测 **1,350.55 kB**(gzip 328.65 kB)。**该体积在 M1 之前即已越过中期计划 §一.2.3 的 1.3MB 触发线**(两次独立测量 1,327.59 / 1,328.12 kB,且中期零新增依赖、零新增入口)⇒ 判为既有体积,拆分评估为**已触发的待决项**(不属 M1 交付面)。
+- **全窗口常驻的渲染负担观测**(风险表「全窗口常驻」行证据,可复跑):1440×900 下窗口 **10** / `sm-workspace` shadow 节点 **250** / 降级面板 **10** / 聚焦交互 RTT **68~83 ms**。
+
 ## 计划书章节速查
 
 | 主题 | 章节 |
