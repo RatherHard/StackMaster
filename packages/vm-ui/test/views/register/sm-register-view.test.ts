@@ -76,6 +76,7 @@ function projectionWithChain(): PublicStateProjection {
       label: "stack",
       startAddressHex: "0x1000",
       byteLength: 4096,
+      permissions: "rw",
       // 偏移 4..11 = 0x1010 的小端形态;其余字节填 0(不可解引用)。
       bytesHex: "00000000101000000000000000000000",
       truncated: true,
