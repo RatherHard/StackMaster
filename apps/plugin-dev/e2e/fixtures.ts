@@ -11,10 +11,11 @@
  *    的服务端间路径)→ 表单填写同一题目上下文 →「创建并连接」→ 等待壳状态行
  *    确认会话已建立。
  *
- * 选择器策略(并行 WP-F8 改 UI 的稳定性前提):优先稳定结构属性——表单
- * `input[name]`(壳源码契约)、菜单按钮 `data-tab-type` / class(vm-ui 注册表
- * 契约)、`role` 语义化 DOM(vm-ui 硬门槛);不引入任何对文本排版的脆弱断言,
- * 不给 vm-ui 组件追加 data-testid。
+ * 选择器策略(并行 WP-71 / WP-72 / WP-73 改 UI 的稳定性前提):优先稳定结构
+ * 属性——表单 `input[name]`(壳源码契约)、菜单窗口入口 `data-window-type` /
+ * class(vm-ui 注册表契约)、窗口面板 `data-tab-id`(窗口 id ≡ 类型键,WP-71
+ * 固定窗口集)、`role` 语义化 DOM(vm-ui 硬门槛);不引入任何对文本排版的脆弱
+ * 断言,不给 vm-ui 组件追加 data-testid。
  */
 import { randomBytes } from "node:crypto";
 
@@ -147,14 +148,36 @@ export const test = base.extend<E2EFixtures>({
 
 // ── 工作区定位帮手(选择器唯一登记点;vm-ui 结构契约)───────────────────────
 
-/** 工作区菜单(打开分组 / 运行动作 / 会话状态面)。 */
+/** 工作区菜单(窗口分组 / 运行动作 / 会话状态面)。 */
 export function menu(page: Page): Locator {
   return page.locator("sm-workspace-menu");
 }
 
-/** 菜单「打开」按钮(稳定键 = data-tab-type 注册表契约)。 */
-export function openTabButton(page: Page, tabType: string): Locator {
-  return menu(page).locator(`button.open-tab[data-tab-type="${tabType}"]`);
+/**
+ * 菜单窗口入口(D-MP-1 聚焦导航;稳定键 = `data-window-type` 注册表契约)。
+ * 点击 = 聚焦 + 滚动到该窗口(窗口集常驻,非开窗)。
+ */
+export function focusWindowButton(page: Page, windowType: string): Locator {
+  return menu(page).locator(`button.focus-window[data-window-type="${windowType}"]`);
+}
+
+/** 工作区窗口面板(常驻;`data-tab-id` = 窗口 id ≡ 注册表类型键)。 */
+export function workspaceWindows(page: Page): Locator {
+  return page.locator("sm-workspace .tab-panel[data-tab-id]");
+}
+
+/** 指定类型的窗口面板。 */
+export function workspaceWindow(page: Page, windowType: string): Locator {
+  return page.locator(`sm-workspace .tab-panel[data-tab-id="${windowType}"]`);
+}
+
+/** 窗口集呈现序(data-tab-id 数组;不变量断言用)。 */
+export async function workspaceWindowTypes(page: Page): Promise<string[]> {
+  return page.locator("sm-workspace").evaluate((element) =>
+    [...element.shadowRoot!.querySelectorAll(".tab-panel[data-tab-id]")].map(
+      (panel) => panel.getAttribute("data-tab-id") ?? "",
+    ),
+  );
 }
 
 /** 菜单动作按钮(class 契约:step-button / reset-button)。 */

@@ -33,8 +33,9 @@ import {
   PLUGIN_SITE_URL,
   pluginMenuButton,
   pluginMenuStatus,
-  pluginOpenTabButton,
+  pluginFocusWindowButton,
   pluginVm,
+  pluginWindow,
 } from "./helpers/embed.js";
 import { menuButton, menuStatus, test } from "./fixtures.js";
 
@@ -88,21 +89,24 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
 
         // ① 投影渲染可达:寄存器视图行(非虚拟化路径)+ 栈视图区域选择器
         //    (虚拟列表面;字节行断言沿 lit-virtualizer 已知缺陷登记)。
-        await pluginOpenTabButton(handle.plugin, "registers").click();
+        await pluginFocusWindowButton(handle.plugin, "registers").click();
         await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
         const registerRows = handle.plugin.locator(
           'sm-register-view [role="row"], sm-register-view tbody tr',
         );
         await expect(registerRows.first()).toBeVisible();
-        await pluginOpenTabButton(handle.plugin, "stack").click();
-        await expect(handle.plugin.locator("sm-byte-view .region-select")).toBeVisible();
+        await pluginFocusWindowButton(handle.plugin, "stack").click();
+        // 窗口集常驻:两个字节窗口(stack / free)同时在场 → 按窗口面板收敛选择器。
+        await expect(
+          pluginWindow(handle.plugin, "stack").locator("sm-byte-view .region-select"),
+        ).toBeVisible();
 
         // ② 无横向溢出破版(宿主 + iframe 双文档)。
         await hostPageNoHorizontalOverflow(page);
         await pluginNoHorizontalOverflow(handle.plugin);
 
         // ③ 核心交互可达。
-        await pluginOpenTabButton(handle.plugin, "registers").click();
+        await pluginFocusWindowButton(handle.plugin, "registers").click();
         await pluginStepAdvancesRevision(handle.plugin);
 
         await closeEmbedSessionBestEffort(handle);
@@ -113,7 +117,7 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
       }) => {
         const page = createdSession;
 
-        await page.locator('button.open-tab[data-tab-type="registers"]').click();
+        await page.locator('button.focus-window[data-window-type="registers"]').click();
         await expect(page.locator("sm-register-view")).toContainText("RSP");
         const registerRows = page.locator(
           'sm-register-view [role="row"], sm-register-view tbody tr',
@@ -148,7 +152,7 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
           ),
         )
         .toBe("rgb(255 255 255 / 22%)");
-      await pluginOpenTabButton(handle.plugin, "registers").click();
+      await pluginFocusWindowButton(handle.plugin, "registers").click();
       await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
       await hostPageNoHorizontalOverflow(page);
       await pluginNoHorizontalOverflow(handle.plugin);
@@ -158,11 +162,11 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
 
     test("键盘操作:Tab 序可达核心动作,Enter 激活 step(revision 前进)", async ({ page }) => {
       const handle = await embedViaHostMock(page);
-      await pluginOpenTabButton(handle.plugin, "registers").click();
+      await pluginFocusWindowButton(handle.plugin, "registers").click();
       // 焦点落入 iframe 内(点击建立焦点),随后纯键盘导航:Tab 巡航至
-      // step-button(预算 = 菜单动作组 + 打开组全量按钮数,循环回绕可达 =
+      // step-button(预算 = 菜单窗口组 + 动作组全量按钮数,循环回绕可达 =
       // 焦点序未被困);Enter 激活。
-      await pluginOpenTabButton(handle.plugin, "registers").focus();
+      await pluginFocusWindowButton(handle.plugin, "registers").focus();
       const visited: string[] = [];
       let reached = false;
       for (let tabIndex = 0; tabIndex < 16 && !reached; tabIndex += 1) {
@@ -197,7 +201,7 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
     test("reduced-motion:emulateMedia reduce 下嵌入面功能完整", async ({ page }) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
       const handle = await embedViaHostMock(page);
-      await pluginOpenTabButton(handle.plugin, "registers").click();
+      await pluginFocusWindowButton(handle.plugin, "registers").click();
       await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
       await pluginStepAdvancesRevision(handle.plugin);
       await hostPageNoHorizontalOverflow(page);
@@ -207,7 +211,7 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
     test("高对比度:forcedColors active 下嵌入面无破版、核心交互可达", async ({ page }) => {
       await page.emulateMedia({ forcedColors: "active" });
       const handle = await embedViaHostMock(page);
-      await pluginOpenTabButton(handle.plugin, "registers").click();
+      await pluginFocusWindowButton(handle.plugin, "registers").click();
       await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
       await expect(handle.plugin.locator("sm-register-view")).toContainText("0x7FFFF008");
       await hostPageNoHorizontalOverflow(page);
@@ -227,7 +231,7 @@ test.describe("13.4 浏览器矩阵(六宽度 × 三浏览器;E2E_MATRIX=1 复�
       expect(frameUrl?.startsWith(`${PLUGIN_SUBPATH_URL}#esid=`)).toBe(true);
 
       await expect(handle.plugin.locator('[data-testid="pwn-workspace"] sm-workspace')).toBeVisible();
-      await pluginOpenTabButton(handle.plugin, "registers").click();
+      await pluginFocusWindowButton(handle.plugin, "registers").click();
       await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
       await pluginStepAdvancesRevision(handle.plugin);
       await hostPageNoHorizontalOverflow(page);

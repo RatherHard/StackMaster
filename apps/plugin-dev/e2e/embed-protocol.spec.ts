@@ -34,7 +34,7 @@ import {
   pluginFragmentEsid,
   pluginMenuButton,
   pluginMenuStatus,
-  pluginOpenTabButton,
+  pluginFocusWindowButton,
   pluginPhase,
   pluginVm,
   postFromPluginToHost,
@@ -86,7 +86,7 @@ test.describe("嵌入协议面(宿主模拟页 × 插件文档页;13.3 iframe �
     // 投影渲染 + 核心交互可达(寄存器视图,非虚拟化路径;初始 RSP 与 seed 同源)。
     // (环境口径:本机 Chromium 对跨源 iframe 按需出帧,首次交互前 rAF 合流
     // 管道不出帧——先驱动一次 iframe 内交互,再断言 height_changed,见决策草稿。)
-    await pluginOpenTabButton(handle.plugin, "registers").click();
+    await pluginFocusWindowButton(handle.plugin, "registers").click();
     await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
     await expect(handle.plugin.locator("sm-register-view")).toContainText("0x7FFFF008");
 
@@ -291,7 +291,7 @@ test.describe("嵌入协议面(宿主模拟页 × 插件文档页;13.3 iframe �
     // ③ 乱序 seq 的 height_changed → V-7 计数(Schema seq 下限 = 1,故以
     //    「已推进高水位的合法 seq=1」承载乱序形态:真实高度上报已把对端
     //    高水位推进到 ≥ 2,seq=1 即过期;先交互一次以驱动真实高度上报)。
-    await pluginOpenTabButton(handle.plugin, "registers").click();
+    await pluginFocusWindowButton(handle.plugin, "registers").click();
     await expect(page.getByTestId("host-mock-event-log")).toContainText("height_changed", {
       timeout: 15_000,
     });
@@ -374,7 +374,7 @@ test.describe("嵌入协议面(宿主模拟页 × 插件文档页;13.3 iframe �
 
     // auto_resize 仍授予:height_changed 照常(降级只影响未授予能力;先驱动
     // 一次 iframe 内交互以出帧,环境口径见「正常握手全链路」用例内注记)。
-    await pluginOpenTabButton(handle.plugin, "registers").click();
+    await pluginFocusWindowButton(handle.plugin, "registers").click();
     await expect(handle.plugin.locator("sm-register-view")).toContainText("RSP");
     await expect(page.getByTestId("host-mock-event-log")).toContainText("height_changed", {
       timeout: 15_000,
@@ -477,7 +477,7 @@ test.describe("嵌入协议面(宿主模拟页 × 插件文档页;13.3 iframe �
     const handle = await embedViaHostMock(page);
     const plugin = handle.plugin;
 
-    await pluginOpenTabButton(plugin, "registers").click();
+    await pluginFocusWindowButton(plugin, "registers").click();
     await expect(plugin.locator("sm-register-view")).toContainText("RSP");
 
     const revisionBefore = (await pluginMenuStatus(plugin, "revision").textContent())?.trim();

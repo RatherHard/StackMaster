@@ -34,7 +34,8 @@ export const en: Record<SmMessageKey, string> = {
 
   // ── menu ──────────────────────────────────────────────────────────────────
   "menu.aria": "Workspace menu",
-  "menu.openGroup": "Open",
+  "menu.windowGroup": "Windows",
+  "menu.focusWindowTitle": "Focus \"{title}\" and scroll to this window",
   "menu.modeGroup": "Mode",
   "menu.modeDebug": "Debug mode",
   "menu.modeSolve": "Solve mode",
@@ -97,11 +98,9 @@ export const en: Record<SmMessageKey, string> = {
 
   // ── workspace ─────────────────────────────────────────────────────────────
   "workspace.teachingPanel": "Teaching panel (hints / error explanations)",
-  "workspace.empty": "The workspace is empty: pick a tab type from the \"Open\" menu above to begin",
-  "workspace.columnsAria": "Workspace tabs area",
-  "workspace.closeTabAria": "Close {title}",
+  "workspace.columnsAria": "Workspace windows area",
   "workspace.highlightNoView":
-    "Structure annotation {address}: no stack/free view is open, cannot locate",
+    "Structure annotation {address}: the byte view is unavailable, cannot locate",
   "workspace.noSessionError": "No session connected: action not submitted",
   "workspace.actionSubmitFailed": "Failed to submit the action (client-side error)",
   // Challenge static face (WP-54: briefing / vmProfile / encodingTable from the

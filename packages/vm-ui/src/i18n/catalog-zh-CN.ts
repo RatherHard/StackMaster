@@ -41,7 +41,8 @@ export const zhCN = {
 
   // ── menu(<sm-workspace-menu> 工作区菜单 / 状态面 / 横幅)─────────────────
   "menu.aria": "工作区菜单",
-  "menu.openGroup": "打开",
+  "menu.windowGroup": "窗口",
+  "menu.focusWindowTitle": "聚焦「{title}」并滚动到该窗口",
   "menu.modeGroup": "模式",
   "menu.modeDebug": "调试模式",
   "menu.modeSolve": "解题模式",
@@ -97,10 +98,8 @@ export const zhCN = {
 
   // ── workspace(<sm-workspace> 工作区容器)─────────────────────────────────
   "workspace.teachingPanel": "教学面板(提示 / 错误解释)",
-  "workspace.empty": "工作区为空:从顶部菜单「打开」选择一个标签页类型开始",
-  "workspace.columnsAria": "工作区标签页区域",
-  "workspace.closeTabAria": "关闭 {title}",
-  "workspace.highlightNoView": "结构标注 {address}:尚未打开栈/自由视图,无法定位",
+  "workspace.columnsAria": "工作区窗口区域",
+  "workspace.highlightNoView": "结构标注 {address}:字节视图不可用,无法定位",
   "workspace.noSessionError": "尚未连接会话:动作未提交",
   "workspace.actionSubmitFailed": "动作提交失败(客户端侧错误)",
   // 题目静态面(WP-54:正式下发描述包的 briefing / vmProfile / encodingTable 渲染)

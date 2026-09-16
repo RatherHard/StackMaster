@@ -47,8 +47,9 @@ import {
   closeEmbedSessionBestEffort,
   embedViaHostMock,
   PLUGIN_SITE_URL,
-  pluginOpenTabButton,
+  pluginFocusWindowButton,
   pluginVm,
+  pluginWindow,
 } from "./helpers/embed.js";
 import { test } from "./fixtures.js";
 
@@ -260,7 +261,7 @@ test.describe("axe color-contrast 真机补测(阶段四条件 6 遗留关闭)",
     // 拒绝(error explainer;publicErrorMapping 缺省 = 默认教学注解形态)。
     // 嵌入面描述包经跨源端点正式下发(主控已补 ETag exposeHeaders,容器重建
     // 生效)——challenge-panel 呈 loaded 状态,静态面内容一并进入扫描面。
-    await pluginOpenTabButton(plugin, "registers").click();
+    await pluginFocusWindowButton(plugin, "registers").click();
     await expect(plugin.locator("sm-register-view")).toContainText("RSP");
     await plugin.locator("sm-workspace .teaching-panel summary").click();
     await plugin
@@ -292,24 +293,25 @@ test.describe("axe color-contrast 真机补测(阶段四条件 6 遗留关闭)",
     await expectFaceClean(frame, "plugin-iframe", "light-registers");
 
     // light / 栈(虚拟列表区域选择器;lit-virtualizer 行渲染已知缺陷见
-    // session.spec.ts 文件头,不影响本扫描的可判定面)。
-    await pluginOpenTabButton(plugin, "stack").click();
-    await expect(plugin.locator("sm-byte-view .region-select")).toBeVisible();
+    // session.spec.ts 文件头,不影响本扫描的可判定面。窗口集常驻 ⇒
+    // stack / free 两个字节窗口同时在场,选择器按窗口面板收敛)。
+    await pluginFocusWindowButton(plugin, "stack").click();
+    await expect(pluginWindow(plugin, "stack").locator("sm-byte-view .region-select")).toBeVisible();
     await expectFaceClean(frame, "plugin-iframe", "light-stack");
 
     // dark(宿主 theme_changed → data-sm-theme=dark + color-scheme dark)。
-    // 多实例 tab 语义:再次点击 open-tab 会新开第二个视图实例(同 aria-label
-    // 并存 → landmark-unique),故 dark 阶段以面板 tab-bar 点击切回已开视图,
-    // 不新开实例。
+    // 固定窗口集(WP-71 / D-MP-1):全部窗口常驻且**各类型唯一**(无重复
+    // aria-label 面),dark 阶段经菜单「窗口」聚焦入口切换焦点视图——点击
+    // 已聚焦窗口不新增实例(aria-pressed 表达当前焦点)。
     await page.getByTestId("host-mock-theme-select").selectOption("dark");
     await expect(pluginVm(plugin)).toHaveAttribute("data-sm-theme", "dark");
-    await plugin.locator('section[data-tab-id="tab-1"] .tab-bar').click();
+    await pluginFocusWindowButton(plugin, "registers").click();
     await expect(plugin.locator("sm-register-view").first()).toBeVisible();
     await expect(plugin.locator("sm-register-view").first()).toContainText("RSP");
     await expectFaceClean(frame, "plugin-iframe", "dark-registers");
 
-    await plugin.locator('section[data-tab-id="tab-2"] .tab-bar').click();
-    await expect(plugin.locator("sm-byte-view .region-select").first()).toBeVisible();
+    await pluginFocusWindowButton(plugin, "stack").click();
+    await expect(pluginWindow(plugin, "stack").locator("sm-byte-view .region-select")).toBeVisible();
     await expectFaceClean(frame, "plugin-iframe", "dark-stack");
 
     await closeEmbedSessionBestEffort(handle);
@@ -336,8 +338,9 @@ test.describe("axe color-contrast 真机补测(阶段四条件 6 遗留关闭)",
     // graytext 映射 #808080 而画布仍 #ffffff)——shell dark 扫描按环境不可达
     // 登记于决策草稿 §三,沿 axe 遗留登记先例。
     const page = createdSession;
-    // 工作区满内容:寄存器视图 + 教学面板(夹具通道缺省 = 无提示形态)。
-    await page.locator('button.open-tab[data-tab-type="registers"]').click();
+    // 工作区满内容:窗口集常驻(寄存器视图聚焦进入视口)+ 教学面板
+    // (夹具通道缺省 = 无提示形态)。
+    await page.locator('button.focus-window[data-window-type="registers"]').click();
     await expect(page.locator("sm-register-view")).toContainText("RSP");
     await page.locator("sm-workspace .teaching-panel summary").click().catch(() => undefined);
 

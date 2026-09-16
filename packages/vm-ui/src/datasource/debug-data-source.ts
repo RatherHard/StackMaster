@@ -109,12 +109,22 @@ export interface DebugDataSourceChangeEvent {
   readonly paused?: DebugPausedPayload;
 }
 
-/** DebugDataSource 构造选项。 */
+/**
+ * DebugDataSource 构造选项(WP-70)。
+ *
+ * `projectionProvider` = **调试档 VMA / 寄存器 / 行区域归属的唯一来源**
+ * (`regions()` / `registers()` / `bytesRows()` 的 regionId·offset 全部由它
+ * 映射而来;调试单元与对齐后的真实实例共享公开条件集,故公开投影寄存器面
+ * 即结构同构的展示面)。来源 ⊆ 公开投影,**不得**从调试通道字节本地推导
+ * 区域或寄存器(ADR-DC1 what-if 纪律)。
+ *
+ * 缺省(不传)= 恒 null → 空 VMA / 空寄存器:独立使用形态(未接会话的
+ * 组件装配)的既有行为保留,反例见 `test/datasource/debug-data-source.test.ts`。
+ * 工作区组合根装配经 `createDebugDataSource` 传
+ * `() => session.store.snapshot ?? null`(每次调用读最新公开投影快照)。
+ */
 export interface DebugDataSourceOptions {
-  /**
-   * 公开投影提供者(`regions()` / `registers()` 的结构同构映射源;缺省恒
-   * null → 空 VMA / 空寄存器)。工作区装配传 `() => client.store.snapshot`。
-   */
+  /** 公开投影提供者(结构同构映射唯一来源;缺省恒 null → 空 VMA / 空寄存器)。 */
   readonly projectionProvider?: () => PublicStateProjection | null;
 }
 
@@ -132,7 +142,15 @@ export const DEBUG_PREFETCH_DEFAULT_BYTES = 256;
 /** 调试档装配的会话最小面(SessionClient 结构兼容;测试可注入替身)。 */
 export interface DebugSessionLike {
   readonly sessionId: string | null;
-  readonly store: { readonly revision: number | null };
+  /**
+   * 会话公开投影存储最小面(`SessionClient.store` = `ProjectionStore` 结构
+   * 兼容:`revision` = 最近权威 revision,`snapshot` = 最近公开投影)。
+   * `snapshot` 只作 `regions()` / `registers()` 的结构同构映射源(公开面)。
+   */
+  readonly store: {
+    readonly revision: number | null;
+    readonly snapshot?: PublicStateProjection | null;
+  };
 }
 
 /** 调试档装配传输选项(透传 DebugChannelClient;测试注入假套接字)。 */
@@ -142,21 +160,43 @@ export type DebugDataSourceTransportOptions = Pick<
 >;
 
 /**
+ * 调试档装配选项(WP-70)= **运输面 & 数据源面**:运输键透传
+ * `DebugChannelClient`,其余键只进 `DebugDataSource`。两地址空间不混——
+ * `projectionProvider` 绝不展开进传输层(通道构造参数键集保持既有形态)。
+ */
+export type DebugDataSourceAssemblyOptions = DebugDataSourceTransportOptions & DebugDataSourceOptions;
+
+/**
  * 组合根装配:按会话当前 revision 起点构造调试档数据源(attach origin =
  * revision 重放对齐)。会话未创建返回 null;装配后由调用方 `attach()`
  * (连接 + 自动 attach)驱动,不再重复取 revision。
+ *
+ * 选项按面拆分透传:**运输键**(channelUrl / baseUrl / webSocketFactory /
+ * generateRequestId)进 `DebugChannelClient`;**数据源键**
+ * (`projectionProvider`)进 `DebugDataSource`——缺省不传即恒空(独立使用
+ * 形态);工作区缺省装配传 `() => session.store.snapshot ?? null`(WP-70)。
  */
 export function createDebugDataSource(
   session: DebugSessionLike,
-  options: DebugDataSourceTransportOptions = {},
+  options: DebugDataSourceAssemblyOptions = {},
 ): DebugDataSource | null {
   const sessionId = session.sessionId;
   if (sessionId === null) {
     return null;
   }
   const revision = session.store.revision ?? 0;
+  // 显式解构而非整体展开:运输面与数据源面各自只收自己的键集。
+  const { channelUrl, baseUrl, webSocketFactory, generateRequestId, ...dataSourceOptions } = options;
   return new DebugDataSource(
-    new DebugChannelClient({ sessionId, origin: { kind: "revision", revision }, ...options }),
+    new DebugChannelClient({
+      sessionId,
+      origin: { kind: "revision", revision },
+      channelUrl,
+      baseUrl,
+      webSocketFactory,
+      generateRequestId,
+    }),
+    dataSourceOptions,
   );
 }
 

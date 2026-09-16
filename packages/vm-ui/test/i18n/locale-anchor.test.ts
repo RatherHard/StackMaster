@@ -54,11 +54,11 @@ describe("data-sm-language 锚消费(嵌入形态对接)", () => {
     expect(menu.shadowRoot?.querySelector(".payload-step-button")?.textContent?.trim()).toBe(
       "Payload step",
     );
-    // 注册表 labelKey:打开项按当前 locale 解析。
-    const openButton = menu.shadowRoot?.querySelector<HTMLButtonElement>(
-      'button.open-tab[data-tab-type="stack"]',
+    // 注册表 labelKey:窗口聚焦入口按当前 locale 解析(锚 = data-window-type)。
+    const focusButton = menu.shadowRoot?.querySelector<HTMLButtonElement>(
+      'button.focus-window[data-window-type="stack"]',
     );
-    expect(openButton?.textContent?.trim()).toBe("Stack view");
+    expect(focusButton?.textContent?.trim()).toBe("Stack view");
   });
 
   it("运行中锚属性更新(language_changed 形态)→ MutationObserver 生效", async () => {

@@ -1,6 +1,6 @@
 /**
- * 标签页类型注册表(WP-F5 / FE-WS-01 / FE-MV-01,按 Q2 定案"四个独立标签页
- * 类型、可多开";WP-F8 扩充调试档与 ED 教学组件面)。
+ * 标签页类型注册表(WP-F5 / FE-WS-01;WP-F8 扩充调试档与 ED 教学组件面;
+ * WP-71 起按 **D-MP-1** 定案登记为「各单实例、常驻」)。
  *
  * 定案(主控已裁决):
  *  - 登记四类:**stack**(栈视图 = 字节视图 stack 形态)、**free**(自由视图 =
@@ -11,10 +11,15 @@
  *    call-stack(调用栈)/ memory-diff(内存 diff)/ timeline(时间线)/
  *    checkpoints(checkpoint)。组件属性由工作区组合根注入(#syncEdContents,
  *    duck-typing 约定同 dataSource / actionSink);
- *  - **可扩展结构**:新标签页类型经 `register()` 追加登记即可进入工作区
- *    「打开」菜单;类型键为开放 string,不封闭枚举;
- *  - **可多开**(FE-MV-01):同类型可开多个实例——注册表只描述"怎么创建",
- *    实例生命周期(排布/焦点/关闭)归工作区布局模型(workspace-model.ts)。
+ *  - **可扩展结构**:新标签页类型经 `register()` 追加登记即进入工作区
+ *    窗口集与「窗口」菜单;类型键为开放 string,不封闭枚举;
+ *  - **单实例常驻(D-MP-1,WP-71)**:窗口集合 = 登记的全部类型、**各恰一个
+ *    实例、常驻**;窗口**没有开 / 关状态**,只有「视口内 / 暂离(条带滚出
+ *    视野)」。登记项**不携带实例数语义字段**:单实例由 `WorkspaceLayoutModel
+ *    .bindWindows()` 结构性保证(窗口 id ≡ 类型键,同类型重复实例无法表达),
+ *    字段化会引入模型无法表达的「可多开」取值。宿主替换工厂 / 文案的既有
+ *    扩展能力(覆盖登记语义)不变;运行中追加登记的类型在窗口集**重新绑定**
+ *    时进入(工作区在 `tabTypes` 换绑时重绑,见 sm-workspace)。
  *
  * 数据纪律:工厂上下文只携带 `MemoryDataSource` 接口(视图唯一依赖面),
  * 注册表自身不接触 SessionClient / ProjectionStore。
@@ -54,16 +59,16 @@ export interface WorkspaceTabFactoryContext {
   readonly dataSource: MemoryDataSource | null;
 }
 
-/** 标签页类型描述(注册表条目)。 */
+/** 标签页类型描述(注册表条目;D-MP-1:一登记项 = 工作区中恰一个常驻窗口)。 */
 export interface WorkspaceTabTypeDescriptor {
   /** 类型键(稳定 id;开放集合,登记即扩展)。 */
   readonly type: WorkspaceTabType;
-  /** 展示名(菜单项与标签页标题基名;模块加载时刻的静态快照)。 */
+  /** 展示名(窗口标题与菜单聚焦入口基名;模块加载时刻的静态快照)。 */
   readonly label: string;
   /**
    * 展示名 i18n 键(WP-53;可缺省):登记后菜单项按**当前 locale** 取词
-   * (渲染时解析,语言切换即生效);缺省回落 `label`。标签页标题在打开
-   * 时刻求值固化(打开后不随切换追溯——登记于决策草稿)。
+   * (渲染时解析,语言切换即生效);缺省回落 `label`。窗口标题在**绑定时刻**
+   * 求值固化(绑定后不随切换追溯——WP-F5 登记口径保留)。
    */
   readonly labelKey?: SmMessageKey;
   /**

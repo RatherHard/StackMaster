@@ -1,8 +1,10 @@
 /**
- * <sm-workspace> 模式切换与 ED 挂接测试(WP-F8 / FE-WS-04c/06/07 + FE-ED 系):
+ * <sm-workspace> 模式切换与 ED 挂接测试(WP-F8 / FE-WS-04c/06/07 + FE-ED 系;
+ * WP-71 起窗口集挂载即常驻,模式切换零布局副作用):
  *  - debugModeAvailable 门槛(未启用题目隐藏切换项);
  *  - 模式切换:数据源换绑(字节视图换绑即重建 = 锚点重置口径)、what-if
- *    横幅显隐、运行到断点动作、payload 标签页状态两模式共用(元素不销毁);
+ *    横幅显隐、运行到断点动作、payload 窗口状态两模式共用(元素不销毁)、
+ *    **layoutSnapshot 深度相等(只换数据源,不动布局)**;
  *  - ED 挂接:结构视图 highlights 注入与 highlight-jump 联动、时间线条目
  *    (动作账本)、checkpoint 刷新时点(list_checkpoints 重拉)、提示揭示
  *    (failed 计数)、错误解释(userVisibleError + teachingNote)。
@@ -18,6 +20,7 @@ import { SessionClient } from "../../src/client/session-client.js";
 import { ProjectionDataSource } from "../../src/datasource/projection-data-source.js";
 import { SmWorkspace } from "../../src/workspace/sm-workspace.js";
 import { SmByteTab } from "../../src/workspace/byte-tab.js";
+import { isWindowSetComplete } from "../../src/workspace/workspace-model.js";
 import { PAYLOAD_TAB_TYPE, createDefaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
 import {
   CREATE_INPUT,
@@ -232,7 +235,7 @@ interface Fixture {
   readonly stub: StubDebugSource;
 }
 
-/** 装配"已建会话 + 已连接 + 栈视图 + 调试工厂注入(debugModeAvailable=true)"。 */
+/** 装配"已建会话 + 已连接 + 调试工厂注入(debugModeAvailable=true)";窗口集挂载即常驻。 */
 async function mountDebugCapableWorkspace(): Promise<Fixture> {
   const harness = createClientHarness();
   const workspace = new SmWorkspace();
@@ -252,8 +255,6 @@ async function mountDebugCapableWorkspace(): Promise<Fixture> {
   harness.frames.flush();
   await workspace.updateComplete;
 
-  workspace.openTab("stack");
-  await workspace.updateComplete;
   await settleFrames(3);
   return { workspace, harness, socket, stub };
 }
@@ -345,17 +346,37 @@ describe("FE-WS-06:debugModeAvailable 门槛与模式切换", () => {
     void harness;
     workspace.remove();
   });
+
+  it("模式切换只换绑数据源:layoutSnapshot 深度相等(焦点列 / 列序 / 标题全不动)", async () => {
+    const { workspace } = await mountDebugCapableWorkspace();
+    workspace.focusWindow("structure");
+    await workspace.updateComplete;
+    const before = workspace.layoutSnapshot;
+
+    clickMenuButton(workspace, ".mode-toggle-button");
+    await workspace.updateComplete;
+    expect(workspace.mode).toBe("debug");
+    expect(workspace.layoutSnapshot).toEqual(before);
+
+    clickMenuButton(workspace, ".mode-toggle-button");
+    await workspace.updateComplete;
+    expect(workspace.mode).toBe("solve");
+    expect(workspace.layoutSnapshot).toEqual(before);
+    // 窗口集不变量在模式切换前后均成立(零布局副作用)。
+    expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
+    expect(workspace.layoutSnapshot.focusedTabId).toBe("structure");
+    workspace.remove();
+  });
 });
 
 // ── FE-WS-07:payload 状态两模式共用 ────────────────────────────────────────
 
-describe("FE-WS-07:payload 标签页状态两模式共用", () => {
+describe("FE-WS-07:payload 窗口状态两模式共用", () => {
   it("模式切换不销毁 payload 元素(程序状态保留;dataSource 换绑不重建元素)", async () => {
     const { workspace } = await mountDebugCapableWorkspace();
-    const payloadId = workspace.openTab("payload");
-    expect(payloadId).not.toBeNull();
     await workspace.updateComplete;
     const payloadBefore = shadowOf(workspace).querySelector("sm-payload-tab");
+    expect(payloadBefore).not.toBeNull();
 
     clickMenuButton(workspace, ".mode-toggle-button");
     await workspace.updateComplete;
@@ -390,8 +411,7 @@ describe("FE-WS-07:payload 标签页状态两模式共用", () => {
     harness.frames.flush();
     await workspace.updateComplete;
 
-    workspace.openTab("payload");
-    await workspace.updateComplete;
+    // 窗口集挂载即常驻(payload 窗口已在);切换模式即触发 breakpointAddresses 并入。
     clickMenuButton(workspace, ".mode-toggle-button");
     await workspace.updateComplete;
 
@@ -438,7 +458,6 @@ describe("FE-WS-04c:运行到断点(调试通道原生暂停点)", () => {
 describe("ED 挂接:结构视图(highlights 注入 + highlight-jump 联动)", () => {
   it("highlights 来自公开投影 semanticHighlights;highlight-jump → 字节视图定位反馈", async () => {
     const { workspace } = await mountDebugCapableWorkspace();
-    workspace.openTab("structure");
     await workspace.updateComplete;
     const structure = shadowOf(workspace).querySelector("sm-structure-view") as unknown as HTMLElement & {
       highlights: readonly unknown[];
@@ -460,7 +479,6 @@ describe("ED 挂接:结构视图(highlights 注入 + highlight-jump 联动)", ()
 
   it("highlight-jump 落点缓存外:调试档自动 prefetch 后重试", async () => {
     const { workspace, stub } = await mountDebugCapableWorkspace();
-    workspace.openTab("structure");
     clickMenuButton(workspace, ".mode-toggle-button");
     await workspace.updateComplete;
     const structure = shadowOf(workspace).querySelector("sm-structure-view");
@@ -483,8 +501,6 @@ describe("ED 挂接:结构视图(highlights 注入 + highlight-jump 联动)", ()
 describe("ED 挂接:时间线(动作账本)与内存 diff(前快照 + delta)", () => {
   it("动作响应流入账本:时间线条目增长;diff 页收到 beforeRegions + delta", async () => {
     const { workspace, harness, socket } = await mountDebugCapableWorkspace();
-    workspace.openTab("timeline");
-    workspace.openTab("memory-diff");
     await workspace.updateComplete;
     const timeline = shadowOf(workspace).querySelector("sm-timeline") as unknown as HTMLElement & {
       entries: readonly unknown[];
@@ -522,7 +538,6 @@ describe("ED 挂接:时间线(动作账本)与内存 diff(前快照 + delta)", (
 describe("ED 挂接:checkpoint(create/checkout 响应回流刷新列表)", () => {
   it("checkpoint 动作响应到达且未拒 → 重拉 list_checkpoints 注入列表", async () => {
     const { workspace, harness, socket } = await mountDebugCapableWorkspace();
-    workspace.openTab("checkpoints");
     await workspace.updateComplete;
     const checkpoints = shadowOf(workspace).querySelector("sm-checkpoints") as unknown as HTMLElement & {
       checkpoints: readonly unknown[];

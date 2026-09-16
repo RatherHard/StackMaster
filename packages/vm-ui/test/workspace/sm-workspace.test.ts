@@ -1,8 +1,9 @@
 /**
- * <sm-workspace> 工作区容器集成测试(WP-F5):
- *  - 平铺(FE-WS-02,Q1 v1):双标签页并排、列间滚动可达(scrollToColumn)、
- *    列内分割、拖拽换位(pointer 事件模拟)、同类型多开(FE-MV-01)、
- *    关闭生命周期与空态、debug 占位空态;
+ * <sm-workspace> 工作区容器集成测试(WP-F5 平铺 × WP-71 固定窗口集 / D-MP-1):
+ *  - 固定窗口集:挂载即按注册表登记集合建窗(各恰一实例、常驻)、无任何关闭
+ *    入口、无空态引导、聚焦导航(focusWindow 聚焦 + 滚动,不改变实例数);
+ *  - 平铺(FE-WS-02,Q1 v1):列间滚动可达(scrollToColumn)、拖拽换位
+ *    (pointer 事件模拟)、拖到列区空白开新列;
  *  - 菜单动作(真实 SessionClient mock 全链路):step / reset 帧形态、
  *    终态禁用 + 引导、断线横幅、connection-replaced 手动重连、
  *    rejected 错误呈现(含 explanation);
@@ -13,7 +14,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionClient } from "../../src/client/session-client.js";
 import { SmWorkspace } from "../../src/workspace/sm-workspace.js";
-import { PAYLOAD_TAB_TYPE } from "../../src/workspace/tab-registry.js";
+import { isWindowSetComplete } from "../../src/workspace/workspace-model.js";
+import { PAYLOAD_TAB_TYPE, defaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
 import {
   CREATE_INPUT,
   FakeFrames,
@@ -33,6 +35,11 @@ import {
 // ── 平铺测试夹具(无 client:直接注入 FakeMemoryDataSource)──────────────────
 
 import { FakeMemoryDataSource } from "../views/byte/fake-data-source.js";
+
+/** 默认注册表登记类型集(窗口集权威来源)。 */
+const REGISTERED_TYPES: readonly string[] = defaultTabTypeRegistry
+  .list()
+  .map((descriptor) => descriptor.type);
 
 /** 等待若干渲染帧(virtualizer 可见范围计算收敛)。 */
 async function settleFrames(frames: number): Promise<void> {
@@ -61,6 +68,18 @@ function shadowOf(element: SmWorkspace): ShadowRoot {
 
 function panelsOf(element: SmWorkspace): HTMLElement[] {
   return [...shadowOf(element).querySelectorAll(".tab-panel")] as HTMLElement[];
+}
+
+function windowTypesOf(element: SmWorkspace): string[] {
+  return panelsOf(element).map((panel) => panel.getAttribute("data-tab-id") ?? "");
+}
+
+function panelOf(element: SmWorkspace, windowType: string): HTMLElement {
+  const panel = shadowOf(element).querySelector(`[data-tab-id="${windowType}"]`);
+  if (panel === null) {
+    throw new Error(`未找到窗口面板:${windowType}`);
+  }
+  return panel as HTMLElement;
 }
 
 // ── 菜单/集成测试夹具(真实 SessionClient + mock 传输)──────────────────────
@@ -148,7 +167,7 @@ function createClientHarness(): ClientHarness {
   return { client, frames, mockFetch };
 }
 
-/** 装配"已建会话 + 已连接 + 已开一个栈视图标签页"的工作区。 */
+/** 装配"已建会话 + 已连接的工作区"(窗口集随挂载常驻,无需开窗)。 */
 async function mountConnectedWorkspace(): Promise<{
   workspace: SmWorkspace;
   harness: ClientHarness;
@@ -166,9 +185,6 @@ async function mountConnectedWorkspace(): Promise<{
   harness.frames.flush();
   await workspace.updateComplete;
 
-  const tabId = workspace.openTab("stack");
-  expect(tabId).not.toBeNull();
-  await workspace.updateComplete;
   await settleFrames(4);
   return { workspace, harness, socket };
 }
@@ -221,10 +237,156 @@ beforeEach(() => {
   FakeWebSocket.reset();
 });
 
-// ── 平铺(FE-WS-02 / FE-WS-01 / FE-MV-01)────────────────────────────────────
+// ── 固定窗口集(D-MP-1 / WP-71)──────────────────────────────────────────────
+
+describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)", () => {
+  it("挂载即按注册表登记集合建窗:全部类型各恰一实例常驻呈现(验收底线)", async () => {
+    const workspace = await mountWorkspace();
+    await workspace.updateComplete;
+
+    const types = windowTypesOf(workspace);
+    expect(types).toEqual([...REGISTERED_TYPES]);
+    expect(new Set(types).size).toBe(REGISTERED_TYPES.length);
+    expect(workspace.layoutSnapshot.tabs).toHaveLength(REGISTERED_TYPES.length);
+    // 结构性不变量:窗口集 ≡ 注册表类型集,各恰一实例(无重无漏、无空列)。
+    expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
+    workspace.remove();
+  });
+
+  it("窗口标题 = 注册表展示名(无类型内序号);标题栏与 aria-label 同源", async () => {
+    const workspace = await mountWorkspace();
+
+    const labels = panelsOf(workspace).map((panel) => panel.getAttribute("aria-label"));
+    expect(labels).toEqual([
+      "栈视图",
+      "自由视图",
+      "寄存器视图",
+      "Payload 搭建",
+      "指令视图",
+      "结构视图",
+      "调用栈",
+      "内存 diff",
+      "时间线",
+      "checkpoint",
+    ]);
+    expect(panelOf(workspace, "stack").querySelector(".tab-title")?.textContent?.trim()).toBe("栈视图");
+    workspace.remove();
+  });
+
+  it("无任何关闭入口:标题栏无关闭按钮、窗口内无关闭语义 aria、公共 API 无关闭方法", async () => {
+    const workspace = await mountWorkspace();
+
+    // 面一:窗口标题栏无关闭按钮(标题栏只承载标题与拖拽)。
+    expect(shadowOf(workspace).querySelector(".tab-close")).toBeNull();
+    for (const panel of panelsOf(workspace)) {
+      expect(panel.querySelector(".tab-bar")?.querySelector("button")).toBeNull();
+      expect(panel.querySelector(".tab-title")?.textContent?.trim()).toBe(panel.getAttribute("aria-label"));
+    }
+    // 面二:工作区自身无任何关闭语义属性(aria / title / data 锚)。
+    expect([...shadowOf(workspace).querySelectorAll("[data-close], [data-tab-close]")]).toHaveLength(0);
+    for (const element of shadowOf(workspace).querySelectorAll("*")) {
+      const labels = [element.getAttribute("aria-label"), element.getAttribute("title")];
+      for (const label of labels) {
+        expect(label ?? "").not.toMatch(/关闭|(^|\W)close/i);
+      }
+    }
+    // 面三:公共 API 无开 / 关入口(生命周期退场)。
+    expect((workspace as unknown as Record<string, unknown>)["closeTab"]).toBeUndefined();
+    expect((workspace as unknown as Record<string, unknown>)["openTab"]).toBeUndefined();
+    workspace.remove();
+  });
+
+  it("窗口集恒非空:空态引导退场(无 .empty 呈现)", async () => {
+    const workspace = await mountWorkspace();
+
+    expect(shadowOf(workspace).querySelector(".empty")).toBeNull();
+    expect(shadowOf(workspace).querySelector("[data-columns]")).not.toBeNull();
+    workspace.remove();
+  });
+
+  it("focusWindow(type):聚焦 + 滚动到该窗口,窗口实例数不变(不是开窗)", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.layoutSnapshot;
+    const original = Element.prototype.scrollIntoView;
+    const scrolledTo: Element[] = [];
+    Element.prototype.scrollIntoView = function scrollIntoViewStub(this: Element): void {
+      scrolledTo.push(this);
+    };
+    let focused: boolean;
+    try {
+      focused = workspace.focusWindow("registers");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+    await workspace.updateComplete;
+
+    expect(focused).toBe(true);
+    expect(workspace.layoutSnapshot.focusedTabId).toBe("registers");
+    expect(scrolledTo.map((element) => element.getAttribute("data-tab-id"))).toContain("registers");
+    // 布局与窗口集不变(仅焦点移动)。
+    expect(workspace.layoutSnapshot.columns).toEqual(before.columns);
+    expect(workspace.layoutSnapshot.tabs).toEqual(before.tabs);
+    expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
+    workspace.remove();
+  });
+
+  it("focusWindow 未登记类型返回 false 且不改变布局与焦点(注册表封闭消费面)", async () => {
+    const workspace = await mountWorkspace();
+    const before = workspace.layoutSnapshot;
+
+    expect(workspace.focusWindow("totally-unregistered-kind")).toBe(false);
+    await workspace.updateComplete;
+
+    expect(workspace.layoutSnapshot).toEqual(before);
+    workspace.remove();
+  });
+
+  it("菜单「窗口」聚焦入口:点击发出 focus-window 动作 → 焦点移动到该窗口", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.layoutSnapshot.focusedTabId).toBe("stack");
+
+    const button = menuShadow(workspace).querySelector(
+      'button.focus-window[data-window-type="payload"]',
+    ) as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    button.click();
+    await workspace.updateComplete;
+
+    expect(workspace.layoutSnapshot.focusedTabId).toBe(PAYLOAD_TAB_TYPE);
+    expect(panelsOf(workspace)).toHaveLength(REGISTERED_TYPES.length);
+    workspace.remove();
+  });
+
+  it("首帧前接入会话(client 与挂载同 tick):窗口集绑定不触发未渲染内容的 refresh 崩溃", async () => {
+    // 嵌入形态时序(web-component 插件装配):元素挂载后同一 tick 注入 client,
+    // 首帧尚未渲染即发生数据源装配 / 投影回流 —— 内容元素的 refresh() 必须
+    // 延后到其 renderRoot 就绪(否则内部 querySelector 取空抛错)。
+    const harness = createClientHarness();
+    const workspace = new SmWorkspace();
+    document.body.append(workspace);
+    workspace.client = harness.client;
+    await workspace.updateComplete;
+
+    await harness.client.createSession(CREATE_INPUT);
+    harness.client.connect();
+    FakeWebSocket.last.serverAccepts();
+    await settle();
+    harness.frames.flush();
+    await workspace.updateComplete;
+    await settleFrames(3);
+
+    // 窗口集常驻且内容已渲染(字节窗口刷新后仍可查字节视图)。
+    expect(windowTypesOf(workspace)).toEqual([...REGISTERED_TYPES]);
+    expect(firstByteView(workspace)).not.toBeUndefined();
+    workspace.remove();
+    harness.client.dispose();
+  });
+});
+
+// ── 平铺(FE-WS-02 / FE-WS-01)──────────────────────────────────────────────
 
 describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
-  it("双标签页并排:打开两个标签页落入同列分割,两面板同时呈现(验收底线)", async () => {
+  it("缺省布局 = 登记序、每列一窗;列容器承载横向滚动(Niri 式可达任意列)", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -240,16 +402,9 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
       [{ name: "RSP", valueHex: "0x1004" }],
     );
     await workspace.updateComplete;
-    workspace.openTab("stack");
-    workspace.openTab("registers");
-    await workspace.updateComplete;
 
-    const panels = panelsOf(workspace);
-    expect(panels).toHaveLength(2);
-    expect(panels[0]?.getAttribute("aria-label")).toBe("栈视图 1");
-    expect(panels[1]?.getAttribute("aria-label")).toBe("寄存器视图 1");
-    expect(panels[0]?.closest(".column")).toBe(panels[1]?.closest(".column"));
-    // 列间水平滚动形态:列容器可横向滚动(Niri 式可达任意列)。
+    const columns = workspace.layoutSnapshot.columns;
+    expect(columns.map((column) => column.tabIds)).toEqual(REGISTERED_TYPES.map((type) => [type]));
     expect(shadowOf(workspace).querySelector("[data-columns]")).not.toBeNull();
     workspace.remove();
   });
@@ -270,9 +425,7 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
       [{ name: "RSP", valueHex: "0x1004" }],
     );
     await workspace.updateComplete;
-    const a = workspace.openTab("stack") as string;
-    const b = workspace.openTab("free") as string;
-    await workspace.updateComplete;
+
     // jsdom 无 scrollIntoView:临时替换原型实现收集调用者(测试后还原)。
     const original = Element.prototype.scrollIntoView;
     const scrolledTo: Element[] = [];
@@ -280,17 +433,16 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
       scrolledTo.push(this);
     };
     try {
-      workspace.scrollToColumn(0);
+      workspace.scrollToColumn(1);
     } finally {
       Element.prototype.scrollIntoView = original;
     }
     expect(scrolledTo).toHaveLength(1);
-    expect(scrolledTo[0]?.getAttribute("data-tab-id")).toBe(a);
-    expect(a).not.toBe(b);
+    expect(scrolledTo[0]?.getAttribute("data-tab-id")).toBe("free");
     workspace.remove();
   });
 
-  it("拖拽换位:pointer 事件模拟——源页拖到目标页下半 → 插到其后", async () => {
+  it("拖拽换位:pointer 事件模拟——源窗拖到目标窗下半 → 插到其后(源列删除)", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -306,21 +458,19 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
       [{ name: "RSP", valueHex: "0x1004" }],
     );
     await workspace.updateComplete;
-    const a = workspace.openTab("stack") as string;
-    const b = workspace.openTab("free") as string;
-    const c = workspace.openTab("registers") as string;
-    await workspace.updateComplete;
 
-    const panelA = shadowOf(workspace).querySelector(`[data-tab-id="${a}"]`) as HTMLElement;
-    const panelB = shadowOf(workspace).querySelector(`[data-tab-id="${b}"]`) as HTMLElement;
+    const panelA = panelOf(workspace, "stack");
+    const panelB = panelOf(workspace, "free");
     // 按下(标题栏)→ 位移过阈值 → 在 B 下半抬起(插到 B 之后)。
     (panelA.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
     shadowOf(workspace).dispatchEvent(pointer("pointermove", 40, 40));
     panelB.dispatchEvent(pointer("pointerup", 10, 999));
     await workspace.updateComplete;
 
-    const order = panelsOf(workspace).map((panel) => panel.getAttribute("data-tab-id"));
-    expect(order).toEqual([b, a, c]);
+    // stack 的独窗列被删除,目标列序前移:列 0 = [free, stack]。
+    expect(workspace.layoutSnapshot.columns[0]?.tabIds).toEqual(["free", "stack"]);
+    expect(workspace.layoutSnapshot.columns).toHaveLength(REGISTERED_TYPES.length - 1);
+    expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
     workspace.remove();
   });
 
@@ -340,21 +490,20 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
       [{ name: "RSP", valueHex: "0x1004" }],
     );
     await workspace.updateComplete;
-    const a = workspace.openTab("stack") as string;
-    const b = workspace.openTab("free") as string;
-    await workspace.updateComplete;
 
     const columns = shadowOf(workspace).querySelector("[data-columns]") as HTMLElement;
-    const panelA = shadowOf(workspace).querySelector(`[data-tab-id="${a}"]`) as HTMLElement;
+    const panelA = panelOf(workspace, "stack");
     (panelA.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
     shadowOf(workspace).dispatchEvent(pointer("pointermove", 60, 60));
     columns.dispatchEvent(pointer("pointerup", 10, 10));
     await workspace.updateComplete;
 
-    // a 摘除后开新列:列 0 剩 b,列 1 = a(尾插)。
-    expect(workspace.layoutSnapshot.columns).toHaveLength(2);
-    expect(workspace.layoutSnapshot.columns[0]?.tabIds).toEqual([b]);
-    expect(workspace.layoutSnapshot.columns[1]?.tabIds).toEqual([a]);
+    // stack 摘除后开新列:原列删除,新列追加在末尾(尾插)。
+    const snapshot = workspace.layoutSnapshot;
+    expect(snapshot.columns).toHaveLength(REGISTERED_TYPES.length);
+    expect(snapshot.columns.at(-1)?.tabIds).toEqual(["stack"]);
+    expect(snapshot.columns[0]?.tabIds).toEqual(["free"]);
+    expect(isWindowSetComplete(snapshot)).toBe(true);
     workspace.remove();
   });
 
@@ -374,23 +523,18 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
       [{ name: "RSP", valueHex: "0x1004" }],
     );
     await workspace.updateComplete;
-    const a = workspace.openTab("stack") as string;
-    workspace.openTab("registers");
-    await workspace.updateComplete;
-    expect(workspace.layoutSnapshot.focusedTabId).not.toBe(a);
+    expect(workspace.layoutSnapshot.focusedTabId).toBe("stack");
 
-    const panelA = shadowOf(workspace).querySelector(`[data-tab-id="${a}"]`) as HTMLElement;
-    (panelA.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
+    const panelFree = panelOf(workspace, "free");
+    (panelFree.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
     shadowOf(workspace).dispatchEvent(pointer("pointermove", 11, 11));
     shadowOf(workspace).dispatchEvent(pointer("pointerup", 11, 11));
     await workspace.updateComplete;
-    expect(workspace.layoutSnapshot.focusedTabId).toBe(a);
+    expect(workspace.layoutSnapshot.focusedTabId).toBe("free");
     workspace.remove();
   });
-});
 
-describe("<sm-workspace> 标签页生命周期(FE-WS-01 / FE-MV-01)", () => {
-  it("同类型可多开:两个栈视图序号 1/2 并列呈现", async () => {
+  it("焦点窗口带 focused 标记;activateTab 切换跟随", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -406,100 +550,31 @@ describe("<sm-workspace> 标签页生命周期(FE-WS-01 / FE-MV-01)", () => {
       [{ name: "RSP", valueHex: "0x1004" }],
     );
     await workspace.updateComplete;
-    workspace.openTab("stack");
-    workspace.openTab("stack");
-    await workspace.updateComplete;
 
-    const titles = panelsOf(workspace).map((panel) => panel.getAttribute("aria-label"));
-    expect(titles).toEqual(["栈视图 1", "栈视图 2"]);
-    workspace.remove();
-  });
+    // 缺省焦点 = 登记序首窗(stack)。
+    expect(panelOf(workspace, "stack").classList.contains("focused")).toBe(true);
+    expect(panelOf(workspace, "registers").classList.contains("focused")).toBe(false);
 
-  it("关闭标签页移除面板;关闭最后一个 → 空态引导打开", async () => {
-    const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
+    workspace.activateTab("registers");
     await workspace.updateComplete;
-    const a = workspace.openTab("stack") as string;
-    await workspace.updateComplete;
-
-    const closeButton = shadowOf(workspace).querySelector(
-      `[data-tab-id="${a}"] .tab-close`,
-    ) as HTMLButtonElement;
-    closeButton.click();
-    await workspace.updateComplete;
-
-    expect(panelsOf(workspace)).toHaveLength(0);
-    expect(shadowOf(workspace).querySelector(".empty")?.textContent).toContain("工作区为空");
-    workspace.remove();
-  });
-
-  it("焦点标签页带 focused 标记;激活切换跟随点击", async () => {
-    const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
-    await workspace.updateComplete;
-    const a = workspace.openTab("stack") as string;
-    const b = workspace.openTab("registers") as string;
-    await workspace.updateComplete;
-
-    const panelA = shadowOf(workspace).querySelector(`[data-tab-id="${a}"]`) as HTMLElement;
-    const panelB = shadowOf(workspace).querySelector(`[data-tab-id="${b}"]`) as HTMLElement;
-    // 新开的标签页获得焦点:初始焦点在 b。
-    expect(panelB.classList.contains("focused")).toBe(true);
-    expect(panelA.classList.contains("focused")).toBe(false);
-
-    workspace.activateTab(a);
-    await workspace.updateComplete;
-    expect(panelA.classList.contains("focused")).toBe(true);
-    expect(panelB.classList.contains("focused")).toBe(false);
+    expect(panelOf(workspace, "registers").classList.contains("focused")).toBe(true);
+    expect(panelOf(workspace, "stack").classList.contains("focused")).toBe(false);
     workspace.remove();
   });
 
   it("debug 类型(WP-F8)= 指令视图真工厂:解题模式呈现调试模式引导空态", async () => {
     const workspace = await mountWorkspace();
-    const tabId = workspace.openTab("debug");
-    expect(tabId).not.toBeNull();
     await workspace.updateComplete;
 
-    const panel = shadowOf(workspace).querySelector(`[data-tab-id="${tabId}"]`);
+    const panel = panelOf(workspace, "debug");
     // 解题模式(公开投影数据源,无 instructionStream)→ 指令视图呈现引导。
-    expect(panel?.querySelector("sm-instruction-view")).toBeInstanceOf(HTMLElement);
-    expect(panel?.querySelector("sm-instruction-view")?.shadowRoot?.textContent).toContain("切换到调试模式");
-    expect(panel?.querySelector("sm-byte-tab")).toBeNull();
+    expect(panel.querySelector("sm-instruction-view")).toBeInstanceOf(HTMLElement);
+    expect(panel.querySelector("sm-instruction-view")?.shadowRoot?.textContent).toContain("切换到调试模式");
+    expect(panel.querySelector("sm-byte-tab")).toBeNull();
     workspace.remove();
   });
 
-  it("未登记类型打开返回 null(注册表封闭消费面)", async () => {
-    const workspace = await mountWorkspace();
-    expect(workspace.openTab("totally-unregistered-kind")).toBeNull();
-    expect(workspace.layoutSnapshot.tabs).toHaveLength(0);
-    workspace.remove();
-  });
-
-  it("payload 标签页(WP-F6):工厂产出内容、组合根注入 actionSink、菜单积木步进接线(FE-WS-04b)", async () => {
+  it("payload 窗口(WP-F6):工厂产出内容、组合根注入 actionSink、菜单积木步进接线(FE-WS-04b)", async () => {
     const workspace = await mountWorkspace();
     workspace.dataSource = new FakeMemoryDataSource(
       [
@@ -514,8 +589,6 @@ describe("<sm-workspace> 标签页生命周期(FE-WS-01 / FE-MV-01)", () => {
       ],
       [],
     );
-    const tabId = workspace.openTab(PAYLOAD_TAB_TYPE);
-    expect(tabId).not.toBeNull();
     await settleFrames(2);
 
     const content = shadowOf(workspace).querySelector("sm-payload-tab") as HTMLElement & {
@@ -527,7 +600,8 @@ describe("<sm-workspace> 标签页生命周期(FE-WS-01 / FE-MV-01)", () => {
     expect("actionSink" in content).toBe(true);
     expect(typeof content.stepOnce).toBe("function");
 
-    // 焦点标签页 = payload → 菜单「积木步进」可用。
+    // 焦点窗口 = payload → 菜单「积木步进」可用。
+    workspace.focusWindow(PAYLOAD_TAB_TYPE);
     await workspace.updateComplete;
     const payloadStepButton = menuShadow(workspace).querySelector(
       "button.payload-step-button",
@@ -672,10 +746,8 @@ describe("<sm-workspace> 连接状态呈现(FE-WS-03)", () => {
     harness.client.dispose();
   });
 
-  it("投影变更 → 各标签页内容 refresh()(组合根接线口径)", async () => {
+  it("投影变更 → 各窗口内容 refresh()(组合根接线口径)", async () => {
     const { workspace, harness, socket } = await mountConnectedWorkspace();
-    workspace.openTab("registers");
-    await workspace.updateComplete;
     await settleFrames(3);
 
     const rowsBefore = dataRows(workspace).length;

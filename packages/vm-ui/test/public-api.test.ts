@@ -48,7 +48,19 @@ describe("公开入口导出面", () => {
     expect(vmUi.WorkspaceTabTypeRegistry).toBeTypeOf("function");
     expect(vmUi.defaultTabTypeRegistry).toBeInstanceOf(vmUi.WorkspaceTabTypeRegistry);
     expect(vmUi.WorkspaceLayoutModel).toBeTypeOf("function");
-    expect(vmUi.formatTabTitle).toBeTypeOf("function");
+    // WP-71(D-MP-1 固定窗口集):窗口集绑定 + 不变量机检入面;开 / 关生命周期
+    // 与「类型名 + 序号」标题退场(公共 API 面零关闭入口)。
+    expect(vmUi.WorkspaceLayoutModel.prototype.bindWindows).toBeTypeOf("function");
+    expect(vmUi.WorkspaceLayoutModel.prototype.focusWindow).toBeTypeOf("function");
+    expect(vmUi.isWindowSetComplete).toBeTypeOf("function");
+    expect(vmUi.SmWorkspace.prototype.focusWindow).toBeTypeOf("function");
+    const layoutPrototype = vmUi.WorkspaceLayoutModel.prototype as unknown as Record<string, unknown>;
+    const workspacePrototype = vmUi.SmWorkspace.prototype as unknown as Record<string, unknown>;
+    expect(layoutPrototype["openTab"]).toBeUndefined();
+    expect(layoutPrototype["closeTab"]).toBeUndefined();
+    expect(workspacePrototype["openTab"]).toBeUndefined();
+    expect(workspacePrototype["closeTab"]).toBeUndefined();
+    expect((vmUi as unknown as Record<string, unknown>)["formatTabTitle"]).toBeUndefined();
     expect(vmUi.STACK_TAB_TYPE).toBe("stack");
     expect(vmUi.FREE_TAB_TYPE).toBe("free");
     expect(vmUi.REGISTERS_TAB_TYPE).toBe("registers");

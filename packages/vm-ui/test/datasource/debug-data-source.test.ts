@@ -10,7 +10,11 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DEBUG_CHANNEL_PROTOCOL_VERSION, PublicStateProjectionSchema } from "@stackmaster/protocol";
+import {
+  DEBUG_CHANNEL_PROTOCOL_VERSION,
+  PublicStateProjectionSchema,
+  type PublicStateProjection,
+} from "@stackmaster/protocol";
 
 import { DebugChannelClient } from "../../src/client/debug-channel-client.js";
 import {
@@ -457,6 +461,59 @@ describe("组合根装配(createDebugDataSource)", () => {
     FakeWebSocket.last.serverAccepts(); // onopen 即发送 attach。
     const attach = FakeWebSocket.last.sent[0] as Record<string, unknown>;
     expect(attach.payload).toEqual({ origin: { kind: "revision", revision: 7 } });
+    source?.dispose();
+  });
+
+  /**
+   * WP-70 工厂面:options = 运输面 & 数据源面。以下用例固定两面的接线口径——
+   * 数据源面透传(DebugDataSource 消费)、运输面零破坏(DebugChannelClient
+   * 构造参数键集不变,`projectionProvider` 不得展开进传输层)。
+   */
+  it("数据源面透传:projectionProvider 进 DebugDataSource → regions / registers 非空", () => {
+    FakeWebSocket.reset();
+    let requestSeq = 0;
+    let snapshot: PublicStateProjection | null = projection;
+    const store: { revision: number | null; snapshot?: PublicStateProjection | null } = {
+      revision: 3,
+      snapshot,
+    };
+    const source = createDebugDataSource(
+      { sessionId: SESSION_ID, store },
+      {
+        projectionProvider: () => snapshot,
+        webSocketFactory: fakeWebSocketFactory,
+        generateRequestId: () => `req-${(requestSeq += 1)}`,
+      },
+    );
+    expect(source).toBeInstanceOf(DebugDataSource);
+    expect(source?.regions().map((entry) => entry.regionId)).toEqual(["stack", "code"]);
+    expect(source?.registers()).toEqual([
+      { name: "RSP", valueHex: "0xB000" },
+      { name: "RIP", valueHex: "0x401000" },
+    ]);
+    // 提供者按调用读取(投影前进即随动):快照替换后 regions 随动。
+    snapshot = PublicStateProjectionSchema.parse({ ...projection, visibleRegions: [] });
+    expect(source?.regions()).toEqual([]);
+    // 运输面仍到达通道(装配未因数据源面而改变传输形态)。
+    source?.attach();
+    FakeWebSocket.last.serverAccepts();
+    expect((FakeWebSocket.last.sent[0] as Record<string, unknown>).type).toBe("debug_attach");
+    source?.dispose();
+  });
+
+  it("反例(行为边界保留):不传 projectionProvider 时 regions / registers 恒空", () => {
+    FakeWebSocket.reset();
+    let requestSeq = 0;
+    const source = createDebugDataSource(
+      { sessionId: SESSION_ID, store: { revision: 3, snapshot: projection } },
+      { projectionProvider: undefined, webSocketFactory: fakeWebSocketFactory, generateRequestId: () => `req-${(requestSeq += 1)}` },
+    );
+    // 缺省装配(未提供投影来源)= 空 VMA / 空寄存器;独立使用形态零变化。
+    expect(source?.regions()).toEqual([]);
+    expect(source?.registers()).toEqual([]);
+    expect(source?.bytesRows({ startAddressHex: "0x1000", endAddressHex: "0x1008" })[0]?.cells.every(
+      (cell) => cell.regionId === null && cell.offset === null,
+    )).toBe(true);
     source?.dispose();
   });
 });

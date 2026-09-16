@@ -1,19 +1,24 @@
 /**
- * <sm-workspace> —— 工作区容器(WP-F5;FE-X-02 唯一主体边界)。
+ * <sm-workspace> —— 工作区容器(WP-F5;FE-X-02 唯一主体边界;WP-71 固定窗口集)。
  *
- * 职责 = 容纳、管理、排布工作标签页(FE-WS-01)+ 顶部菜单(FE-WS-03)+
+ * 职责 = 容纳、管理、排布工作窗口(FE-WS-01)+ 顶部菜单(FE-WS-03)+
  * 跨视图集成接线(F3/F4 交付能力的组合根):
  *
+ *  - **固定窗口集(D-MP-1,WP-71)**:窗口集合 = 注册表登记的全部类型、
+ *    **各恰一个实例、常驻**;窗口没有开 / 关状态,只有「视口内 / 暂离
+ *    (条带滚出视野)」;窗口集在工作区接入(首帧前)按登记序一次性绑定
+ *    (`#bindWindows`),`tabTypes` 换绑即重绑。**无关闭入口、无空态引导**
+ *    (窗口集恒非空);窗口管理动作 = 聚焦导航(本包)+ 移动位置 / 调整大小
+ *    (WP-72);
  *  - **列式滚动平铺**(Q1 定案 v1):工作区 = 列的有序序列,列间水平滚动
- *    (Niri 式,`scrollToColumn` / 激活时滚动可达任意列);列内二叉分割
- *    (Hyprland 式:新标签页落入焦点列并均分列高);
- *  - **拖拽排布**(pointer 事件):标签页标题栏按下拖动,落到目标标签页
+ *    (Niri 式,`scrollToColumn` / 聚焦时滚动可达任意列);列内二叉分割
+ *    (Hyprland 式:同列窗口均分列高);
+ *  - **拖拽排布**(pointer 事件):窗口标题栏按下拖动,落到目标窗口
  *    (上/下半 = 前/后)、目标列(尾插)或列区空白(开新列);
- *  - **标签页生命周期**:tab-type registry 可扩展(FE-MV-01 同类型可多开);
- *    打开 / 关闭 / 激活 / 焦点管理;关到最后一个 → 空态引导打开;标题栏 =
- *    类型名 + 序号 + 关闭钮;debug 占位类型呈现 WP-F8 空态;
+ *  - **聚焦导航**:`focusWindow(type)` = 聚焦 + 滚动到该窗口(菜单「窗口」
+ *    分组逐个入口,详见 sm-workspace-menu);
  *  - **组合根装配**(README §双档数据源纪律):`client` 换绑即
- *    `new ProjectionDataSource(client.store)` 注入各标签页内容;
+ *    `new ProjectionDataSource(client.store)` 注入各窗口内容;
  *    `client.onProjectionChanged(() => 各内容 refresh())` 驱动视图刷新;
  *  - **跨视图联动**:`vma-select ↔ showRegion ↔ selectedRegionId` 回路在
  *    `<sm-byte-tab>` 内闭环;寄存器交叉标注(FE-RG-04)与跳转链
@@ -29,7 +34,8 @@
  *    postMessage 零权威语义不破(V-9,裁决数据不经嵌入协议帧)。
  *
  * 纪律(CLAUDE.md 第十章):浏览器只保存公开投影与 UI 状态;动画只用
- * transform / opacity(拖拽反馈 = opacity);语义化 DOM。
+ * transform / opacity(拖拽反馈 = opacity);语义化 DOM;窗口标题栏不带
+ * 关闭入口,可达性由菜单「窗口」聚焦入口承担(键盘可达 + aria-pressed)。
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -207,8 +213,11 @@ export class SmWorkspace extends LitElement {
 
   /**
    * 调试档数据源工厂(测试接缝):缺省 = 组合根装配
-   * `createDebugDataSource(client)`(DebugChannelClient 缺省传输);
-   * 测试注入假传输 / 替身数据源。返回 null = 会话未创建。
+   * `createDebugDataSource(client, { projectionProvider: () => client.store.snapshot ?? null })`
+   * ——传输面走 DebugChannelClient 缺省实现,投影来源 = 会话公开投影
+   * (调试档 VMA / 寄存器 / 行区域归属的结构同构映射唯一来源;WP-70 接线)。
+   * 测试注入假传输 / 替身数据源(注意:注入替身即绕开上述缺省装配路径)。
+   * 返回 null = 会话未创建。
    */
   @property({ attribute: false })
   debugDataSourceFactory: DebugDataSourceFactory | null = null;
@@ -234,6 +243,8 @@ export class SmWorkspace extends LitElement {
 
   readonly #model = new WorkspaceLayoutModel();
   readonly #contents = new Map<string, HTMLElement>();
+  /** 已绑定窗口集的注册表实例(换绑即重绑;同实例重渲染不重绑)。 */
+  #boundTabTypes: WorkspaceTabTypeRegistry | null = null;
   #listenerDisposers: readonly (() => void)[] = [];
 
   // 菜单呈现状态(由 client 事件与投影快照驱动;render 读取)。
@@ -284,6 +295,8 @@ export class SmWorkspace extends LitElement {
   // 拖拽态(pointer 事件;标题栏按下 → 阈值外位移 = 拖拽,否则 = 激活)。
   #drag: { tabId: string; startX: number; startY: number; moved: boolean } | null = null;
   #lastVisibleTabId: string | null = null;
+  /** 首帧前建窗 ⇒ 未渲染内容元素的 refresh 延后到首帧之后(WP-71 时序)。 */
+  #contentRefreshDeferred = false;
 
   /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
   readonly #i18n = new LocaleController(this);
@@ -361,18 +374,6 @@ export class SmWorkspace extends LitElement {
       font-size: 0.8125rem;
     }
 
-    .tab-close {
-      margin-inline-start: auto;
-      padding: 0 0.375rem;
-      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
-      border-radius: 4px;
-      background: canvas;
-      color: canvastext;
-      font: inherit;
-      line-height: 1.3;
-      cursor: pointer;
-    }
-
     .tab-content {
       flex: 1;
       min-block-size: 0;
@@ -385,8 +386,7 @@ export class SmWorkspace extends LitElement {
       flex: 1;
     }
 
-    .tab-placeholder,
-    .empty {
+    .tab-placeholder {
       margin: 0;
       padding: 1rem;
       color: graytext;
@@ -554,19 +554,28 @@ export class SmWorkspace extends LitElement {
       this.#rebindContents();
       this.#rebuildAnnotationCache();
     }
+    if (changed.has("tabTypes") && this.tabTypes !== this.#boundTabTypes) {
+      // 注册表换绑(宿主替换工厂 / 文案 / 追加登记)= 窗口集重绑。
+      this.#bindWindows();
+    }
     if (changed.has("theme")) {
       this.#syncThemeAnchor();
     }
   }
 
   protected override updated(): void {
-    // 焦点变化 → 滚动使焦点标签页可见(列间水平滚动可达,验收底线)。
+    // 焦点变化 → 滚动使焦点窗口可见(列间水平滚动可达,验收底线)。
     const focusedTabId = this.#model.focusedTabId;
     if (focusedTabId !== this.#lastVisibleTabId) {
       this.#lastVisibleTabId = focusedTabId;
       if (focusedTabId !== null) {
         this.ensureTabVisible(focusedTabId);
       }
+    }
+    if (this.#contentRefreshDeferred) {
+      // 首帧前建窗的内容元素此刻已渲染(renderRoot 就绪)→ 补一次 refresh。
+      this.#contentRefreshDeferred = false;
+      this.#refreshContents();
     }
   }
 
@@ -577,6 +586,8 @@ export class SmWorkspace extends LitElement {
     // 主题锚样式表(幂等)+ 独立使用形态的 theme 属性转写(最近锚优先)。
     ensureSmThemeStyles(this.ownerDocument ?? document);
     this.#syncThemeAnchor();
+    // 窗口集绑定(D-MP-1:登记集合各恰一实例、常驻;首帧前建窗)。
+    this.#bindWindows();
     // pointer 拖拽监听挂在 shadow root 内:避免跨 shadow 边界的 target 重定向。
     this.renderRoot.addEventListener("pointermove", this.#onPointerMove as EventListener);
     this.renderRoot.addEventListener("pointerup", this.#onPointerUp as EventListener);
@@ -628,44 +639,62 @@ export class SmWorkspace extends LitElement {
     return this.#model.snapshot;
   }
 
-  /** 打开标签页(按注册表类型;返回标签页 id,未登记类型返回 null)。 */
-  openTab(type: string): string | null {
-    const descriptor = this.#tabTypeDescriptor(type);
-    if (descriptor === undefined) {
-      return null;
+  /**
+   * 窗口集绑定(D-MP-1 固定窗口集,WP-71):按注册表登记集合一次性建窗——
+   *
+   *  - 每种登记类型恰一实例(窗口 id ≡ 类型键;单实例为结构性保证);
+   *  - 缺省布局 = 登记序、每列一窗(WP-72 落 P0 精确预设前的**最小形态**;
+   *    WP-72 经 `WorkspaceLayoutModel.bindWindows(entries, columns)` 的单点
+   *    入口换成 P0 预设,工作区层无需再改);
+   *  - 内容元素按各描述项 `createContent` 产出(字节窗口注入行装饰挂点;
+   *    声明 `actionSink` 的内容按 duck-typing 注入会话客户端);
+   *  - 触发点 = 工作区接入(connectedCallback,首帧前)+ `tabTypes` 换绑;
+   *    **与「接入会话」无关**——窗口集是结构,数据面由 `dataSource` 换绑注入
+   *    (解题 ↔ 调试模式切换只换数据源,布局零副作用)。
+   */
+  #bindWindows(): void {
+    this.#boundTabTypes = this.tabTypes;
+    const descriptors = this.tabTypes.list();
+    this.#contents.clear();
+    this.#model.bindWindows(
+      descriptors.map((descriptor) => ({
+        type: descriptor.type,
+        // 展示名:i18n 键优先(WP-53),按**绑定时刻** locale 求值固化
+        // (窗口标题不随语言切换追溯——WP-F5 登记口径保留)。
+        label: descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label,
+      })),
+    );
+    for (const descriptor of descriptors) {
+      const content = descriptor.createContent?.({ dataSource: this.dataSource }) ?? null;
+      if (content instanceof SmByteTab) {
+        content.rowDecorator = this.#rowDecorator;
+      }
+      this.#bindActionSink(content);
+      if (content !== null) {
+        this.#contents.set(descriptor.type, content);
+      }
     }
-    // Hyprland 式分割:新标签页落入焦点列(模型负责插入位),内容工厂产出
-    // 内容元素;字节页注入行装饰挂点(交叉标注 + 跳转链);payload 页等
-    // 声明 actionSink 属性的内容(duck-typing,同 dataSource 约定)注入
-    // 会话客户端(动作提交面)。
-    const content = descriptor.createContent?.({ dataSource: this.dataSource }) ?? null;
-    if (content instanceof SmByteTab) {
-      content.rowDecorator = this.#rowDecorator;
-    }
-    this.#bindActionSink(content);
-    // 展示名:i18n 键优先(WP-53),按打开时刻 locale 求值(标题固化,登记)。
-    const label = descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label;
-    const id = this.#model.openTab(type, label);
-    if (content !== null) {
-      this.#contents.set(id, content);
-    }
-    // ED 组件面:新开标签页立即注入当前投影 / 账本切面(不等下一次投影事件)。
+    // ED 组件面:绑定即注入当前投影 / 账本切面(不等下一次投影事件)。
     this.#syncEdContents();
     this.requestUpdate();
-    return id;
   }
 
-  /** 关闭标签页(内容元素一并弃用;最后一个关闭后呈现空态引导)。 */
-  closeTab(tabId: string): void {
-    if (this.#model.tab(tabId) === null) {
-      return;
+  /**
+   * 聚焦指定类型窗口(D-MP-1 三类管理动作之「聚焦导航」):聚焦 + 滚动到该
+   * 窗口;未登记类型返回 false(不改变布局与焦点)。窗口集常驻,本方法
+   * **不创建实例**——窗口实例数在绑定后恒定。
+   */
+  focusWindow(type: string): boolean {
+    if (!this.#model.focusWindow(type)) {
+      return false;
     }
-    this.#contents.delete(tabId);
-    this.#model.closeTab(tabId);
+    // 聚焦即滚动可达(jsdom 无布局环境静默;updated() 亦按焦点变化滚动)。
+    this.ensureTabVisible(type);
     this.requestUpdate();
+    return true;
   }
 
-  /** 激活标签页(焦点跟随 + 滚动可见)。 */
+  /** 激活窗口(焦点跟随 + 滚动可见;不存在的 id 为 no-op)。 */
   activateTab(tabId: string): void {
     this.#model.activateTab(tabId);
     this.requestUpdate();
@@ -807,12 +836,22 @@ export class SmWorkspace extends LitElement {
 
   #refreshContents(): void {
     this.#rebuildAnnotationCache();
+    let deferred = false;
     for (const content of this.#contents.values()) {
-      const refreshable = content as { refresh?: () => void };
-      if (typeof refreshable.refresh === "function") {
-        refreshable.refresh();
+      const refreshable = content as { refresh?: () => void; renderRoot?: ShadowRoot | undefined };
+      if (typeof refreshable.refresh !== "function") {
+        continue;
       }
+      if (refreshable.renderRoot === undefined) {
+        // WP-71 时序:窗口集在首帧前绑定,内容元素在**首帧渲染前**尚无
+        // renderRoot(Lit 未首渲染)——对未就绪元素调用 refresh() 会因其内部
+        // querySelector 取空而抛错。延后到 updated() 之后补刷新。
+        deferred = true;
+        continue;
+      }
+      refreshable.refresh();
     }
+    this.#contentRefreshDeferred = deferred;
   }
 
   #rebindContents(): void {
@@ -941,7 +980,15 @@ export class SmWorkspace extends LitElement {
       return;
     }
     this.#teardownDebugSource();
-    const factory = this.debugDataSourceFactory ?? ((session: DebugSessionLike) => createDebugDataSource(session));
+    const factory =
+      this.debugDataSourceFactory ??
+      ((session: DebugSessionLike) =>
+        createDebugDataSource(session, {
+          // 投影来源 = 会话公开投影(WP-70:`regions()` / `registers()` / 行区域
+          // 归属的结构同构映射唯一来源;调试档零私有信息推导,ADR-DC1 what-if
+          // 纪律)。每次调用读最新快照,投影前进即随动。
+          projectionProvider: () => session.store.snapshot ?? null,
+        }));
     const debugSource = factory(client);
     if (debugSource === null) {
       this.#debugFeedback = t("debug.sourceFailed");
@@ -1069,8 +1116,10 @@ export class SmWorkspace extends LitElement {
         // 宿主(plugin-dev 壳)执行;工作区只发请求事件。
         this.dispatchEvent(new CustomEvent("new-session-request", { bubbles: true, composed: true }));
         break;
-      case "open-tab":
-        this.openTab(action.tabType);
+      case "focus-window":
+        // D-MP-1 聚焦导航(WP-71):菜单「窗口」分组 = 聚焦 + 滚动到该窗口
+        // (替代原「打开标签」;窗口集常驻,不存在开 / 关语义)。
+        this.focusWindow(action.windowType);
         break;
     }
   }
@@ -1400,10 +1449,7 @@ export class SmWorkspace extends LitElement {
   // ── 拖拽排布(pointer 事件;动画只用 opacity)────────────────────────────
 
   #onTabBarPointerDown(event: PointerEvent, tabId: string): void {
-    // 关闭钮不触发拖拽 / 激活。
-    if (event.target instanceof Element && event.target.closest(".tab-close") !== null) {
-      return;
-    }
+    // 标题栏 = 拖拽把手(无关闭钮等交互子元素;WP-72 落大小控件时在此放行)。
     this.#drag = { tabId, startX: event.clientX, startY: event.clientY, moved: false };
   }
 
@@ -1492,6 +1538,7 @@ export class SmWorkspace extends LitElement {
     return html`
       <sm-workspace-menu
         .tabTypes=${this.tabTypes.list()}
+        .focusedWindowType=${snapshot.focusedTabId}
         .connectionStatus=${this.#connectionStatus}
         .disconnectReason=${this.#disconnectReason}
         .reconnectAttempt=${this.#reconnectAttempt}
@@ -1525,7 +1572,6 @@ export class SmWorkspace extends LitElement {
       ${this.#jumpFeedback === null
         ? nothing
         : html`<p class="jump-feedback" role="status">${this.#jumpFeedback}</p>`}
-      ${snapshot.columns.length === 0 ? this.#renderEmptyState() : nothing}
       <main
         class="columns"
         data-columns
@@ -1637,10 +1683,6 @@ export class SmWorkspace extends LitElement {
     }
   }
 
-  #renderEmptyState(): unknown {
-    return html`<p class="empty" role="status">${t("workspace.empty")}</p>`;
-  }
-
   #renderPanel(tabId: string): unknown {
     const info = this.#model.tab(tabId);
     if (info === null) {
@@ -1660,15 +1702,6 @@ export class SmWorkspace extends LitElement {
           @pointerdown=${(event: PointerEvent) => this.#onTabBarPointerDown(event, info.id)}
         >
           <span class="tab-title">${info.title}</span>
-          <button
-            type="button"
-            class="tab-close"
-            aria-label=${t("workspace.closeTabAria", { title: info.title })}
-            @pointerdown=${(event: PointerEvent) => event.stopPropagation()}
-            @click=${() => this.closeTab(info.id)}
-          >
-            ×
-          </button>
         </header>
         <div class="tab-content">
           ${content ??

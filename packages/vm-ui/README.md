@@ -17,11 +17,13 @@ src/
 ├── workspace/                      WP-F5:工作区容器与菜单
 │   ├── sm-workspace.ts             <sm-workspace> 工作区本体——列式滚动平铺
 │   │                               (列间 Niri 式水平滚动 + 列内 Hyprland 式
-│   │                               二叉分割)、pointer 拖拽排布、标签页生命
-│   │                               周期、组合根装配(client → Projection-
-│   │                               DataSource → 各标签页)、跨视图集成接线
-│   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——打开分组
-│   │                               (注册表驱动)/ 指令步进 step / 积木步进
+│   │                               二叉分割)、pointer 拖拽排布、**固定窗口集**
+│   │                               (WP-71 / D-MP-1:登记集合各恰一实例常驻)、
+│   │                               组合根装配(client → Projection-
+│   │                               DataSource → 各窗口)、跨视图集成接线
+│   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——窗口分组
+│   │                               (WP-71 聚焦导航,注册表驱动;aria-pressed
+│   │                               表达当前焦点)/ 指令步进 step / 积木步进
 │   │                               payload-step(WP-F6,仅 payload 页激活时
 │   │                               可用)/ 运行到断点(WP-F8,调试档)/
 │   │                               解题/调试模式切换(WP-F8,debugMode
@@ -31,9 +33,12 @@ src/
 │   ├── tab-registry.ts             标签页类型注册表(stack / free / registers /
 │   │                               payload / debug=指令视图 带工厂;ED 组件面
 │   │                               五类(structure/call-stack/memory-diff/
-│   │                               timeline/checkpoints)登记;可扩展)
-│   ├── workspace-model.ts          布局模型纯状态机——列/标签页结构、焦点
-│   │                               管理、开关与拖拽移动、类型内序号
+│   │                               timeline/checkpoints)登记;可扩展;WP-71 /
+│   │                               D-MP-1:一登记项 = 恰一个常驻窗口)
+│   ├── workspace-model.ts          布局模型纯状态机——列/窗口结构、窗口集
+│   │                               绑定(bindWindows)、焦点导航(focusWindow)
+│   │                               与拖拽移动、窗口集不变量机检
+│   │                               (isWindowSetComplete)
 │   ├── byte-tab.ts                 <sm-byte-tab> 字节页组合(字节视图 + VMA
 │   │                               侧栏;vma-select ↔ showRegion ↔
 │   │                               selectedRegionId 回路;rowDecorator 透传)
@@ -151,9 +156,19 @@ interface MemoryDataSource {          // UI 组件只依赖此接口
   `search` 仅在已下发窗口字节内检索;`instructionStream` 不实现。
 - 调试档 `DebugDataSource`(WP-F8 填充,契约见下方 WP-F8 章节):调试通道
   缓存模型(全量语义;`instructionStream` 仅此档存在)+ 调试档独有扩展方法。
+  **投影结构同构映射是调试档 VMA / 寄存器 / 行区域归属的唯一来源**(WP-70
+  接线修复):`regions()` / `registers()` / `bytesRows()` 的 `regionId`·`offset`
+  全部读 `projectionProvider`(组合根装配 = `() => session.store.snapshot ?? null`,
+  即会话公开投影面;每次调用读最新快照,投影前进即随动);**缺省不传 = 恒
+  null → 空 VMA / 空寄存器**(独立使用形态的既有行为保留,反例见
+  `test/datasource/debug-data-source.test.ts`)。调试档**不得**从调试通道字节
+  本地推导区域归属或寄存器(ADR-DC1 what-if 纪律;来源 ⊆ 公开投影)。
 
 装配形态(F5 接线参考):`dataSource = new ProjectionDataSource(client.store)`
-——该装配发生在**组合根**(工作区容器),视图只接收 `MemoryDataSource`。
+——该装配发生在**组合根**(工作区容器),视图只接收 `MemoryDataSource`;
+调试档同理:`createDebugDataSource(client, { projectionProvider: () =>
+client.store.snapshot ?? null })`(工厂 options = 运输面 & 数据源面:运输键
+透传 `DebugChannelClient`,数据源键只进 `DebugDataSource`;两面不混)。
 
 ## SessionClient 行为契约(WP-F2 定稿)
 
@@ -278,30 +293,78 @@ const client = new SessionClient({
 本 WP 未强制跑 compose E2E(留给 WP-F7 的 Playwright 最小集);上述接入面已由
 mock 全链路测试覆盖同一代码路径。
 
-## 主题与语言机制面(WP-53,2026-09-11)
+## 主题与语言机制面(WP-53,2026-09-11;WP-73 主题边界修订)
 
-嵌入协议冻结面的实现义务(阶段五边界裁决 2:**主题/语言是机制不是视觉美化,
-视觉风格零重设计**);定案细节与遗留登记见
-`docs/develop/阶段五WP53决策草稿.md`。
+嵌入协议冻结面的实现义务(阶段五边界裁决 2:**主题/语言是机制不是视觉美化**);
+定案细节与遗留登记见 `docs/develop/阶段五WP53决策草稿.md`。
+**WP-73 修订**:阶段五的「视觉风格零重设计」边界已按中期计划 §2.1 显式修订为
+**完整设计 token 集 + terminal 预设**(黑客氛围靠一致性 + 克制达成,学习可读性
+优先级高于氛围);机制(锚 + 文档级样式表 + 自定义属性继承)与协议面均不变。
 
-### 主题(src/theme/theme-tokens.ts)
+### 主题(src/theme/theme-tokens.ts;WP-73 三预设 token 表)
 
-- **变量面 = 8 个 CSS 自定义属性**(边框 3 档 / 分隔 2 档 / 徽标底 2 档 /
-  `--sm-danger`),light 值 = 现行硬编码值原样(light 零视觉变化),dark 值 =
-  功能对比度初值(以 axe 真机门禁为唯一口径,WX-55 校准);系统颜色关键词
-  (canvas/canvastext/graytext/…)随 `color-scheme` 自适应,不入变量面;
+> **本节 = WP-77 回填点**(中期计划 §2.1 变量面文档):三预设 token 集与承载口径
+> 已由 WP-73 落地;组件消费面(逐组件改读 token)+ 真机 axe 三预设门禁属 WP-74,
+> 完成后由 WP-77 复核本文档。
+
+**边界变更登记(WP-73)**:`theme-tokens.ts` 头注释此前为「视觉风格零重设计,
+只做功能对比度最小变量面(8 个)」,已按中期计划 §2.1 **显式修订**为完整设计
+token 集 + 新增 `terminal` 预设;冻结不变量 = 8 个功能对比度变量的 light / dark
+值逐值不变(机检语料 `test/theming/theme.test.ts` 的 `FROZEN_CONTRAST_VARIABLES`);
+契约面零改动(嵌入协议 `EMBED_THEMES` 三值不动,见下方 D-MP-2 承载口径)。
+
+**变量面 = 20 个 CSS 自定义属性 × light / dark / terminal 三预设**(键集与键序
+三预设一致,`SM_THEME_PRESET_VALUES`;值域 `SM_THEME_VALUES` = 预设三值 + `auto`):
+
+| 族 | token | light / dark | terminal(具体色值) |
+|---|---|---|---|
+| 背景三层 | `--sm-bg-base` | `canvas` | `#0b0f0b` 近黑(非纯黑) |
+| | `--sm-bg-panel` | `color-mix(in srgb, canvas 92%, highlight 8%)` | `#101610` 面板 |
+| | `--sm-bg-inset` | `field` | `#070907` 内嵌区 |
+| 前景 | `--sm-fg` | `canvastext` | `#b9ffc4` 磷光绿(16.7:1) |
+| | `--sm-fg-dim` | `graytext` | `#6dd47f` 暗绿(10.5:1) |
+| 语义色 | `--sm-accent` | `linktext` | `#4fe6c2` 青绿(12.4:1) |
+| | `--sm-warn` | `highlight` | `#ffc857` 琥珀(12.6:1) |
+| | `--sm-danger` | `crimson` / `#ff8a94` | `#ff8a94`(8.6:1) |
+| | `--sm-selection` | `color-mix(in srgb, highlight 14%, transparent)` | `#1c3a25`(对前景 10.8:1) |
+| | `--sm-focus-ring` | `accentcolor` | `#a9ffb8`(16.3:1) |
+| 字体 | `--sm-font-mono` | §2.1 定案栈(三预设同源) | 同左 |
+| 效果 | `--sm-scanline-opacity` | `0`(关闭) | `0.06`(WP-74 登记上限) |
+| | `--sm-caret-blink` | `0s`(关闭) | `1.1s` |
+| 冻结族(功能对比度 8) | `--sm-border` / `--sm-border-button` / `--sm-border-strong` / `--sm-divider` / `--sm-divider-faint` / `--sm-badge-bg` / `--sm-badge-bg-soft` / `--sm-danger` | light = 现行硬编码原样;dark = 功能对比度初值 | 磷光绿 α 阶梯(28/34/46/16/12/18/10%) |
+
+- **数值口径**:light / dark 的新 token 取**系统颜色关键词**(与现行渲染同源,
+  `color-scheme` 自适应 ⇒ 组件开始消费这些 token 时 light / dark 仍像素级零变化);
+  terminal 一律**具体色值**(真机 axe 判定确定、跨平台一致),为**保守可读初值**
+  —— 前景对三层背景的 WCAG 对比度实测 ≥ 8.1:1(括号内数值 = 对 `--sm-bg-base`)。
+- **可读性口径**:真机 axe color-contrast 是**唯一权威门禁**(WP-74 三预设扩面 +
+  13px 字号下限);本包在 jsdom 层固化结构 + 公式面证据
+  (`test/theming/theme-terminal.test.ts`:token 齐备 / 锚同源生成 / 效果面 light·dark
+  关闭 / terminal 色板 WCAG 逐对机检),**terminal 数值以 WP-74 真机报告修正**。
 - **注入 = `data-sm-theme` 属性锚 + 文档级样式表 + 自定义属性继承**:
-  `ensureSmThemeStyles(document)` 幂等注入(各组件 connectedCallback 调用),
-  文档级规则命中携带锚的宿主元素(嵌入形态 = WP-52 落的
-  `<pwn-memory-vm data-sm-theme>`),变量沿 composed 树继承穿透 shadow DOM,
-  组件以 `var(--sm-*, <light 值>)` 消费、零 JS 解析;`auto` 的系统跟随 =
-  `@media (prefers-color-scheme: dark)`(嵌入形态的 auto 已由 WP-52 解析为
-  二值锚,两条路径互不依赖);
-- **独立使用形态**:`<sm-workspace theme="light|dark|auto">`(转写为自身
-  `data-sm-theme`,最近锚优先);
-- 机械护栏测试(`test/theming/theme.test.ts`):全部组件样式 var() 之外零
-  `rgb(0 0 0` / `crimson` 硬编码;axe 套件 light / dark 锚双主题零 violations
-  (`color-contrast` 沿既有豁免,真机补测归 WP-55,dark 数值按其报告校准)。
+  `ensureSmThemeStyles(document)` 幂等注入(各组件 connectedCallback 调用;WP-73 只
+  扩样式表**内容**,注入面结构零变化),文档级规则命中携带锚的宿主元素(嵌入形态 =
+  WP-52 落的 `<pwn-memory-vm data-sm-theme>`),变量沿 composed 树继承穿透 shadow
+  DOM,组件以 `var(--sm-*, <light 值>)` 消费、零 JS 解析;`auto` 的系统跟随 =
+  `@media (prefers-color-scheme: dark)`(嵌入形态的 auto 已由 WP-52 解析为二值锚,
+  两条路径互不依赖)。锚样式表由变量记录**同源生成**(单一来源,严禁手写重复块)。
+- **独立使用形态**:`<sm-workspace theme="light|dark|terminal|auto">`(转写为自身
+  `data-sm-theme`,最近锚优先;值域即 `SmThemeValue`,terminal 随之可选)。
+- **`terminal` 承载口径(D-MP-2;嵌入协议零改动)**:`terminal` **不经冻结协议**
+  传达(协议外观值域仍为 light / dark / auto),由宿主元素上的
+  `data-sm-theme="terminal"` 扩展锚承载 —— **插件文档页预置**(部署面)或集成方在
+  同文档内直接设置。插件自身的落锚只写二值 `resolvedTheme`,故该锚出现即视为
+  **外部显式锚优先**(保留锚 + `color-scheme` 落 dark;宿主 `theme_changed` 不夺锚;
+  锚属性变更经 MutationObserver 即时生效),锚被移除或改写为协议三值时交还插件控制
+  —— light / dark / auto 路径逐字零变化。跨源宿主无法直接写插件文档内的锚
+  (同源策略),该形态承载面(插件文档 / 部署配置)口径由 WP-74 / WP-77 成文。
+- **效果类 token 的实装义务归 WP-74**(本包只落变量、组件零动画):扫描线 overlay 与
+  光标闪烁必须 `aria-hidden` 纯装饰、`pointer-events: none`、包在
+  `prefers-reduced-motion: no-preference` 内(或给 reduce 覆盖)、动画只用
+  transform / opacity;字号下限 13px 亦归 WP-74,本包不越界改组件字号。
+- 机械护栏测试(`test/theming/theme.test.ts` + `test/theming/theme-terminal.test.ts`):
+  全部组件样式 var() 之外零 `rgb(0 0 0` / `crimson` 硬编码;axe 套件 **light / dark /
+  terminal 三锚**零 violations(`color-contrast` 沿既有豁免,真机补测归 WP-55 / WP-74)。
 
 ### i18n(src/i18n/)
 
@@ -446,7 +509,7 @@ src/views/
 (与生产同一语义路径)。jsdom 的 Selection 不支持影子根内选区(rangeCount 恒 0,
 真实浏览器无此限制),降级路径测试以 `Selection.addRange` 侦察验证。
 
-## WP-F5:工作区容器与菜单(src/workspace,2026-09-11)
+## WP-F5:工作区容器与菜单(src/workspace,2026-09-11;WP-71 起固定窗口集)
 
 M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)、
 `<sm-workspace-menu>` 顶部菜单、标签页类型注册表、布局模型纯状态机、
@@ -454,17 +517,26 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
 
 ### 定案规则(主控已裁决,同时登记于源码注释)
 
+- **固定窗口集(D-MP-1,WP-71)**:窗口集合 = 注册表登记的**全部类型、各恰
+  一个实例、常驻**;窗口**没有开 / 关状态**,只有「视口内 / 暂离(条带滚出
+  视野)」——管理动作收敛为**移动位置**(WP-F5 拖拽)、**调整大小**(WP-72)、
+  **聚焦导航**(`focusWindow(type)` / 菜单「窗口」分组)。工作区接入(首帧前)
+  按登记序一次性绑定(`WorkspaceLayoutModel.bindWindows`;缺省布局 = 登记序、
+  每列一窗,WP-72 落 P0 精确预设前的最小形态,预设经同方法 `columns` 参数
+  单点注入);无关闭入口、无空态引导;解题 ↔ 调试模式切换**只换绑数据源**
+  (`layoutSnapshot` 深度相等),布局零副作用。
 - **平铺(Q1 v1)**:工作区 = 列的有序序列,**列间水平滚动**(Niri 式,
-  `scrollToColumn` / 激活跟随滚动可达任意列);**列内二叉分割**(Hyprland 式:
-  新标签页落入焦点列、插入焦点页之后,同列均分列高);拖拽排布 = pointer
-  事件(标题栏按下 → 位移 >3px 进入拖拽 → 落点:目标页上/下半 = 前/后、
-  目标列 = 尾插、列区空白 = 开新列;拖拽反馈只用 opacity)。
-- **标签页类型注册表(Q2 四类独立可多开)**:`stack`(栈视图)/`free`
-  (自由视图)共用 `<sm-byte-tab>`(view-kind 只决定标题)/`registers`
-  (寄存器视图)带工厂;**`debug` 登记占位不实现**——注册存在但无工厂,
-  选中呈现「调试模式档由 WP-F8 提供」空态;注册表为可扩展结构(WP-F6
-  payload 经 `register()` 追加即进「打开」菜单);同类型可多开(FE-MV-01),
-  类型内序号只增不减(标题稳定)。
+  `scrollToColumn` / 聚焦跟随滚动可达任意列);**列内二叉分割**(Hyprland 式:
+  同列窗口均分列高);拖拽排布 = pointer 事件(标题栏按下 → 位移 >3px 进入
+  拖拽 → 落点:目标窗口上/下半 = 前/后、目标列 = 尾插、列区空白 = 开新列;
+  拖拽反馈只用 opacity)。**平铺不变量:不存在空列**;`moveTab` 落点语义
+  (WP-F5 定案)原样保留。
+- **标签页类型注册表(Q2 起四类,WP-71 起单实例常驻)**:`stack`(栈视图)/
+  `free`(自由视图)共用 `<sm-byte-tab>`(view-kind 只决定标题)/`registers`
+  (寄存器视图)/`payload`/`debug`(WP-F8 起 = 指令视图真工厂)带工厂;
+  `register()` 为开放扩展点(Map 保序覆盖语义:宿主可替换工厂 / 文案);
+  **注册项不携带实例数语义字段**——单实例由 `bindWindows` 结构性保证
+  (窗口 id ≡ 类型键,同类型重复实例无法表达)。
 - **菜单(FE-WS-03/04a/05)**:指令步进 = `step` 动作(恰执行一条指令后暂停);
   重启测试环境 = `reset` 动作,**终态(won/failed)禁用**并呈现
   「测试环境已结束,请新建会话」引导——引导动作 = `new-session-request` 事件,
@@ -478,7 +550,7 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
   动作被拒(onActionRejected)呈现 userVisibleError——code + message +
   explanation(hints 与事实字段),「知道了」消隐。
 - **组合根装配**:工作区持有 `client`,`client` 换绑即
-  `dataSource = new ProjectionDataSource(client.store)` 注入各标签页内容,
+  `dataSource = new ProjectionDataSource(client.store)` 注入各窗口内容,
   `client.onProjectionChanged(() => 各内容 refresh())` 驱动刷新;视图组件
   本身仍只依赖 `MemoryDataSource` 接口(§四纪律不破)。
 
@@ -513,16 +585,19 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
 
 ### 测试面
 
-`test/workspace/`:布局模型(打开分割 / 关闭邻居焦点 / 拖拽换位含跨列与
-开新列 / 原地 no-op / 序号稳定)、注册表(默认四类 / debug 占位 / 可扩展 /
-覆盖更新)、`<sm-workspace-menu>`(打开分组 / step·reset 禁用矩阵 / 终态引导 /
-断线横幅 attempt·retryDelayMs / connection-replaced 手动重连 / 拒绝错误含
-explanation)、`<sm-byte-tab>`(vma 回路 / rowDecorator 透传 / refresh)、
+`test/workspace/`:布局模型(窗口集绑定各恰一实例 / 缺省每列一窗与显式列分组 /
+焦点导航 focusWindow / 拖拽落点含跨列与开新列 / 原地 no-op / 窗口集不变量机检
+`isWindowSetComplete`)、注册表(默认登记序 / 工厂面 / 登记集合 → 窗口集 1:1 /
+可扩展 / 覆盖更新)、`<sm-workspace-menu>`(窗口分组与 aria-pressed 焦点表达 /
+无「打开 / 关闭」语义文案 / step·reset 禁用矩阵 / 终态引导 / 断线横幅
+attempt·retryDelayMs / connection-replaced 手动重连 / 拒绝错误含 explanation)、
+`<sm-byte-tab>`(vma 回路 / rowDecorator 透传 / refresh)、
 `<sm-register-annotation>`(按钮面 / 点击展开收起)、`<sm-workspace>` 集成
-(双标签页并排 / 列间滚动可达 / pointer 拖拽模拟 / 同类型多开 / 关闭生命周期
-与空态 / debug 占位 / **真实 SessionClient mock 全链路**:step·reset 帧形态、
-终态禁用引导、断线横幅、踢旧重连、rejected 呈现、投影回流刷新、交叉标注与
-跳转链挂载、viewport-jump 滚动/窗口外反馈)。
+(全部登记类型常驻且各恰一实例 / 无关闭入口(按钮 / aria / 公共 API 三面)/
+无空态引导 / focusWindow 聚焦与滚动 / pointer 拖拽模拟 / **模式切换
+layoutSnapshot 深度相等** / **真实 SessionClient mock 全链路**:step·reset 帧
+形态、终态禁用引导、断线横幅、踢旧重连、rejected 呈现、投影回流刷新、
+交叉标注与跳转链挂载、viewport-jump 滚动/窗口外反馈)。
 
 ## WP-F9:教学组件面(src/views/ed + src/ed,2026-09-11)
 

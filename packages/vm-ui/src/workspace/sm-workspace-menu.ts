@@ -1,12 +1,14 @@
 /**
- * <sm-workspace-menu> —— 工作区顶部菜单(WP-F5 / FE-WS-03)。
+ * <sm-workspace-menu> —— 工作区顶部菜单(WP-F5 / FE-WS-03;WP-71 窗口分组)。
  *
- * 职责:作用于工作区/标签页**整体**(而非单个标签页内部)的常驻菜单与状态面:
- *  - **打开标签页**:按注册表条目渲染打开项(可扩展结构——payload 等
- *    新类型登记后自动出现);
+ * 职责:作用于工作区/窗口**整体**(而非单个窗口内部)的常驻菜单与状态面:
+ *  - **窗口(D-MP-1 聚焦导航,WP-71)**:按注册表条目渲染**聚焦入口**——
+ *    点击 = 聚焦 + 滚动到该窗口(替代原「打开标签页」);窗口集常驻、无开 /
+ *    关语义,当前焦点窗口以 `aria-pressed` 表达(禁用态不适用:聚焦导航
+ *    恒可用)。锚点 = `data-window-type`(注册表类型契约);
  *  - **指令步进**(FE-WS-04a)= `step` 动作;**积木步进**(FE-WS-04b,WP-F6)
- *    = `payload-step` 动作——仅 payload 标签页激活时可用,语义(编译 + 推进
- *    一个原子动作)由 payload 标签页承载;
+ *    = `payload-step` 动作——仅 payload 窗口聚焦时可用,语义(编译 + 推进
+ *    一个原子动作)由 payload 窗口承载;
  *  - **提交**(阶段六 WP-63,D-API-84)= `submit` 动作:正式裁决呈现入口
  *    (submit → pending → verdicted;禁用矩阵与 step 同形);
  *  - **重启测试环境**(FE-WS-05,Q5 / M11 口径):运行中可点 = `reset` 动作;
@@ -59,7 +61,11 @@ export type WorkspaceMenuAction =
   | { readonly action: "run-to-breakpoint" }
   /** 解题/调试模式切换(FE-WS-06,WP-F8;可用性 = debugModeAvailable 题目声明)。 */
   | { readonly action: "toggle-debug-mode" }
-  | { readonly action: "open-tab"; readonly tabType: string };
+  /**
+   * 窗口聚焦导航(D-MP-1,WP-71):聚焦 + 滚动到指定类型窗口——窗口集常驻,
+   * 本动作**不创建实例**(替代原 `open-tab`)。
+   */
+  | { readonly action: "focus-window"; readonly windowType: string };
 
 /** `workspace-menu-action` 事件 detail。 */
 export interface WorkspaceMenuActionDetail {
@@ -71,9 +77,16 @@ const TERMINAL_STATUSES: readonly string[] = ["won", "failed"];
 
 @customElement("sm-workspace-menu")
 export class SmWorkspaceMenu extends LitElement {
-  /** 注册表条目(「打开」分组;可扩展类型的呈现面)。 */
+  /** 注册表条目(「窗口」分组;可扩展类型的呈现面)。 */
   @property({ attribute: false })
   tabTypes: readonly WorkspaceTabTypeDescriptor[] = [];
+
+  /**
+   * 当前焦点窗口类型(宿主按布局模型注入;`aria-pressed` 表达当前态——
+   * 恰一个入口为真;null = 尚无焦点)。
+   */
+  @property({ attribute: false })
+  focusedWindowType: string | null = null;
 
   /** 连接状态机当前态。 */
   @property({ type: String })
@@ -293,8 +306,8 @@ export class SmWorkspaceMenu extends LitElement {
     return html`
       <nav aria-label=${t("menu.aria")} part="nav">
         <span class="group">
-          <span class="group-label">${t("menu.openGroup")}</span>
-          ${this.tabTypes.map((descriptor) => this.#renderOpenButton(descriptor))}
+          <span class="group-label window-group-label">${t("menu.windowGroup")}</span>
+          ${this.tabTypes.map((descriptor) => this.#renderFocusButton(descriptor))}
         </span>
         <span class="group">
           <span class="group-label">${t("menu.modeGroup")}</span>
@@ -396,16 +409,22 @@ export class SmWorkspaceMenu extends LitElement {
     `;
   }
 
-  #renderOpenButton(descriptor: WorkspaceTabTypeDescriptor): unknown {
+  /**
+   * 窗口聚焦入口(D-MP-1 聚焦导航,WP-71):点击 = 聚焦 + 滚动到该窗口。
+   * 当前焦点窗口以 `aria-pressed` 表达(可达性:焦点态不只存在于视觉);
+   * 聚焦导航恒可用(无禁用态——窗口集常驻,聚焦不依赖会话)。
+   */
+  #renderFocusButton(descriptor: WorkspaceTabTypeDescriptor): unknown {
     return html`
       <button
         type="button"
-        class="open-tab"
-        data-tab-type=${descriptor.type}
+        class="focus-window"
+        data-window-type=${descriptor.type}
+        aria-pressed=${this.focusedWindowType === descriptor.type ? "true" : "false"}
         title=${descriptor.createContent === undefined
           ? (descriptor.placeholderNote ?? t("common.noContentNote"))
-          : this.#tabLabel(descriptor)}
-        @click=${() => this.#emit({ action: "open-tab", tabType: descriptor.type })}
+          : t("menu.focusWindowTitle", { title: this.#tabLabel(descriptor) })}
+        @click=${() => this.#emit({ action: "focus-window", windowType: descriptor.type })}
       >
         ${this.#tabLabel(descriptor)}
       </button>

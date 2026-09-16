@@ -20,7 +20,7 @@ import {
   disconnectBanner,
   expect,
   menuStatus,
-  openTabButton,
+  focusWindowButton,
   test,
 } from "./fixtures.js";
 import type { WebSocketRoute } from "@playwright/test";
@@ -42,7 +42,7 @@ test.describe("断线恢复(sync-projection 对齐;零本地 VM 降级)", () => 
 
     const sessionId = await createSessionViaForm(page);
     try {
-      await openTabButton(page, "stack").click();
+      await focusWindowButton(page, "stack").click();
 
       // 断线前锚点:revision(恢复后不得回退)。
       const revisionBefore = (await menuStatus(page, "revision").textContent())?.trim();

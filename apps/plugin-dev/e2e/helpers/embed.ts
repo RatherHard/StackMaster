@@ -205,9 +205,21 @@ export function pluginMenu(plugin: FrameLocator): Locator {
   return plugin.locator("sm-workspace-menu");
 }
 
-/** 菜单「打开」按钮(data-tab-type 注册表契约)。 */
-export function pluginOpenTabButton(plugin: FrameLocator, tabType: string): Locator {
-  return pluginMenu(plugin).locator(`button.open-tab[data-tab-type="${tabType}"]`);
+/**
+ * 菜单窗口入口(FrameLocator 形态;`data-window-type` 注册表契约,
+ * 点击 = 聚焦 + 滚动到该窗口)。
+ */
+export function pluginFocusWindowButton(plugin: FrameLocator, windowType: string): Locator {
+  return pluginMenu(plugin).locator(`button.focus-window[data-window-type="${windowType}"]`);
+}
+
+/**
+ * 指定类型的窗口面板(WP-71 固定窗口集:`data-tab-id` = 窗口 id ≡ 类型键)。
+ * 窗口集常驻 ⇒ stack / free 两个字节窗口同时在场,字节视图选择器必须按窗口
+ * 面板收敛(否则命中多个元素触发 strict 模式违规)。
+ */
+export function pluginWindow(plugin: FrameLocator, windowType: string): Locator {
+  return plugin.locator(`sm-workspace .tab-panel[data-tab-id="${windowType}"]`);
 }
 
 /** 菜单动作按钮(class 契约:step-button / reset-button)。 */

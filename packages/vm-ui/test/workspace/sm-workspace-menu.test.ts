@@ -1,6 +1,7 @@
 /**
  * <sm-workspace-menu> 工作区菜单行为测试(WP-F5 / FE-WS-03/04a/05;WP-F8
- * 增补 FE-WS-04c/06 + what-if 横幅):打开分组、step/reset 禁用矩阵、终态
+ * 增补 FE-WS-04c/06 + what-if 横幅;WP-71 起「打开」分组改为「窗口」聚焦
+ * 入口):窗口聚焦分组与 aria-pressed 焦点表达、step/reset 禁用矩阵、终态
  * 引导(Q5/M11)、断线横幅(reconnecting attempt/retryDelayMs、
  * connection-replaced 手动重连)、拒绝错误呈现(含 explanation,不只 code)、
  * 运行到断点与模式切换门槛、what-if 纪律横幅。
@@ -10,7 +11,12 @@ import { describe, expect, it } from "vitest";
 import type { PublicError } from "@stackmaster/protocol";
 
 import { SmWorkspaceMenu } from "../../src/workspace/sm-workspace-menu.js";
-import { createDefaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
+import {
+  PAYLOAD_TAB_TYPE,
+  REGISTERS_TAB_TYPE,
+  STACK_TAB_TYPE,
+  createDefaultTabTypeRegistry,
+} from "../../src/workspace/tab-registry.js";
 
 async function mountMenu(): Promise<SmWorkspaceMenu> {
   const element = new SmWorkspaceMenu();
@@ -24,16 +30,20 @@ function menuOf(element: SmWorkspaceMenu): ShadowRoot {
   return element.shadowRoot as ShadowRoot;
 }
 
-describe("<sm-workspace-menu> 打开分组(FE-WS-03 菜单项可扩展)", () => {
-  it("按注册表渲染打开项,点击发出 open-tab 动作(WP-F8:debug = 指令视图 + ED 组件面五类)", async () => {
+function windowButtons(element: SmWorkspaceMenu): HTMLButtonElement[] {
+  return [...menuOf(element).querySelectorAll("button.focus-window")] as HTMLButtonElement[];
+}
+
+describe("<sm-workspace-menu> 窗口分组(FE-WS-03 菜单项可扩展;D-MP-1 固定窗口集)", () => {
+  it("按注册表渲染窗口聚焦入口,点击发出 focus-window 动作(携带 windowType)", async () => {
     const element = await mountMenu();
     const actions: unknown[] = [];
     element.addEventListener("workspace-menu-action", (event) => {
       actions.push((event as CustomEvent).detail.action);
     });
 
-    const openButtons = [...menuOf(element).querySelectorAll("button.open-tab")];
-    expect(openButtons.map((button) => button.textContent?.trim())).toEqual([
+    const buttons = windowButtons(element);
+    expect(buttons.map((button) => button.textContent?.trim())).toEqual([
       "栈视图",
       "自由视图",
       "寄存器视图",
@@ -45,11 +55,69 @@ describe("<sm-workspace-menu> 打开分组(FE-WS-03 菜单项可扩展)", () => 
       "时间线",
       "checkpoint",
     ]);
-    (openButtons[4] as HTMLButtonElement).click();
+    // 锚点 = 规范键 data-window-type(注册表类型契约;data-tab-type 已删除)。
+    expect(buttons.map((button) => button.getAttribute("data-window-type"))).toEqual([
+      STACK_TAB_TYPE,
+      "free",
+      REGISTERS_TAB_TYPE,
+      PAYLOAD_TAB_TYPE,
+      "debug",
+      "structure",
+      "call-stack",
+      "memory-diff",
+      "timeline",
+      "checkpoints",
+    ]);
+    expect(buttons[4]?.getAttribute("data-tab-type")).toBeNull();
 
-    expect(actions).toEqual([{ action: "open-tab", tabType: "debug" }]);
-    // 指令视图(WP-F8 真工厂):提示文案 = 展示名(有工厂,非占位空态)。
-    expect((openButtons[4] as HTMLButtonElement).getAttribute("title")).toContain("指令视图");
+    buttons[4]?.click();
+    expect(actions).toEqual([{ action: "focus-window", windowType: "debug" }]);
+    // 指令视图(WP-F8 真工厂):提示文案 = 聚焦说明(不带「打开」语义)。
+    expect(buttons[4]?.getAttribute("title")).toContain("指令视图");
+    element.remove();
+  });
+
+  it("当前焦点窗口以 aria-pressed 表达(恰一个 true),无禁用态", async () => {
+    const element = await mountMenu();
+    element.focusedWindowType = REGISTERS_TAB_TYPE;
+    await element.updateComplete;
+
+    const buttons = windowButtons(element);
+    const pressed = buttons.filter((button) => button.getAttribute("aria-pressed") === "true");
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0]?.getAttribute("data-window-type")).toBe(REGISTERS_TAB_TYPE);
+    // 聚焦导航恒可用:无禁用态。
+    expect(buttons.some((button) => button.disabled)).toBe(false);
+
+    // 焦点窗口变化 → aria-pressed 跟随(确定性单点)。
+    element.focusedWindowType = PAYLOAD_TAB_TYPE;
+    await element.updateComplete;
+    const pressedAfter = windowButtons(element).filter(
+      (button) => button.getAttribute("aria-pressed") === "true",
+    );
+    expect(pressedAfter.map((button) => button.getAttribute("data-window-type"))).toEqual([
+      PAYLOAD_TAB_TYPE,
+    ]);
+    element.remove();
+  });
+
+  it("窗口分组与聚焦入口无「打开 / 关闭」语义文案(文本 / title / aria-label)", async () => {
+    const element = await mountMenu();
+
+    expect(menuOf(element).querySelector(".window-group-label")?.textContent?.trim()).toBe("窗口");
+    for (const button of windowButtons(element)) {
+      const texts = [
+        button.textContent ?? "",
+        button.getAttribute("title") ?? "",
+        button.getAttribute("aria-label") ?? "",
+      ];
+      for (const text of texts) {
+        expect(text).not.toMatch(/打开|关闭|(^|\W)open(\W|$)|(^|\W)close(\W|$)/i);
+      }
+    }
+    // 旧「打开」语义锚(class / data-tab-type)完全退场。
+    expect(menuOf(element).querySelector("button.open-tab")).toBeNull();
+    expect([...menuOf(element).querySelectorAll("[data-tab-type]")]).toHaveLength(0);
     element.remove();
   });
 });
