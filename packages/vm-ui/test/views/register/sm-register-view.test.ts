@@ -1,7 +1,8 @@
 /**
- * <sm-register-view> 组件测试(WP-F4 / FE-RG-01/02/03 + Q8):
- * 全量纵向渲染(M14 白名单口径)、valueHex 大写归一化、特殊显示列(区域引用)、
- * 点击复制成功 / 降级两路径(注入 clipboard stub)、键盘 Enter 复制、反馈自动消隐。
+ * <sm-register-view> 组件测试(WP-F4 / FE-RG-01/02/03 + Q8;WP-75#5 / D-MP-3):
+ * 全量纵向渲染(M14 白名单口径)、valueHex 大写归一化、特殊显示列(区域引用 +
+ * 复用 <sm-jump-chain> 只读形态)、点击值 / 点击链上地址复制成功与降级两路径
+ * (注入 clipboard stub)、键盘 Enter 复制、反馈自动消隐。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +15,7 @@ import {
   SmRegisterView,
   defaultClipboardWriter,
 } from "../../../src/views/register/sm-register-view.js";
+import type { SmJumpChain } from "../../../src/views/chain/sm-jump-chain.js";
 import type { PublicStateProjection } from "@stackmaster/protocol";
 
 import "../../../src/views/register/sm-register-view.js";
@@ -59,6 +61,48 @@ function dataSourceWith(projection: PublicStateProjection = projectionFixture())
   const store = new ProjectionStore();
   store.replaceProjection(projection);
   return new ProjectionDataSource(store);
+}
+
+/**
+ * 链可解引用夹具(WP-75#5):RSP = 0x1004,该处 8 字节(小端)= 0x1010 →
+ * 链 = 0x1004 → 0x1010(第二段地址超出 16 字节已下发窗口 ⇒ outsideWindow 截断)。
+ * 两个芯片地址不同 ⇒ 可区分「复制寄存器值」与「复制链上地址」。
+ */
+function projectionWithChain(): PublicStateProjection {
+  const projection = projectionFixture();
+  projection.visibleRegions = [
+    {
+      regionId: "region-stack",
+      label: "stack",
+      startAddressHex: "0x1000",
+      byteLength: 4096,
+      // 偏移 4..11 = 0x1010 的小端形态;其余字节填 0(不可解引用)。
+      bytesHex: "00000000101000000000000000000000",
+      truncated: true,
+    },
+  ];
+  projection.visibleRegisters = [{ name: "RSP", valueHex: "0x1004" }];
+  return projection;
+}
+
+/** 取行内链组件并等待其自身首帧渲染完成(链内容在其 shadow 根内)。 */
+async function chainOf(element: SmRegisterView, registerName = "RSP"): Promise<SmJumpChain> {
+  const chain = queryShadow(
+    element,
+    `tr[data-register="${registerName}"] sm-jump-chain`,
+  ) as SmJumpChain | null;
+  expect(chain).not.toBeNull();
+  await (chain as SmJumpChain).updateComplete;
+  return chain as SmJumpChain;
+}
+
+/** 链 shadow 根内的地址芯片查询。 */
+function chipOf(chain: SmJumpChain, addressHex: string): HTMLButtonElement {
+  const chip = chain.shadowRoot?.querySelector(
+    `.chain-address[data-address="${addressHex}"]`,
+  ) as HTMLButtonElement | null;
+  expect(chip).not.toBeNull();
+  return chip as HTMLButtonElement;
 }
 
 async function mountedElement(dataSource: MemoryDataSource | null): Promise<SmRegisterView> {
@@ -119,6 +163,123 @@ describe("SmRegisterView 寄存器列表(FE-RG-01/02)", () => {
     expect(firstRowRef?.getAttribute("data-region")).toBe("region-stack");
 
     expect(rows[1]?.querySelector(".cell-region-ref")).toBeNull();
+    expect(rows[1]?.querySelector("sm-jump-chain")).toBeNull();
+
+    element.remove();
+  });
+});
+
+// ── WP-75#5 / D-MP-3:特殊显示列复用跳转链只读形态 + 点击复制 ────────────────
+
+describe("SmRegisterView 特殊显示列只读跳转链(D-MP-3)", () => {
+  it("命中可见区域 → 以寄存器值为锚挂载 <sm-jump-chain>(视觉与栈视图同族)", async () => {
+    const element = await mountedElement(dataSourceWith(projectionWithChain()));
+    const chain = await chainOf(element);
+
+    // 锚 = 寄存器值(命中地址),与栈视图行右段链同源语义。
+    // 绑定形态 = **属性面**(`.startAddressHex`):Lit 的属性名缺省是「全小写、
+    // 不加连字符」(startAddressHex → startaddresshex),kebab 属性名
+    // (`start-address-hex`)落不进属性、链恒空渲染——本用例即固定该口径。
+    expect(chain.startAddressHex).toBe("0x1004");
+    expect(chain.dataSource).toBe(element.dataSource);
+    // 只读形态:不呈现调试档「延伸」入口(延伸归栈视图链,不在本视图接线)。
+    expect(chain.extendable).toBe(false);
+    // 链两段芯片齐备(0x1004 → 0x1010)。
+    expect(chipOf(chain, "0x1004").textContent?.trim()).toBe("0x1004");
+    expect(chipOf(chain, "0x1010").textContent?.trim()).toBe("0x1010");
+
+    element.remove();
+  });
+
+  it("点击链上地址 → 复制该地址且 viewport-jump 不冒泡(点击不跳转)", async () => {
+    const writer = vi.fn().mockResolvedValue(undefined);
+    const element = await mountedElement(dataSourceWith(projectionWithChain()));
+    element.copyToClipboard = writer;
+    await element.updateComplete;
+    const chain = await chainOf(element);
+
+    const atChain: Event[] = [];
+    const atDocument: Event[] = [];
+    const chainListener = (event: Event): void => {
+      atChain.push(event);
+    };
+    const documentListener = (event: Event): void => {
+      atDocument.push(event);
+    };
+    chain.addEventListener("viewport-jump", chainListener);
+    document.addEventListener("viewport-jump", documentListener);
+    try {
+      chipOf(chain, "0x1010").click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await element.updateComplete;
+    } finally {
+      chain.removeEventListener("viewport-jump", chainListener);
+      document.removeEventListener("viewport-jump", documentListener);
+    }
+
+    // 事件确实由链组件发出(链级可见),但被本视图就地截停 → 工作区跳转处理器收不到。
+    expect(atChain).toHaveLength(1);
+    expect(atDocument).toHaveLength(0);
+    expect(writer).toHaveBeenCalledTimes(1);
+    expect(writer).toHaveBeenCalledWith("0x1010");
+    const feedback = queryShadow(element, ".copy-feedback");
+    expect(feedback?.textContent?.trim()).toBe(COPY_SUCCESS_TEXT);
+    expect(feedback?.getAttribute("data-copy-source")).toBe("address");
+
+    element.remove();
+  });
+
+  it("地址复制降级:剪贴板 rejection → 选中该地址芯片 + '已就绪手动复制'(不静默失败)", async () => {
+    const writer = vi.fn().mockRejectedValue(new Error("denied"));
+    const element = await mountedElement(dataSourceWith(projectionWithChain()));
+    element.copyToClipboard = writer;
+    await element.updateComplete;
+    const chain = await chainOf(element);
+
+    const selection = window.getSelection()!;
+    const addRangeSpy = vi.spyOn(selection, "addRange");
+
+    chipOf(chain, "0x1010").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await element.updateComplete;
+
+    expect(writer).toHaveBeenCalledWith("0x1010");
+    const feedback = queryShadow(element, ".copy-feedback");
+    expect(feedback?.textContent?.trim()).toBe(COPY_FALLBACK_TEXT);
+    expect(feedback?.classList.contains("copy-fallback")).toBe(true);
+    expect(feedback?.getAttribute("data-copy-source")).toBe("address");
+    // 降级选区落在被点击的地址芯片(链 shadow 根内),用户可直接 Ctrl+C。
+    expect(addRangeSpy).toHaveBeenCalledTimes(1);
+    expect(addRangeSpy.mock.calls[0]?.[0]?.toString()).toContain("0x1010");
+    addRangeSpy.mockRestore();
+
+    element.remove();
+  });
+
+  it("复制反馈落在来源单元格:值复制在值格、地址复制在特殊显示列(同行至多一条 status)", async () => {
+    const writer = vi.fn().mockResolvedValue(undefined);
+    const element = await mountedElement(dataSourceWith(projectionWithChain()));
+    element.copyToClipboard = writer;
+    await element.updateComplete;
+
+    (queryShadow(element, "tbody tr .value-button") as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await element.updateComplete;
+    expect(
+      queryShadow(element, "tbody tr td.value .copy-feedback")?.getAttribute("data-copy-source"),
+    ).toBe("value");
+    expect(queryAllShadow(element, "tbody tr .copy-feedback")).toHaveLength(1);
+
+    const chain = await chainOf(element);
+    chipOf(chain, "0x1010").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await element.updateComplete;
+    // 来源切换:值格反馈让位给特殊显示列反馈(单条 status,不重复播报)。
+    expect(queryShadow(element, "tbody tr td.value .copy-feedback")).toBeNull();
+    expect(
+      queryShadow(element, "tbody tr td.special .copy-feedback")?.getAttribute("data-copy-source"),
+    ).toBe("address");
+    expect(queryAllShadow(element, "tbody tr .copy-feedback")).toHaveLength(1);
 
     element.remove();
   });
