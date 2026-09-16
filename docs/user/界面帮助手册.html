@@ -73,7 +73,7 @@
 <main>
 
 <h1>StackMaster 界面帮助手册（学习者版）</h1>
-<p class="muted">版本 1.0 · 2026-09-15 · 面向：在 StackMaster 工作区做题的学习者<br>
+<p class="muted">版本 1.1 · 2026-09-16 · 面向：在 StackMaster 工作区做题的学习者<br>
 权威性说明：本手册是使用文档；界面行为的实现权威 = <code>packages/vm-ui/README.md</code>（组件逐条登记），
 交互语义权威 = <code>docs/develop/投影语义规约.md</code> 与 <code>packages/protocol/docs/会话动作协议语义.md</code>。
 手册与实现不一致时以实现为准。</p>
@@ -82,12 +82,14 @@
 <h2 id="s0">0. 这本手册怎么用</h2>
 <table>
   <tr><th>如果你想知道…</th><th>直接看</th></tr>
-  <tr><td>屏幕上这一块是什么、能不能关</td><td><a href="#s1">§1 界面总览</a></td></tr>
+  <tr><td>屏幕上这一块是什么、能不能关</td><td><a href="#s1">§1.1 页面解剖 · §1.3 布局模型</a></td></tr>
+  <tr><td>窗口能不能挪、列宽 / 窗高怎么调、窄屏会怎样</td><td><a href="#s1">§1.3 工作区布局模型</a></td></tr>
   <tr><td>顶部某个按钮是干什么的、什么时候亮</td><td><a href="#s2">§2 菜单与状态条</a></td></tr>
   <tr><td>内存表怎么读、<code>??</code> 是什么、怎么跳转/搜索</td><td><a href="#s4">§4 字节视图</a></td></tr>
   <tr><td>积木怎么搭、程序区/输出区看什么</td><td><a href="#s7">§7 Payload 搭建</a></td></tr>
   <tr><td>调试模式能做什么、为什么有横幅警告</td><td><a href="#s8">§8 调试模式</a></td></tr>
   <tr><td>提交之后界面会发生什么</td><td><a href="#s10">§10 提交与裁决</a></td></tr>
+  <tr><td>深色 / 终端风格主题、语言、键盘操作</td><td><a href="#s12">§12 主题与键盘</a></td></tr>
   <tr><td>想照着一条完整流程从头走到尾</td><td><a href="#s13">§13 完整交互链</a></td></tr>
 </table>
 <div class="note">你在 CTF 平台里看到的是<strong>嵌入式插件页</strong>；本仓库的开发联调壳（plugin-dev）多一个
@@ -96,24 +98,24 @@
 <h2 id="s1">1. 界面总览与布局模型</h2>
 <h3>1.1 页面解剖</h3>
 <pre><code>┌──────────────────────────────────────────────────────────────┐
-│ ① 状态横幅区   （会话创建提示 / 断线横幅 / what-if 纪律横幅 /   │
-│                 裁决横幅——出现时置顶显示，见 §3 / §10 / §11）   │
+│ ① 状态横幅区 （会话创建提示 / 断线横幅 / what-if 纪律横幅 /  │
+│               裁决横幅；出现时置顶显示，见 §3 / §10 / §11）  │
 ├──────────────────────────────────────────────────────────────┤
-│ ② 顶部菜单   「窗口」│模式│运行        会话状态 running ·      │
-│                窗口按钮  切换  动作按钮        revision 0 · 连接 │
+│ ② 顶部菜单 「窗口」│「布局」│模式│运行   会话状态 running ·  │
+│      10 个聚焦  五档列宽+重置  切换  动作  revision 0 · 连接 │
 ├──────────────────────────────────────────────────────────────┤
-│ ③ 题目简介（可折叠）  架构位宽 / 端序 / 页大小 / 寄存器 / canary│
+│ ③ 题目简介（可折叠） 架构位宽/端序/页大小/寄存器/canary      │
 ├──────────────────────────────────────────────────────────────┤
-│ ④ 教学面板（可折叠）  提示阶梯 + 错误解释           （§9）      │
+│ ④ 教学面板（可折叠） 提示阶梯 + 错误解释            （§9）   │
 ├──────────────────────────────────────────────────────────────┤
-│ ⑤ 工作区窗口区域（主战场）                                   │
-│ ┌─列 1────────────┐┌─列 2────────────┐┌─列 3───…           │
-│ │┌─窗口 A────────┐││┌─窗口 C──────┐  ││                     │
-│ ││（上半）       ││││             │  ││   列间水平滚动       │
-│ │├─窗口 B────────┤││└─────────────┘  ││                     │
-│ ││（下半）       │││                  ││                     │
-│ │└───────────────┘│└──────────────────┘│                     │
-│ └─────────────────┘────────────────────┘                     │
+│ ⑤ 工作区窗口区域（主战场；固定窗口集常驻，见 §1.3）          │
+│  ┌─列 1───────────┐┌─列 2───────────┐┌─列 3─…                │
+│  │┌─窗口 A───────┐││┌─窗口 C─────┐ ││                        │
+│  ││（上半）      ││││            │ ││   列间水平滚动         │
+│  │├─窗口 B───────┤││└────────────┘ ││                        │
+│  ││（下半）      │││               ││                        │
+│  │└──────────────┘│└───────────────┘│                        │
+│  └────────────────┘─────────────────┘                        │
 └──────────────────────────────────────────────────────────────┘</code></pre>
 
 <h3>1.2 创建会话表单（开发壳 / 首次进入）</h3>
@@ -126,19 +128,39 @@
   <tr><td>「新建会话」按钮</td><td>结束当前会话并走全新创建流程（会话到达 won/failed 终态、或重启被禁用时的正规出路）</td></tr>
 </table>
 
-<h3>1.3 工作区布局模型（固定窗口 · 列式平铺）</h3>
-<p>工作区的窗口是一个<strong>固定窗口集</strong>：注册表登记的全部类型、<strong>各恰一个实例、常驻</strong>。
+<h3>1.3 工作区布局模型（固定窗口集 · Niri 式列条带）</h3>
+<p>工作区的窗口是一个<strong>固定窗口集</strong>：注册表登记的全部 10 类窗口<strong>各恰一个实例、常驻</strong>。
 窗口<strong>没有「开 / 关」这回事</strong>——标题栏上没有「×」，菜单里也没有「打开 / 关闭」入口；
 窗口只可能是「视口内」或「暂离（条带滚出视野）」，滚回去就能看到。
 换句话说：<strong>不提供关闭、也不提供新开</strong>，每个类型的窗口一直都在。</p>
+
+<h4>1.3.1 列排布预设：按视口宽自动选档（P0 / P1 / P2）</h4>
+<p>窗口第一次出现时，按<strong>当前视口宽</strong>选一档预设铺开（预设是默认列排布的唯一来源）：</p>
 <table>
-  <tr><th>操作</th><th>行为</th></tr>
+  <tr><th style="width:110px">档位</th><th style="width:180px">生效视口宽</th><th>列排布</th></tr>
+  <tr><td><code>P0</code> 宽屏</td><td>≥ <strong>932.8px</strong></td><td><strong>5 列</strong>：①栈视图 + 寄存器视图 ②指令视图 + 自由视图 ③Payload 搭建 ④调用栈 + 结构视图 ⑤时间线 + checkpoint + 内存 diff</td></tr>
+  <tr><td><code>P1</code> 中宽</td><td>468.4px ≤ 宽 &lt; 932.8px</td><td><strong>3 列</strong>：①栈视图 + 寄存器视图 + 自由视图 ②指令视图 + 结构视图 + 调用栈 ③Payload 搭建 + 时间线 + checkpoint + 内存 diff</td></tr>
+  <tr><td><code>P2</code> 窄条</td><td>&lt; <strong>468.4px</strong></td><td><strong>单列纵向</strong>：10 类窗口按登记序竖排（栈视图 / 自由视图 / 寄存器视图 / Payload 搭建 / 指令视图 / 结构视图 / 调用栈 / 内存 diff / 时间线 / checkpoint）；换窗靠菜单「窗口」聚焦组</td></tr>
+</table>
+<div class="note">视口宽<strong>跨档</strong>（例如把浏览器窗口拖窄到 932.8px 以下）会<strong>按新档预设重新排布列</strong>——你之前手工拖出来的排布会被预设覆盖；
+<strong>同档内的宽度变化不动排布</strong>（列宽按占比随动）。换档只换<strong>排布</strong>，窗口<strong>集</strong>永远不变。
+阈值来源：单列最小可读宽 452.4px（十六进制行不折行）→ 468.4px（+ 列区左右内边距 16px）→ 932.8px（2 列并排 + 列间距 16px + 分隔条 12px）。</div>
+
+<h4>1.3.2 窗口管理与尺寸调整</h4>
+<table>
+  <tr><th style="width:118px">操作</th><th>行为</th></tr>
   <tr><td>窗口常驻</td><td>固定窗口集的 10 类窗口各一个，从工作区出现的那一刻起就都在（<strong>与是否已连接会话无关</strong>）；窗口标题 = 该类型的展示名（如「栈视图」），<strong>标题里没有类型内序号</strong>——不存在「栈视图 1 / 栈视图 2」这种说法</td></tr>
-  <tr><td>列内分割</td><td>同一列的窗口纵向二叉均分列高（上下分割）；同列内容超高时列内滚动</td></tr>
-  <tr><td>列间浏览</td><td>窗口组织为垂直列，列组成一条<strong>水平条带</strong>，列与列之间<strong>水平滚动</strong>可达任意列；从菜单「窗口」组聚焦某个窗口时，条带会自动滚到让该窗口可见的位置</td></tr>
-  <tr><td>拖拽排布</td><td>按住<strong>窗口标题栏</strong>拖动（位移超过 3px 进入拖拽，拖拽反馈只用透明度）：放到目标<strong>窗口上半</strong> = 排它前面、<strong>下半</strong> = 排在它后面；放到<strong>目标列空白</strong> = 追加到该列；放到<strong>列区空白</strong> = 开一个新列</td></tr>
-  <tr><td>焦点窗口</td><td>点击过的窗口是「焦点窗口」（焦点列 = 焦点窗口所在列）；某些菜单动作只对焦点窗口生效（如「积木步进」要求 <strong>Payload 搭建窗口是焦点窗口</strong>）</td></tr>
+  <tr><td>列与条带</td><td>窗口组织为垂直<strong>列</strong>，列组成一条<strong>水平条带</strong>：列间滚动可达任意列；<strong>不存在空列</strong>（一列里最后一个窗口被移走后该列即消失）</td></tr>
+  <tr><td>列内分割</td><td>同一列的多个窗口<strong>纵向排布、按窗高比例分配列高</strong>（缺省等分）；拖窗间分隔条可改比例，<strong>单窗列自动占满列高</strong>；单个窗口最小高 9rem（144px），列高不够时条带自身纵向滚动</td></tr>
+  <tr><td>列宽调整</td><td>三种途径：①菜单「布局」组五档（<code>1/4</code>、<code>1/3</code>、<code>1/2</code>、<code>2/3</code>、<code>全宽</code>，作用于<strong>焦点列</strong>）；②拖动列间分隔条（只改<strong>左侧列</strong>的宽度，右侧列宽度自持）；③聚焦分隔条后按 <kbd>←</kbd>/<kbd>→</kbd>（每次 32px）。列宽下限 = <strong>452.4px</strong>（十六进制行不折行的最小可读宽度），算出来更窄会被自动抬回下限</td></tr>
+  <tr><td>窗高调整</td><td>拖动同列窗间分隔条（上下两窗比例之和恒定）；聚焦分隔条后按 <kbd>↑</kbd>/<kbd>↓</kbd>（每次 = 列高的 5%）；下限 = 单窗 144px</td></tr>
+  <tr><td>拖拽排布</td><td>按住<strong>窗口标题栏</strong>拖动（位移超过 3px 才算拖拽；拖拽中的窗口<strong>只降低不透明度</strong>作反馈）：落到目标窗口<strong>上半</strong> / <strong>下半</strong> = 插到它前面 / 后面；落到<strong>目标列空白</strong> = 追加到该列末尾；落到<strong>列间分隔条或列区空白</strong> = 在该位置<strong>新建一列</strong>；拖到列区之外松开 = 不移动。落点用<strong>静态虚线轮廓</strong>标出（不弹浮层、不遮挡内容），同时底部状态行用文字宣读落点</td></tr>
+  <tr><td>焦点窗口</td><td>点击过的窗口是「焦点窗口」（焦点列 = 焦点窗口所在列）；聚焦某列时该列会<strong>水平居中到视口</strong>（相邻列各探出一部分，暗示条带还能滚）。某些菜单动作只对焦点窗口生效（如「积木步进」要求 <strong>Payload 搭建窗口是焦点窗口</strong>）</td></tr>
   <tr><td>菜单「窗口」组</td><td>每个按钮 = 一个窗口的<strong>聚焦导航</strong>：点击即<strong>聚焦该窗口并滚动到它</strong>，<strong>不会新开实例</strong>（窗口本来就在）；当前焦点窗口用 <code>aria-pressed</code> 标记；这组按钮<strong>恒可用、没有禁用态</strong>（聚焦不依赖会话）</td></tr>
+  <tr><td>菜单「布局」组</td><td>显示当前档位标识（<code>P0</code> / <code>P1</code> / <code>P2</code>）+ 五个列宽档 + 「重置布局」；<strong>标题栏保持零控件</strong>——所有尺寸入口都只在这组菜单里</td></tr>
+  <tr><td>重置布局</td><td>「重置布局」= 清空你做的列宽 / 窗高调整，并按<strong>当前视口宽对应的预设</strong>重新排布列（宽屏即回到 P0）；焦点窗口保持。布局改乱后的逃生门</td></tr>
+  <tr><td>键盘兜底</td><td>窗口标题栏可聚焦：<kbd>Enter</kbd> / <kbd>Space</kbd> = 激活该窗口；<kbd>↑</kbd>/<kbd>↓</kbd> = 列内上下换位；<kbd>←</kbd>/<kbd>→</kbd> = 移到相邻列。分隔条同样是可聚焦的真实控件（<code>role="separator"</code>，方向键调整并带 aria 数值）。每次布局变更都在底部状态行用文字反馈</td></tr>
+  <tr><td>响应式降级渲染</td><td>滚出视野的窗口由浏览器<strong>跳过渲染与绘制</strong>（零 JS 观察者、零新增依赖）：它<strong>不是被卸载</strong>——DOM 与内容都在，滚回视野立刻恢复；面板先以最小高占位，进入视野时不跳动。字节表自身的虚拟滚动照旧（每个区域最多渲染 512 行）</td></tr>
 </table>
 <div class="note">常驻的窗口类型（10 类）：<strong>栈视图 / 自由视图 / 寄存器视图 / Payload 搭建 / 指令视图（调试档）/
 结构视图 / 调用栈 / 内存 diff / 时间线 / checkpoint（检查点）</strong>。
@@ -150,15 +172,43 @@
 <table>
   <tr><th style="width:130px">按钮</th><th>可用条件</th><th>动作与你会看到什么</th></tr>
   <tr><td>「窗口」分组</td><td>恒可用（无禁用态）</td><td>一排<strong>窗口聚焦按钮</strong>（§1.3 的 10 类窗口，一类一个）；点击即<strong>聚焦该窗口并滚动到它</strong>，<strong>不会新开实例</strong>（窗口本就常驻）。当前焦点窗口用 <code>aria-pressed</code> 标记；鼠标停在按钮上会提示「聚焦『某某』并滚动到该窗口」</td></tr>
+  <tr><td>「布局」分组</td><td>恒可用（无禁用态）</td><td>当前档位标识（<code>P0</code> / <code>P1</code> / <code>P2</code>，按视口宽自动判定）+ 五个列宽档（<code>1/4</code> / <code>1/3</code> / <code>1/2</code> / <code>2/3</code> / <code>全宽</code>，作用于<strong>焦点列</strong>）+ 「重置布局」（清空列宽 / 窗高调整并回到当前宽度档预设）。生效值在底部状态行用文字反馈</td></tr>
   <tr><td>「指令步进」</td><td>已连接且会话未终态</td><td>让虚拟机<strong>恰好执行一条指令</strong>后暂停。每次点击 revision +1；控制流里当前指令会随之前进（在字节/指令视图中观察）</td></tr>
   <tr><td>「积木步进」</td><td><strong>Payload 搭建窗口是焦点窗口</strong>且已编译</td><td>推进积木程序的<strong>一个原子动作</strong>并暂停；等于在 Payload 搭建窗口点工具栏「单步」</td></tr>
   <tr><td>「运行到断点」</td><td>仅调试模式；断点集合非空；通道可用且未终态</td><td>运行到最近断点后暂停；命中后指令视图高亮暂停行并显示暂停原因「命中断点已暂停」</td></tr>
   <tr><td>「切换到调试模式 / 返回解题模式」</td><td>题目启用调试时才显示（出题人可关闭）</td><td>切换数据档：工作区所有视图换绑数据源（§8），<strong>布局不动</strong>（列序、焦点、窗口标题保持）。切换后字节视图滚动/锚点重置属预期；Payload 搭建窗口状态两模式共用不丢失</td></tr>
-  <tr><td>「提交」</td><td>已连接</td><td>把你的<strong>服务端操作日志</strong>送交独立裁决服务（§10）。终态后仍可提交（sync/时间线/提交/关闭不受终态限制）</td></tr>
+  <tr><td>「提交」</td><td>已连接且会话未终态</td><td>把你的<strong>服务端操作日志</strong>送交独立裁决服务（§10）。按钮的禁用矩阵与「指令步进」同形：未连接或会话已终态时置灰，终态时提示「测试环境已结束，请新建会话后再提交」</td></tr>
   <tr><td>「重启测试环境」</td><td>未终态时可用；<strong>won/failed 后禁用</strong></td><td>清空一切回到题目初始状态（revision 仍 +1）。终态后点击会看到引导「测试环境已结束，请新建会话」</td></tr>
 </table>
 <div class="note">模式分组里有当前模式指示（「解题模式」/「调试模式」）；运行分组按钮在未连接或终态时呈灰色禁用态，
-把鼠标停上去可看出不可用的原因（未连接 / 已终态）。「窗口」分组<strong>不在此列</strong>——窗口聚焦导航恒可用，从不置灰。</div>
+把鼠标停上去可看出不可用的原因（未连接 / 已终态）。「窗口」分组与「布局」分组<strong>不在此列</strong>——窗口聚焦导航与布局调整恒可用，从不置灰。</div>
+
+<h4>「窗口」组的 10 个按钮（逐个）</h4>
+<p>这 10 个按钮<strong>行为完全同形</strong>：点击 = <strong>聚焦对应窗口，并把它的列滚动到视口中央</strong>（相邻列各探出一部分）。
+<strong>不会新开、也不会新建实例</strong>——窗口本来就常驻。当前焦点窗口的按钮呈<strong>按下态</strong>（<code>aria-pressed</code>）；
+悬停提示为「聚焦『某某』并滚动到该窗口」；整组<strong>恒可用、从不置灰</strong>（聚焦不依赖会话是否连接）。</p>
+<table>
+  <tr><th style="width:150px">按钮</th><th>聚焦的窗口</th></tr>
+  <tr><td>栈视图</td><td>栈视图——字节表 stack 形态（§4）</td></tr>
+  <tr><td>自由视图</td><td>自由视图——同一个字节表组件的 free 形态（§4）；两者<strong>只差窗口标题</strong>，默认区域与锚点规则相同</td></tr>
+  <tr><td>寄存器视图</td><td>寄存器视图——题目公开的全部寄存器（§5）</td></tr>
+  <tr><td>Payload 搭建</td><td>Payload 搭建页（§7）；<strong>它是「积木步进」可用的前提</strong>（该按钮要求本窗口是焦点窗口）</td></tr>
+  <tr><td>指令视图</td><td>指令视图（§8.2）；解题模式下只呈现「切换到调试模式」引导空态，切到调试模式才有真实指令流</td></tr>
+  <tr><td>结构视图</td><td>结构视图——出题人声明的语义地图（§6.1）</td></tr>
+  <tr><td>调用栈</td><td>调用栈——最内帧在最上（§6.2）</td></tr>
+  <tr><td>内存 diff</td><td>内存 diff——最近一次动作前后的字节差异（§6.3）</td></tr>
+  <tr><td>时间线</td><td>时间线——按 revision 排列的操作历史（§6.4）</td></tr>
+  <tr><td>checkpoint</td><td>checkpoint 检查点面板——创建 / 两步确认恢复（§6.5）</td></tr>
+</table>
+
+<h4>「布局」组的 7 个控件（逐个）</h4>
+<p>组首是<strong>当前档位标识</strong>（<code>P0</code> / <code>P1</code> / <code>P2</code>，按视口宽自动判定，见 §1.3.1，是登记标识、不翻译）。
+后面 5 个列宽档 + 「重置布局」全部<strong>恒可用</strong>，全部作用于<strong>焦点列</strong>，生效值经底部状态行反馈。</p>
+<table>
+  <tr><th style="width:190px">控件</th><th>点它会发生什么</th></tr>
+  <tr><td><code>1/4</code> / <code>1/3</code> / <code>1/2</code> / <code>2/3</code> / <code>全宽</code></td><td>把<strong>焦点列</strong>的宽度设为该比例（占视口宽的比例）。实际生效宽度<strong>不会小于 452.4px</strong>——按比例算出来更窄时会被抬到下限，此时这五个按钮<strong>都不呈按下态</strong>（按下态按<strong>生效</strong>占比比对）。悬停提示「把焦点列宽度设为 1/2（不小于十六进制行可读的最小列宽）」；状态行反馈「焦点列宽度已设为 50%」</td></tr>
+  <tr><td><code>重置布局</code></td><td>清空列宽 / 窗高调整，并按<strong>当前视口宽对应预设</strong>重新排布列（宽屏 = P0）；焦点窗口保持。悬停提示「清空列宽 / 窗高调整，并回到当前宽度的默认布局预设（宽屏 = P0）」；状态行反馈「已重置布局：回到预设 P0」。视口宽跨档时也会自动按新档重排，状态行反馈「视口宽变化：布局已切换为 P1（3 列）」</td></tr>
+</table>
 
 <h3>2.2 会话状态条（菜单右侧）</h3>
 <table>
@@ -179,14 +229,15 @@
 </table>
 
 <h2 id="s4">4. 字节视图（栈视图 / 自由视图）</h2>
-<p>主战场。<strong>栈视图与自由视图是同一个组件的两种默认姿态</strong>——栈视图会自动滚到 RSP 所在区域，自由视图从第一个区域看起；除此之外能力完全相同，所以放在一起讲。</p>
+<p>主战场。<strong>栈视图与自由视图是同一个组件的两种默认姿态</strong>——两者<strong>唯一的差别是窗口标题</strong>：
+默认区域、RSP/RBP 锚点、跳转、检索、交叉标注、跳转链全部相同（默认区域 = 含 RSP 值的区域，否则第一个可见区域），所以放在一起讲。</p>
 
 <h3>4.1 组成结构</h3>
 <pre><code>┌─ 窗口「栈视图」──────────────────────────────────────────────┐
 │ ┌─VMA 区域列表──┐ ┌─字节表────────────────────────────────┐ │
-│ │ ● stack  0x…  │ │ 0x7FFFF7F0  41 41 41 41 …  A A A A    │ │
-│ │ ○ code   0x…  │ │ 0x7FFFF7F8  41 41 …        → stack    │ │
-│ │ ○ global 0x…  │ │ 0x7FFFF800  42 42 …  [RSP 锚点行高亮]  │ │
+│ │ ● stack  0x…  │ │ 0x7ffff7f0  41 41 41 41 …  A A A A    │ │
+│ │ ○ code   0x…  │ │ 0x7ffff7f8  41 41 …        → stack    │ │
+│ │ ○ global 0x…  │ │ 0x7ffff800  42 42 …  [RSP 锚点行高亮]  │ │
 │ │ （按地址有序， │ │ …每行 8 字节：地址段│十六进制段│特殊显示段│ │
 │ │  点击切换区域）│ │                                        │ │
 │ └───────────────┘ └────────────────────────────────────────┘ │
@@ -194,7 +245,7 @@
 <table>
   <tr><th>组成</th><th>说明</th></tr>
   <tr><td>VMA 区域列表（侧栏）</td><td>题目全部<strong>可见</strong>内存区域，按地址排序：名称、起始地址、长度。点击某区域 → 右侧字节表跳到该区域开头；在字节表里跳转到别的区域时，侧栏选中项会自动跟随（双向回路）</td></tr>
-  <tr><td>字节表</td><td>每行 8 字节，三段式：<strong>地址段</strong>（0x 大写十六进制）、<strong>十六进制段</strong>（字节 + 下方对应 ASCII 可见字符）、<strong>特殊显示段</strong>（语义标注/跳转链芯片，见下）</td></tr>
+  <tr><td>字节表</td><td>每行 8 字节，<strong>同一行横向三段</strong>（三列网格，左 → 右）：<strong>地址段</strong>（<code>0x</code> + <strong>小写</strong>十六进制，不足 8 位左侧补 0）、<strong>十六进制段</strong>（每 4 字节一组，组间空格）、<strong>特殊显示段</strong>（每字节一格、与十六进制段<strong>按字节次序一一对应</strong>：可见 ASCII 原样显示，不可见字节显示统一占位符 <code>·</code>；本段还承载语义标注 / 跳转链芯片，见下）。ASCII 是<strong>行内第三段（右侧）</strong>，不在十六进制下方</td></tr>
   <tr><td>虚拟滚动</td><td>区域很长也只渲染可视行（窗口上限 512 行），滚动流畅</td></tr>
 </table>
 
@@ -233,7 +284,7 @@
 <h2 id="s6">6. 教学组件五件套</h2>
 <h3>6.1 结构视图</h3>
 <p>出题人声明的"语义地图"。按固定分组排序展示：<code>buffer 起点 → 返回地址槽 → saved RBP 槽 → canary 槽 → 自定义</code>；
-每条高亮显示名称、所属区域、地址与长度（如「buffer 起点 · input-buffer · stack @ 0x7FFFF7F0 · 16B」）。
+每条高亮显示名称、所属区域、地址与长度（如「buffer 起点 · input-buffer · stack @ 0x7ffff7f0 · 16B」）。
 <strong>点击任一条</strong>会发出跳转请求——配了字节视图时直接滚到对应位置。这是你把"抽象的栈帧布局"对上"具体字节地址"的主要工具。</p>
 
 <h3>6.2 调用栈</h3>
@@ -272,7 +323,7 @@
 │ │ [工具箱分类] [积木]  │ │ 编译  运行  单步  暂停  复位步进 │    │
 │ │  🚩 Payload 开始    │ │ 状态:idle                       │    │
 │ │   └─写字节到…      │ ├─程序(原子动作序列)─────────────┤    │
-│ │   └─…              │ │ ▶ 1. write_bytes 0x7FFFF7F0 …  │    │
+│ │   └─…              │ │ ▶ 1. write_bytes 0x7ffff7f0 …  │    │
 │ │                     │ │   2. …（当前步高亮）            │    │
 │ │                     │ ├─执行输出───────────────────────┤    │
 │ │                     │ │ • 动作摘要 + 状态 + 错误解释     │    │
@@ -381,10 +432,37 @@
 </table>
 
 <h2 id="s12">12. 主题、语言与键盘操作</h2>
+<h3>12.1 主题预设：light / dark / terminal（+ auto）</h3>
+<p>主题值域 = <strong>三预设 + auto</strong>：<code>light</code>（浅色）、<code>dark</code>（深色）、<code>terminal</code>（终端风格）、<code>auto</code>（跟随系统深浅色）。
+切换即时生效，无需刷新；配色以对比度为准（不靠颜色单独承载语义）。</p>
+<p>主题承载面分两种形态，共用同一套变量：</p>
+<table>
+  <tr><th style="width:150px">形态</th><th>主题值怎么来</th></tr>
+  <tr><td>独立使用</td><td>宿主直接给工作区元素写 <code>theme</code> 属性（<code>light</code> / <code>dark</code> / <code>terminal</code> / <code>auto</code>），它会转写成元素自身的 <code>data-sm-theme</code> 锚；<strong>没写属性也没有祖先锚 = light 缺省</strong></td></tr>
+  <tr><td>嵌入形态（CTF 平台里）</td><td>嵌入协议承载的只有 <strong>light / dark / auto 三值</strong>（冻结面），插件把它解析成二值的 <code>light</code> / <code>dark</code> 落到锚上。因此 <strong><code>terminal</code> 不经嵌入协议传达</strong>，只能由集成方（平台 / 插件文档页）在宿主元素上<strong>直接写</strong> <code>data-sm-theme="terminal"</code>：插件自身从不写这个值，所以它一出现即视为「外部显式选择」——插件保留该锚、把 <code>color-scheme</code> 落到 <code>dark</code>（terminal 属暗族），宿主的主题切换消息也<strong>不会把它覆盖掉</strong>；集成方删掉该锚或改回三值，控制权即交回插件</td></tr>
+</table>
+
+<h3>12.2 <code>terminal</code> 预设实际是什么样</h3>
+<p>terminal 不是滤镜，而是一整套 CSS 变量的替换值（共 <strong>20 个 token</strong>：8 个功能对比度 token + 12 个设计 token）。关键取值（源码登记值）：</p>
+<table>
+  <tr><th style="width:190px">token</th><th>terminal 取值</th><th>体现为</th></tr>
+  <tr><td><code>--sm-bg-base</code> / <code>--sm-bg-panel</code> / <code>--sm-bg-inset</code></td><td><code>#0b0f0b</code> / <code>#101610</code> / <code>#070907</code></td><td>三层近黑背景（非纯黑，带极轻绿底）</td></tr>
+  <tr><td><code>--sm-fg</code> / <code>--sm-fg-dim</code></td><td><code>#b9ffc4</code> / <code>#6dd47f</code></td><td>磷光绿主前景 / 暗绿次要文字</td></tr>
+  <tr><td><code>--sm-accent</code> / <code>--sm-warn</code> / <code>--sm-focus-ring</code></td><td><code>#4fe6c2</code> / <code>#ffc857</code> / <code>#a9ffb8</code></td><td>青绿 = 可点击地址 / 琥珀 = 断点与暂停 / 亮绿 = 焦点环</td></tr>
+  <tr><td><code>--sm-border</code> 族 / <code>--sm-danger</code></td><td>磷光绿 α 阶梯 / <code>#ff8a94</code></td><td>卡片边框与分隔线、编译错误与断点红</td></tr>
+  <tr><td><code>--sm-scanline-opacity</code> / <code>--sm-caret-blink</code></td><td><code>0.06</code> / <code>1.1s</code></td><td>扫描线强度 / 光标闪烁周期（<strong>仅为登记值</strong>，见下）</td></tr>
+</table>
+<div class="warnbox"><strong>如实声明</strong>：扫描线与光标闪烁这两个效果 token 的<strong>变量值已经登记</strong>（light / dark 档为 <code>0</code> / <code>0s</code>，terminal 档为 <code>0.06</code> / <code>1.1s</code>），
+但把扫描线画出来、让光标闪起来的<strong>组件侧实装不属于本手册定稿时的现状</strong>（截至 2026-09-16，源码中尚无这两个变量的消费点）——所以现在切到 terminal，你看到的是<strong>终端配色</strong>；
+terminal 色板的<strong>真机 axe 对比度门禁</strong>也随该实装一并复跑。手册只登记到「变量已就位」为止，<strong>不提前声称效果已生效</strong>。</div>
+<p class="muted">对比度基准：terminal 前景类 token 按 WCAG 公式逐对机检（正文 ≥ 4.5、主前景 ≥ 7），色板登记实测前景对三层背景 ≥ 8.1:1。</p>
+
+<h3>12.3 语言与键盘</h3>
 <ul>
-  <li><strong>主题</strong>：light / dark / auto 三值（auto 跟随系统深浅色）。宿主平台切换时全界面即时生效；配色以可访问性对比度为准；</li>
   <li><strong>语言</strong>：内置 zh-CN（默认）与 en，跟随宿主切换，未知语言标签确定性回落；协议/状态机词（write_bytes、running 等）保持原文不翻译；</li>
-  <li><strong>键盘可达</strong>：全部功能 Tab 序可达，按钮 Enter/Space 原生激活，焦点环可见；寄存器行 Enter 复制；信息全部有文本承载（不依赖颜色/图形）；动画零。</li>
+  <li><strong>键盘可达</strong>：全部功能 Tab 序可达，按钮 Enter/Space 原生激活，焦点环可见；寄存器行 Enter 复制；
+  窗口标题栏可聚焦（方向键换位 / 跨列移动，见 §1.3.2），分隔条可聚焦（方向键调列宽 / 窗高）；
+  信息全部有文本承载（不依赖颜色/图形），布局变更与动作结果都经文本状态行宣读；动画零（仅相机滚动会在 <code>prefers-reduced-motion: reduce</code> 下降级为即时定位）。</li>
 </ul>
 
 <h2 id="s13">13. 完整交互链：调试 → 解题 → 提交 → 反馈</h2>
@@ -447,7 +525,8 @@ memory_fault 是什么样子。</div>
   <tr><td>「重启测试环境」灰色</td><td>会话已终态；走「新建会话」</td></tr>
   <tr><td>提交一直 pending</td><td>独立裁决在排队/重放；保持页面打开（自动重询）。长时间（分钟级）不动请联系平台查裁决服务</td></tr>
   <tr><td>调试模式和解题模式地址对不上</td><td>预期语义（尤其 ASLR 题）；裁决以真实会话为准</td></tr>
-  <tr><td>界面语言/主题突然变了</td><td>宿主平台切换了下发配置；可在平台设置改回</td></tr>
+  <tr><td>界面语言/主题突然变了</td><td>宿主平台切换了下发配置；可在平台设置改回。注意：<code>terminal</code> 不随宿主配置下发，只有宿主元素上写了 <code>data-sm-theme="terminal"</code> 才会生效（§12.1）</td></tr>
+  <tr><td>切到 terminal 但没看到扫描线 / 闪烁光标</td><td>这两个效果的 token 值已登记，但效果本身的组件侧实装不属于本手册定稿时的现状（§12.2 有逐条声明）；terminal 当前确定的观感是终端配色</td></tr>
 </table>
 
 <h2 id="sa">附录 A · 会话动作 ↔ 界面入口对照</h2>
@@ -468,6 +547,9 @@ memory_fault 是什么样子。</div>
 <h2 id="sb">附录 B · 可见窗口语义速查</h2>
 <table>
   <tr><th>对象</th><th>你能看到</th><th>你看不到</th></tr>
+  <tr><td>窗口</td><td>注册表登记的 <strong>10 类窗口各恰一个、常驻</strong>；视口内的窗口正常渲染，滚出视野的窗口由浏览器跳过渲染与绘制（滚回去即恢复）</td><td>「关闭窗口」「新开窗口」「工作区为空」——这些状态与入口<strong>结构性不存在</strong>（窗口只有「视口内 / 暂离」两种处境）</td></tr>
+  <tr><td>布局</td><td>列排布（P0 五列 / P1 三列 / P2 单列，按视口宽选档）、列宽 / 窗高调整、焦点列居中、菜单「布局」组的五档与「重置布局」</td><td>标题栏上的尺寸控件（不存在——尺寸入口只在菜单「布局」组）；跨档后你手工拖出的排布（会被新档预设覆盖）</td></tr>
+  <tr><td>主题</td><td>light / dark / terminal 三预设与 auto；变量切换即时生效</td><td>嵌入协议里的 <code>terminal</code> 值（协议面冻结三值；terminal 只能由宿主元素上的外部锚承载）；terminal 的扫描线 / 光标闪烁效果是否可见以实际现状为准（§12.2 有如实声明）</td></tr>
   <tr><td>可见区域</td><td>锚定起点的窗口前缀（缺省 256 B；短区域全量）+ truncated 标记</td><td>前缀之外的字节（<code>??</code>）</td></tr>
   <tr><td>隐藏区域</td><td>什么都不显示——"不存在"</td><td>全部；探测结果与未映射地址不可区分</td></tr>
   <tr><td>寄存器</td><td>公开名单的值（0x 大写）</td><td>FLAG/秘密汇寄存器（名字都不出现）</td></tr>
@@ -477,7 +559,7 @@ memory_fault 是什么样子。</div>
 </table>
 
 <footer>
-StackMaster · 界面帮助手册 v1.0（2026-09-15）· 本手册为使用文档，非冻结契约；
+StackMaster · 界面帮助手册 v1.1（2026-09-16）· 本手册为使用文档，非冻结契约；
 界面行为以 <code>packages/vm-ui/README.md</code> 与各冻结契约为权威。
 姊妹篇：〈学习者上手指南〉(概念与玩法)、〈出题人参考手册〉(制作方)。
 </footer>
