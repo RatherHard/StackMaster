@@ -86,6 +86,13 @@ const VARIANT_TEMPLATE = (attributes) =>
 const VARIANT_ROUTES = new Map([
   ["/axe.html", VARIANT_TEMPLATE("")],
   ["/axe-fast.html", VARIANT_TEMPLATE(' handshake-timeout-ms="3000" hello-max-retries="0"')],
+  // WP-74:terminal 预设的**挂载前预置锚**承载形态。嵌入协议 `EMBED_THEMES` 是
+  // 冻结值域(light / dark / auto),terminal 不经协议传达,由集成方在宿主元素上
+  // 直接写 `data-sm-theme="terminal"` 承载(D-MP-2 / D-API-110)——故真机门禁要
+  // 覆盖 terminal,必须有一个页面自带该锚的变体(与 /axe.html 同构,仅多一个
+  // attribute);插件 `pwn-memory-vm` 在 connectedCallback 保留该外部锚并落
+  // `color-scheme: dark`,宿主 `theme_changed` 不夺锚。
+  ["/axe-terminal.html", VARIANT_TEMPLATE(' data-sm-theme="terminal"')],
 ]);
 
 const server = createServer((req, res) => {
