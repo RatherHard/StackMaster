@@ -192,3 +192,103 @@ revision(重放对齐由 session-api 调试编排承担)。
   既有 `wireSessionDemo` 接线回归;WP-54 增补:通道解析、静态面投影
   (`descriptorStaticFace`)、接入状态注入(`applyDescriptorState`)、
   boot 正式通道成功注入 / 失败缺席明示(夹具通道未触达断言)。
+
+## E2E 门禁与复跑(WP-74:axe 三预设真机 + 三浏览器矩阵 + reduced-motion)
+
+### 门禁形态自查:为什么 `e2e-matrix` 不进 turbo 任务图
+
+`e2e-matrix` 是 **CI 承载**的门禁(真机浏览器 × docker compose 全拓扑 × 固定端口
+独占),不是 turbo 任务:
+
+- `turbo.json` 只登记 `build` / `typecheck` / `test` / `lint:rust` —— 无任何
+  e2e 任务,`pnpm build` / `typecheck` / `test` 均不触发 Playwright;
+- 本地入口 = `pnpm --filter @stackmaster/plugin-dev test:e2e`(默认 chromium
+  全量 spec);矩阵入口 = 下文的 `E2E_MATRIX=1 … e2e/browser-matrix.spec.ts`;
+- 拓扑单例(固定端口 5173 / 5174 / 5175 / 13000;**同一时刻只允许一个 E2E
+  进程**),`workers: 1` / `fullyParallel: false`(真实后端共享单拓扑,
+  会话并发预算 D-API-50)⇒ **spec 内串行**;矩阵 12 格(六宽度 × 两面)在
+  chromium / firefox / webkit 之间同样串行,另 5 个 chromium 口径附加格
+  (主题 / 键盘 / reduced-motion / 高对比度 / 非根路径)。
+
+### 前置(三条都必需)
+
+```bash
+pnpm build                                                   # 1) 被测产物
+pnpm --filter @stackmaster/plugin-dev exec playwright install chromium firefox webkit  # 2) 浏览器(CI 加 --with-deps)
+export SESSION_API_HOST_BACKEND_TOKEN=host-backend-shared-credential-0123456789        # 3) 凭证(只经环境变量)
+```
+
+### env 清单(全部可选值都有缺省,仅凭证无缺省)
+
+| 变量 | 缺省 | 作用 |
+|---|---|---|
+| `SESSION_API_HOST_BACKEND_TOKEN` | **无(必需)** | 服务端间签发 embed token 的共享凭证;compose dev 合成值见 `apps/session-api/compose/app.yaml` |
+| `E2E_MATRIX` | 未设 | `1` = 追加 firefox / webkit 项目(chromium 恒在);`playwright.config.ts:22` |
+| `E2E_KEEP_COMPOSE` | 未设 | `1` = teardown 保留拓扑(调试 / 多步复跑;CI 用它跨两次 Playwright 调用复用同一次冷构建) |
+| `E2E_SKIP_COMPOSE` | 未设 | `1` = setup / teardown 都不碰 compose(假设拓扑已在跑) |
+| `SESSION_API_ORIGIN` | `http://127.0.0.1:13000` | session-api 直连源(签发 / seed) |
+| `E2E_ALLOWED_ORIGIN` | `http://localhost:13000` | CSRF 闸改写目标;须与拓扑 `SESSION_API_ALLOWED_ORIGINS` 一致 |
+| `E2E_TENANT_ID` / `E2E_USER_ID` / `E2E_CHALLENGE_ID` / `E2E_CHALLENGE_VERSION` | `e2e-tenant` / `e2e-user` / `chal-e2e-plugin-dev` / `1.0.0` | global-setup 登记题目上下文 |
+| `WORKER_CARGO_PROFILE` | `debug` | compose 内 vm-worker 构建 profile;CI = `release`(D-API-64) |
+| `PLAYWRIGHT_JSON_OUTPUT_NAME` | 未设 | 矩阵 JSON 报告落点(CI 取 `.tmp/e2e-matrix-report.json`) |
+
+### 复跑命令(原文可复制)
+
+```bash
+# A. 默认门禁(单浏览器 chromium 全量 spec;拓扑由 global-setup 拉起 / teardown 收尾)
+pnpm --filter @stackmaster/plugin-dev test:e2e
+
+# B. axe 三预设真机门禁 + reduced-motion(chromium 口径;归档自动写 reports/axe/<运行日期>/)
+pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/axe-contrast.spec.ts e2e/reduced-motion.spec.ts --project=chromium
+
+# C. 三浏览器矩阵(六宽度 × 两面 × 三引擎;串行)
+E2E_MATRIX=1 pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/browser-matrix.spec.ts
+
+# C'. 逐引擎复跑(WebKit linux 复跑义务的补测锚)
+E2E_MATRIX=1 pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/browser-matrix.spec.ts --project=webkit
+
+# D. 保留拓扑调试(步骤 A/B/C 之间共享同一次冷构建)
+E2E_KEEP_COMPOSE=1 pnpm --filter @stackmaster/plugin-dev test:e2e
+pnpm --filter @stackmaster/session-api compose:app:down        # 调试完手动下线
+```
+
+### axe 归档纪律(`e2e/reports/axe/<YYYY-MM-DD>/`)
+
+- **归档即历史证据**:目录按**运行当日**生成,路径无覆盖开关 —— `2026-09-11/`
+  是 WP-55 的测量证据,只增不改(WP-74 首件修掉了「硬编码 WP-55 日期 + 标题
+  绑定 WP-55」导致每次跑 axe 都覆写历史目录的缺陷);
+- 面矩阵 = 三预设 × 既有扫描面,共 **10 份 JSON** + `summary.md`:插件面
+  registers / stack × light / dark / terminal(6)、降级面 light / terminal(2)、
+  壳面 light / terminal(2);
+- 不可达格如实登记:shell dark(本机 headless 不绘制 root 级暗色画布,半暗态伪影)、
+  degraded dark(降级形态无握手 ⇒ 无 `theme_changed` 通道,宿主元素外部锚被插件
+  写回 resolvedTheme);
+- 预设承载:**light / dark** 走嵌入协议 `theme_changed`;**terminal 不经协议**
+  (`EMBED_THEMES` 冻结),由外部 `data-sm-theme` 锚承载(插件文档页预置 /
+  运行期写入 / 独立使用形态 `theme` 属性 —— 见 `e2e/helpers/theme-anchor.ts`);
+- CI 只**归档 artifact**(`e2e-matrix-artifacts`),不提交归档 —— 落仓由本地 /
+  主控波次执行。
+
+### 三浏览器矩阵结果登记纪律
+
+矩阵(12 格 × 三引擎 + 5 个 chromium 口径附加格)在**纯 CSS 目标**下差异应极小;
+任何差异都要:
+
+1. 如实登记在阶段文档 / WP 报告的实测行(引擎 + 宽度 + 面 + 断言 + 现象);
+2. **附最小复现**(`--project=<引擎>` + 单个 spec / 单个 describe 的精确命令,
+   必要时附 `--grep`);
+3. 平台级不可达(如 WebKit Windows 无 WebSocket)与产品缺陷**分开登记**,
+   前者走「环境不可达 + linux CI 复跑义务」口径,后者开缺陷。
+
+CI 的矩阵报告以 artifact 形式归档(`apps/plugin-dev/.tmp/e2e-matrix-report.json`,
+JSON reporter);本地矩阵复跑不落仓。
+
+### reduced-motion 断言与「装饰不承载信息」
+
+`e2e/reduced-motion.spec.ts` 断言的是**终态契约**(契约全文 = C1~C9 见
+`e2e/helpers/decoration.ts` 文件头):reduce 下零非 `none` 动画 + 扫描线层不可见
++ 装饰不承载信息(`aria-hidden="true"` / 零文本 / 零可聚焦后代 / `pointer-events: none`),
+界面功能不降级;no-preference 正面对照要求扫描线层与光标闪烁**按契约在场**。
+效果面实装归 WP-74 的效果面波次(`packages/vm-ui/src/**`),故正面对照在实装前
+为**有意承载的红灯**(失败信息含契约描述与实测计数);reduce 侧在实装前恒真、
+实装后成为真实守护断言。

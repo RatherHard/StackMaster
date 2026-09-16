@@ -82,6 +82,93 @@ jobs:
         env:
           WORKER_CARGO_PROFILE: release
 
+  e2e-matrix:
+    name: E2E 三浏览器矩阵 + axe 三预设真机门禁(WP-74;E-3)
+    runs-on: ubuntu-latest
+    # ── timeout-minutes 登记(WP-74 要求明确登记)───────────────────────────────
+    # 本 job 含**两次** Playwright 调用(矩阵 spec 一次;axe 真机 + reduced-motion
+    # 一次),每次各自享有 `playwright.config.ts:33` 的 globalTimeout —— 矩阵形态
+    # (E2E_MATRIX=1)为 75 分钟/次,故 Playwright 侧理论最坏 75 + 75 = 150 分钟;
+    # 叠加 frozen-lockfile 安装、三浏览器 + 系统依赖下载、compose 冷构建
+    # (helpers/compose.ts 的 up -d --build --wait 自身上限 10 分钟)与收尾,
+    # 取 180 分钟。普通增量形态远低于此(实测面见 README「门禁形态自查」)。
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖(frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      # 被测产物:vm-ui dist(vite dev 的 publicDir,壳 / 嵌入面都加载它)、
+      # web-component 自包含产物(plugin-site-server 承载的插件文档页 +
+      # /pwn-memory-vm.js)、session-api dist(global-setup 的题目登记走真实
+      # registrar,依赖该产物)。`--filter X...` 含依赖 ⇒ protocol / vm-ui 一并构建。
+      - name: 构建被测产物(vm-ui / web-component 自包含产物 + session-api dist)
+        run: |
+          pnpm --filter @stackmaster/web-component... run build
+          pnpm --filter @stackmaster/session-api... run build
+      # linux runner 上补齐三引擎与其系统依赖(本地已装;CI 每次全新)。
+      - name: Playwright 三浏览器 chromium + firefox + webkit(含系统依赖)
+        run: pnpm --filter @stackmaster/plugin-dev exec playwright install --with-deps chromium firefox webkit
+      # ── 步骤 1:矩阵 spec(三引擎)────────────────────────────────────────────
+      # 并行 / 串行边界登记(拓扑单例 ⇒ 矩阵 spec 内串行):
+      #  - compose 全拓扑为**单例**(固定端口 5173/5174/5175/13000,docker compose
+      #    工程名固定)⇒ 同一时刻只允许一个 Playwright 进程持有拓扑;
+      #  - `playwright.config.ts` 的 workers: 1 / fullyParallel: false(真实后端
+      #    共享单拓扑,会话并发预算 D-API-50)⇒ **spec 内用例串行**;矩阵 12 格
+      #    (六宽度 × 两面)在 chromium / firefox / webkit 三项目间亦串行,另 5 个
+      #    chromium 口径附加格(主题 / 键盘 / reduced-motion / 高对比度 / 非根路径);
+      #  - **job 之间**:本 job 占满拓扑,不得与任何其它 E2E job 并行(现无第二个;
+      #    若将来新增,须串行化或改用独立端口与独立 compose 工程名);
+      #  - **O-MP-2(中期任务分解 §七)口径**:chromium + firefox + webkit 三引擎
+      #    常态跑,webkit 允许 retry 一次 —— 由 `playwright.config.ts:30` 的
+      #    CI 形态 `retries: 1` 承载(GitHub 自动注入 CI=true),本 job 不再叠加;
+      #  - 本步 E2E_KEEP_COMPOSE=1:保留拓扑给下一步(避免第二次冷构建),
+      #    收尾由本 job 末尾的 `if: always()` 步骤显式执行。
+      - name: 矩阵 spec(chromium + firefox + webkit;E2E_MATRIX=1)
+        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/browser-matrix.spec.ts --reporter=list,json
+        env:
+          E2E_MATRIX: "1"
+          # 拓扑保留给下一步(步骤 2 在其上复跑;末尾统一下线)。
+          E2E_KEEP_COMPOSE: "1"
+          # 凭证只经环境变量(compose dev 拓扑的合成开发值,仓库内公开常量:
+          # apps/session-api/compose/app.yaml:72;生产形态由部署注入真实值)。
+          SESSION_API_HOST_BACKEND_TOKEN: host-backend-shared-credential-0123456789
+          WORKER_CARGO_PROFILE: release
+          # 矩阵报告落 .tmp/(仓库 .gitignore 覆盖),供 artifacts 归档。
+          PLAYWRIGHT_JSON_OUTPUT_NAME: .tmp/e2e-matrix-report.json
+      # ── 步骤 2:axe 三预设真机门禁 + reduced-motion(chromium 门禁口径)─────
+      # axe / reduced-motion 两个 spec 自身 skip 非 chromium 项目(browserName 断言),
+      # 此处再显式 --project=chromium:门禁口径不变,且不随 E2E_MATRIX 膨胀。
+      # 拓扑已在跑 ⇒ global-setup 的 readyz 探测直接复用(不再 compose:app:up)。
+      - name: axe 三预设真机门禁 + reduced-motion(chromium)
+        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/axe-contrast.spec.ts e2e/reduced-motion.spec.ts --project=chromium
+        env:
+          E2E_KEEP_COMPOSE: "1"
+          SESSION_API_HOST_BACKEND_TOKEN: host-backend-shared-credential-0123456789
+          WORKER_CARGO_PROFILE: release
+      # ── 归档 artifacts(axe JSON 归档 + 矩阵报告 + 失败 trace;失败也执行)──
+      - name: 归档 artifacts(axe 归档 + 矩阵报告 + 失败 trace)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-matrix-artifacts
+          if-no-files-found: warn
+          # axe 归档目录按**运行当日**生成(见 e2e/axe-contrast.spec.ts);CI 只归档
+          # 不提交 —— 落仓归档由本地 / 主控波次执行(归档即历史证据)。
+          path: |
+            apps/plugin-dev/e2e/reports/axe/**
+            apps/plugin-dev/.tmp/e2e-matrix-report.json
+            apps/plugin-dev/.tmp/playwright-artifacts/**
+      - name: 拓扑收尾(compose:app:down;失败也执行,不掩盖测试结果)
+        if: always()
+        run: pnpm --filter @stackmaster/session-api compose:app:down
+        env:
+          WORKER_CARGO_PROFILE: release
+
   rust-gate:
     name: vm-engine 确定性纪律与测试(ENG-1 ~ ENG-7)
     runs-on: ubuntu-latest
