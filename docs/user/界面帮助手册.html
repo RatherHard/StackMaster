@@ -73,7 +73,7 @@
 <main>
 
 <h1>StackMaster 界面帮助手册（学习者版）</h1>
-<p class="muted">版本 1.1 · 2026-09-16 · 面向：在 StackMaster 工作区做题的学习者<br>
+<p class="muted">版本 1.2 · 2026-09-17 · 面向：在 StackMaster 工作区做题的学习者<br>
 权威性说明：本手册是使用文档；界面行为的实现权威 = <code>packages/vm-ui/README.md</code>（组件逐条登记），
 交互语义权威 = <code>docs/develop/投影语义规约.md</code> 与 <code>packages/protocol/docs/会话动作协议语义.md</code>。
 手册与实现不一致时以实现为准。</p>
@@ -450,11 +450,11 @@
   <tr><td><code>--sm-fg</code> / <code>--sm-fg-dim</code></td><td><code>#b9ffc4</code> / <code>#6dd47f</code></td><td>磷光绿主前景 / 暗绿次要文字</td></tr>
   <tr><td><code>--sm-accent</code> / <code>--sm-warn</code> / <code>--sm-focus-ring</code></td><td><code>#4fe6c2</code> / <code>#ffc857</code> / <code>#a9ffb8</code></td><td>青绿 = 可点击地址 / 琥珀 = 断点与暂停 / 亮绿 = 焦点环</td></tr>
   <tr><td><code>--sm-border</code> 族 / <code>--sm-danger</code></td><td>磷光绿 α 阶梯 / <code>#ff8a94</code></td><td>卡片边框与分隔线、编译错误与断点红</td></tr>
-  <tr><td><code>--sm-scanline-opacity</code> / <code>--sm-caret-blink</code></td><td><code>0.06</code> / <code>1.1s</code></td><td>扫描线强度 / 光标闪烁周期（<strong>仅为登记值</strong>，见下）</td></tr>
+  <tr><td><code>--sm-scanline-opacity</code> / <code>--sm-caret-blink</code></td><td><code>0.06</code> / <code>1.1s</code></td><td>扫描线强度 / 光标闪烁周期（随 terminal 生效，见下）</td></tr>
 </table>
-<div class="warnbox"><strong>如实声明</strong>：扫描线与光标闪烁这两个效果 token 的<strong>变量值已经登记</strong>（light / dark 档为 <code>0</code> / <code>0s</code>，terminal 档为 <code>0.06</code> / <code>1.1s</code>），
-但把扫描线画出来、让光标闪起来的<strong>组件侧实装不属于本手册定稿时的现状</strong>（截至 2026-09-16，源码中尚无这两个变量的消费点）——所以现在切到 terminal，你看到的是<strong>终端配色</strong>；
-terminal 色板的<strong>真机 axe 对比度门禁</strong>也随该实装一并复跑。手册只登记到「变量已就位」为止，<strong>不提前声称效果已生效</strong>。</div>
+<div class="warnbox"><strong>效果面现状（2026-09-17 更新）</strong>：扫描线与光标闪烁<strong>已组件侧实装并真机验证</strong>。切到 terminal 后，你会看到<strong>终端配色 + 扫描线叠加 + 窗口标题栏光标闪烁</strong>（light / dark 档这两个值取 <code>0</code> / <code>0s</code> ⇒ 效果不可见，只呈现常规外观）。
+三条边界如实写明：①扫描线强度极轻（<code>opacity ≤ 0.06</code>）且<strong>不拦截鼠标</strong>（<code>pointer-events: none</code>），不影响你点选内存格与按钮；②这些装饰<strong>不承载任何信息</strong>（对屏幕阅读器隐藏），关掉它们不影响功能；③开启系统的<strong>「减少动态效果」</strong>后，扫描线与光标闪烁一并关闭，界面照常可用。
+terminal 色板的<strong>真机 axe 对比度门禁</strong>已随该实装复跑：三预设共 <strong>9 个可达面零违规</strong>（归档见 <code>apps/plugin-dev/e2e/reports/axe/2026-09-17/</code>）。</div>
 <p class="muted">对比度基准：terminal 前景类 token 按 WCAG 公式逐对机检（正文 ≥ 4.5、主前景 ≥ 7），色板登记实测前景对三层背景 ≥ 8.1:1。</p>
 
 <h3>12.3 语言与键盘</h3>
@@ -526,7 +526,7 @@ memory_fault 是什么样子。</div>
   <tr><td>提交一直 pending</td><td>独立裁决在排队/重放；保持页面打开（自动重询）。长时间（分钟级）不动请联系平台查裁决服务</td></tr>
   <tr><td>调试模式和解题模式地址对不上</td><td>预期语义（尤其 ASLR 题）；裁决以真实会话为准</td></tr>
   <tr><td>界面语言/主题突然变了</td><td>宿主平台切换了下发配置；可在平台设置改回。注意：<code>terminal</code> 不随宿主配置下发，只有宿主元素上写了 <code>data-sm-theme="terminal"</code> 才会生效（§12.1）</td></tr>
-  <tr><td>切到 terminal 但没看到扫描线 / 闪烁光标</td><td>这两个效果的 token 值已登记，但效果本身的组件侧实装不属于本手册定稿时的现状（§12.2 有逐条声明）；terminal 当前确定的观感是终端配色</td></tr>
+  <tr><td>切到 terminal 但没看到扫描线 / 闪烁光标</td><td>先确认系统是否开启了<strong>「减少动态效果」</strong>——开启后这两项效果会按无障碍要求自动关闭（§12.2）。若未开启仍看不到：扫描线强度极轻（<code>opacity ≤ 0.06</code>）且每 3px 才一条 1px 细线，在缩放或低对比度屏幕上不易察觉，属设计如此</td></tr>
 </table>
 
 <h2 id="sa">附录 A · 会话动作 ↔ 界面入口对照</h2>
@@ -549,7 +549,7 @@ memory_fault 是什么样子。</div>
   <tr><th>对象</th><th>你能看到</th><th>你看不到</th></tr>
   <tr><td>窗口</td><td>注册表登记的 <strong>10 类窗口各恰一个、常驻</strong>；视口内的窗口正常渲染，滚出视野的窗口由浏览器跳过渲染与绘制（滚回去即恢复）</td><td>「关闭窗口」「新开窗口」「工作区为空」——这些状态与入口<strong>结构性不存在</strong>（窗口只有「视口内 / 暂离」两种处境）</td></tr>
   <tr><td>布局</td><td>列排布（P0 五列 / P1 三列 / P2 单列，按视口宽选档）、列宽 / 窗高调整、焦点列居中、菜单「布局」组的五档与「重置布局」</td><td>标题栏上的尺寸控件（不存在——尺寸入口只在菜单「布局」组）；跨档后你手工拖出的排布（会被新档预设覆盖）</td></tr>
-  <tr><td>主题</td><td>light / dark / terminal 三预设与 auto；变量切换即时生效</td><td>嵌入协议里的 <code>terminal</code> 值（协议面冻结三值；terminal 只能由宿主元素上的外部锚承载）；terminal 的扫描线 / 光标闪烁效果是否可见以实际现状为准（§12.2 有如实声明）</td></tr>
+  <tr><td>主题</td><td>light / dark / terminal 三预设与 auto；变量切换即时生效；terminal 附带扫描线叠加与窗口标题栏光标闪烁（装饰不承载信息）</td><td>嵌入协议里的 <code>terminal</code> 值（协议面冻结三值；terminal 只能由宿主元素上的外部锚承载）；开启系统「减少动态效果」后上述两项装饰按无障碍要求自动关闭</td></tr>
   <tr><td>可见区域</td><td>锚定起点的窗口前缀（缺省 256 B；短区域全量）+ truncated 标记</td><td>前缀之外的字节（<code>??</code>）</td></tr>
   <tr><td>隐藏区域</td><td>什么都不显示——"不存在"</td><td>全部；探测结果与未映射地址不可区分</td></tr>
   <tr><td>寄存器</td><td>公开名单的值（0x 大写）</td><td>FLAG/秘密汇寄存器（名字都不出现）</td></tr>
@@ -559,7 +559,7 @@ memory_fault 是什么样子。</div>
 </table>
 
 <footer>
-StackMaster · 界面帮助手册 v1.1（2026-09-16）· 本手册为使用文档，非冻结契约；
+StackMaster · 界面帮助手册 v1.2（2026-09-17）· 本手册为使用文档，非冻结契约；
 界面行为以 <code>packages/vm-ui/README.md</code> 与各冻结契约为权威。
 姊妹篇：〈学习者上手指南〉(概念与玩法)、〈出题人参考手册〉(制作方)。
 </footer>
