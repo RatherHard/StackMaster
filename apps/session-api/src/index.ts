@@ -29,6 +29,12 @@ async function main(): Promise<void> {
     descriptorRoutes: runtime.descriptorRoutes,
     verdictRoutes: runtime.verdictRoutes,
     wssChannel: runtime.wssChannel,
+    // 调试通道插件(中期 WP-76 越界缺陷修复):runtime 构好但此前**漏传**,
+    // 而 `server.ts:171` 仅在 `deps.debugChannel !== undefined` 时注册 ⇒ 生产入口
+    // 从未挂载 `/sessions/debug-channel`(实测 404,而 `/sessions/channel` 为 401)。
+    // 集成测试走 `test/routes/helpers/session-rig.ts:458` 的测试接缝(那里传了),
+    // 故缺陷长期不被测试发现 —— 与 WP-70「测试接缝绕开真实装配路径」同类。
+    debugChannel: runtime.debugChannel,
     metricsPlugin: runtime.metricsPlugin,
     readinessProbes: runtime.readinessProbes,
   });
