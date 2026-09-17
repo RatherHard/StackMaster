@@ -32,6 +32,14 @@
  * WP-74 前置修复报告:输出区为 flex 布局且 `<ol>` 自身即滚动容器
  * (`.pane ol { flex: 1; overflow: auto }`),引入包裹元素须连带改 CSS 几何,
  * 与「本包只调语义属性、视觉零变化」相冲突。
+ *
+ * **滚动区域的键盘可达性(M3 真机 axe 抓出:`.output-log` 命中
+ * `scrollable-region-focusable` / serious)**:`.pane ol` 使两处列表自身即滚动
+ * 容器,而两者既无 `tabindex` 也无任何可聚焦后代 ⇒ 键盘用户无法滚动到溢出内容。
+ * 修法 = 给滚动容器自身加 `tabindex="0"`(axe 对该规则的标准修法),不动
+ * `aria-live="polite"` 语义、不加可聚焦后代、不动 CSS 几何(`tabindex`
+ * 零布局影响)。`.output-log`(本次命中节点)与 `.program-list`(同一渲染点、
+ * 同一条 `.pane ol` 规则造成的直接同类:程序步骤多时同样溢出)一并加。
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -799,7 +807,7 @@ export class SmPayloadTab extends LitElement {
             ${total === 0
               ? html`<p class="empty">${t("payload.programEmpty")}</p>`
               : html`
-                  <ol class="program-list">
+                  <ol class="program-list" tabindex="0">
                     ${steps.map((step, index) => {
                       const isCurrent =
                         index === this.#executorCursor &&
@@ -828,7 +836,7 @@ export class SmPayloadTab extends LitElement {
             ${this.#log.length === 0
               ? html`<p class="empty">${t("payload.outputEmpty")}</p>`
               : html`
-                  <ol class="output-log" aria-live="polite">
+                  <ol class="output-log" aria-live="polite" tabindex="0">
                     ${this.#log.map(
                       (line) => html`<li class=${line.kind === "error" ? "error" : nothing}>${line.text}</li>`,
                     )}

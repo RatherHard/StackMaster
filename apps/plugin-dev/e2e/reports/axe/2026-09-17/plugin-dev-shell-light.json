@@ -12,46 +12,46 @@
           "target": [
             [
               "sm-workspace",
-              "#blockly-4\\.label"
+              "#blockly-1g\\.label"
             ]
           ],
-          "html": "<span id=\"blockly-4.label\" class=\"blocklyToolboxCategoryLabel\">会话动作</span>"
+          "html": "<span id=\"blockly-1g.label\" class=\"blocklyToolboxCategoryLabel\">会话动作</span>"
         },
         {
           "target": [
             [
               "sm-workspace",
-              "#blockly-5\\.label"
+              "#blockly-1h\\.label"
             ]
           ],
-          "html": "<span id=\"blockly-5.label\" class=\"blocklyToolboxCategoryLabel\">变量</span>"
+          "html": "<span id=\"blockly-1h.label\" class=\"blocklyToolboxCategoryLabel\">变量</span>"
         },
         {
           "target": [
             [
               "sm-workspace",
-              "#blockly-6\\.label"
+              "#blockly-1i\\.label"
             ]
           ],
-          "html": "<span id=\"blockly-6.label\" class=\"blocklyToolboxCategoryLabel\">列表</span>"
+          "html": "<span id=\"blockly-1i.label\" class=\"blocklyToolboxCategoryLabel\">列表</span>"
         },
         {
           "target": [
             [
               "sm-workspace",
-              "#blockly-7\\.label"
+              "#blockly-1j\\.label"
             ]
           ],
-          "html": "<span id=\"blockly-7.label\" class=\"blocklyToolboxCategoryLabel\">分支</span>"
+          "html": "<span id=\"blockly-1j.label\" class=\"blocklyToolboxCategoryLabel\">分支</span>"
         },
         {
           "target": [
             [
               "sm-workspace",
-              "#blockly-8\\.label"
+              "#blockly-1k\\.label"
             ]
           ],
-          "html": "<span id=\"blockly-8.label\" class=\"blocklyToolboxCategoryLabel\">循环</span>"
+          "html": "<span id=\"blockly-1k.label\" class=\"blocklyToolboxCategoryLabel\">循环</span>"
         }
       ]
     }
