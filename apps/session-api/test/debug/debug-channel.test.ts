@@ -30,6 +30,7 @@ import {
   DebugChannelError,
 } from "../../src/debug/index.js";
 import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../src/auth/cookie.js";
+import { DebugVariantBuildError, RULE_ID_DEBUG_IR_MODE } from "@stackmaster/challenge-compiler";
 import { DebugFrameSchema, type DebugFrame } from "@stackmaster/protocol";
 
 // ── 测试工具 ─────────────────────────────────────────────────────────────────
@@ -499,6 +500,55 @@ describe("展示上下文推送(attached → function_table 恰一次;每次 pau
       expect("jumpTargetHex" in stream.payload.instructions[2]!).toBe(false);
       expect("truncated" in stream.payload).toBe(false);
     }
+  });
+
+  it("挑战级确定性拒绝(变体产出失败)→ 呈现面恒 internal_error,受控日志保留 cause(可归因)", async () => {
+    // 中期 WP-76 缺陷 2 的第二处缺陷:未编排失败兜底只登记 `type: error.name`
+    // ⇒ 携带 violations[].ruleId 的确定性拒绝在真机日志里退化成 "unknown
+    // error"(实测只剩 type=DebugVariantBuildError,规则 ID / message 全丢),
+    // 缺陷不可归因。呈现面**不变**(恒冻结 internal_error,细节零透出)。
+    const rig = await buildRig({
+      debug: {
+        variantProviderFactory: () => ({
+          forSession: async () => {
+            throw new DebugVariantBuildError(
+              [{
+                ruleId: RULE_ID_DEBUG_IR_MODE,
+                message: "调试变体镜像仅支持字节模式题目",
+                path: "/program/mode",
+              }],
+              "ir-mode challenge cannot produce a debug variant",
+            );
+          },
+        }),
+      },
+    });
+    const stack = await createDebugStack(rig, { attach: false });
+    stack.client.send(debugFrame({
+      sessionId: stack.sessionId, seq: 1, type: "debug_attach",
+      payload: { origin: { kind: "revision", revision: 0 } },
+      requestId: "attach-1",
+    }));
+    await stack.collector.waitFor((frames) => frames.length === 1);
+
+    // ① 呈现面:冻结 internal_error(零内部细节、零规则 ID 透出)。
+    expect(stack.collector.frames[0]?.type).toBe("error");
+    if (stack.collector.frames[0]?.type === "error") {
+      expect(stack.collector.frames[0].payload).toEqual(DEBUG_INTERNAL_ERROR);
+    }
+    // ② 受控日志:错误类型 + 原始 message + 规则 ID(修前仅 type)。
+    const line = rig.capture
+      .entries()
+      .find((entry) => entry["msg"] === "debug frame failed with unknown error");
+    expect(line).toBeDefined();
+    expect(line?.["type"]).toBe("DebugVariantBuildError");
+    expect(line?.["message"]).toBe(
+      "debug variant build rejected: ir-mode challenge cannot produce a debug variant",
+    );
+    expect(line?.["rejectionRuleIds"]).toEqual([RULE_ID_DEBUG_IR_MODE]);
+    expect(line?.["rejectionViolationCount"]).toBe(1);
+    // 违规 message / path 不入日志(可能内嵌私有引用 ID;只登记标识面)。
+    expect(rig.capture.raw()).not.toContain("/program/mode");
   });
 
   it("指令流推送失败 → error 帧(internal_error)且连接存活(后续请求照常回执)", async () => {

@@ -377,8 +377,20 @@ export class DebugChannelConnection {
         this.#emitError(error.payload);
         return;
       }
+      // 未编排失败兜底:呈现面恒为冻结 `internal_error`(细节零透出,与
+      // productionDebugVariantProvider 的映射定案一致),但**受控日志必须保留
+      // 原始 cause**。此前的日志只带 `type: error.name` ⇒ 携带 `violations[].ruleId`
+      // 的挑战级确定性拒绝(如 challenge-compiler `DebugVariantBuildError` 的
+      // `XC-DEBUG-MODE-IR`)在日志里退化成 "unknown error",缺陷不可归因
+      // (中期 WP-76 缺陷 2 的实测教训:真机只留下 type=DebugVariantBuildError,
+      // 规则 ID、message、违反面全部丢失)。规则 ID 是标识面,零内容、零秘密
+      // ⇒ 只登记 ruleId(违规 message / path 可能携带私有引用 ID,不入日志)。
       this.#log.warn(
-        { type: error instanceof Error ? error.name : "NonError" },
+        {
+          type: error instanceof Error ? error.name : "NonError",
+          message: error instanceof Error ? error.message : String(error),
+          ...rejectionRuleIds(error),
+        },
         "debug frame failed with unknown error",
       );
       this.#emitError(DEBUG_INTERNAL_ERROR);
@@ -637,5 +649,32 @@ export class DebugChannelConnection {
     } catch (error) {
       onWritten(error instanceof Error ? error : new Error(String(error)));
     }
+  };
+}
+
+/** 受控日志登记的规则 ID 条数上限(日志行有界;超出只登记总数)。 */
+const REJECTION_RULE_ID_LOG_LIMIT = 8;
+
+/**
+ * 从任意错误对象提取**确定性拒绝的规则 ID 面**(标识面,零内容零秘密):
+ * challenge-compiler 的装载 / 变体产出拒绝以 `violations: {ruleId, message,
+ * path}[]` 携带规则 ID(如 `XC-DEBUG-MODE-IR`)。只登记 ruleId —— 违规
+ * message / path 可能内嵌私有引用 ID,不入受控日志。非该形态返回空对象
+ * (日志字段零噪声)。
+ */
+function rejectionRuleIds(error: unknown): Record<string, unknown> {
+  const violations = (error as { violations?: unknown } | null)?.violations;
+  if (!Array.isArray(violations)) {
+    return {};
+  }
+  const ruleIds = violations
+    .map((item) => (item as { ruleId?: unknown } | null)?.ruleId)
+    .filter((ruleId): ruleId is string => typeof ruleId === "string" && ruleId.length > 0);
+  if (ruleIds.length === 0) {
+    return {};
+  }
+  return {
+    rejectionRuleIds: ruleIds.slice(0, REJECTION_RULE_ID_LOG_LIMIT),
+    rejectionViolationCount: ruleIds.length,
   };
 }

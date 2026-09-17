@@ -1,10 +1,30 @@
 /**
- * k6 基线题目种子(阶段三 WP-8;D-API-73)。
+ * k6 基线 / 演示 / E2E 题目种子(阶段三 WP-8;D-API-73;中期 WP-76 缺陷 2 修复)。
  *
- * 经持久化端口把 k6 基线题目(生命周期教学题,与 test/compose/helpers/
- * lifecycle-challenge.ts 同一常量面——引擎侧已验证的合法装载形态)登记进
- * compose 拓扑的 PostgreSQL / MinIO:双包入对象存储 → 版本行落库(真实验签)。
- * 内容全部为合成占位(FLAG{lifecycle} 为引擎测试同款占位,非真实秘密)。
+ * 经持久化端口把演示题(生命周期教学题,**字节模式**)登记进 compose 拓扑的
+ * PostgreSQL / MinIO:双包入对象存储 → 版本行落库(真实验签)。内容全部为
+ * 合成占位(FLAG{lifecycle} 为引擎测试同款占位,非真实秘密)。
+ *
+ * # 为什么是字节模式(中期 WP-76 缺陷 2 的修复面,勿回退)
+ *
+ * 本脚本登记的是 **E2E(`e2e/helpers/compose.ts:seedChallenge`)与手工演示
+ * 拓扑唯一驱动的题目**。调试变体契约不携带程序 IR / 入口声明面(ADR-DC1
+ * 条款 2:调试实例恒字节模式装配;`vm-engine/vm-worker/src/session/variant.rs`
+ * 模块文档「程序形态边界」)⇒ challenge-compiler `buildDebugVariantBundle`
+ * 对 IR 模式题目**确定性拒绝**(`XC-DEBUG-MODE-IR`),而公开描述包 `debugMode`
+ * 是 **opt-out 缺省 = true** ⇒ **IR 形态会让浏览器出现一个永远点不通的调试
+ * 开关**(attach 必失败,真机 WP-76 断点联动 E2E 因此打红)。故本题目:
+ *  ①程序以 `entrypointAddressHex` 声明 + `vmProfile.encodingTable` 覆盖代码区
+ *    **全部字节**(0x00 填充 = mov RAX,RAX;入口 0xc3 = ret),无 `compiledIr`;
+ *  ②私有初始寄存器与公开可见寄存器的 `RIP` **同址**对齐到代码区入口
+ *    (XS-PROJ-VALUES 镜像义务;RIP 落区域外 ⇒ 调试暂停落点无指令覆盖)。
+ * 语义与 IR `[ret]` 形态等价(0xc3 = ret)。形态由
+ * `test/debug/demo-challenge-debug-capability.test.ts` 机检锚定(含本文件
+ * 源码面的防漂移检查)。
+ *
+ * ⚠ 形态变更的拓扑副作用:内容版本仍为 1.0.0(版本不可变语义)⇒ 持有旧卷
+ * (内含旧 IR 双包)的拓扑需先 `compose:app:down`(含 -v 清卷)再重新登记,
+ * 否则登记行走「已存在即复用」分支、MinIO 对象与库内哈希可能不同源。
  *
  * 用法(run-baseline.mjs 自动调用;手工):
  *   node --env-file=compose/integration.env k6/seed-challenge.mjs
@@ -50,7 +70,7 @@ function lifecycleBundle() {
     declaredSeedPublicPaths: [],
     seedPolicy: { strategy: "fixed", seedHex: "00112233445566778899aabbccddeeff" },
     initialState: {
-      registers: { RSP: "0x7ffff008", RBP: "0x7ffff008", RIP: "0x0", RAX: "0x0", FLAG_SYS: "0x0" },
+      registers: { RSP: "0x7ffff008", RBP: "0x7ffff008", RIP: CODE_BASE, RAX: "0x0", FLAG_SYS: "0x0" },
       memoryRegions: [
         { regionId: "code", kind: "code", startAddressHex: CODE_BASE, byteLength: 4096, permissions: "rx", contentHex: codeContent, isHidden: false },
         { regionId: "buffer", kind: "heap", startAddressHex: BUFFER_BASE, byteLength: 4096, permissions: "rw", contentHex: zeroHex(4096), isHidden: false },
@@ -65,7 +85,8 @@ function lifecycleBundle() {
         all: [{ all: [{ predicate: { type: "register_equals", register: "RAX", valueHex: "0x41" } }] }],
       },
     },
-    compiledIr: { irFormatVersion: 2, entrypointIndex: 0, instructions: [{ op: "ret", operands: [] }], labels: [] },
+    // 字节模式:入口地址声明(XS-PROG-MODE 双形态恰一);形态理由见文件头。
+    entrypointAddressHex: CODE_BASE,
     judgingConfig: { verdictRuleVersion: "1.0.0", maxPredicateEvalSteps: 10000 },
   };
 }
@@ -90,6 +111,12 @@ function lifecycleDescriptor() {
       archBits: 32,
       pageSizeBytes: 4096,
       canary: { enabled: false },
+      // 编码表须覆盖代码区全部字节(0x00 填充 + 入口 0xc3),否则装载期
+      // 探测译码 XS-ENC-PROBE 拒绝。
+      encodingTable: [
+        { tokenHex: "0x00", op: "mov", operands: [{ kind: "register", name: "RAX" }, { kind: "register", name: "RAX" }] },
+        { tokenHex: "0xc3", op: "ret" },
+      ],
     },
     memoryLayout: {
       regions: [
@@ -114,7 +141,7 @@ function lifecycleDescriptor() {
       visibleRegisters: [
         { name: "RSP", valueHex: "0x7FFFF008" },
         { name: "RBP", valueHex: "0x7FFFF008" },
-        { name: "RIP", valueHex: "0x0" },
+        { name: "RIP", valueHex: "0x401000" },
         { name: "RAX", valueHex: "0x0" },
       ],
     },

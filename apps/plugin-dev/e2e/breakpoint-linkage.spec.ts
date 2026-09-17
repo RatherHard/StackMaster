@@ -14,12 +14,27 @@
  * `compileNow` + `runProgram`)——与宿主恢复程序同一入口;E2E 不做积木拖拽
  * (拖拽稳定性属 Blockly 面,不在本 WP 交付范围)。
  *
- * ⚠ 调试档用例前置:真实拓扑必须注册 `/sessions/debug-channel`。当前
- * `apps/session-api/src/index.ts` **未把 `runtime.debugChannel` 传入
- * `buildServer`**(测试桩 `test/routes/helpers/session-rig.ts:458` 传了,
- * 生产入口漏了 ⇒ 该路由 404)。属越界点(非本 WP 可改文件),已在 WP-76
- * 报告「需主控协调的越界点」登记;修复前调试档用例以显式前置断言失败,
- * 不伪装通过。
+ * ⚠ 调试档用例的两处前置(中期 WP-76 缺陷 1 / 2,均已修):
+ *  ① 路由 404 —— `apps/session-api/src/index.ts` 生产入口未把
+ *    `runtime.debugChannel` 传入 `buildServer`(测试桩传了、生产入口漏了)。
+ *    已修:commit a35bb01;
+ *  ② `debug_attach` 恒失败(日志 type=DebugVariantBuildError、回执
+ *    error/internal_error)—— 演示拓扑登记的题目是 **IR 模式**,
+ *    而调试变体契约不携带程序 IR(确定性拒绝 XC-DEBUG-MODE-IR)。已修:
+ *    种子题改字节模式 + 初始 RIP 对齐代码区入口(`k6/seed-challenge.mjs`),
+ *    机器锚 = `apps/session-api/test/debug/demo-challenge-debug-capability.test.ts`。
+ *
+ * ⚠ **仍未闭合**:本用例第 2 步断言「进入调试模式后**不步进**即可见指令行」,
+ * 与冻结的推送模型(调试通道协议语义 §九:`debug_paused` 才推
+ * `debug_instruction_stream`)**不一致**。真机实测(真实 vm-worker + 生产变体
+ * 供给,Node 侧):attach 对齐到 running 时只推 `debug_attached` +
+ * `debug_function_table`,**不推指令流**;推 `debug_run_to_breakpoint`(断点
+ * 取当前 RIP)后依次得到 `debug_paused` + `debug_instruction_stream`(4 条)。
+ * 故需二选一定案,本 spec 未擅自改口径:
+ *  (a)用例侧补「触发首个暂停」(如 payload 断点并入后点菜单「运行到断点」),
+ *     断言保持不动 —— 不触碰冻结面,由后续真机时段实施并验证;
+ *  (b)扩展 §九 推送模型(attach 时补推一次上下文)—— **属冻结契约面**
+ *     (`packages/protocol/docs/**`),须主控定案。
  */
 import { expect, focusWindowButton, menuButton, test, workspaceWindow } from "./fixtures.js";
 
@@ -89,11 +104,10 @@ async function enterDebugModeReachable(page: import("@playwright/test").Page): P
       {
         timeout: 15_000,
         message:
-          "调试实例未 attach(真实拓扑两个前置缺陷,均属越界点):" +
-          "① session-api 未注册 /sessions/debug-channel —— apps/session-api/src/index.ts " +
-          "需传入 debugChannel: runtime.debugChannel(现状 404);" +
-          "② 注册后服务端 debug 变体构建失败(session-api 日志 type=DebugVariantBuildError、" +
-          "回执 error/internal_error),attach 无法完成。",
+          "调试实例未 attach(WP-76 缺陷 1/2 已修:① 生产入口已传 debugChannel " +
+          "a35bb01;② 种子题已改字节模式 + 初始 RIP 对齐)。此处仍未 attach ⇒ " +
+          "多半是拓扑跑的是修复前产物(缓存镜像 / 未重建 dist)或登记的仍是旧 " +
+          "IR 双包(需 compose:app:down -v 后重新登记),而非服务端实现问题。",
       },
     )
     .toBe("connected/attached");
