@@ -66,6 +66,22 @@ export default defineConfig({
   plugins: [hostMockDevServer(), serveVmUiDistDirect()],
   server: {
     port: 5173,
+    /**
+     * 文件监视忽略面(dev-only 加固;2026-09-17):
+     * 写文件工具与编辑器的原子写会在项目内留下 `<name>.<pid>.<guid>.tmpdir/`
+     * 形式的临时目录,而 Windows 对该目录内文件的 `watch` 会返回 **EBUSY**,
+     * 让 Vite 的 FSWatcher **整个进程退出**。
+     * **教训(实测三次才收口)**:该临时目录的前缀不固定 —— 见过
+     * `._<name>.<pid>.<guid>.tmpdir`(下划线)与
+     * `.<name>.<pid>.<guid>.tmpdir`(单点)两种;按**前缀**匹配会漏,
+     * 必须按**后缀 `.tmpdir`** 匹配。
+     * `.tmp/` = Playwright 归档目录,其写入还会触发无意义的整页 reload
+     * (可能干扰正在跑的 E2E),一并忽略。
+     * 本项只影响 HMR 监视面(不参与模块解析,也不进生产构建) ⇒ **零生产影响**。
+     */
+    watch: {
+      ignored: ["**/*.tmpdir", "**/*.tmpdir/**", "**/.tmp/**", "**/._*"],
+    },
     proxy: proxyEnabled
       ? {
           // REST 5 命令面(POST /sessions 等)与认证 WSS(GET /sessions/channel)。
