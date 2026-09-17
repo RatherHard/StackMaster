@@ -28,9 +28,32 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 构建 + 类型检查 + 测试(turbo)
         run: |
-          pnpm build
-          pnpm typecheck
-          pnpm test
+          set -o pipefail
+          mkdir -p .tmp
+          pnpm build 2>&1 | tee -a .tmp/ts-gate.log
+          pnpm typecheck 2>&1 | tee -a .tmp/ts-gate.log
+          pnpm test 2>&1 | tee -a .tmp/ts-gate.log
+      # ── 失败摘要 → **公开注解**(免凭证可读;仅在失败时执行)─────────────
+      # 为什么必须这一步:job 日志与 artifacts 下载**都要认证**(实测
+      # `GET /actions/runs/<id>/logs` = 403、artifacts = 401),而 check-run
+      # **annotations 公开可读** ⇒ 注解是唯一无需凭证的诊断通道。
+      # 为什么 Vitest 的 github-actions reporter 不够:它只覆盖**逐用例失败**
+      # (已本地实证:`CI=true` 下产出 `::error file=…,line=…`;无 CI 零输出)。
+      # 而**套件级失败**(transform / 导入收集 / worker 崩溃 / 无失败用例的非零
+      # 退出)不产出任何注解 —— run 37 的 `packages/vm-ui` 红即属此类:
+      # 注解仅 3 条(全是旧形态),**零逐用例注解本身就是证据**。
+      # 本步补齐该缺口:把日志里最有信息量的行提升为注解。
+      # 注:`%` 必须转义为 `%25`,`\n` 以 `%0A` 串联(workflow command 语法)。
+      - name: 失败摘要 → 注解(免凭证可读;失败才执行)
+        if: failure()
+        run: |
+          log=.tmp/ts-gate.log
+          if [ ! -f "$log" ]; then
+            echo "::error::ts-gate 日志缺失(前序步骤未产出 .tmp/ts-gate.log)"
+            exit 0
+          fi
+          echo "::error::ts-gate 关键失败行::$(grep -nE 'FAIL|failed|Error|error TS|Transform|Cannot find|exited \(1\)|worker' "$log" | tail -n 12 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          echo "::error::ts-gate 日志尾部 5000 字节::$(tail -c 5000 "$log" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
       - name: ESLint + 依赖边界(dependency-cruiser)+ 必触发反例自检(WP-1)
         run: |
           pnpm lint
