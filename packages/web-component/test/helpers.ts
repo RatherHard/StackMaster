@@ -224,6 +224,35 @@ export async function flushMicrotasks(times = 8): Promise<void> {
   }
 }
 
+/**
+ * 排空到「异步静止」:以宏任务边界为界推进 mock 传输面的端到端链路。
+ *
+ * # 为什么不能用固定跳数(实测根因,勿回退为小常数)
+ *
+ * `flushMicrotasks(n)` 把「异步链的微任务深度」当成环境常量,而它**随运行时
+ * 版本变化**:`Response.json()` 的微任务跳数在 Node 22 与 Node 24 的 undici
+ * 实现间不同 —— 实测 `flushMicrotasks(8)` 在 Node 24 足够、在 **Node 22 差一跳**
+ * ⇒ 引导取回 → create_session → 会话客户端建连 → 组件相位更新这条链停在
+ * `connecting`,四个端到端用例全红。CI(`node-version: 22`,即本仓声明的
+ * LTS 目标)因此在 e78ace5 及此前连续多次运行中恒红,而本地 Node 24 掩盖了它。
+ *
+ * 宏任务边界**不依赖跳数**:`setTimeout(0)` 的回调必然在当时已排入的全部微任务
+ * 之后执行。重复若干轮以覆盖「本轮排空后又排入新异步」的链式推进。
+ *
+ * 注意:本 helper 的语义是「让链路跑完」,不是「只推进微任务」;需要精确控制
+ * 微任务步数的场景仍用 `flushMicrotasks`。
+ */
+export async function settleAsyncWork(element: {
+  readonly updateComplete: Promise<unknown>;
+}, rounds = 4): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    await element.updateComplete;
+  }
+}
+
 /* ── 会话通道假体(端到端集成:mock session-api 的 REST / WSS 面)────────── */
 
 /** 标准公开投影夹具(经冻结 Schema 自检构造;形态同 vm-ui 测试基建)。 */

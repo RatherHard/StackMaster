@@ -16,6 +16,7 @@ import {
   flushMicrotasks,
   HOST_ORIGIN,
   readyMessage,
+  settleAsyncWork,
   TEST_ESID,
 } from "./helpers.js";
 import type { RecordedRequest } from "./helpers.js";
@@ -92,8 +93,9 @@ async function mountElement(overrides: {
     retryButton: () =>
       element.shadowRoot?.querySelector<HTMLButtonElement>("[data-testid=pwn-retry-button]") ?? null,
     async settle(): Promise<void> {
-      await flushMicrotasks();
-      await element.updateComplete;
+      // 排空到异步静止(宏任务边界;固定微任务跳数随运行时版本漂移,见
+      // helpers.ts `settleAsyncWork` 注释)。
+      await settleAsyncWork(element);
     },
   };
 }

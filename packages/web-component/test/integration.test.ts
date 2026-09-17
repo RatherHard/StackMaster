@@ -20,6 +20,7 @@ import {
   flushMicrotasks,
   HOST_ORIGIN,
   readyMessage,
+  settleAsyncWork,
   TEST_ESID,
 } from "./helpers.js";
 import type { RecordedRequest } from "./helpers.js";
@@ -131,8 +132,9 @@ async function mountFullChain(options: ChainOptions = {}) {
       return root;
     },
     async settle(): Promise<void> {
-      await flushMicrotasks();
-      await element.updateComplete;
+      // 排空到异步静止(宏任务边界;固定微任务跳数在 Node 22 下差一跳 ⇒ CI 恒红,
+      // 见 helpers.ts `settleAsyncWork` 注释)。
+      await settleAsyncWork(element);
     },
   };
 }
