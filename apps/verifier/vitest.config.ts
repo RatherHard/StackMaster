@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    reporters: process.env["CI"] ? ["default", "github-actions"] : ["default"],
     environment: "node",
     include: ["test/**/*.test.ts"],
     // verify 客户端的进程级用例(spawn 假 worker 协议往返)为真实进程链路。

@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    reporters: process.env["CI"] ? ["default", "github-actions"] : ["default"],
     environment: "node",
     include: ["test/**/*.test.ts"],
     // 集成测试 spawn 真实进程(dist/index.js)走启动 → 健康检查 → 优雅停机全链路。
