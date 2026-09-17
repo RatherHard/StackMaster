@@ -54,6 +54,19 @@
  * outline);`prefers-reduced-motion` 由相机滚动行为尊重;语义化 DOM;拖拽落点
  * 指示不引入浮动层与重叠;分隔条是可聚焦的 `role="separator"`(方向键可调);
  * 屏幕阅读器信息不只在视觉中(布局变更经 `role="status"` 状态行宣读)。
+ *
+ * 主题与效果面(WP-74):底色 / 前景 / 次要前景 / 面板底 / 语义色 / 焦点环 /
+ * 等宽字体栈全走既有 token(`var(--sm-*, <原字面量>)` 回退值逐字等于原值 ⇒
+ * light / dark 视觉零变化);字号下限 13px(`0.75rem` → `0.8125rem`)。
+ *
+ * 效果面三件(扫描线 overlay / 光标闪烁 / 终端式标题栏角标)为**纯装饰**:
+ * 装饰节点 `aria-hidden="true"`、零文本、零可聚焦后代、`pointer-events: none`,
+ * 缺席不丢失任何信息;强度 / 周期一律取自既有 token(`--sm-scanline-opacity`
+ * 与 `--sm-caret-blink`,light / dark = `0` / `0s` ⇒ 装饰天然不生效),**零新增
+ * token**;全部动画声明包在 `@media (prefers-reduced-motion: no-preference)` 内
+ * (reduce 下装饰 `display: none` 且 composed 树零 `animation-name`),动画只动
+ * opacity(零大面积 glow / text-shadow);终端式标题栏只加 1px 发丝线与角标伪
+ * 元素,**不加**按钮 / 交互元素 / `tabindex`(WP-71「标题栏零控件」口径保留)。
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -398,8 +411,12 @@ export class SmWorkspace extends LitElement {
       min-block-size: 24rem;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
-      background: canvas;
-      color: canvastext;
+      /* 扫描线 overlay 的定位锚(纯装饰层 inset:0;既有绝对定位后代各有自身
+         定位锚:sm-window-list 宿主 position:relative、Blockly .injectionDiv
+         position:relative ⇒ 零布局影响)。 */
+      position: relative;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-fg, canvastext);
       overflow: hidden;
     }
 
@@ -460,12 +477,12 @@ export class SmWorkspace extends LitElement {
 
     .column-divider:hover::before,
     .column-divider:focus-visible::before {
-      background: highlight;
+      background: var(--sm-warn, highlight);
     }
 
     .column-divider:focus-visible,
     .row-divider:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
@@ -493,7 +510,7 @@ export class SmWorkspace extends LitElement {
 
     .row-divider:hover::before,
     .row-divider:focus-visible::before {
-      background: highlight;
+      background: var(--sm-warn, highlight);
     }
 
     /* 列内按窗高比例分配列高(Hyprland 式):面板 flex-grow 由模型比例内联给值
@@ -507,7 +524,7 @@ export class SmWorkspace extends LitElement {
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 8px;
       overflow: hidden;
-      background: canvas;
+      background: var(--sm-bg-base, canvas);
       /* 视口外窗口降级渲染(WP-72):离屏子树跳过渲染与绘制;语义标记
          data-render-degrade="content-visibility"(结构断言面)。
          contain-intrinsic-size 以面板最小高为占位,auto 关键字记住上次尺寸,
@@ -517,7 +534,7 @@ export class SmWorkspace extends LitElement {
     }
 
     .tab-panel.focused {
-      border-color: highlight;
+      border-color: var(--sm-warn, highlight);
     }
 
     /* 拖拽反馈:opacity(compositor 友好;零 CSS 动画)。 */
@@ -527,17 +544,17 @@ export class SmWorkspace extends LitElement {
 
     /* 落点指示(WP-72):静态轮廓 / 背景,不引入浮动层与重叠,不做动画。 */
     .tab-panel.drop-target {
-      outline: 2px dashed highlight;
+      outline: 2px dashed var(--sm-warn, highlight);
       outline-offset: -2px;
     }
 
     .column-divider.drop-target,
     .row-divider.drop-target {
-      background: color-mix(in srgb, highlight 22%, transparent);
+      background: color-mix(in srgb, var(--sm-warn, highlight) 22%, transparent);
     }
 
     .columns.drop-target {
-      outline: 2px dashed highlight;
+      outline: 2px dashed var(--sm-warn, highlight);
       outline-offset: -2px;
     }
 
@@ -546,8 +563,10 @@ export class SmWorkspace extends LitElement {
       align-items: center;
       gap: 0.375rem;
       padding: 0.25rem 0.5rem;
+      /* 终端式标题栏 1px 框线 = 既有发丝线(角标与光标装饰的定位锚)。 */
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      background: color-mix(in srgb, canvas 92%, highlight 8%);
+      position: relative;
+      background: var(--sm-bg-panel, color-mix(in srgb, canvas 92%, highlight 8%));
       cursor: grab;
       user-select: none;
       touch-action: none;
@@ -573,15 +592,15 @@ export class SmWorkspace extends LitElement {
     .tab-placeholder {
       margin: 0;
       padding: 1rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
 
     .jump-feedback {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
@@ -589,8 +608,8 @@ export class SmWorkspace extends LitElement {
     .layout-status {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
       min-block-size: 1.1em;
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
@@ -599,9 +618,9 @@ export class SmWorkspace extends LitElement {
     .debug-feedback {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      color: canvastext;
-      font-size: 0.75rem;
-      background: color-mix(in srgb, field 94%, accentcolor 6%);
+      color: var(--sm-fg, canvastext);
+      font-size: 0.8125rem;
+      background: color-mix(in srgb, var(--sm-bg-inset, field) 94%, var(--sm-focus-ring, accentcolor) 6%);
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
     }
 
@@ -613,9 +632,9 @@ export class SmWorkspace extends LitElement {
 
     .teaching-panel > summary {
       padding: 0.25rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       cursor: pointer;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .teaching-grid {
@@ -640,9 +659,9 @@ export class SmWorkspace extends LitElement {
 
     .challenge-panel > summary {
       padding: 0.25rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       cursor: pointer;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .challenge-body {
@@ -670,7 +689,7 @@ export class SmWorkspace extends LitElement {
     }
 
     .challenge-facts dt {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .challenge-facts dd {
@@ -679,14 +698,14 @@ export class SmWorkspace extends LitElement {
     }
 
     .mono {
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
     }
 
     .encoding-table {
       margin: 0;
       border-collapse: collapse;
-      font-family: ui-monospace, monospace;
-      font-size: 0.75rem;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-size: 0.8125rem;
     }
 
     .encoding-table th,
@@ -699,7 +718,7 @@ export class SmWorkspace extends LitElement {
     .challenge-absent {
       margin: 0;
       padding: 0.25rem 0.75rem 0.5rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     /* 正式裁决横幅(阶段六 WP-63;零视觉重设计:复用横幅式样的取简变体)。 */
@@ -710,32 +729,156 @@ export class SmWorkspace extends LitElement {
       gap: 0.25rem 0.75rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      background: color-mix(in srgb, field 92%, highlight 8%);
+      background: color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%);
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .verdict-banner strong {
-      color: canvastext;
+      color: var(--sm-fg, canvastext);
     }
 
     .verdict-banner .verdict-state {
-      color: canvastext;
+      color: var(--sm-fg, canvastext);
       font-weight: 600;
     }
 
     .verdict-banner.unavailable {
-      background: color-mix(in srgb, mark 8%, canvas);
+      background: color-mix(in srgb, mark 8%, var(--sm-bg-base, canvas));
     }
 
     .verdict-banner button {
       padding: 0.125rem 0.5rem;
       border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 6px;
-      background: canvas;
-      color: canvastext;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-fg, canvastext);
       font: inherit;
       cursor: pointer;
+    }
+
+    /* ── 效果面(WP-74;契约 C1~C9 见 e2e/helpers/decoration.ts 文件头)─────
+       三件装饰全为**纯装饰**:节点 aria-hidden="true"(伪元素天然不入无障碍
+       树)、零文本、零可聚焦后代、pointer-events: none;动画只动 opacity;
+       缺席不丢失任何信息。参数一律取自既有 effect token,零新增 token:
+       扫描线强度 = --sm-scanline-opacity(light / dark = 0,terminal = 0.06),
+       光标周期 = --sm-caret-blink(light / dark = 0s,terminal = 1.1s)——
+       light / dark 下两者天然不生效 ⇒ 视觉零变化。全部动画声明包在
+       @media (prefers-reduced-motion: no-preference) 内;reduce 下装饰
+       display: none(C8)且 composed 树零 non-none 动画(C9)。 */
+
+    /* 扫描线 overlay(C1 锚 / C2 形态 / C3 强度 / C4 命中测试 / C7 不承载信息)。
+       几何、命中测试与形态是**静态**属性(与动效偏好无关 ⇒ reduce 下同样成立),
+       故落在基态规则内;强度由 token 驱动;基态 display: none ⇒ reduce 与非
+       no-preference 下装饰不生效(C8,零绘制)。 */
+    .sm-scanline {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      /* C3:强度由 --sm-scanline-opacity 驱动(light / dark = 0 ⇒ 不可见)。 */
+      opacity: var(--sm-scanline-opacity, 0);
+      /* C2:形态 = repeating-linear-gradient 覆盖层(1px 线 / 3px 周期)。 */
+      background-image: repeating-linear-gradient(
+        to bottom,
+        var(--sm-fg, canvastext) 0,
+        var(--sm-fg, canvastext) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .sm-scanline {
+        display: block;
+      }
+    }
+
+    /* 光标闪烁(C5 锚 / C6 steps 动画):终端块状光标,基态不可见 ——
+       light / dark 的 --sm-caret-blink = 0s ⇒ 动画不生效 ⇒ 保持基态 opacity 0
+       (视觉零变化;不靠 JS 分支主题)。 */
+    .sm-caret {
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-end: 0.5rem;
+      inline-size: 0.375rem;
+      block-size: 0.75rem;
+      margin-block-start: -0.375rem;
+      background: var(--sm-fg, canvastext);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .sm-caret {
+        /* C6:阶跃闪烁(steps,非平滑淡入淡出),周期解析自 --sm-caret-blink。 */
+        animation-name: sm-caret-blink;
+        animation-duration: var(--sm-caret-blink, 0s);
+        animation-timing-function: steps(1, end);
+        animation-iteration-count: infinite;
+      }
+    }
+
+    @keyframes sm-caret-blink {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    /* 终端式窗口标题栏:1px 框线 = .tab-bar 既有发丝线;角标 = 伪元素纯装饰
+       (零控件、零 tabindex、零文本)。基态 content: none ⇒ light / dark 与
+       reduce 下整体缺席(视觉零变化)。 */
+    .tab-bar::before,
+    .tab-bar::after {
+      content: none;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .tab-bar::before,
+      .tab-bar::after {
+        content: "";
+        position: absolute;
+        inline-size: 0.375rem;
+        block-size: 0.375rem;
+        pointer-events: none;
+        /* 角标强度 = 效果面开关的数值代理:light / dark 的
+           --sm-scanline-opacity = 0 ⇒ 完全透明;terminal = 0.06 ⇒ 放大到
+           不透明度上限 1(既有 token 复用,不新增 token)。 */
+        opacity: calc(var(--sm-scanline-opacity, 0) * 20);
+      }
+
+      .tab-bar::before {
+        inset-block-start: 0.125rem;
+        inset-inline-start: 0.25rem;
+        border-block-start: 1px solid var(--sm-fg-dim, graytext);
+        border-inline-start: 1px solid var(--sm-fg-dim, graytext);
+      }
+
+      .tab-bar::after {
+        inset-block-end: 0.125rem;
+        inset-inline-end: 0.25rem;
+        border-block-end: 1px solid var(--sm-fg-dim, graytext);
+        border-inline-end: 1px solid var(--sm-fg-dim, graytext);
+      }
+    }
+
+    /* reduce 等价覆盖(C8 / C9):装饰整体 display: none,节点数不为零但零绘制;
+       零动画声明(上方动画全在 no-preference 内 ⇒ reduce 下 composed 树
+       animation-name 恒为 none)。 */
+    @media (prefers-reduced-motion: reduce) {
+      .sm-scanline,
+      .sm-caret {
+        display: none;
+      }
     }
   `;
 
@@ -2294,6 +2437,12 @@ export class SmWorkspace extends LitElement {
     const snapshot = this.#model.snapshot;
     const descriptor = this.challengeDescriptor;
     return html`
+      <div
+        class="sm-scanline"
+        part="scanline"
+        data-sm-decoration="scanline"
+        aria-hidden="true"
+      ></div>
       <sm-workspace-menu
         .tabTypes=${this.tabTypes.list()}
         .focusedWindowType=${snapshot.focusedTabId}
@@ -2539,7 +2688,10 @@ export class SmWorkspace extends LitElement {
    *    内联比例,不重建面板内容(虚拟列表维持);
    *  - 落点指示(`drop-target` + `data-drop-kind` / `data-drop-position`)只在
    *    拖拽中出现在**命中落点的那一个**面板上(静态 class,零浮动层);
-   *  - 标题栏 = 拖拽把手 + 键盘可达入口(`tabindex=0`,方向键重排 / 移动)。
+   *  - 标题栏 = 拖拽把手 + 键盘可达入口(`tabindex=0`,方向键重排 / 移动),
+   *    **零控件**(无按钮 / 无交互元素,WP-71 口径保留);终端式装饰(角标伪
+   *    元素 + 块状光标)为纯装饰、绝对定位、`aria-hidden`、零文本、零可聚焦
+   *    后代,不承载信息(缺席不丢失任何信息,WP-74 效果面)。
    */
   #renderPanel(
     tabId: string,
@@ -2574,6 +2726,12 @@ export class SmWorkspace extends LitElement {
           @keydown=${(event: KeyboardEvent) => this.#onTabBarKeyDown(event, info.id)}
         >
           <span class="tab-title">${info.title}</span>
+          <span
+            class="sm-caret"
+            part="caret"
+            data-sm-decoration="caret"
+            aria-hidden="true"
+          ></span>
         </header>
         <div class="tab-content">
           ${content ??

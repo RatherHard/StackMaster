@@ -10,7 +10,10 @@
  *    终态禁用 + 引导、断线横幅、connection-replaced 手动重连、
  *    rejected 错误呈现(含 explanation);
  *  - 跨视图集成:寄存器交叉标注左缘出现与点击展开(FE-RG-04)、跳转链
- *    形似地址行挂载(FE-ST-07)、viewport-jump 滚动 / 窗口外反馈(FE-ST-09)。
+ *    形似地址行挂载(FE-ST-07)、viewport-jump 滚动 / 窗口外反馈(FE-ST-09);
+ *  - 效果面(WP-74):装饰锚与「不承载信息」口径、标题栏零控件口径、动效纪律
+ *    (no-preference / reduce)与主题消费 + 字号下限的**声明面**机检;真机计算值
+ *    与 composed 树全树扫描归 E2E(`e2e/reduced-motion.spec.ts` + decoration.ts)。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -935,5 +938,106 @@ describe("<sm-workspace> 跨视图集成接线", () => {
     expect(shadowOf(workspace).querySelector(".jump-feedback")?.textContent).toContain("在可见窗口之外");
     workspace.remove();
     harness.client.dispose();
+  });
+});
+
+// ── 效果面(WP-74:扫描线 overlay / 光标闪烁 / 终端式标题栏)────────────────────
+
+/**
+ * 终态契约 C1~C9 的判定在真机 E2E(`apps/plugin-dev/e2e/reduced-motion.spec.ts`
+ * × `e2e/helpers/decoration.ts` 文件头);本组是 **jsdom 结构面**机检:装饰锚 /
+ * 不承载信息口径 / 零控件口径 / 样式面契约标记(jsdom 不评估媒体查询,故动画与
+ * 强度取值只能以声明文本机检,token 驱动的计算值面归真机)。
+ */
+describe("<sm-workspace> 效果面(WP-74)", () => {
+  /** 组件静态样式合并文本(与 sm-workspace-layout.test.ts 同款读法;静态面,无需挂载)。 */
+  function stylesTextOf(): string {
+    const styles =
+      (SmWorkspace as unknown as { elementStyles?: { cssText?: string }[] }).elementStyles ?? [];
+    expect(styles.length, "组件静态样式缺席?").toBeGreaterThan(0);
+    return styles.map((style) => style.cssText ?? "").join("\n").replace(/\s+/g, " ");
+  }
+
+  /** 可聚焦后代(与 E2E decoration.ts 的判定式同款)。 */
+  const FOCUSABLE = 'a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])';
+
+  it("扫描线 overlay:锚在场、装饰不承载信息、强度与形态由 token 驱动(C1~C4/C7)", async () => {
+    const workspace = await mountWorkspace();
+
+    const scanlines = [...shadowOf(workspace).querySelectorAll('[data-sm-decoration="scanline"]')];
+    expect(scanlines).toHaveLength(1);
+    const scanline = scanlines[0] as HTMLElement;
+    // C7:纯装饰(aria-hidden + 零文本 + 零可聚焦后代),命中测试不受影响(C4)。
+    expect(scanline.getAttribute("aria-hidden")).toBe("true");
+    expect(scanline.getAttribute("part")).toBe("scanline");
+    expect(scanline.textContent?.trim()).toBe("");
+    expect(scanline.querySelectorAll(FOCUSABLE)).toHaveLength(0);
+
+    const cssText = stylesTextOf();
+    // C2 形态 + C4 命中测试(静态属性,与动效偏好无关)+ C3 强度由
+    // --sm-scanline-opacity 驱动;C8 基态不生成(reduce 下零绘制)。
+    expect(cssText).toContain("repeating-linear-gradient");
+    expect(cssText).toMatch(/\.sm-scanline\s*\{[^}]*pointer-events: none/);
+    expect(cssText).toContain("opacity: var(--sm-scanline-opacity, 0)");
+    expect(cssText).toMatch(/\.sm-scanline\s*\{[^}]*display: none/);
+    workspace.remove();
+  });
+
+  it("光标闪烁:每窗口标题栏恰一处装饰,标题栏仍零控件(C5/C6/C7)", async () => {
+    const workspace = await mountWorkspace();
+
+    const carets = [...shadowOf(workspace).querySelectorAll('[data-sm-decoration="caret"]')];
+    // 每个窗口面板的终端式标题栏恰一个块状光标(全窗口常驻 ⇒ 数 = 窗口数)。
+    expect(carets).toHaveLength(panelsOf(workspace).length);
+    for (const caret of carets) {
+      expect(caret.getAttribute("aria-hidden")).toBe("true");
+      expect(caret.getAttribute("part")).toBe("caret");
+      expect(caret.textContent?.trim()).toBe("");
+      expect(caret.querySelectorAll(FOCUSABLE)).toHaveLength(0);
+    }
+    // WP-71「标题栏零控件」口径保留:装饰之外仍是零按钮 / 零 tabindex 子元素。
+    for (const panel of panelsOf(workspace)) {
+      const bar = panel.querySelector(".tab-bar");
+      expect(bar).not.toBeNull();
+      expect(bar?.querySelector(`button, a[href], input, select, textarea, [tabindex]`)).toBeNull();
+      expect(bar?.querySelectorAll('[data-sm-decoration="caret"]')).toHaveLength(1);
+    }
+
+    const cssText = stylesTextOf();
+    // C6:动画周期解析自 --sm-caret-blink,且为阶跃(steps)而非平滑淡入淡出。
+    expect(cssText).toContain("animation-duration: var(--sm-caret-blink, 0s)");
+    expect(cssText).toContain("steps(1, end)");
+    workspace.remove();
+  });
+
+  it("动效纪律:全部动画包在 no-preference 内,reduce 下装饰 display: none(C8/C9)", () => {
+    const cssText = stylesTextOf();
+
+    expect(cssText).toContain("@media (prefers-reduced-motion: no-preference)");
+    expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
+    // reduce 覆盖:C8 = 装饰不可见(display: none);C9 = 无 reduce 外动画声明。
+    const reduceIndex = cssText.indexOf("@media (prefers-reduced-motion: reduce)");
+    const reduceBody = cssText.slice(reduceIndex);
+    expect(reduceBody).toMatch(/\.sm-scanline[^{]*\{[^}]*display: none/);
+    expect(reduceBody).toMatch(/\.sm-caret[^{]*\{[^}]*display: none/);
+    // 动画只用 opacity(零大面积 glow / text-shadow)。
+    expect(cssText).not.toContain("text-shadow");
+  });
+
+  it("主题消费与字号下限(§2.1):等宽字体栈走 token,无小于 13px 的字号", () => {
+    const cssText = stylesTextOf();
+
+    // 等宽字体栈 = token + 逐字回退栈(字体栈字面量内联,零模板插值)。
+    expect(cssText).toContain(
+      'font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace)',
+    );
+    // 字号下限 13px(0.8125rem = 13px,仓库既有等价惯例)。
+    const sizes = [...cssText.matchAll(/font-size:\s*([\d.]+)rem/g)].map((match) =>
+      Number(match[1]),
+    );
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const size of sizes) {
+      expect(size, `字号低于 13px 下限:${size}rem`).toBeGreaterThanOrEqual(0.8125);
+    }
   });
 });
