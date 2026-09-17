@@ -105,10 +105,55 @@ export const PAYLOAD_BLOCKLY_THEME: Blockly.Theme = Blockly.Theme.defineTheme(
 );
 
 /**
+ * 测量画布样式表 id(**与画布样式表分开**的幂等锚:两者注入根不同,见下)。
+ */
+export const PAYLOAD_MEASURE_CANVAS_STYLE_ID = "sm-payload-measure-canvas-style";
+
+/**
+ * Blockly 文本测量画布的离屏定位规则(**注入 `ownerDocument`,非画布宿主所在根**)。
+ *
+ * 缺陷事实(13.4 矩阵 320px 格的真根因,2026-09-17 真机定位):Blockly 在
+ * `blockly.min.js` 内为文本测量建一枚画布并**直接挂到文档 body** ——
+ * `Xa||(f=document.createElement("canvas"),f.className="blocklyComputeCanvas",
+ * document.body.appendChild(f),…)`。`<canvas>` 无 CSS 时取默认 **300×150** 且
+ * **参与文档流**;上游 Blockly 13.2.1 **不带** `.blocklyComputeCanvas` 的任何
+ * 样式规则(实测其 css 内无该类),故宽度足够大的页面看不出问题,而窄视口下
+ * 它把文档撑宽:矩阵 320px 格实测布局视口 288px、画布 `left=8 + 宽 300 = 308`
+ * ⇒ 断言 `innerWidth − scrollWidth = −20`,**三引擎同值**。
+ *
+ * 落点纪律(与 M1「深底光栅精灵」同一类根错配的另一面):画布挂**文档 body**、
+ * 不在画布宿主的 shadow 树内,故规则必须落**文档级** —— 若只随
+ * `ensurePayloadCanvasStyles` 注入宿主所在根,shadow 形态下树内样式表**匹配不到
+ * 树外的 canvas**(M1 已实测同机理的死规则),缺陷依旧。
+ *
+ * 只做**离屏定位、不改 `display`**:canvas 2D `measureText` 与布局无关,但保持
+ * 画布仍被渲染,测量语义**逐字不变**(零回归风险);负偏移不产生可滚动溢出。
+ */
+export const PAYLOAD_MEASURE_CANVAS_CSS =
+  "canvas.blocklyComputeCanvas{position:absolute;top:-1000px;left:-1000px;}";
+
+/**
+ * 幂等注入测量画布的文档级离屏规则(与宿主形态无关;已安装则零开销)。
+ */
+export function ensurePayloadMeasureCanvasStyles(doc: Document): void {
+  if (doc.head === null || doc.getElementById(PAYLOAD_MEASURE_CANVAS_STYLE_ID) !== null) {
+    return;
+  }
+  const style = doc.createElement("style");
+  style.id = PAYLOAD_MEASURE_CANVAS_STYLE_ID;
+  style.textContent = PAYLOAD_MEASURE_CANVAS_CSS;
+  doc.head.append(style);
+}
+
+/**
  * 确保画布样式表在场(幂等;注入画布宿主所在的根 —— shadow root 内嵌形态与
  * 文档形态同一条路径,类名作用域使其对宿主页面零影响)。
+ *
+ * 另**无条件**注入文档级测量画布规则:该画布在文档 body(宿主所在根之外),
+ * 故两个分支都要注入 —— 故本调用置于分支之前,避免任一分支提前 return 漏掉。
  */
 export function ensurePayloadCanvasStyles(host: HTMLElement): void {
+  ensurePayloadMeasureCanvasStyles(host.ownerDocument ?? document);
   const root: Node = host.getRootNode();
   if (root instanceof ShadowRoot) {
     if (root.querySelector(`#${PAYLOAD_CANVAS_STYLE_ID}`) !== null) {
