@@ -151,9 +151,9 @@
   <tr><th style="width:118px">操作</th><th>行为</th></tr>
   <tr><td>窗口常驻</td><td>固定窗口集的 10 类窗口各一个，从工作区出现的那一刻起就都在（<strong>与是否已连接会话无关</strong>）；窗口标题 = 该类型的展示名（如「栈视图」），<strong>标题里没有类型内序号</strong>——不存在「栈视图 1 / 栈视图 2」这种说法</td></tr>
   <tr><td>列与条带</td><td>窗口组织为垂直<strong>列</strong>，列组成一条<strong>水平条带</strong>：列间滚动可达任意列；<strong>不存在空列</strong>（一列里最后一个窗口被移走后该列即消失）</td></tr>
-  <tr><td>列内分割</td><td>同一列的多个窗口<strong>纵向排布、按窗高比例分配列高</strong>（缺省等分）；拖窗间分隔条可改比例，<strong>单窗列自动占满列高</strong>；单个窗口最小高 9rem（144px），列高不够时条带自身纵向滚动</td></tr>
+  <tr><td>列内分割</td><td>同一列的多个窗口<strong>纵向排布、按窗高比例分配列高</strong>（缺省等分）；拖窗间分隔条可改比例，<strong>单窗列自动占满列高</strong>；单个窗口有<strong>可读最小高 266px</strong>（= 面板头部实测 182.1px + 4 行字节行 × 20.8px 推导，见 D-API-152）——<strong>窗口不会被压到看不见内容</strong>；可用高度不够时改为<strong>纵向滚动</strong>承载（不压缩窗口）</td></tr>
   <tr><td>列宽调整</td><td>三种途径：①菜单「布局」组五档（<code>1/4</code>、<code>1/3</code>、<code>1/2</code>、<code>2/3</code>、<code>全宽</code>，作用于<strong>焦点列</strong>）；②拖动列间分隔条（只改<strong>左侧列</strong>的宽度，右侧列宽度自持）；③聚焦分隔条后按 <kbd>←</kbd>/<kbd>→</kbd>（每次 32px）。列宽下限 = <strong>452.4px</strong>（十六进制行不折行的最小可读宽度），算出来更窄会被自动抬回下限</td></tr>
-  <tr><td>窗高调整</td><td>拖动同列窗间分隔条（上下两窗比例之和恒定）；聚焦分隔条后按 <kbd>↑</kbd>/<kbd>↓</kbd>（每次 = 列高的 5%）；下限 = 单窗 144px</td></tr>
+  <tr><td>窗高调整</td><td>拖动同列窗间分隔条（上下两窗比例之和恒定）；聚焦分隔条后按 <kbd>↑</kbd>/<kbd>↓</kbd>（每次 = 列高的 5%）；下限 = 单窗 <strong>266px</strong>（与「列内分割」同一下限，拖不出比它更矮的窗口）。<strong>注意</strong>：当某列已贴住下限（无富余空间）时，拖动该列的分隔条不会有可见位移</td></tr>
   <tr><td>拖拽排布</td><td>按住<strong>窗口标题栏</strong>拖动（位移超过 3px 才算拖拽；拖拽中的窗口<strong>只降低不透明度</strong>作反馈）：落到目标窗口<strong>上半</strong> / <strong>下半</strong> = 插到它前面 / 后面；落到<strong>目标列空白</strong> = 追加到该列末尾；落到<strong>列间分隔条或列区空白</strong> = 在该位置<strong>新建一列</strong>；拖到列区之外松开 = 不移动。落点用<strong>静态虚线轮廓</strong>标出（不弹浮层、不遮挡内容），同时底部状态行用文字宣读落点</td></tr>
   <tr><td>焦点窗口</td><td>点击过的窗口是「焦点窗口」（焦点列 = 焦点窗口所在列）；聚焦某列时该列会<strong>水平居中到视口</strong>（相邻列各探出一部分，暗示条带还能滚）。某些菜单动作只对焦点窗口生效（如「积木步进」要求 <strong>Payload 搭建窗口是焦点窗口</strong>）</td></tr>
   <tr><td>菜单「窗口」组</td><td>每个按钮 = 一个窗口的<strong>聚焦导航</strong>：点击即<strong>聚焦该窗口并滚动到它</strong>，<strong>不会新开实例</strong>（窗口本来就在）；当前焦点窗口用 <code>aria-pressed</code> 标记；这组按钮<strong>恒可用、没有禁用态</strong>（聚焦不依赖会话）</td></tr>

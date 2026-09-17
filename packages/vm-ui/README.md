@@ -636,10 +636,15 @@ layout-presets.test.ts`,权威来源 = `createDefaultTabTypeRegistry()`)。
   同档内只更新列宽基准;驱动 = 宿主 `window resize`(iframe 尺寸变化即其 window
   resize;不引入 ResizeObserver);
 - **视口外降级渲染(择一登记)**:面板声明 `content-visibility: auto` +
-  `contain-intrinsic-size: auto 9rem`(语义标记 `data-render-degrade=
+  `contain-intrinsic-size: auto <MIN_ROW_HEIGHT_PX>px`(占位尺寸 = 面板最小高常量,
+  随该常量插值;语义标记 `data-render-degrade=
   "content-visibility"`)。判据:零 JS、零浮动层、浏览器原生跳过离屏子树的渲染与
   绘制,payload(Blockly 挂载即 inject)与指令视图的挂载成本随之推迟到进入视口;
-  行级虚拟列表维持、拖拽期间只改容器比例。真机观测(2026-09-11 E2E):10 窗口常驻
+  行级虚拟列表维持、拖拽期间只改容器比例。**2026-09-17(D-API-152)**:该处置的
+  占位值原为裸 `9rem`(144px),现随窗高下限一并推导为 **266px**
+  (`MIN_ROW_HEIGHT_PX = ceil(面板 chrome 182.1px + 4 行 × 20.8px)`;
+  推导见 `src/workspace/layout-presets.ts`,常量见 `src/workspace/layout-divider.ts`);
+  真机观测(2026-09-11 E2E):10 窗口常驻
   时工作区 shadow 节点数 250、聚焦交互 RTT 68–83ms;
 - **性能护栏**:零新增运行时依赖(纯 CSS token + 既有 Lit 组件);布局状态随会话
   内存保持(不落 IndexedDB);主 chunk 实测 1,350.55 kB / gzip 328.65 kB
