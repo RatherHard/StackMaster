@@ -32,8 +32,8 @@
 </nav>
 <main>
 
-<h1>1D 程序 <span class="badge b1">概念组 · 6 个概念</span></h1>
-<div class="toc"><b>本页目录</b>　<a href="#c-d1">D1 · IR 模式与字节模式</a>　<a href="#c-d2">D2 · 指令、操作数、标志位</a>　<a href="#c-d3">D3 · 控制流、标签与死代码</a>　<a href="#c-d4">D4 · 自定义指令</a>　<a href="#c-d5">D5 · 作者接口与虚拟文件</a>　<a href="#c-d6">D6 · 字节模式深潜</a></div>
+<h1>1D 程序 <span class="badge b1">概念组 · 7 个概念</span></h1>
+<div class="toc"><b>本页目录</b>　<a href="#c-d1">D1 · IR 模式与字节模式</a>　<a href="#c-d2">D2 · 指令、操作数、标志位</a>　<a href="#c-d3">D3 · 控制流、标签与死代码</a>　<a href="#c-d4">D4 · 自定义指令</a>　<a href="#c-d5">D5 · 作者接口与虚拟文件</a>　<a href="#c-d6">D6 · 字节模式深潜</a>　<a href="#c-d7">D7 · 出题者积木（M10）</a></div>
 <h3 id="c-d1">D1 · IR 模式与字节模式 <span class="badge b1">概念 · 程序</span></h3>
 <div class="one">一句话：程序有两种载体——<b>IR 模式</b>（一个指令数组，跳转目标"第几条指令"，内存字节只是数据）
 与<b>字节模式</b>（真实机器码字节躺在内存里，代码区可执行，任意字节位置都可以开始取指）——二者<b>恰选其一</b>，执行语义层完全同一。</div>
@@ -187,6 +187,41 @@ interfaces: [ { interfaceId: 0x100, displayText: "vault: 读取密档",
 <div class="misuse"><b>常见误解。</b>①"编码表放公开包会泄漏答案"——泄漏的是<b>编码</b>不是<b>谜题</b>：教学立场是解谜在 gadget 构造；
 ②"NOP 填充可以用 0x00"——填充字节必须落在编码表内（纯指令流约定），全零未登记就是未知 token；
 ③"flag/数据可以藏在代码区尾部"——纯指令流约定禁止（数据进 global/key 区域）；④"4096 字节区域装不下 4096 条 NOP0"——装得下（1 字节/条 ≈ 4080 条 &lt; 4096 上限），但要心里有数。</div>
+<h3 id="c-d7">D7 · 出题者积木（M10） <span class="badge b1">概念 · 程序</span></h3>
+<div class="one">一句话：你可以在<b>公开包</b>里声明若干"积木模板"（<code>authorBlocks</code>，可选字段），
+选手在程序窗口拖积木、填空，界面把它展开成<b>你声明的 12 个公开动作</b>的固定序列交给服务端执行——
+初学者不必先学汇编就能动手，而你<b>不必放弃权威判题</b>。</div>
+<p><b>最小可跑的例子。</b>一个模板 = 一个展示名 + 一个已声明的作者接口 + 若干"槽"（选手填的空）+ 若干动作：</p>
+<pre><code>// 公开包（authorBlocks 是顶层可选字段，最多 16 个模板）：
+"authorBlocks": [ {
+  "id": "overwrite-return",            // 小写连字符，题目内唯一，也是积木类型名的来源
+  "displayText": "覆写返回地址",         // 积木上显示的字（≤128）
+  "interfaceId": 512,                  // 必须指向私有包 interfaces[] 已声明的接口号
+  "slots": [ { "key": "target", "label": "目标地址", "kind": "address" } ],   // 槽 ≤4
+  "actions": [                         // 动作 ≤8，按顺序展开成服务端动作序列
+    { "type": "write_bytes",
+      "args": { "addressHex": {"slot":"target"}, "bytesHex": "4141414141414141" } },
+    { "type": "call", "args": { "targetHex": {"slot":"target"} } } ]
+} ]</code></pre>
+<p><b>四条硬约束（记不住就记这四条）。</b></p>
+<ul>
+  <li><b>动作只能是 12 个公开动作</b>：<code>actions[].type</code> 与题目 <code>allowedActions</code> 同一枚举，
+      参数名必须用该动作的冻结参数名；值只能是字面量或 <code>{"slot":"槽键"}</code> 的结构化引用；</li>
+  <li><b>接口必须先声明</b>：<code>interfaceId</code> 必须在私有包 <code>interfaces[]</code> 里出现过，
+      未声明即拒（<code>XS-BLOCK-IFACE-REF</code>）——所以积木<b>不会</b>泄露隐藏接口的存在性；</li>
+  <li><b>公开面不许有"效果"</b>：不能写 <code>effects</code> / <code>semantics</code> / <code>flagRegister</code> / <code>fileId</code>，
+      展示文本与槽标签里也不能出现隐藏区域名、隐藏对象名、秘密汇或 FLAG 寄存器名（<code>XS-BLOCK-NO-EFFECT</code> 递归扫描）；</li>
+  <li><b>声明不是放权</b>：服务端对展开出的每个动作照旧重新校验（地址、权限、预算、<code>allowedActions</code>），
+      越界动作以 <code>unauthorized_action</code> 拒绝，报错会带上积木 id；积木里写不出循环 / 条件 / 变量（非图灵完备）。</li>
+</ul>
+<p><b>为什么这样设计。</b>三件事同时成立才有意义：①<b>教学</b>——积木让"栈帧 / 返回地址"这些概念先于汇编出现；
+②<b>权威不变量</b>——积木只在客户端把"填的值"编译成动作序列，判题、执行、回退仍全在服务端（底线 3 不变），
+公开声明既不放宽也不收紧 <code>allowedActions</code>；③<b>秘密零驻留</b>——效果原语序列仍只在私有包，
+公开面结构上<b>没有</b>效果语义表达位，接口存在性只在作者主动引用时可见，且未声明引用被拒（与公开 ISA 引用面同纪律）。
+另：<code>authorBlocks</code> 是<b>可选</b>字段且 <code>schemaVersion</code> 仍是 1 —— 已有题目包不改一个字，行为与 M10 之前完全一致。</p>
+<div class="misuse"><b>常见误解。</b>①"积木能拼出任意逻辑"——不能，没有变量 / 循环 / 条件 / 表达式，
+要复杂逻辑就多声明几个模板或把逻辑放回 <code>interfaces[]</code> 的私有效果序列；②"积木里写了动作就等于允许"——
+不等于，<code>allowedActions</code> 是权威面，没放开的动作运行时被拒；③"声明了没被用到的槽无所谓"——会被拒（悬空槽 / 未引用槽都算形态不自洽）；④"客户端校验过了就能上线"——客户端只做形状闸（浏览器拿不到你的私有包），权威校验在服务端 / 编译前置。</div>
 <div class="pager">
   <a class="prev" href="1C-内存.html"><span class="lbl">◀ 上一篇</span>1C 内存</a>
   <a class="next" href="1E-判题.html"><span class="lbl">下一篇 ▶</span>1E 判题</a>

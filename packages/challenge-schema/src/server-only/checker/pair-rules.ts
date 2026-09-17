@@ -15,12 +15,24 @@
  *  - XS-PROJ-GEOM 初始投影区域 ↔ 公开布局双射,几何与标签逐项相等;
  *  - XS-PROJ-VALUES 公开 bytesHex 是私有 contentHex 的前缀、truncated 自洽、寄存器值同值;
  *  - XS-CANARY-CORR 启用 canary ⇒ 存在 hidden + containsSecret 的 canary 对象且与公开区域不相交;
- *  - XS-SEED-DECL declaredSeedPublicPaths 根必须是作者可声明投影面且可解析。
+ *  - XS-SEED-DECL declaredSeedPublicPaths 根必须是作者可声明投影面且可解析;
+ *  - XS-BLOCK-IFACE-REF(M10/WP-80)公开 authorBlocks[].interfaceId 必须落在私有包
+ *    `interfaces[]` 声明面(公开 ISA 引用与私有声明面的互证;未声明引用即拒,
+ *    与 XS-ENC-TOKEN / XS-IFACE-REF 同一「隐藏声明不产生存在性信号」立场);
+ *  - XS-BLOCK-NO-EFFECT(M10/WP-80)公开 authorBlocks 子树不得承载效果语义键与
+ *    私有标识符(实例级复锚 D2-NO-HIDDEN-IN-PUBLIC + I-9:隐藏区域名 / 隐藏对象
+ *    ID / FLAG 名出现在公开文本即存在性信号)。
  *
  * 前置条件:两个输入均已通过各自 Schema 校验。
  */
 
+import { EFFECT_PRIMITIVES } from "../../common/vocabulary.js";
+import { AUTHOR_BLOCK_FORBIDDEN_PRIVATE_KEYS } from "../../common/author-blocks.js";
 import { FLAG_REGISTER_NAME_PATTERN } from "../../common/patterns.js";
+import {
+  FORBIDDEN_PUBLIC_PROPERTIES,
+  PRIVATE_BUNDLE_FIELDS,
+} from "../../common/classification.js";
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
 import type {
   MemoryRegionSeed,
@@ -543,6 +555,136 @@ export function checkSeedDeclarations(
         message: `seed 公开路径 "${seedPath}" 的目标 "${midSegment}" 不在初始投影中`,
         path: `/declaredSeedPublicPaths/${index}`,
       });
+    }
+  });
+  return violations;
+}
+
+/**
+ * XS-BLOCK-IFACE-REF(M10/WP-80):公开 `authorBlocks[].interfaceId` 必须落在私有包
+ * `interfaces[]` 声明面。
+ *
+ * 语义与 `XS-IFACE-REF`(IR `call` 的 interface 操作数)/ `XS-ENC-TOKEN`
+ * (`encodingTable[].op` 的自定义助记符)同族:公开 ISA 引用**只揭示接口的存在性
+ * 与公开标识**(R1/R2 裁决,`checker/index.ts` 记录),因此引用必须可解析到私有声明;
+ * 反过来,**未在公开面引用的接口不产生任何存在性信号**(隐藏接口清单的存在性不得
+ * 由公开通道推断,I-9 / T-SC1 探针变体)。
+ *
+ * 前置条件:两输入均已通过各自 Schema 校验。
+ */
+export function checkAuthorBlockInterfaceReferences(
+  publicDescriptor: PublicChallengeDescriptor,
+  privateBundle: PrivateChallengeBundle,
+): CheckerViolation[] {
+  const blocks = publicDescriptor.authorBlocks ?? [];
+  if (blocks.length === 0) {
+    return [];
+  }
+  const declaredInterfaceIds = new Set(
+    (privateBundle.interfaces ?? []).map((entry) => entry.interfaceId),
+  );
+  const violations: CheckerViolation[] = [];
+  blocks.forEach((block, blockIndex) => {
+    if (!declaredInterfaceIds.has(block.interfaceId)) {
+      violations.push({
+        ruleId: "XS-BLOCK-IFACE-REF",
+        message: `积木模板 ${block.id} 引用的接口号 ${block.interfaceId} 未在私有包 interfaces 声明(公开 ISA 引用必须与私有声明面互证)`,
+        path: `/authorBlocks/${blockIndex}/interfaceId`,
+      });
+    }
+  });
+  return violations;
+}
+
+/**
+ * XS-BLOCK-NO-EFFECT(M10/WP-80):公开声明面**不得承载效果语义与私有词汇**——
+ * 对 D2-NO-HIDDEN-IN-PUBLIC(文档级元检查)的实例级复锚。
+ *
+ * 逐条:
+ *  - 公开 authorBlocks 子树不得出现私有顶层属性名的键(`FORBIDDEN_PUBLIC_PROPERTIES`,
+ *    递归;`interfaces` / `customInstructions` / `stages` 等一律禁入公开面);
+ *  - 不得出现效果原语词汇(`EFFECT_PRIMITIVES`;效果序列整体留私有包
+ *    `interfaces[].effects`),含"效果字段名"与"效果原语名"两种走私形态;
+ *  - `displayText` / 槽位 `label` 不得注入**隐藏面哨兵**(隐藏区域 regionId、
+ *    hidden 私有对象 objectId、FLAG 寄存器名)——公开文本出现这些值即私有面
+ *    存在性信号(I-9),与 XS-CUSTOM-DISPLAY / ZR-B8-CAP-SCAN 同扫描口径。
+ */
+export function checkAuthorBlocksNoEffectSemantics(
+  publicDescriptor: PublicChallengeDescriptor,
+  privateBundle: PrivateChallengeBundle,
+): CheckerViolation[] {
+  const blocks = publicDescriptor.authorBlocks ?? [];
+  if (blocks.length === 0) {
+    return [];
+  }
+  const forbiddenKeys = new Set<string>(FORBIDDEN_PUBLIC_PROPERTIES);
+  const effectNames = new Set<string>(EFFECT_PRIMITIVES);
+  const privateFieldNames = new Set<string>(AUTHOR_BLOCK_FORBIDDEN_PRIVATE_KEYS);
+  const privatePropertyNames = new Set<string>(PRIVATE_BUNDLE_FIELDS);
+  const hiddenSentinels: string[] = [
+    ...privateBundle.initialState.memoryRegions
+      .filter((region) => region.isHidden)
+      .map((region) => region.regionId),
+    ...privateBundle.privateObjects
+      .filter((object) => object.visibility === "hidden")
+      .map((object) => object.objectId),
+    ...(privateBundle.secretSinkRegisters ?? []),
+    ...(privateBundle.initialState.registers
+      ? Object.keys(privateBundle.initialState.registers).filter((name) =>
+          FLAG_REGISTER_NAME_PATTERN.test(name),
+        )
+      : []),
+  ];
+  const violations: CheckerViolation[] = [];
+
+  const scanKeys = (node: object, path: string): void => {
+    for (const key of Object.keys(node)) {
+      if (
+        forbiddenKeys.has(key) ||
+        effectNames.has(key) ||
+        privateFieldNames.has(key) ||
+        privatePropertyNames.has(key)
+      ) {
+        violations.push({
+          ruleId: "XS-BLOCK-NO-EFFECT",
+          message: `公开积木声明面携带私有 / 效果语义键 "${key}"(公开面不承载效果原语序列与 SERVER_ONLY 字段)`,
+          path: `${path}/${key}`,
+        });
+      }
+    }
+  };
+
+  blocks.forEach((block, blockIndex) => {
+    const base = `/authorBlocks/${blockIndex}`;
+    scanKeys(block as unknown as object, base);
+    (block.slots ?? []).forEach((slot, slotIndex) => {
+      scanKeys(slot as unknown as object, `${base}/slots/${slotIndex}`);
+    });
+    (block.actions ?? []).forEach((action, actionIndex) => {
+      scanKeys(action as unknown as object, `${base}/actions/${actionIndex}`);
+      scanKeys(
+        (action.args ?? {}) as unknown as object,
+        `${base}/actions/${actionIndex}/args`,
+      );
+    });
+
+    const texts: Array<{ readonly value: string; readonly path: string }> = [
+      { value: block.displayText, path: `${base}/displayText` },
+      ...(block.slots ?? []).map((slot, slotIndex) => ({
+        value: slot.label,
+        path: `${base}/slots/${slotIndex}/label`,
+      })),
+    ];
+    for (const text of texts) {
+      for (const sentinel of hiddenSentinels) {
+        if (sentinel.length > 0 && text.value.includes(sentinel)) {
+          violations.push({
+            ruleId: "XS-BLOCK-NO-EFFECT",
+            message: `公开文本注入了私有标识符 "${sentinel}"(展示文本是 I-10 静态模板,不得承载隐藏面语义)`,
+            path: text.path,
+          });
+        }
+      }
     }
   });
   return violations;

@@ -39,6 +39,19 @@ function resolveAcrossRepo(relativeFromRoot: string): string {
 }
 
 const BASIC_PATH = join(import.meta.dirname, "fixtures", "public-descriptor", "basic.json");
+/** M10/WP-80 出题者积木声明面黄金样例(与 basic 同一 Schema,同一目录)。 */
+const AUTHOR_BLOCKS_PATH = join(
+  import.meta.dirname,
+  "fixtures",
+  "public-descriptor",
+  "author-blocks.json",
+);
+const AUTHOR_BLOCKS_MINIMAL_PATH = join(
+  import.meta.dirname,
+  "fixtures",
+  "public-descriptor",
+  "author-blocks-minimal.json",
+);
 const FIXTURE_PATH = resolveAcrossRepo(join("apps", "plugin-dev", "fixtures", "dev-descriptor.json"));
 const FORMAL_PATH = resolveAcrossRepo(
   join("apps", "plugin-dev", "e2e", "fixtures", "formal-descriptor.json"),
@@ -47,9 +60,58 @@ const FORMAL_PATH = resolveAcrossRepo(
 /** 语料清单(路径 + 角色;一致性断言的数据面)。 */
 const CORPORA = [
   { role: "schema 绿灯基线", path: BASIC_PATH },
+  { role: "M10 出题者积木声明面", path: AUTHOR_BLOCKS_PATH },
+  { role: "M10 出题者积木下界形态", path: AUTHOR_BLOCKS_MINIMAL_PATH },
   { role: "plugin-dev 夹具通道", path: FIXTURE_PATH },
   { role: "E2E 正式下发通道", path: FORMAL_PATH },
 ] as const;
+
+/** 必修红线语料(断言可咬合;每条 = 定向破坏 + 期望拒绝)。 */
+const DRIFT_EDITS: ReadonlyArray<{
+  readonly role: string;
+  readonly edit: (clone: Record<string, unknown>) => void;
+}> = [
+  {
+    role: "未知顶层字段(additionalProperties: false;I-1)",
+    edit: (clone) => {
+      clone["secrets"] = { flag: "FLAG{drift}" };
+    },
+  },
+  {
+    role: "布尔字段类型漂移(debugMode 非布尔)",
+    edit: (clone) => {
+      clone["debugMode"] = "true";
+    },
+  },
+  {
+    role: "M10 authorBlocks 类型漂移(数组 → 对象)",
+    edit: (clone) => {
+      clone["authorBlocks"] = { id: "drift" };
+    },
+  },
+  {
+    role: "M10 authorBlocks 动作 type 漂移(非 12 公开动作)",
+    edit: (clone) => {
+      clone["authorBlocks"] = [
+        { id: "drift", displayText: "漂移", interfaceId: 512, slots: [], actions: [{ type: "loop_forever", args: {} }] },
+      ];
+    },
+  },
+  {
+    role: "M10 参数位取值类型漂移(槽位引用 → 数字)",
+    edit: (clone) => {
+      clone["authorBlocks"] = [
+        {
+          id: "drift",
+          displayText: "漂移",
+          interfaceId: 512,
+          slots: [{ key: "target", label: "目标地址", kind: "address" }],
+          actions: [{ type: "write_bytes", args: { addressHex: 4096, bytesHex: "41" } }],
+        },
+      ];
+    },
+  },
+];
 
 describe("夹具 ↔ 公开 Schema 形态一致性(WP-54)", () => {
   it.each(CORPORA)("$role:对同一公开 Schema 校验同绿($path)", ({ path }) => {
@@ -68,14 +130,23 @@ describe("夹具 ↔ 公开 Schema 形态一致性(WP-54)", () => {
 
   it("红灯反例:定向破坏被同一校验器拒绝(断言可咬合,漂移必红灯)", () => {
     for (const { path } of CORPORA) {
-      const clone = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-      // 未知顶层字段(公开 Schema additionalProperties: false;I-1)。
-      clone["secrets"] = { flag: "FLAG{drift}" };
-      expect(parsePublicDescriptorText(JSON.stringify(clone)).ok).toBe(false);
-      // debugMode 非布尔(布尔字段漂移形态)。
-      const clone2 = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-      clone2["debugMode"] = "true";
-      expect(parsePublicDescriptorText(JSON.stringify(clone2)).ok).toBe(false);
+      for (const drift of DRIFT_EDITS) {
+        const clone = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        drift.edit(clone);
+        expect(
+          parsePublicDescriptorText(JSON.stringify(clone)).ok,
+          `${path} × ${drift.role}`,
+        ).toBe(false);
+      }
     }
+  });
+
+  it("M10 声明面只在显式声明的语料上出现(既有语料零新增字段)", () => {
+    for (const path of [BASIC_PATH, FIXTURE_PATH, FORMAL_PATH]) {
+      const parsed = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+      expect(parsed["authorBlocks"], `${path} 不应携带 authorBlocks`).toBeUndefined();
+    }
+    const declared = JSON.parse(readFileSync(AUTHOR_BLOCKS_PATH, "utf8")) as Record<string, unknown>;
+    expect(Array.isArray(declared["authorBlocks"])).toBe(true);
   });
 });

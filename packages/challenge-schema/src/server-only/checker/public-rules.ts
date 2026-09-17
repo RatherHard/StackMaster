@@ -19,7 +19,13 @@
  */
 
 import type { PublicChallengeDescriptor } from "../../common/public-types.js";
+import {
+  AUTHOR_BLOCK_ACTION_ARGS,
+  AUTHOR_BLOCK_SLOT_KINDS,
+} from "../../common/author-blocks.js";
+import { MAX_AUTHOR_BLOCK_SLOTS } from "../../common/limits.js";
 import { CORE_REGISTER_NAMES } from "../../common/patterns.js";
+import { SESSION_ACTION_TYPES, type SessionActionType } from "../../common/vocabulary.js";
 import { checkPublicPageAlignment } from "./arch-rules.js";
 import { toAddressRange, rangesOverlap, rangeContains, rangeExceedsAddressSpace } from "./address-ranges.js";
 import type { AddressRange } from "./address-ranges.js";
@@ -255,8 +261,166 @@ export function checkPublicReferenceUniqueness(
     (index) => `/publicErrorMapping/${index}/errorCode`,
     (value) => `公开错误映射 errorCode "${value}" `,
   );
+  // M10/WP-80:出题者积木模板标识唯一(公开面引用 ID 一族)。
+  pushPublicDuplicates(
+    violations,
+    (descriptor.authorBlocks ?? []).map((block) => block.id),
+    (index) => `/authorBlocks/${index}/id`,
+    (value) => `积木模板 id "${value}" `,
+  );
   return violations;
 }
+
+/**
+ * XS-BLOCK-SLOT-FORM(M10/WP-80):出题者积木声明面的**槽位形态与参数位取值形态**。
+ *
+ * 逐条:
+ *  - 槽位键唯一(同一模板内不同槽位不得同名——否则 `{slot}` 引用歧义);
+ *  - 槽位数量 ≤ `MAX_AUTHOR_BLOCK_SLOTS`(Schema maxItems 之外的纵深防御);
+ *  - 槽位 `kind` ∈ `AUTHOR_BLOCK_SLOT_KINDS`(类型断言绕过 Schema 时的第二道防线);
+ *  - 动作参数位的 `{slot}` 引用必须解析到**本模板已声明**的槽位(未声明即拒);
+ *  - 动作引用的槽位必须是**被引用过的**声明槽位(悬空槽位 = 声明面自相矛盾);
+ *  - 参数位取值形态:`{slot}` 与字面量二选一(第三种形态即拒),字面量必须非空串。
+ *
+ * 前置条件:输入已通过公开 Schema 校验;本规则是纵深防御与跨字段一致性检查。
+ */
+export function checkAuthorBlockSlotForm(
+  descriptor: PublicChallengeDescriptor,
+): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  (descriptor.authorBlocks ?? []).forEach((block, blockIndex) => {
+    const base = `/authorBlocks/${blockIndex}`;
+    const slots = block.slots ?? [];
+    if (slots.length > MAX_AUTHOR_BLOCK_SLOTS) {
+      violations.push({
+        ruleId: "XS-BLOCK-SLOT-FORM",
+        message: `积木模板 ${block.id} 的槽位数 ${slots.length} 超过上限 ${MAX_AUTHOR_BLOCK_SLOTS}(D-MP-6 定案)`,
+        path: `${base}/slots`,
+      });
+    }
+    const declared = new Set<string>();
+    slots.forEach((slot, slotIndex) => {
+      if (declared.has(slot.key)) {
+        violations.push({
+          ruleId: "XS-BLOCK-SLOT-FORM",
+          message: `积木模板 ${block.id} 的槽位键 "${slot.key}" 重复(引用歧义)`,
+          path: `${base}/slots/${slotIndex}/key`,
+        });
+      }
+      declared.add(slot.key);
+      if (!(AUTHOR_BLOCK_SLOT_KINDS as readonly string[]).includes(slot.kind)) {
+        violations.push({
+          ruleId: "XS-BLOCK-SLOT-FORM",
+          message: `积木模板 ${block.id} 的槽位 "${slot.key}" 形态 "${String(slot.kind)}" 不在封闭枚举 address/immediate/length 内`,
+          path: `${base}/slots/${slotIndex}/kind`,
+        });
+      }
+    });
+
+    const referenced = new Set<string>();
+    (block.actions ?? []).forEach((action, actionIndex) => {
+      const argsPath = `${base}/actions/${actionIndex}/args`;
+      for (const [argName, value] of Object.entries(action.args ?? {})) {
+        const argPath = `${argsPath}/${argName}`;
+        if (typeof value === "string") {
+          if (value.length === 0) {
+            violations.push({
+              ruleId: "XS-BLOCK-SLOT-FORM",
+              message: `积木模板 ${block.id} 的动作参数位 ${argName} 字面量为空串`,
+              path: argPath,
+            });
+          }
+          continue;
+        }
+        if (value === null || typeof value !== "object" || typeof value.slot !== "string") {
+          violations.push({
+            ruleId: "XS-BLOCK-SLOT-FORM",
+            message: `积木模板 ${block.id} 的动作参数位 ${argName} 既非字面量也非 { slot } 槽位引用`,
+            path: argPath,
+          });
+          continue;
+        }
+        referenced.add(value.slot);
+        if (!declared.has(value.slot)) {
+          violations.push({
+            ruleId: "XS-BLOCK-SLOT-FORM",
+            message: `积木模板 ${block.id} 的动作参数位 ${argName} 引用的槽位 "${value.slot}" 未在 slots 中声明`,
+            path: argPath,
+          });
+        }
+      }
+    });
+    slots.forEach((slot, slotIndex) => {
+      if (!referenced.has(slot.key)) {
+        violations.push({
+          ruleId: "XS-BLOCK-SLOT-FORM",
+          message: `积木模板 ${block.id} 声明的槽位 "${slot.key}" 未被任何动作引用(悬空声明)`,
+          path: `${base}/slots/${slotIndex}/key`,
+        });
+      }
+    });
+  });
+  return violations;
+}
+
+/**
+ * XS-BLOCK-ARG-ALLOW(M10/WP-80):动作序列是 **12 公开动作的子集**、且参数位不越出
+ * 该动作的公开参数面。
+ *
+ * 逐条:
+ *  - `type` ∈ `SESSION_ACTION_TYPES`(Schema 封闭枚举之外的纵深防御:类型断言
+ *    绕过 Schema 时的子集闸——"动作序列面必须是 12 个公开动作的子集"是硬约束);
+ *  - `args` 键 ⊆ 该动作的允许参数位(`AUTHOR_BLOCK_ACTION_ARGS`;协议
+ *    `ActionObjectSchema` 的公开镜像);
+ *  - 必填参数位在场(缺参动作在编译期必然失败,声明期即拒可给出可解释反馈)。
+ */
+export function checkAuthorBlockActionArgs(
+  descriptor: PublicChallengeDescriptor,
+): CheckerViolation[] {
+  const violations: CheckerViolation[] = [];
+  const knownActions = new Set<string>(SESSION_ACTION_TYPES);
+  (descriptor.authorBlocks ?? []).forEach((block, blockIndex) => {
+    (block.actions ?? []).forEach((action, actionIndex) => {
+      const base = `/authorBlocks/${blockIndex}/actions/${actionIndex}`;
+      const actionType = String(action.type);
+      if (!knownActions.has(actionType)) {
+        violations.push({
+          ruleId: "XS-BLOCK-ARG-ALLOW",
+          message: `积木模板 ${block.id} 的动作 ${actionType} 不在 12 个公开动作内(动作序列面必须是公开动作子集)`,
+          path: `${base}/type`,
+        });
+        return;
+      }
+      const spec = AUTHOR_BLOCK_ACTION_ARGS[actionType as SessionActionType];
+      const argNames = Object.keys(action.args ?? {});
+      for (const argName of argNames) {
+        if (!spec.allowed.includes(argName)) {
+          violations.push({
+            ruleId: "XS-BLOCK-ARG-ALLOW",
+            message: `积木模板 ${block.id} 的动作 ${actionType} 携带越界参数位 "${argName}"(该动作公开参数面:${spec.allowed.length === 0 ? "无" : spec.allowed.join(" / ")})`,
+            path: `${base}/args/${argName}`,
+          });
+        }
+      }
+      for (const required of spec.required) {
+        if (!argNames.includes(required)) {
+          violations.push({
+            ruleId: "XS-BLOCK-ARG-ALLOW",
+            message: `积木模板 ${block.id} 的动作 ${actionType} 缺少必填参数位 "${required}"`,
+            path: `${base}/args`,
+          });
+        }
+      }
+    });
+  });
+  return violations;
+}
+
+/**
+ * XS-BLOCK-NO-EFFECT(M10/WP-80)是**跨包**规则(需要私有包的隐藏面哨兵),
+ * 落点为 `pair-rules.ts#checkAuthorBlocksNoEffectSemantics` —— 本文件只承载
+ * 公开单侧可判定的声明面形态规则(XS-BLOCK-SLOT-FORM / XS-BLOCK-ARG-ALLOW)。
+ */
 
 /** 公开侧单规则聚合(供 checkChallengePair 复用,亦可单测)。 */
 export function checkPublicDescriptorRules(
@@ -271,5 +435,7 @@ export function checkPublicDescriptorRules(
     ...checkRegisterCoreSet(descriptor),
     ...checkAslrRandomizationNotice(descriptor),
     ...checkPublicPageAlignment(descriptor),
+    ...checkAuthorBlockSlotForm(descriptor),
+    ...checkAuthorBlockActionArgs(descriptor),
   ];
 }

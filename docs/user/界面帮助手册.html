@@ -443,7 +443,7 @@
 </table>
 
 <h3>12.2 <code>terminal</code> 预设实际是什么样</h3>
-<p>terminal 不是滤镜，而是一整套 CSS 变量的替换值（共 <strong>20 个 token</strong>：8 个功能对比度 token + 12 个设计 token）。关键取值（源码登记值）：</p>
+<p>terminal 不是滤镜，而是一整套 CSS 变量的替换值（共 <strong>21 个 token</strong>：8 个功能对比度 token + 12 个设计 token + 1 个深底画布精灵处理 token）。关键取值（源码登记值）：</p>
 <table>
   <tr><th style="width:190px">token</th><th>terminal 取值</th><th>体现为</th></tr>
   <tr><td><code>--sm-bg-base</code> / <code>--sm-bg-panel</code> / <code>--sm-bg-inset</code></td><td><code>#0b0f0b</code> / <code>#101610</code> / <code>#070907</code></td><td>三层近黑背景（非纯黑，带极轻绿底）</td></tr>
@@ -451,7 +451,9 @@
   <tr><td><code>--sm-accent</code> / <code>--sm-warn</code> / <code>--sm-focus-ring</code></td><td><code>#4fe6c2</code> / <code>#ffc857</code> / <code>#a9ffb8</code></td><td>青绿 = 可点击地址 / 琥珀 = 断点与暂停 / 亮绿 = 焦点环</td></tr>
   <tr><td><code>--sm-border</code> 族 / <code>--sm-danger</code></td><td>磷光绿 α 阶梯 / <code>#ff8a94</code></td><td>卡片边框与分隔线、编译错误与断点红</td></tr>
   <tr><td><code>--sm-scanline-opacity</code> / <code>--sm-caret-blink</code></td><td><code>0.06</code> / <code>1.1s</code></td><td>扫描线强度 / 光标闪烁周期（随 terminal 生效，见下）</td></tr>
+  <tr><td><code>--sm-canvas-sprite-filter</code>（<strong>2026-09-17 新增</strong>）</td><td><code>brightness(1.6)</code>（light 档取 <code>none</code>）</td><td>程序画布上的<strong>垃圾桶</strong>图标在近黑底色上的提亮；light 档取 <code>none</code> ⇒ 与之前<strong>像素级一致</strong></td></tr>
 </table>
+<div class="warnbox"><strong>程序积木画布的深底图标（2026-09-17 修复）</strong>：程序画布右下角的垃圾桶图标来自 Blockly 自带的灰色精灵（<code>#888</code>），在暗色与 terminal 的近黑画布上原本偏暗——真机实测「图标与画布底」的对比度仅 <strong>1.84:1（dark）/ 1.82:1（terminal）</strong>，低于无障碍对非文本图元的 3:1 下限。现以主题 token <code>--sm-canvas-sprite-filter</code> 承载提亮滤镜，实测升到 <strong>3.07:1 / 3.04:1</strong>（light 档保持 1.56:1 不变，因为那里本来就是给浅底设计的）。</div>
 <div class="warnbox"><strong>效果面现状（2026-09-17 更新）</strong>：扫描线与光标闪烁<strong>已组件侧实装并真机验证</strong>。切到 terminal 后，你会看到<strong>终端配色 + 扫描线叠加 + 窗口标题栏光标闪烁</strong>（light / dark 档这两个值取 <code>0</code> / <code>0s</code> ⇒ 效果不可见，只呈现常规外观）。
 三条边界如实写明：①扫描线强度极轻（<code>opacity ≤ 0.06</code>）且<strong>不拦截鼠标</strong>（<code>pointer-events: none</code>），不影响你点选内存格与按钮；②这些装饰<strong>不承载任何信息</strong>（对屏幕阅读器隐藏），关掉它们不影响功能；③开启系统的<strong>「减少动态效果」</strong>后，扫描线与光标闪烁一并关闭，界面照常可用。
 terminal 色板的<strong>真机 axe 对比度门禁</strong>已随该实装复跑：三预设共 <strong>9 个可达面零违规</strong>（归档见 <code>apps/plugin-dev/e2e/reports/axe/2026-09-17/</code>）。</div>

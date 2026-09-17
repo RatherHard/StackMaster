@@ -313,8 +313,9 @@ token 集 + 新增 `terminal` 预设;冻结不变量 = 8 个功能对比度变�
 值逐值不变(机检语料 `test/theming/theme.test.ts` 的 `FROZEN_CONTRAST_VARIABLES`);
 契约面零改动(嵌入协议 `EMBED_THEMES` 三值不动,见下方 D-MP-2 承载口径)。
 
-**变量面 = 20 个 CSS 自定义属性 × light / dark / terminal 三预设**(键集与键序
-三预设一致,`SM_THEME_PRESET_VALUES`;值域 `SM_THEME_VALUES` = 预设三值 + `auto`):
+**变量面 = 21 个 CSS 自定义属性 × light / dark / terminal 三预设**(键集与键序
+三预设一致,`SM_THEME_PRESET_VALUES`;值域 `SM_THEME_VALUES` = 预设三值 + `auto`;
+第 21 个 = M3 WP-80 的深底画布精灵处理,见下表末行):
 
 | 族 | token | light / dark | terminal(具体色值) |
 |---|---|---|---|
@@ -331,6 +332,7 @@ token 集 + 新增 `terminal` 预设;冻结不变量 = 8 个功能对比度变�
 | 字体 | `--sm-font-mono` | §2.1 定案栈(三预设同源) | 同左 |
 | 效果 | `--sm-scanline-opacity` | `0`(关闭) | `0.06`(WP-74 登记上限) |
 | | `--sm-caret-blink` | `0s`(关闭) | `1.1s` |
+| 深底精灵处理(M3 WP-80) | `--sm-canvas-sprite-filter` | `none`(零视觉变化) | `brightness(1.6)` |
 | 冻结族(功能对比度 8) | `--sm-border` / `--sm-border-button` / `--sm-border-strong` / `--sm-divider` / `--sm-divider-faint` / `--sm-badge-bg` / `--sm-badge-bg-soft` / `--sm-danger` | light = 现行硬编码原样;dark = 功能对比度初值 | 磷光绿 α 阶梯(28/34/46/16/12/18/10%) |
 
 - **数值口径**:light / dark 的新 token 取**系统颜色关键词**(与现行渲染同源,
@@ -362,6 +364,22 @@ token 集 + 新增 `terminal` 预设;冻结不变量 = 8 个功能对比度变�
   光标闪烁必须 `aria-hidden` 纯装饰、`pointer-events: none`、包在
   `prefers-reduced-motion: no-preference` 内(或给 reduce 覆盖)、动画只用
   transform / opacity;字号下限 13px 亦归 WP-74,本包不越界改组件字号。
+- **深底画布精灵处理(M3 WP-80;M1 遗留项结清)**:Blockly 画布上的垃圾桶 / 缩放
+  图标取自 `media/sprites.svg`(`.trash{fill:#888}` / `.zoom{stroke:#888}`,整张精灵表
+  经 `<image>` 引用),在暗色 / terminal 近黑画布上偏暗。**按主题锚改写选择器不可行**
+  —— 画布样式表注入**画布宿主所在根**(生产形态 = 工作区 shadow 根),而主题锚
+  `data-sm-theme` 在 shadow 树**之外**,树内样式表匹配不到树外祖先(M1 真机实测
+  `filter` 恒 `none`);故改由 **token 承载**:
+  `blockly-theme.ts` 的 `PAYLOAD_CANVAS_CSS` 对 `.blocklyTrash` / `.blocklyZoom`
+  取 `filter: var(--sm-canvas-sprite-filter, none)` —— 自定义属性**沿 composed 树继承**
+  穿透 shadow 边界,`var()` 在元素自身求值 ⇒ 零祖先选择器、零重新 inject。真机
+  (chromium,真 dist + 真画布)实测:`.blocklyTrash` 的 `filter` = light `none` /
+  dark·terminal `brightness(1.6)`(元素自身 `opacity = 0.4` 为 Blockly 基态),
+  合成后非文本对比度 light **1.56:1 不变** / dark **1.84 → 3.07** / terminal
+  **1.82 → 3.04**(达到 WCAG 1.4.11 非文本 3:1);像素级复核(包围盒截图平均亮度)
+  dark **+0.0102** / terminal **+0.0098** / light **±0**,证明滤镜实际参与绘制。
+  机检:`test/payload/canvas-sprite-filter.test.ts`(绑定 + **禁锚选择器回潮** +
+  三预设齐备)、`test/theming/theme-terminal.test.ts`(键数锁 21)。`--sm-canvas-sprite-filter` 是唯一一处**非颜色** token。
 - 机械护栏测试(`test/theming/theme.test.ts` + `test/theming/theme-terminal.test.ts`):
   全部组件样式 var() 之外零 `rgb(0 0 0` / `crimson` 硬编码;axe 套件 **light / dark /
   terminal 三锚**零 violations(`color-contrast` 沿既有豁免,真机补测归 WP-55 / WP-74)。
@@ -844,6 +862,34 @@ M3 交付面:`<sm-payload-tab>` 三区布局(FE-PB-01)、积木 → 12 动作编
 - **FE-WS-07(payload 状态两模式共用)归 WP-F8**:本 WP 已保证 payload 元
   素状态不被窗口切换销毁(照 workspace `#contents` 生命周期约定;固定窗口集
   下窗口**常驻、无关闭入口**,弃置只发生在工作区整体卸载)。
+
+### 出题者积木声明面(M10 / WP-80;2026-09-17)
+
+- **输入面**:公开描述包顶层可选字段 `authorBlocks`(形状与规则见
+  `challenge-schema/docs/双包Schema语义.md` §2.1 / §五)。客户端在
+  `src/descriptor/challenge-descriptor.ts` 的 `parseAuthorBlocks` 做**形状闸**
+  (键集封闭 / 动作 ⊆ `SESSION_ACTION_TYPES` / 参数名禁令 / 上限),坏形态整体
+  回落 `null`(不渲染误导性工具箱);**客户端不持有私有包**,故接口存在性
+  (`XS-BLOCK-IFACE-REF`)由服务端与编译链兜底 —— 两层判定**同则但不同源**
+  (vm-ui 只依赖 `protocol`,禁 import `challenge-schema`,依赖纪律 5.5)。
+- **积木生成**:`src/payload/compiler/blocks.ts` 的 `buildAuthorBlockDefinitions()` /
+  `buildAuthorBlockCategory()` 把每个模板转成一枚动态积木(类型名
+  `payload_author_<id>`,槽 = `input_value`,显示名 `displayText` + 槽标签),
+  `buildPayloadToolbox()` / `registerPayloadBlocks()` 追加「题目积木」分类;
+  **零声明 ⇒ 定义表与工具箱逐字节等于 M10 之前**(回归护栏见测试)。
+- **编译面**:`compiler/compile.ts` 的 `compileAuthorBlock()` 按声明顺序展开动作,
+  槽引用经 `evalValueInput` 求值后按参数语义格式化(`addressHex` / `targetHex`
+  → 地址串、`valueHex` → `0x` + 大写 hex),`allowedActions` 裁剪**原样保留**
+  (越界动作以 `unauthorized_action` 拒绝,错误携带积木 `id`);未声明类型
+  → `unknown_block_type`,槽缺失 → `missing_input`。
+- **注入面**:`SmWorkspace` 的 `authorBlocks` duck-typing 注入(与 `dataSource` /
+  `actionSink` 同法)。**M10 顺带修一处晚到缺陷**:描述包**异步晚到**时,注册表
+  内容元素(无模板绑定)过去不会补同步 ⇒ `willUpdate` 现对
+  `challengeDescriptor` 变更重跑 `#syncEdContents()`。
+- **测试**:`test/payload/author-blocks.test.ts`(15 例:零声明回归 / 定义与工具箱 /
+  幂等注册 / 编译求值与裁剪)、`test/payload/author-blocks-injection.test.ts`
+  (4 例:声明集经工作区注入落到真组件并可用)、`test/descriptor/challenge-descriptor.test.ts`
+  (11 例坏形态红灯)。
 
 ### 测试面
 

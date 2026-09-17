@@ -33,12 +33,12 @@
 <main>
 
 <h1>第 3 层 · 精确参考 <span class="badge b1">参考 R1–R6</span></h1>
-<div class="toc"><b>本页目录</b>　<a href="#r1">R1 · 公开描述包字段表（顶层 16 项：13 必填 + 3 可选）</a>　<a href="#r2">R2 · 私有判题包字段表（13 必填 + 条件/可选）</a>　<a href="#r3">R3 · 基线指令集（20 opcode，封闭）</a>　<a href="#r4">R4 · 谓词 / 微算子 / 效果原语参数表</a>　<a href="#r5">R5 · 校验规则速查（XS = 检查器 34 条 / XC = 编译器 18 条）</a>　<a href="#r6">R6 · 错误码 · 版本字段 · 发布检查清单</a></div>
+<div class="toc"><b>本页目录</b>　<a href="#r1">R1 · 公开描述包字段表（顶层 17 项：13 必填 + 4 可选）</a>　<a href="#r2">R2 · 私有判题包字段表（13 必填 + 条件/可选）</a>　<a href="#r3">R3 · 基线指令集（20 opcode，封闭）</a>　<a href="#r4">R4 · 谓词 / 微算子 / 效果原语参数表</a>　<a href="#r5">R5 · 校验规则速查（XS = 检查器 34 条 / XC = 编译器 18 条）</a>　<a href="#r6">R6 · 错误码 · 版本字段 · 发布检查清单</a></div>
 <p class="muted">全部摘自 <code>packages/challenge-schema/schema/*.schema.json</code> 原文与冻结契约；
 <span class="badge b3" style="background:var(--warn)">必填</span>
 <span class="badge b3" style="background:var(--ok)">可选</span>
 <span class="badge b3" style="background:#e8590c">条件</span></p>
-<h3 id="r1">R1 · 公开描述包字段表（顶层 16 项：13 必填 + 3 可选）</h3>
+<h3 id="r1">R1 · 公开描述包字段表（顶层 17 项：13 必填 + 4 可选）</h3>
 <table>
   <tr><th style="width:185px">字段</th><th>类型与约束</th><th>语义</th></tr>
   <tr><td><code>schemaVersion</code> <span class="badge b3" style="background:var(--warn)">必填</span></td><td>const 1</td><td>双包格式信封版本</td></tr>
@@ -57,6 +57,7 @@
   <tr><td><code>randomizationNotice</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>1–200 字符</td><td>只声明随机化存在；aslrEnabled=true 时必填</td></tr>
   <tr><td><code>debugMode</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>boolean（缺省 true）</td><td>调试能力开关（opt-out）</td></tr>
   <tr><td><code>aslrEnabled</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>boolean（缺省 false）</td><td>ASLR 开关；true ⇒ 布局为相对描述 + 必须带 notice</td></tr>
+  <tr><td><code>authorBlocks</code> <span class="badge b3" style="background:var(--ok)">可选</span> <span class="badge b1">M10</span></td><td>1–16 × {id <code>^[a-z][a-z0-9-]{0,62}$</code> 唯一, displayText 1–128, interfaceId 256–65535, slots 0–4 × {key <code>^[a-z][a-z0-9_]{0,31}$</code> 唯一, label 1–64, kind: address|immediate|length}, actions 1–8 × {type: 12 公开动作, args: 参数名封闭为该动作冻结参数名，值 = 字面量 ≤64 或 {slot: 本模板槽键}}}</td><td>出题者积木声明面（学员拖积木 → 展开为公开动作序列）；<b>不进 required</b>，不声明则行为与 M10 前一致</td></tr>
 </table>
 <table>
   <tr><th style="width:185px">vmProfile / regions 嵌套</th><th>约束</th></tr>
@@ -89,7 +90,7 @@
   <tr><td><code>compiledIr</code> <span class="badge b3" style="background:#e8590c">条件</span></td><td>{irFormatVersion: 2, entrypointIndex?, instructions 1–4096, labels 0–512}；op 双形态；操作数 4 kind</td><td>IR 模式程序（字节模式省略）</td></tr>
   <tr><td><code>entrypointAddressHex</code> <span class="badge b3" style="background:#e8590c">条件</span></td><td>hex 地址，须落代码区</td><td>字节模式入口（IR 模式不得出现）</td></tr>
   <tr><td><code>customInstructions[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>0–16 × {mnemonic <code>^[A-Z][A-Z0-9_]{0,15}$</code>, displayText 1–120, semantics 1–16 微算子}</td><td>自定义指令（D4）</td></tr>
-  <tr><td><code>interfaces[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>0–16 × {interfaceId 0x0100–0xFFFF, displayText 1–120, effects 1–16 效果原语}</td><td>作者接口（D5）</td></tr>
+  <tr><td><code>interfaces[]</code> <span class="badge b3" style="background:var(--ok)">可选</span></td><td>0–16 × {interfaceId 0x0100–0xFFFF, displayText 1–120, effects 1–16 效果原语}</td><td>作者接口（D5）；公开包 <code>authorBlocks[].interfaceId</code> 只能引用这里声明过的接口号（XS-BLOCK-IFACE-REF）</td></tr>
 </table>
 <h3 id="r3">R3 · 基线指令集（20 opcode，封闭）</h3>
 <table>

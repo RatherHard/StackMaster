@@ -4,7 +4,8 @@
  * - 模式字面量:patterns.ts 的每个模式源串必须原样出现在对应 Schema 文档中;
  * - 词汇封闭:Schema enum 数组 ≡ vocabulary.ts 封闭集(双文件同锚);
  * - 分类清单:schema/classification.json ≡ CHALLENGE_CLASSIFICATIONS 常量,
- *   且顶层 properties 键 ≡ 字段清单常量(14 公开 / 20 私有,R9 数量锁定);
+ *   且顶层 properties 键 ≡ 字段清单常量(17 公开 / 20 私有,R9 数量锁定;
+ *   M10/WP-80:公开 16 → 17 新增 authorBlocks);
  * - 共享身份字段:4 个版本/身份字段必须同时出现在两个 Schema 的 required
  *   (WP-1 §12.1;XS-ID-CORR 的 Schema 侧前提);
  * - 结构性不相交:一般命名空间(负向前瞻排除 FLAG 保留区,G2/D3)× FLAG 模式
@@ -16,6 +17,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ARCH_BITS_VALUES,
+  AUTHOR_BLOCK_ACTION_ARGS,
+  AUTHOR_BLOCK_ARG_NAMES,
+  AUTHOR_BLOCK_ARG_VALUE_KIND,
+  AUTHOR_BLOCK_SLOT_KEY_PATTERN_SOURCE,
+  AUTHOR_BLOCK_SLOT_KINDS,
   BIT_MASK_LOGIC_OPS,
   CORE_REGISTER_NAMES,
   CUSTOM_MNEMONIC_PATTERN_SOURCE,
@@ -34,6 +40,11 @@ import {
   INTERFACE_ID_MIN,
   IR_LABEL_ID_PATTERN_SOURCE,
   MAX_BYTES_HEX_PER_RANGE,
+  MAX_AUTHOR_BLOCKS,
+  MAX_AUTHOR_BLOCK_ACTIONS,
+  MAX_AUTHOR_BLOCK_ARG_LITERAL_LENGTH,
+  MAX_AUTHOR_BLOCK_SLOTS,
+  MAX_AUTHOR_BLOCK_TEXT_LENGTH,
   MAX_CONDITION_BRANCHES,
   MAX_CUSTOM_INSTRUCTIONS,
   MAX_DECLARED_SEED_PATHS,
@@ -156,6 +167,38 @@ describe("Schema 数值限制 ≡ limits.ts(路径锚定防漂移)", () => {
     );
     expectNumberAt(publicSchema, "/properties/initialProjection/properties/visibleRegisters", "maxItems", MAX_VISIBLE_REGISTERS);
     expectNumberAt(publicSchema, "/properties/initialProjection/properties/semanticHighlights", "maxItems", MAX_SEMANTIC_HIGHLIGHTS);
+    // M10/WP-80 出题者积木声明面(可选顶层字段)数值锚点。
+    expectNumberAt(publicSchema, "/properties/authorBlocks", "maxItems", MAX_AUTHOR_BLOCKS);
+    expectNumberAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/slots",
+      "maxItems",
+      MAX_AUTHOR_BLOCK_SLOTS,
+    );
+    expectNumberAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/actions",
+      "maxItems",
+      MAX_AUTHOR_BLOCK_ACTIONS,
+    );
+    expectNumberAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/displayText",
+      "maxLength",
+      MAX_AUTHOR_BLOCK_TEXT_LENGTH,
+    );
+    expectNumberAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/slots/items/properties/label",
+      "maxLength",
+      MAX_AUTHOR_BLOCK_TEXT_LENGTH,
+    );
+    expectNumberAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/actions/items/properties/args/additionalProperties/oneOf/0",
+      "maxLength",
+      MAX_AUTHOR_BLOCK_ARG_LITERAL_LENGTH,
+    );
   });
 
   it("私有 Schema 数值锚点", () => {
@@ -254,7 +297,11 @@ describe("Schema 模式字面量 ≡ patterns.ts(源串原样出现)", () => {
   });
 
   it("公开 / 私有专属模式源串各归其位", () => {
-    for (const source of [CONTROL_CHARS_BAN_PATTERN_SOURCE, PUBLIC_HEX_VALUE_64_PATTERN_SOURCE]) {
+    for (const source of [
+      CONTROL_CHARS_BAN_PATTERN_SOURCE,
+      PUBLIC_HEX_VALUE_64_PATTERN_SOURCE,
+      AUTHOR_BLOCK_SLOT_KEY_PATTERN_SOURCE,
+    ]) {
       expect(publicSchemaText).toContain(JSON.stringify(source));
     }
     for (const source of [
@@ -279,6 +326,23 @@ describe("Schema enum ≡ vocabulary 封闭集", () => {
       publicSchema,
       "/properties/initialProjection/properties/semanticHighlights/items/properties/kind",
       SEMANTIC_HIGHLIGHT_KINDS,
+    );
+    // M10/WP-80:动作序列 type 是 12 公开动作的子集(枚举即子集闸);
+    // 参数槽位 kind 取有限枚举;动作参数位名称受并集白名单约束。
+    expectEnumAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/actions/items/properties/type",
+      SESSION_ACTION_TYPES,
+    );
+    expectEnumAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/slots/items/properties/kind",
+      AUTHOR_BLOCK_SLOT_KINDS,
+    );
+    expectEnumAt(
+      publicSchema,
+      "/properties/authorBlocks/items/properties/actions/items/properties/args/propertyNames",
+      AUTHOR_BLOCK_ARG_NAMES,
     );
   });
 
@@ -358,12 +422,13 @@ describe("分类清单与字段清单防漂移", () => {
     expect(manifest).toEqual(CHALLENGE_CLASSIFICATIONS);
   });
 
-  it("公开 Schema 顶层 properties ≡ PUBLIC_DESCRIPTOR_FIELDS(锁定 16 字段)", () => {
+  it("公开 Schema 顶层 properties ≡ PUBLIC_DESCRIPTOR_FIELDS(锁定 17 字段)", () => {
     const keys = Object.keys(resolveAt(publicSchema, "/properties") as Record<string, unknown>);
     expect([...keys].sort()).toEqual([...PUBLIC_DESCRIPTOR_FIELDS].sort());
     // 字段数量锁定:数组、本测试与 classification.json / Schema properties
-    // 必须同步演进(WP-43:14 → 16,新增 debugMode / aslrEnabled 顶层可选布尔)。
-    expect(PUBLIC_DESCRIPTOR_FIELDS).toHaveLength(16);
+    // 必须同步演进(WP-43:14 → 16,新增 debugMode / aslrEnabled 顶层可选布尔;
+    // M10/WP-80:16 → 17,新增 authorBlocks 顶层可选字段)。
+    expect(PUBLIC_DESCRIPTOR_FIELDS).toHaveLength(17);
   });
 
   it("私有 Schema 顶层 properties ≡ PRIVATE_BUNDLE_FIELDS(锁定 20 字段,R9 防漂移)", () => {
@@ -381,6 +446,45 @@ describe("分类清单与字段清单防漂移", () => {
     expect([...FORBIDDEN_PUBLIC_PROPERTIES].sort()).toEqual([...derived].sort());
     for (const name of FORBIDDEN_PUBLIC_PROPERTIES) {
       expect(PUBLIC_DESCRIPTOR_FIELDS).not.toContain(name);
+    }
+  });
+
+  it("authorBlocks 声明面不带私有顶层属性名与效果词汇(D2 递归推导面)", () => {
+    // 新增公开字段不得成为私有字段的走私位:公开 Schema 文档内 authorBlocks
+    // 整棵子树不得出现任何禁止属性名(元检查 D2-NO-HIDDEN-IN-PUBLIC 的
+    // 递归面在此以常量推导固定,使新增字段时禁飞区自动扩展)。
+    const authorBlocksDoc = JSON.stringify(resolveAt(publicSchema, "/properties/authorBlocks"));
+    for (const forbidden of FORBIDDEN_PUBLIC_PROPERTIES) {
+      expect(authorBlocksDoc, `禁用属性名 ${forbidden}`).not.toContain(`"${forbidden}"`);
+    }
+    // 公开声明面不得出现效果原语词汇(EFFECT_PRIMITIVES 整体留私有包)。
+    for (const primitive of EFFECT_PRIMITIVES) {
+      expect(authorBlocksDoc, `效果原语 ${primitive}`).not.toContain(`"${primitive}"`);
+    }
+  });
+
+  it("动作参数位并集 ≡ AUTHOR_BLOCK_ACTION_ARGS 的 allowed 集(12 动作全覆盖)", () => {
+    const specKeys = Object.keys(AUTHOR_BLOCK_ACTION_ARGS).sort();
+    expect(specKeys).toEqual([...SESSION_ACTION_TYPES].sort());
+    const union = [
+      ...new Set(Object.values(AUTHOR_BLOCK_ACTION_ARGS).flatMap((spec) => [...spec.allowed])),
+    ].sort();
+    expect([...AUTHOR_BLOCK_ARG_NAMES].sort()).toEqual(union);
+    // 必填集 ⊆ 允许集;无参动作的允许集为空(动作协议 strictObject 同则)。
+    for (const [action, spec] of Object.entries(AUTHOR_BLOCK_ACTION_ARGS)) {
+      for (const required of spec.required) {
+        expect(spec.allowed, `${action} 必填 ${required} 必须在允许集内`).toContain(required);
+      }
+    }
+  });
+
+  it("参数位取值类别表 ≡ 参数位并集(编译面词汇完备,无遗漏 / 无多余)", () => {
+    // `AUTHOR_BLOCK_ARG_VALUE_KIND` 是编译面的取值类别词汇(address / number /
+    // literal):槽位引用是否合法、字面量如何解析都以它为准。它必须**恰好覆盖**
+    // 冻结参数位并集 —— 新增动作参数位而忘登记取值类别,直接变红。
+    expect(Object.keys(AUTHOR_BLOCK_ARG_VALUE_KIND).sort()).toEqual([...AUTHOR_BLOCK_ARG_NAMES].sort());
+    for (const [name, kind] of Object.entries(AUTHOR_BLOCK_ARG_VALUE_KIND)) {
+      expect(["address", "number", "literal"], `${name} 取值类别`).toContain(kind);
     }
   });
 });

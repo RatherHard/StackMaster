@@ -123,6 +123,11 @@ export {
   MAX_SEED_PATH_SEGMENTS,
   MAX_PREDICATE_EVAL_STEPS,
   MAX_STAGE_INSTRUCTION_STEPS,
+  MAX_AUTHOR_BLOCKS,
+  MAX_AUTHOR_BLOCK_SLOTS,
+  MAX_AUTHOR_BLOCK_ACTIONS,
+  MAX_AUTHOR_BLOCK_TEXT_LENGTH,
+  MAX_AUTHOR_BLOCK_ARG_LITERAL_LENGTH,
 } from "./common/limits.js";
 export type { FieldClass, SchemaClassificationEntry, ClassificationManifest } from "./common/classification.js";
 export {
@@ -149,6 +154,18 @@ export type {
   InitialVisibleRegister,
   InitialSemanticHighlight,
   InitialProjection,
+  AuthorBlockSlot,
+  AuthorBlockArgValue,
+  AuthorBlockAction,
+  AuthorBlockDecl,
   PublicChallengeDescriptor,
 } from "./common/public-types.js";
+export {
+  AUTHOR_BLOCK_SLOT_KINDS,
+  AUTHOR_BLOCK_SLOT_KEY_PATTERN_SOURCE,
+  AUTHOR_BLOCK_ACTION_ARGS,
+  AUTHOR_BLOCK_ARG_VALUE_KIND,
+  AUTHOR_BLOCK_ARG_NAMES,
+} from "./common/author-blocks.js";
+export type { AuthorBlockSlotKind, AuthorBlockActionArgSpec } from "./common/author-blocks.js";
 export { validatePublicDescriptor, parsePublicDescriptorText } from "./internal/public-descriptor.js";

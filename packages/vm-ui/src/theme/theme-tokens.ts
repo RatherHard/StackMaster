@@ -36,7 +36,7 @@
  *    (`SM_THEME_ANCHOR_STYLESHEET_TEXT`),严禁手写重复 CSS 块——新增预设只
  *    扩变量记录(D-API-80 机制不变)。
  *
- * ## 变量面(20 个 = 8 冻结功能对比度 + 12 WP-73 设计 token)
+ * ## 变量面(21 个 = 8 冻结功能对比度 + 12 WP-73 设计 token + 1 M3 WP-80 深底精灵处理)
  *
  * ### 冻结族(light / dark 值逐值不变;功能对比度口径)
  *
@@ -63,6 +63,21 @@
  * | 语义色 | `--sm-accent` / `--sm-warn` / `--sm-selection` / `--sm-focus-ring` | linktext / highlight / highlight 混色 / accentcolor | 青绿 / 琥珀 / 暗绿底 / 亮绿环 |
  * | 字体 | `--sm-font-mono` | 三预设同一栈(§2.1 定案) | 同左 |
  * | 效果 | `--sm-scanline-opacity` / `--sm-caret-blink` | 关闭(0 / 0s) | 0.06 / 1.1s |
+ *
+ * ### M3 WP-80 增量 token(1 个;深底画布精灵处理)
+ *
+ * | token | light | dark / terminal |
+ * |---|---|---|
+ * | `--sm-canvas-sprite-filter` | `none`(零视觉变化) | `brightness(1.6)` |
+ *
+ * 背景:M1 移交的遗留项 —— Blockly 画布上的垃圾桶 / 缩放图标取自
+ * `media/sprites.svg` 的 `.trash{fill:#888}` / `.zoom{stroke:#888}`(整张精灵表经
+ * `<image>` 引用),在暗色 / terminal 近黑画布上偏暗。**不能**用「按主题锚选择器
+ * 改写」:画布样式表注入画布宿主所在根(生产形态 = 工作区 shadow 根),而主题锚
+ * 在 shadow 树之外,树内样式表匹配不到树外祖先(M1 真机实测 `filter` 恒 `none`)。
+ * **修法 = 变量承载**:`filter: var(--sm-canvas-sprite-filter, none)` 走**自定义属性
+ * 继承**穿透 shadow 边界(与其余 20 个 token 同一机制),故无需任何祖先选择器。
+ * `light` 取 `none` ⇒ 与 M1 前逐像素一致。
  *
  * **light / dark 值取系统颜色关键词**:与现行渲染同源(color-scheme 自适应),
  * 因此组件(归 WP-74)开始消费这些 token 时 light / dark 仍像素级零变化;
@@ -118,6 +133,8 @@ export const SM_THEME_VARIABLES: Readonly<Record<SmThemePreset, Readonly<Record<
     "--sm-font-mono": SM_MONO_FONT_STACK,
     "--sm-scanline-opacity": "0",
     "--sm-caret-blink": "0s",
+    // ── 深底画布精灵处理(M3 WP-80;light = 原样,零视觉变化)──────────────
+    "--sm-canvas-sprite-filter": "none",
   },
   dark: {
     "--sm-border": "rgb(255 255 255 / 22%)",
@@ -142,6 +159,8 @@ export const SM_THEME_VARIABLES: Readonly<Record<SmThemePreset, Readonly<Record<
     "--sm-font-mono": SM_MONO_FONT_STACK,
     "--sm-scanline-opacity": "0",
     "--sm-caret-blink": "0s",
+    // 深色画布精灵补偿(值与 dark 同;见文件末族表)。
+    "--sm-canvas-sprite-filter": "brightness(1.6)",
   },
   terminal: {
     // 边框族 = 磷光绿 α 阶梯(底色近黑,α 比 dark 档提升一档以保持可见度)。
@@ -170,6 +189,10 @@ export const SM_THEME_VARIABLES: Readonly<Record<SmThemePreset, Readonly<Record<
     // 效果面:terminal 唯一开启(实装归 WP-74;0.06 为其登记上限)。
     "--sm-scanline-opacity": "0.06",
     "--sm-caret-blink": "1.1s",
+    // 深色画布精灵补偿:Blockly 垃圾桶 / 缩放图标为 `#888` 灰(SVG 精灵经
+    // `<image>` 引用),在近黑底色上偏暗 ⇒ 提亮(不改变色相;不做滤镜近似的
+    // 磷光着色,避免不可验证的色彩数学)。
+    "--sm-canvas-sprite-filter": "brightness(1.6)",
   },
 };
 

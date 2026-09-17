@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "challengeId": "m10-author-blocks-minimal",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "locale": "zh-CN",
+  "briefing": {
+    "title": "最小出题者积木声明",
+    "summary": "单个模板、零参数槽位、单条字面量动作——authorBlocks 的下界形态。",
+    "learningObjectives": ["理解 authorBlocks 是可选顶层字段且下界形态为 1 个模板"]
+  },
+  "vmProfile": {
+    "registers": [{ "name": "RSP" }, { "name": "RBP" }, { "name": "RIP" }],
+    "endianness": "little",
+    "pageSizeBytes": 4096,
+    "archBits": 64,
+    "canary": { "enabled": false }
+  },
+  "memoryLayout": {
+    "regions": [
+      {
+        "regionId": "code",
+        "kind": "code",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "publicLabel": "代码段"
+      }
+    ]
+  },
+  "allowedActions": ["step", "ret"],
+  "resourceLimits": {},
+  "hintLadder": [],
+  "publicErrorMapping": [],
+  "initialProjection": {
+    "visibleRegions": [
+      {
+        "regionId": "code",
+        "label": "代码段",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "bytesHex": "c3",
+        "truncated": true
+      }
+    ],
+    "visibleRegisters": [{ "name": "RIP", "valueHex": "0x400000" }]
+  },
+  "authorBlocks": [
+    {
+      "id": "single-step",
+      "displayText": "单步执行一条指令",
+      "interfaceId": 256,
+      "slots": [],
+      "actions": [{ "type": "step", "args": {} }]
+    }
+  ]
+}

@@ -20,6 +20,8 @@
  */
 import type { ActionObject } from "@stackmaster/protocol";
 
+import type { PayloadAuthorBlockDecl } from "./blocks.js";
+
 /** Blockly workspace 序列化形态(`Blockly.serialization.workspaces.save` 的产物)。 */
 export interface BlocklySerializedState {
   readonly blocks?: {
@@ -139,4 +141,11 @@ export interface CompilePayloadOptions {
   readonly allowedActions?: readonly string[];
   /** 求值环境(缺省 = 空环境:任何寄存器 / 内存引用确定性报错)。 */
   readonly environment?: PayloadEvalEnvironment;
+  /**
+   * M10/WP-80:题目声明的积木模板集(公开描述包可选顶层字段 `authorBlocks`)。
+   * 缺省 / 空数组 ⇒ 既有一切行为零变化(画布上不存在动态积木类型);
+   * 声明集内的模板类型必须先经 `registerPayloadBlocks(authorBlocks)` 登记,
+   * 否则序列化状态加载即报 `unknown_block_type`(与内建未知块同形)。
+   */
+  readonly authorBlocks?: readonly PayloadAuthorBlockDecl[];
 }

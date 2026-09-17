@@ -19,12 +19,12 @@
  *   6. JSON 解析失败 → `invalid-json`;**尺寸护栏第二闸**(嵌套深度 / 数组
  *      长度 / 字符串长度,与服务端 D-API-31 同值装配)越限 → `over-limit`;
  *   7. **结构校验**(轻量形状检查,对齐锚 = challenge-schema 公开描述包
- *      Schema 16 字段;依赖纪律:浏览器包禁 import challenge-schema,形态
+ *      Schema 17 字段;依赖纪律:浏览器包禁 import challenge-schema,形态
  *      对齐由测试锚定——见 test/descriptor/ 与 challenge-schema 包的
  *      fixture 一致性断言)→ 坏形态 `bad-shape`;
  *   8. 产出强类型 `ChallengeDescriptorView`(本地结构类型,沿 ed-types.ts
  *      先例;debugMode / aslrEnabled 按 Schema 语义归一为布尔:opt-out 缺省
- *      true / 缺省 false)。
+ *      true / 缺省 false;M10/WP-80 新增可选 `authorBlocks` 声明面)。
  *
  * 失败呈现纪律(FE-ED 缺席形态):全部失败折叠为布尔结果 + 确定性原因码,
  * 调用方只呈现「描述包缺席」静态明示,失败细节(原因码属于诊断面,不进
@@ -37,6 +37,12 @@ import {
   SESSION_ACTION_TYPES,
 } from "@stackmaster/protocol";
 
+import type {
+  PayloadAuthorBlockAction,
+  PayloadAuthorBlockArgValue,
+  PayloadAuthorBlockDecl,
+  PayloadAuthorBlockSlot,
+} from "../payload/compiler/blocks.js";
 import type { PublicErrorMapping, PublicHint } from "../ed/ed-types.js";
 
 // ── 客户端尺寸护栏(与 §8.3 服务端护栏成对的双闸;数值登记于 WP-54 决策草稿)──
@@ -172,11 +178,14 @@ export interface DescriptorInitialProjectionView {
 }
 
 /**
- * 公开描述包强类型视图(16 字段;`hintLadder` / `publicErrorMapping` 直接
+ * 公开描述包强类型视图(17 字段;`hintLadder` / `publicErrorMapping` 直接
  * 复用 ed-types 的结构类型 = ED 组件注入面零转换)。
  *
  * `debugMode` / `aslrEnabled` 已按 Schema 语义归一为布尔(登记):debugMode
  * 为 opt-out(缺省 = true)、aslrEnabled 缺省 = false;消费方不再各自解释缺席。
+ *
+ * M10/WP-80:`authorBlocks` 为**可选**字段(缺省 = 题目未声明积木模板 ⇒
+ * Payload 面板与既有一字不差)。
  */
 export interface ChallengeDescriptorView {
   readonly schemaVersion: number;
@@ -199,6 +208,7 @@ export interface ChallengeDescriptorView {
   readonly debugMode: boolean;
   readonly aslrEnabled: boolean;
   readonly initialProjection: DescriptorInitialProjectionView;
+  readonly authorBlocks?: readonly PayloadAuthorBlockDecl[];
 }
 
 // ── 工作区静态面投影(标题 / 简介 / VM Profile / encodingTable)───────────────
@@ -340,9 +350,9 @@ function assertWithinLimits(value: unknown, limits: DescriptorGuardLimits, depth
   }
 }
 
-// ── 轻量结构校验(对齐锚 = 公开 Schema 16 字段;测试锚定于本包 + challenge-schema)──
+// ── 轻量结构校验(对齐锚 = 公开 Schema 17 字段;测试锚定于本包 + challenge-schema)──
 
-/** Schema 顶层必需 13 字段 + 可选 3 字段(16 字段冻结面)。 */
+/** Schema 顶层必需 13 字段 + 可选 4 字段(17 字段冻结面;M10/WP-80 新增 authorBlocks)。 */
 const REQUIRED_TOP_LEVEL_FIELDS = [
   "schemaVersion",
   "challengeId",
@@ -358,10 +368,39 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
   "publicErrorMapping",
   "initialProjection",
 ] as const;
-const OPTIONAL_TOP_LEVEL_FIELDS = ["randomizationNotice", "debugMode", "aslrEnabled"] as const;
+const OPTIONAL_TOP_LEVEL_FIELDS = [
+  "randomizationNotice",
+  "debugMode",
+  "aslrEnabled",
+  // M10/WP-80:出题者积木声明面(可选顶层字段;D-MP-6 形状)。
+  "authorBlocks",
+] as const;
 
 /** schemaVersion 冻结值(challenge-schema CHALLENGE_PACKAGE_SCHEMA_VERSION 同值)。 */
 const DESCRIPTOR_SCHEMA_VERSION = 1;
+
+/**
+ * M10/WP-80 出题者积木声明面的形态锚(本地副本;challenge-schema 的
+ * `author-blocks.ts` 为单一来源,浏览器包禁 import 该包 ⇒ 此处重述并在
+ * `test/descriptor/` 侧以 fixture 一致性断言锚定漂移)。
+ */
+const AUTHOR_BLOCK_ID_PATTERN = /^[a-z][a-z0-9-]{0,62}$/;
+const AUTHOR_BLOCK_SLOT_KEY_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
+/** 模板 / 槽位 / 动作的**封闭键集**(公开 Schema `additionalProperties: false` 同则)。 */
+const AUTHOR_BLOCK_KEYS = ["id", "displayText", "interfaceId", "slots", "actions"] as const;
+const AUTHOR_BLOCK_SLOT_KEYS = ["key", "label", "kind"] as const;
+const AUTHOR_BLOCK_ACTION_KEYS = ["type", "args"] as const;
+/**
+ * 效果语义键禁令(公开面不承载效果原语序列;challenge-schema 侧
+ * `AUTHOR_BLOCK_FORBIDDEN_PRIVATE_KEYS` + `XS-BLOCK-NO-EFFECT` 的客户端同则)。
+ * 客户端闸只做形状拒收,真实效果语义判定仍以服务端校验器为准。
+ */
+const AUTHOR_BLOCK_FORBIDDEN_ARG_NAMES = ["effects", "semantics", "flagRegister", "fileId"] as const;
+
+/** 未知键拒绝(封闭键集;`undefined` 值同样视为越界存在)。 */
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
 
 const REVEAL_POLICIES = ["on_request", "after_n_failures"] as const;
 const REGION_KINDS = ["code", "global", "stack", "heap", "key", "custom"] as const;
@@ -427,6 +466,8 @@ export function parseDescriptorView(input: unknown): ChallengeDescriptorView | n
   if (input["randomizationNotice"] !== undefined && !isNonEmptyString(input["randomizationNotice"])) {
     return null;
   }
+  const authorBlocks = parseAuthorBlocks(input["authorBlocks"]);
+  if (authorBlocks === null) return null;
   for (const key of ["debugMode", "aslrEnabled"] as const) {
     if (input[key] !== undefined && typeof input[key] !== "boolean") {
       return null;
@@ -452,7 +493,92 @@ export function parseDescriptorView(input: unknown): ChallengeDescriptorView | n
     debugMode: input["debugMode"] === undefined ? true : (input["debugMode"] as boolean),
     aslrEnabled: input["aslrEnabled"] === undefined ? false : (input["aslrEnabled"] as boolean),
     initialProjection,
+    ...(authorBlocks === undefined ? {} : { authorBlocks }),
   };
+}
+
+/**
+ * M10/WP-80 出题者积木声明面解析(可选字段;缺席 → undefined = 零行为变化)。
+ *
+ * 轻量结构校验对齐公开 Schema 的 authorBlocks 形状(声明包已在服务端经
+ * 登记管线全量校验;此处是客户端闸,坏形态一律 null = 折叠为 bad-shape,
+ * **不做修复性归一**)。逐项:
+ *  - `authorBlocks` 必须是 1~16 元素数组;
+ *  - 模板:`id`(小写标识符形态)/ `displayText`(非空)/ `interfaceId`(256~65535)
+ *    + `slots`(0~4)/ `actions`(1~8);
+ *  - 槽位:`key` 小写标识符、`label` 非空、`kind` ∈ address / immediate / length;
+ *  - 动作:`type` 非空、`args` 每个取值 = 非空字面量串 或 `{ slot }` 单键对象。
+ */
+function parseAuthorBlocks(value: unknown): readonly PayloadAuthorBlockDecl[] | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16) {
+    return null;
+  }
+  const blocks: PayloadAuthorBlockDecl[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) return null;
+    // 模板封闭键集(未知键 / 效果语义键一律拒:公开 Schema
+    // additionalProperties:false 同则;效果序列整体留私有包)。
+    if (!hasOnlyKeys(entry, AUTHOR_BLOCK_KEYS)) return null;
+    const id = entry["id"];
+    const displayText = entry["displayText"];
+    const interfaceId = entry["interfaceId"];
+    if (typeof id !== "string" || !AUTHOR_BLOCK_ID_PATTERN.test(id)) return null;
+    if (!isNonEmptyString(displayText)) return null;
+    if (!isNumber(interfaceId) || !Number.isInteger(interfaceId)) return null;
+    if (interfaceId < 256 || interfaceId > 65535) return null;
+
+    const rawSlots = entry["slots"];
+    if (!Array.isArray(rawSlots) || rawSlots.length > 4) return null;
+    const slots: PayloadAuthorBlockSlot[] = [];
+    for (const slot of rawSlots) {
+      if (!isRecord(slot)) return null;
+      if (!hasOnlyKeys(slot, AUTHOR_BLOCK_SLOT_KEYS)) return null;
+      const key = slot["key"];
+      const label = slot["label"];
+      const kind = slot["kind"];
+      if (typeof key !== "string" || !AUTHOR_BLOCK_SLOT_KEY_PATTERN.test(key)) return null;
+      if (!isNonEmptyString(label)) return null;
+      if (kind !== "address" && kind !== "immediate" && kind !== "length") return null;
+      slots.push({ key, label, kind });
+    }
+
+    const rawActions = entry["actions"];
+    if (!Array.isArray(rawActions) || rawActions.length < 1 || rawActions.length > 8) return null;
+    const actions: PayloadAuthorBlockAction[] = [];
+    for (const action of rawActions) {
+      if (!isRecord(action)) return null;
+      if (!hasOnlyKeys(action, AUTHOR_BLOCK_ACTION_KEYS)) return null;
+      const type = action["type"];
+      if (!isNonEmptyString(type)) return null;
+      // 动作序列面 = 12 公开动作的子集(公开 Schema 的 type 枚举同则;
+      // 效果原语 / 微算子等私有动作名在此一律拒收)。
+      if (!(SESSION_ACTION_TYPES as readonly string[]).includes(type)) return null;
+      const rawArgs = action["args"];
+      if (!isRecord(rawArgs)) return null;
+      const args: Record<string, PayloadAuthorBlockArgValue> = {};
+      for (const [argName, argValue] of Object.entries(rawArgs)) {
+        if ((AUTHOR_BLOCK_FORBIDDEN_ARG_NAMES as readonly string[]).includes(argName)) {
+          return null;
+        }
+        if (isNonEmptyString(argValue)) {
+          args[argName] = argValue;
+          continue;
+        }
+        if (isRecord(argValue) && typeof argValue["slot"] === "string") {
+          if (!hasOnlyKeys(argValue, ["slot"])) return null;
+          args[argName] = { slot: argValue["slot"] as string };
+          continue;
+        }
+        return null;
+      }
+      actions.push({ type, args });
+    }
+    blocks.push({ id, displayText, interfaceId, slots, actions });
+  }
+  return blocks;
 }
 
 function parseBriefing(value: unknown): boolean {

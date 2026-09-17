@@ -460,9 +460,129 @@ export const PAYLOAD_BLOCK_DEFINITIONS: readonly Record<string, unknown>[] = [
   },
 ];
 
-/** 按当前 locale 构建积木定义(message0 / tooltip 取词;zh-CN 下与常量同形)。 */
-export function buildPayloadBlockDefinitions(): Record<string, unknown>[] {
-  return PAYLOAD_BLOCK_DEFINITIONS.map((definition) => {
+// ── M10/WP-80 出题者积木动态注入面 ─────────────────────────────────────────
+//
+// 声明面形状 = 公开描述包可选顶层字段 `authorBlocks`(D-MP-6 定案;锚 =
+// packages/challenge-schema 的公开 Schema)。vm-ui 是浏览器包,**不依赖
+// challenge-schema**(依赖方向 5.5:vm-ui 只依赖 protocol),故此处以**本地
+// 结构镜像类型**承载(challenge-descriptor.ts 的 `ChallengeDescriptorView`
+// 同纪律),字段与公开 Schema 逐项同形。
+//
+// 注入纪律(缺省空 ⇒ 既有行为零变化):
+//  - 未声明 `authorBlocks` / 声明为空数组 ⇒ 积木定义、工具箱分类、编译行为
+//    **逐字不变**(回归护栏:既有 29 块与 10 个分类不动);
+//  - 声明即在此之上**追加**动态积木(`payload_author_<id>`)与「题目积木」分类,
+//    追加不改写既有定义;
+//  - 动态积木只在**编译期**展开为 12 公开动作的原子序列(见 compile.ts),
+//    不在浏览器里执行任何语义:动作仍经 `actionSink` 提交服务端串行执行。
+//  - `interfaceId` 只用于**展示与开发生成**,不参与编译(接口效果语义整体
+//    留在私有包);公开面不承载效果原语序列。
+
+/** 出题者积木声明中的参数槽位(结构镜像;见公开 Schema authorBlocks[].slots)。 */
+export interface PayloadAuthorBlockSlot {
+  readonly key: string;
+  readonly label: string;
+  /** 形态:address / immediate / length(决定编译期取值转换)。 */
+  readonly kind: string;
+}
+
+/** 积木动作参数位取值:字面量串或 `{ slot }` 槽位引用(两种形态互斥)。 */
+export type PayloadAuthorBlockArgValue = string | { readonly slot: string };
+
+/** 出题者积木声明中的单条动作(12 公开动作的子集)。 */
+export interface PayloadAuthorBlockAction {
+  readonly type: string;
+  readonly args: Readonly<Record<string, PayloadAuthorBlockArgValue>>;
+}
+
+/** 出题者积木模板声明(结构镜像;见公开 Schema authorBlocks[])。 */
+export interface PayloadAuthorBlockDecl {
+  readonly id: string;
+  readonly displayText: string;
+  readonly interfaceId: number;
+  readonly slots: readonly PayloadAuthorBlockSlot[];
+  readonly actions: readonly PayloadAuthorBlockAction[];
+}
+
+/** 动态积木类型前缀(与内建 `payload_*` 类型同命名空间,`author_` 段隔离)。 */
+export const PAYLOAD_AUTHOR_BLOCK_TYPE_PREFIX = "payload_author_";
+
+/** 动态积木类型名(`payload_author_<id>`;id 由 Schema 冻结为小写标识符形态)。 */
+export function authorBlockType(id: string): string {
+  return `${PAYLOAD_AUTHOR_BLOCK_TYPE_PREFIX}${id}`;
+}
+
+/** 是否为动态(题目声明)积木类型。 */
+export function isAuthorBlockType(type: string): boolean {
+  return type.startsWith(PAYLOAD_AUTHOR_BLOCK_TYPE_PREFIX);
+}
+
+/** 动态积木类型 → 模板 id(非动态类型返回 null)。 */
+export function authorBlockIdFromType(type: string): string | null {
+  return isAuthorBlockType(type) ? type.slice(PAYLOAD_AUTHOR_BLOCK_TYPE_PREFIX.length) : null;
+}
+
+/** 槽位 key → Blockly 输入名(大写化;Schema 冻结小写标识符 ⇒ 单射无歧义)。 */
+export function authorBlockSlotInputName(key: string): string {
+  return `SLOT_${key.toUpperCase()}`;
+}
+
+/**
+ * 动态积木定义(每个模板一块;槽位 = `input_value`(Number)= 参数表达式输入)。
+ * 动态块进工具箱与画布,与内建块同连接形态(上/下语句连接),可任意插序。
+ */
+export function buildAuthorBlockDefinitions(
+  authorBlocks: readonly PayloadAuthorBlockDecl[],
+): Record<string, unknown>[] {
+  return authorBlocks.map((block) => {
+    const slotLabels = block.slots.map((slot, index) => `${slot.label} %${index + 1}`);
+    const message0 =
+      slotLabels.length === 0 ? block.displayText : `${block.displayText} ${slotLabels.join(" ")}`;
+    return {
+      type: authorBlockType(block.id),
+      message0,
+      args0: block.slots.map((slot) => ({
+        type: "input_value",
+        name: authorBlockSlotInputName(slot.key),
+        check: NUM,
+        align: "RIGHT",
+      })),
+      previousStatement: null,
+      nextStatement: null,
+      colour: 200,
+      tooltip: t("block.authorBlock.tooltip", { name: block.displayText }),
+    };
+  });
+}
+
+/** 「题目积木」工具箱分类(无声明时返回 null = 不追加分类)。 */
+export function buildAuthorBlockCategory(
+  authorBlocks: readonly PayloadAuthorBlockDecl[],
+): PayloadToolboxCategory | null {
+  if (authorBlocks.length === 0) {
+    return null;
+  }
+  return {
+    kind: "category",
+    name: t("block.catAuthorBlocks"),
+    colour: "200",
+    contents: authorBlocks.map((block) => ({
+      kind: "block" as const,
+      type: authorBlockType(block.id),
+    })),
+  };
+}
+
+/**
+ * 按当前 locale 构建积木定义(message0 / tooltip 取词;zh-CN 下与常量同形)。
+ *
+ * M10/WP-80:可选 `authorBlocks` **追加**题目声明积木;缺省 / 空数组 ⇒
+ * 返回值与既往逐字相同(既有内建定义零变化——回归护栏)。
+ */
+export function buildPayloadBlockDefinitions(
+  authorBlocks: readonly PayloadAuthorBlockDecl[] = [],
+): Record<string, unknown>[] {
+  const builtin = PAYLOAD_BLOCK_DEFINITIONS.map((definition) => {
     const keys = BLOCK_MESSAGE_KEYS[String(definition.type)];
     if (keys === undefined) {
       return { ...definition };
@@ -489,35 +609,67 @@ export function buildPayloadBlockDefinitions(): Record<string, unknown>[] {
     }
     return localized;
   });
+  if (authorBlocks.length === 0) {
+    return builtin;
+  }
+  return [...builtin, ...buildAuthorBlockDefinitions(authorBlocks)];
 }
 
-/** 按当前 locale 构建工具箱分类名单(zh-CN 下与常量同形)。 */
-export function buildPayloadToolboxCategories(): PayloadToolboxCategory[] {
-  return PAYLOAD_TOOLBOX_CATEGORIES.map((category) => {
+/**
+ * 按当前 locale 构建工具箱分类名单(zh-CN 下与常量同形)。
+ * 声明了题目积木时在末尾**追加**「题目积木」分类(内建分类零变化)。
+ */
+export function buildPayloadToolboxCategories(
+  authorBlocks: readonly PayloadAuthorBlockDecl[] = [],
+): PayloadToolboxCategory[] {
+  const builtin = PAYLOAD_TOOLBOX_CATEGORIES.map((category) => {
     const key = CATEGORY_NAME_KEYS[category.name];
     return { ...category, name: key !== undefined ? t(key) : category.name };
   });
+  const authorCategory = buildAuthorBlockCategory(authorBlocks);
+  return authorCategory === null ? builtin : [...builtin, authorCategory];
 }
 
 /** Blockly 工具箱定义(本地化构建形态;inject 时消费)。 */
-export function buildPayloadToolbox(): { kind: "categoryToolbox"; contents: PayloadToolboxCategory[] } {
-  return { kind: "categoryToolbox", contents: buildPayloadToolboxCategories() };
+export function buildPayloadToolbox(
+  authorBlocks: readonly PayloadAuthorBlockDecl[] = [],
+): { kind: "categoryToolbox"; contents: PayloadToolboxCategory[] } {
+  return { kind: "categoryToolbox", contents: buildPayloadToolboxCategories(authorBlocks) };
 }
 
-/** 积木类型 → 注册状态(幂等登记)。 */
+/** 内建积木注册状态(幂等登记;进程内一次性)。 */
 let blocksRegistered = false;
+
+/** 已登记的动态积木类型(幂等登记面;内建块由 `blocksRegistered` 单独守护)。 */
+const registeredAuthorBlockTypes = new Set<string>();
 
 /**
  * 幂等登记全部积木定义(UI inject 前与编译器加载前都要调用)。
  * 文案按**首次注册时刻 locale** 固化(Blockly 定义机制;运行中切换不追溯,
  * 遗留登记见决策草稿)。
+ *
+ * M10/WP-80:`authorBlocks` 参数只**增量**登记尚未登记的动态积木类型——
+ * 同一类型重复 `defineBlocksWithJsonArray` 会覆盖既有定义,故按类型去重;
+ * 换绑不同题目的声明集时,先声明的类型保留(画布上已放置的积木不失效),
+ * 新声明集的新增类型继续登记(幂等纪律维持)。
  */
-export function registerPayloadBlocks(): void {
-  if (blocksRegistered) {
+export function registerPayloadBlocks(
+  authorBlocks: readonly PayloadAuthorBlockDecl[] = [],
+): void {
+  if (!blocksRegistered) {
+    Blockly.defineBlocksWithJsonArray(buildPayloadBlockDefinitions() as never);
+    blocksRegistered = true;
+  }
+  const pending = authorBlocks.filter(
+    (block) => !registeredAuthorBlockTypes.has(authorBlockType(block.id)),
+  );
+  if (pending.length === 0) {
     return;
   }
-  Blockly.defineBlocksWithJsonArray(buildPayloadBlockDefinitions() as never);
-  blocksRegistered = true;
+  Blockly.defineBlocksWithJsonArray(buildAuthorBlockDefinitions(pending) as never);
+  for (const block of pending) {
+    registeredAuthorBlockTypes.add(authorBlockType(block.id));
+  }
 }
 
 /** 工具箱分类(中文分类名;起始积木不进工具箱——FE-PB-03 唯一预置)。 */

@@ -106,6 +106,7 @@ import type {
   DescriptorEncodingOperandView,
 } from "../descriptor/challenge-descriptor.js";
 import { LocaleController, t } from "../i18n/i18n.js";
+import type { PayloadAuthorBlockDecl } from "../payload/compiler/blocks.js";
 import { formatAddressHex } from "../render/hex.js";
 import { ensureSmThemeStyles, SM_THEME_ATTRIBUTE, type SmThemeValue } from "../theme/theme-tokens.js";
 import { crossAnnotateRegisters, type RegisterHit } from "../views/register/cross-annotation.js";
@@ -213,6 +214,11 @@ export interface WorkspaceChallengeDescriptor {
   readonly hintLadder?: readonly PublicHint[];
   /** 错误教学注解映射(FE-ED-07;按 errorCode 匹配)。 */
   readonly publicErrorMapping?: readonly PublicErrorMapping[];
+  /**
+   * M10/WP-80:出题者积木声明面(公开描述包可选顶层字段 `authorBlocks`)。
+   * 缺省 / 空数组 ⇒ Payload 面板与既有一字不差(不追加题目积木分类)。
+   */
+  readonly authorBlocks?: readonly PayloadAuthorBlockDecl[];
 }
 
 /** 工作区静态面注入形状(WP-54;= 描述包视图的 ChallengeStaticFace 投影)。 */
@@ -897,6 +903,13 @@ export class SmWorkspace extends LitElement {
     }
     if (changed.has("theme")) {
       this.#syncThemeAnchor();
+    }
+    if (changed.has("challengeDescriptor")) {
+      // M10/WP-80:描述包**晚到**(WP-54 异步下发通道:先建窗、后注入)时,
+      // 注册表内容元素的 duck-typing 注入面必须补一次同步——模板直连的
+      // ED 组件(`.hints` / `.mappings`)由 Lit 响应式绑定覆盖,而注册表内容
+      // (payload 惰性宿主等)没有模板绑定,只能在描述包变更时显式补注入。
+      this.#syncEdContents();
     }
   }
 
@@ -1857,6 +1870,11 @@ export class SmWorkspace extends LitElement {
       }
       if ("mappings" in bindable) {
         bindable["mappings"] = descriptor?.publicErrorMapping ?? [];
+      }
+      if ("authorBlocks" in bindable) {
+        // M10/WP-80:出题者积木声明面(公开描述包可选顶层字段)→ Payload 面板。
+        // 缺省(题目未声明 / 未接入描述包)= 空数组 ⇒ 面板与既有一字不差。
+        bindable["authorBlocks"] = descriptor?.authorBlocks ?? [];
       }
       if (content.localName === "sm-error-explainer") {
         // 错误解释(FE-ED-07):userVisibleError + 描述包注解(F5 菜单内联

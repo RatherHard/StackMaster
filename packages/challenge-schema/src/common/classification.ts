@@ -27,7 +27,7 @@ export interface ClassificationManifest {
   readonly schemas: Readonly<Record<string, SchemaClassificationEntry>>;
 }
 
-/** 公开描述包 16 个顶层字段(与 Schema properties 键严格一致)。 */
+/** 公开描述包 17 个顶层字段(与 Schema properties 键严格一致)。 */
 export const PUBLIC_DESCRIPTOR_FIELDS = [
   "schemaVersion",
   "challengeId",
@@ -45,6 +45,7 @@ export const PUBLIC_DESCRIPTOR_FIELDS = [
   "debugMode",
   "aslrEnabled",
   "initialProjection",
+  "authorBlocks",
 ] as const;
 
 /**
@@ -100,7 +101,7 @@ function toFieldClasses(
 }
 
 const NOTE =
-  "字段分类唯一依据 docs/contracts/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。R1/R2 裁决(公开 ISA 引用面):公开包 encodingTable[].op 的自定义助记符与 operands[].interfaceId 是公开 ISA 引用——仅揭示指令 / 接口的存在性与公开标识;customInstructions 的微算子语义与 displayText、interfaces 的效果序列等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝,隐藏声明不产生存在性信号。";
+  "字段分类唯一依据 docs/contracts/数据分类与秘密零驻留清单.md 第十二章;机检消费见 WP-1 §12.6(ZR-B8 / I-1 / I-2 / I-3 / D2)。Schema 存在不等于可下发:server-only 类型仅供后端包(challenge-compiler、session-api、verifier)跨语言校验消费,永不进入浏览器构建图。R1/R2 裁决(公开 ISA 引用面):公开包 encodingTable[].op 的自定义助记符与 operands[].interfaceId 是公开 ISA 引用——仅揭示指令 / 接口的存在性与公开标识;customInstructions 的微算子语义与 displayText、interfaces 的效果序列等私有声明细节整体 server-only,未声明引用被 XS-ENC-TOKEN 拒绝,隐藏声明不产生存在性信号。M10/WP-80 增补(authorBlocks):公开描述包可选顶层字段,承载出题者积木模板声明面(id / displayText / interfaceId / slots / actions);interfaceId 与 encodingTable 的 interface 操作数同一公开语义(仅存在性与公开标识),效果原语序列仍整体留私有包 interfaces[].effects;actions[].type 是 12 公开动作的子集(枚举即子集闸),未在公开面引用的接口不产生存在性信号(I-9 / T-SC1 探针变体)。";
 
 /** 分类清单常量(与 schema/classification.json 严格一致;测试强制)。 */
 export const CHALLENGE_CLASSIFICATIONS: ClassificationManifest = {

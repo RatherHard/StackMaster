@@ -33,8 +33,7 @@ import {
   PAYLOAD_ARITH_TYPE,
   PAYLOAD_BREAKPOINT_TYPE,
   PAYLOAD_CALL_TYPE,
-  PAYLOAD_COMPARE_TYPE,
-  PAYLOAD_FUNC_CALL_STMT_TYPE,
+  PAYLOAD_COMPARE_TYPE,  PAYLOAD_FUNC_CALL_STMT_TYPE,
   PAYLOAD_FUNC_CALL_VALUE_TYPE,
   PAYLOAD_FUNC_DEF_TYPE,
   PAYLOAD_IF_TYPE,
@@ -59,7 +58,11 @@ import {
   PAYLOAD_VAR_SET_TYPE,
   PAYLOAD_WRITE_BYTES_TYPE,
   PAYLOAD_WRITE_STRING_TYPE,
+  authorBlockIdFromType,
+  authorBlockSlotInputName,
+  isAuthorBlockType,
   registerPayloadBlocks,
+  type PayloadAuthorBlockDecl,
 } from "./blocks.js";
 import {
   MASK_64,
@@ -122,6 +125,8 @@ interface CompileContext {
   readonly functions: Map<string, Blockly.Block>;
   readonly allowedActions: ReadonlySet<string>;
   readonly environment: PayloadEvalEnvironment;
+  /** M10/WP-80:题目声明积木(模板 id → 声明;空 Map = 未声明)。 */
+  readonly authorBlocks: ReadonlyMap<string, PayloadAuthorBlockDecl>;
   readonly errors: PayloadCompileError[];
   expandedStatementCount: number;
   expandedActionCount: number;
@@ -547,9 +552,104 @@ function compileStatement(ctx: CompileContext, block: Blockly.Block): void {
     case PAYLOAD_FUNC_CALL_STMT_TYPE:
       void callFunction(ctx, block, false);
       return;
-    default:
+    default: {
+      // M10/WP-80:题目声明积木(动态类型)→ 展开为该模板声明的公开动作序列。
+      if (isAuthorBlockType(block.type)) {
+        compileAuthorBlock(ctx, block);
+        return;
+      }
       fail("unknown_block_type", t("compile.errUnknownStatementBlock", { type: block.type }), block.id);
+    }
   }
+}
+
+// ── M10/WP-80 出题者积木编译面 ─────────────────────────────────────────────
+
+/**
+ * 编译题目声明积木:按声明面的动作序列**逐条**产出公开动作步骤。
+ *
+ * 逐条口径(本包登记,主控未给细则):
+ *  - **槽位取值**:每个槽位输入连接一个表达式,按编译期求值(与内建动作积木
+ *    同一求值环境与预算);`address` 槽 → 64 位地址(`addressToHex`,小写 `0x`);
+ *    `immediate` / `length` 槽 → `0x` + 大写十六进制数值(容量语义由服务端按
+ *    动作参数契约裁剪,编译面不做越界猜测);
+ *  - **槽位缺失 / 未连接**:`missing_input` 确定性报错(不静默取 0);
+ *  - **参数位取值**:模板声明的字面量串**原样**透传(形态与合法性由契约包
+ *    校验器与协议对动作参数的重新校验负责);`{slot}` 引用解析为上述槽位值。
+ *    对仅接受字面量的参数位(`bytesHex` / `pauseOn` / `checkpointId` / `label`),
+ *    槽位引用被解引用为**字符串化**形式(数值槽 → 同 immediate 的 `0x` 形态),
+ *    不猜测语义;
+ *  - **动作合法性**:动作类型与参数位形态是**公开契约面**的事(编译前已由
+ *    服务端 `checkChallengePair` 校验);编译面只做机械展开,故此处不重复
+ *    白名单判定——展开后的每个动作仍逐条经 `emitAction` 走 `allowedActions`
+ *    裁剪(`unauthorized_action` 携带该积木的 `blockId`,与内建动作积木同形);
+ *  - **未知模板**:类型前缀命中但声明集里找不到 ⇒ `unknown_block_type`
+ *    (与内建未知块同一错误码,可解释)。
+ */
+function compileAuthorBlock(ctx: CompileContext, block: Blockly.Block): void {
+  const blockId = authorBlockIdFromType(block.type);
+  const declaration =
+    blockId === null ? undefined : ctx.authorBlocks.get(blockId);
+  if (declaration === undefined) {
+    fail(
+      "unknown_block_type",
+      t("compile.errUnknownAuthorBlock", { type: block.type }),
+      block.id,
+    );
+  }
+
+  // 槽位求值:先一次性解析全部槽位(声明顺序),缺输入即报错。
+  const slotValues = new Map<string, PayloadValue>();
+  for (const slot of declaration.slots) {
+    slotValues.set(slot.key, evalValueInput(ctx, block, authorBlockSlotInputName(slot.key)));
+  }
+
+  for (const action of declaration.actions) {
+    const args: Record<string, string> = {};
+    for (const [argName, raw] of Object.entries(action.args)) {
+      if (typeof raw === "string") {
+        args[argName] = raw;
+        continue;
+      }
+      const value = slotValues.get(raw.slot);
+      if (value === undefined) {
+        // 契约面已拒绝未声明槽位引用;此处为绕过校验器的纵深防御(不静默)。
+        fail(
+          "invalid_field",
+          t("compile.errAuthorBlockSlotUnknown", { slot: raw.slot, type: block.type }),
+          block.id,
+        );
+      }
+      args[argName] = formatAuthorBlockArg(argName, value);
+    }
+    emitAction(
+      ctx,
+      block,
+      { type: action.type, args } as ActionObject,
+      t("compile.stepAuthorBlock", { name: declaration.displayText }),
+    );
+  }
+}
+
+/**
+ * 槽位值 → 动作参数字符串形态。
+ *
+ * - `addressHex` / `targetHex`:地址形态(小写 `0x` 前缀,与内建动作积木一致);
+ * - `valueHex`:64 位数值形态(大写十六进制,`0x` 前缀);
+ * - 其余参数位(`bytesHex` / `pauseOn` / `checkpointId` / `label`,契约面为
+ *   字面量或槽位引用):数值槽按数值形态字符串化,字节串形态由出题人保证
+ *   在字面量中给出(不猜测编码)。
+ */
+function formatAuthorBlockArg(argName: string, value: PayloadValue): string {
+  if (argName === "addressHex" || argName === "targetHex") {
+    return addressToHex(valueToNumber(value));
+  }
+  if (argName === "valueHex") {
+    return `0x${valueToNumber(value).toString(16).toUpperCase()}`;
+  }
+  return typeof value === "bigint"
+    ? `0x${value.toString(16).toUpperCase()}`
+    : value.toString();
 }
 
 // ── 编译入口 ───────────────────────────────────────────────────────────────
@@ -562,7 +662,7 @@ export function compilePayload(
   state: BlocklySerializedState,
   options: CompilePayloadOptions = {},
 ): CompilePayloadResult {
-  registerPayloadBlocks();
+  registerPayloadBlocks(options.authorBlocks ?? []);
   const workspace = new Blockly.Workspace();
   try {
     try {
@@ -618,6 +718,7 @@ export function compilePayload(
       functions: new Map(),
       allowedActions: new Set(options.allowedActions ?? PAYLOAD_DEFAULT_ALLOWED_ACTIONS),
       environment: options.environment ?? createFallbackEnvironment(),
+      authorBlocks: new Map((options.authorBlocks ?? []).map((block) => [block.id, block])),
       errors: [],
       expandedStatementCount: 0,
       expandedActionCount: 0,

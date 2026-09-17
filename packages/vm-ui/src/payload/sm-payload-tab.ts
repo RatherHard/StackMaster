@@ -51,6 +51,7 @@ import {
   PAYLOAD_START_BLOCK_TYPE,
   buildPayloadToolbox,
   registerPayloadBlocks,
+  type PayloadAuthorBlockDecl,
 } from "./compiler/blocks.js";
 import { compilePayload } from "./compiler/compile.js";
 import type {
@@ -132,6 +133,14 @@ export class SmPayloadTab extends LitElement {
   /** 题目 allowedActions 白名单(缺省 null = 12 动作裁去 run_to_event)。 */
   @property({ attribute: false })
   allowedActions: readonly string[] | null = null;
+
+  /**
+   * M10/WP-80 出题者积木声明面(公开描述包可选顶层字段;工作区组合根按
+   * duck-typing 约定注入)。缺省 null / 空数组 ⇒ 工具箱与既有一字不差
+   * (不追加「题目积木」分类,画布上不存在动态块类型)。
+   */
+  @property({ attribute: false })
+  authorBlocks: readonly PayloadAuthorBlockDecl[] | null = null;
 
   // ── 内部状态 ─────────────────────────────────────────────────────────────
 
@@ -252,7 +261,7 @@ export class SmPayloadTab extends LitElement {
 
     /* 面板标题条底:原字面量 canvas 92% + highlight 8% 逐字等于 --sm-bg-panel 的
        light / dark 值 ⇒ 直接归该 token(明暗逐像素不变,terminal 取设计好的面板色
-       #101610,不产生 20 token 面外的新颜色)。本处**不用**嵌套重组写法:口径 =
+       #101610,不产生既有 token 面外的新颜色)。本处**不用**嵌套重组写法:口径 =
        字面量逐字等于某 token 值 ⇒ 直接用该 token;字面量不等于任何 token 值、但
        可由 token 重组而明暗不动 ⇒ 才用嵌套 var(),并把基底关键词原样落回退位
        (该形态仅适用于 field 基底那一类淡染底)。 */
@@ -312,6 +321,14 @@ export class SmPayloadTab extends LitElement {
     }
     if (changed.has("actionSink")) {
       this.#rebuildExecutor();
+    }
+    if (changed.has("authorBlocks")) {
+      // M10/WP-80:声明集换绑 → 登记新增动态块类型 + 刷新工具箱(Blockly
+      // 官方 `updateToolbox` 接口);已放置的既有积木不受影响(登记面幂等,
+      // 见 registerPayloadBlocks)。未挂画布时静默(connectedCallback 会带上
+      // 最新声明集执行首次 inject)。
+      registerPayloadBlocks(this.#authorBlockDecls());
+      this.#workspace?.updateToolbox(buildPayloadToolbox(this.#authorBlockDecls()) as never);
     }
   }
 
@@ -402,6 +419,8 @@ export class SmPayloadTab extends LitElement {
     const result = compilePayload(state, {
       allowedActions: this.allowedActions ?? undefined,
       environment,
+      // M10/WP-80:声明集喂给编译器(动态块类型 → 公开动作序列)。
+      authorBlocks: this.#authorBlockDecls(),
     });
     this.#programStale = false;
     if (result.ok) {
@@ -512,17 +531,24 @@ export class SmPayloadTab extends LitElement {
     return this.#manualState;
   }
 
+  /** 注入的声明集(规范化:null / 缺省 → 空数组 = 零行为变化)。 */
+  #authorBlockDecls(): readonly PayloadAuthorBlockDecl[] {
+    return this.authorBlocks ?? [];
+  }
+
   #mountBlockly(): void {
     const host = this.#canvasHost;
     if (host === null || this.#workspace !== null) {
       return;
     }
-    registerPayloadBlocks();
+    // M10/WP-80:动态块类型在 inject 前登记(否则序列化状态里的动态块
+    // 会以 unknown_block_type 拒载),工具箱在其后按声明集构建。
+    registerPayloadBlocks(this.#authorBlockDecls());
     try {
       const workspace = Blockly.inject(host, {
         // 工具箱定义为 readonly 常量;Blockly Options 面要求可变数组(注入
         // 后不改写),此处单点窄化。
-        toolbox: buildPayloadToolbox() as never,
+        toolbox: buildPayloadToolbox(this.#authorBlockDecls()) as never,
         trashcan: true,
         scrollbars: true,
         // 画布配色 = StackMaster 主题 token(WP-74 前置修复:暗色对比度;见

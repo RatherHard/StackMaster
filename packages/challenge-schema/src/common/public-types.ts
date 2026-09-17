@@ -6,7 +6,14 @@
  * 全部只读:公开包一旦通过校验即视为不可变输入。
  */
 
-import type { ArchBits, PublicErrorCode, RegionKind, SemanticHighlightKind, SessionActionType } from "./vocabulary.js";
+import type {
+  ArchBits,
+  PublicErrorCode,
+  RegionKind,
+  SemanticHighlightKind,
+  SessionActionType,
+} from "./vocabulary.js";
+import type { AuthorBlockSlotKind } from "./author-blocks.js";
 
 export interface PublicBriefing {
   readonly title: string;
@@ -133,9 +140,49 @@ export interface InitialProjection {
   readonly semanticHighlights?: readonly InitialSemanticHighlight[];
 }
 
+/**
+ * 出题者积木参数槽位(M10 / WP-80;D-MP-6 定案形状)。
+ * `kind` 决定编译期取值转换:`address` → 地址串;`immediate` / `length` → 数值。
+ */
+export interface AuthorBlockSlot {
+  readonly key: string;
+  readonly label: string;
+  readonly kind: AuthorBlockSlotKind;
+}
+
+/**
+ * 积木动作参数位取值:字面量串,或对模板已声明槽位的引用(`{ slot: <key> }`)。
+ * 两部分在 Schema 层结构性互斥(`oneOf`),不存在"引用与字面量并存"的第三种形态。
+ */
+export type AuthorBlockArgValue = string | { readonly slot: string };
+
+/**
+ * 积木模板的单条动作(12 公开动作的子集;`type` 由 Schema 封闭枚举冻结)。
+ * 参数位名称受 `AUTHOR_BLOCK_ARG_NAMES` 约束,逐动作允许/必填集见
+ * `AUTHOR_BLOCK_ACTION_ARGS`(检查器 XS-BLOCK-ARG-ALLOW)。
+ */
+export interface AuthorBlockAction {
+  readonly type: SessionActionType;
+  readonly args: Readonly<Record<string, AuthorBlockArgValue>>;
+}
+
+/**
+ * 出题者积木模板声明(M10 / WP-80;公开描述包可选顶层字段 `authorBlocks`)。
+ *
+ * `interfaceId` 是公开 ISA 引用(与 `encodingTable[].operands[].kind = "interface"`
+ * 同一公开语义):仅揭示接口存在性与公开标识,**不揭示效果语义**;效果原语序列
+ * 仍整体留在私有包 `interfaces[].effects`。
+ */
+export interface AuthorBlockDecl {
+  readonly id: string;
+  readonly displayText: string;
+  readonly interfaceId: number;
+  readonly slots: readonly AuthorBlockSlot[];
+  readonly actions: readonly AuthorBlockAction[];
+}
+
 /** 公开描述包(整体 PUBLIC;可下发浏览器)。 */
-export interface PublicChallengeDescriptor {
-  readonly schemaVersion: number;
+export interface PublicChallengeDescriptor {  readonly schemaVersion: number;
   readonly challengeId: string;
   readonly challengeContentVersion: string;
   /** VM Profile Version(7.4 第 3 类);与私有包同值(XS-ID-CORR)。 */
@@ -161,4 +208,13 @@ export interface PublicChallengeDescriptor {
    */
   readonly aslrEnabled?: boolean;
   readonly initialProjection: InitialProjection;
+  /**
+   * 出题者积木最小声明面(M10 / WP-80;可选顶层字段,不进 `required`)。
+   *
+   * 形状 = D-MP-6 定案:每项 `{id, displayText, interfaceId, slots, actions}`。
+   * 缺失 = 该题不下发作者积木(工作区工具箱与既有积木集零变化——回归护栏)。
+   * **公开面不承载**效果原语序列、隐藏接口存在性、私有谓词或任何 `SERVER_ONLY`
+   * 语义(逐字段论证见《数据分类与秘密零驻留清单》§12.2 `authorBlocks` 行)。
+   */
+  readonly authorBlocks?: readonly AuthorBlockDecl[];
 }

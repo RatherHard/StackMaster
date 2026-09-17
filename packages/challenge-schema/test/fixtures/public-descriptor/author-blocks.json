@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "challengeId": "m10-author-blocks",
+  "challengeContentVersion": "1.0.0",
+  "vmProfileVersion": "1.0.0",
+  "locale": "zh-CN",
+  "debugMode": true,
+  "briefing": {
+    "title": "出题者积木声明面入门",
+    "summary": "出题人声明积木模板后,选手在 Payload 搭建面板把模板参数填好即可编译为 12 个公开会话动作。",
+    "learningObjectives": [
+      "理解积木模板 = 展示文本 + 公开 ISA 引用 + 参数槽位 + 动作序列",
+      "理解动作序列只能是 12 个公开动作的子集",
+      "理解参数槽位引用与字面量的区别"
+    ],
+    "teachingNotes": [
+      "模板本身不含效果语义:效果序列留在私有判题包",
+      "槽位形态决定编译期取值转换(地址 / 数值)"
+    ]
+  },
+  "vmProfile": {
+    "registers": [
+      { "name": "RAX", "displayLabel": "通用累加器" },
+      { "name": "RBX" },
+      { "name": "RCX" },
+      { "name": "RDX" },
+      { "name": "RSP", "displayLabel": "栈顶指针" },
+      { "name": "RBP", "displayLabel": "栈帧基址" },
+      { "name": "RIP", "displayLabel": "指令指针" }
+    ],
+    "flagRegisterNames": ["FLAG0"],
+    "endianness": "little",
+    "pageSizeBytes": 4096,
+    "archBits": 64,
+    "canary": { "enabled": true, "sizeBytes": 8 }
+  },
+  "memoryLayout": {
+    "regions": [
+      {
+        "regionId": "code",
+        "kind": "code",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "publicLabel": "代码段"
+      },
+      {
+        "regionId": "stack",
+        "kind": "stack",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "publicLabel": "栈"
+      }
+    ]
+  },
+  "allowedActions": ["write_bytes", "push", "call", "ret", "step"],
+  "resourceLimits": {
+    "predicateEvalBudgetPerSession": 10000,
+    "rollbackBudgetPerSession": 200,
+    "maxWriteBytesPerAction": 64
+  },
+  "hintLadder": [
+    {
+      "order": 1,
+      "revealPolicy": "on_request",
+      "hintText": "先看积木上的槽位说明,再把地址槽填成返回地址槽的地址。"
+    }
+  ],
+  "publicErrorMapping": [
+    {
+      "errorCode": "offset_out_of_range",
+      "teachingNote": "写入越过区域边界:检查目标地址与字节长度。"
+    }
+  ],
+  "randomizationNotice": "本题使用固定布局与固定初始状态,无随机化面。",
+  "initialProjection": {
+    "visibleRegions": [
+      {
+        "regionId": "code",
+        "label": "代码段",
+        "startAddressHex": "0x400000",
+        "byteLength": 4096,
+        "permissions": "rx",
+        "bytesHex": "554889e5c39090909090909090909090",
+        "truncated": true
+      },
+      {
+        "regionId": "stack",
+        "label": "栈",
+        "startAddressHex": "0x7ffff000",
+        "byteLength": 4096,
+        "permissions": "rw",
+        "bytesHex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "truncated": true
+      }
+    ],
+    "visibleRegisters": [
+      { "name": "RSP", "valueHex": "0x7FFFFFF8" },
+      { "name": "RBP", "valueHex": "0x7FFFFFF8" },
+      { "name": "RIP", "valueHex": "0x400100" }
+    ],
+    "semanticHighlights": [
+      {
+        "kind": "return_address_slot",
+        "targetRegionId": "stack",
+        "startAddressHex": "0x7FFFFFF8",
+        "byteLength": 8,
+        "label": "返回地址槽"
+      }
+    ]
+  },
+  "authorBlocks": [
+    {
+      "id": "overwrite-return",
+      "displayText": "覆写返回地址",
+      "interfaceId": 512,
+      "slots": [
+        { "key": "target", "label": "目标地址", "kind": "address" },
+        { "key": "padding", "label": "填充长度", "kind": "length" }
+      ],
+      "actions": [
+        {
+          "type": "write_bytes",
+          "args": { "addressHex": { "slot": "target" }, "bytesHex": "4141414141414141" }
+        },
+        { "type": "push", "args": { "valueHex": { "slot": "padding" } } },
+        { "type": "call", "args": { "targetHex": { "slot": "target" } } }
+      ]
+    },
+    {
+      "id": "mark-and-step",
+      "displayText": "打标记并单步",
+      "interfaceId": 768,
+      "slots": [],
+      "actions": [
+        { "type": "create_checkpoint", "args": { "label": "payload 检查点" } },
+        { "type": "step", "args": {} }
+      ]
+    }
+  ]
+}

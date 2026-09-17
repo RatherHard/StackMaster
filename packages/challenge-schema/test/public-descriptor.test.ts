@@ -21,6 +21,12 @@ const basicText = readFileSync(
   "utf8",
 );
 
+/** M10/WP-80 出题者积木声明面黄金样例(golden fixture,扁平目录,Rust 同步校验)。 */
+const authorBlocksText = readFileSync(
+  join(import.meta.dirname, "fixtures", "public-descriptor", "author-blocks.json"),
+  "utf8",
+);
+
 /** 显式构造 C0 控制字符,避免源码里出现不可见字符。 */
 const BELL_CONTROL_CHAR = String.fromCharCode(0x07);
 
@@ -507,8 +513,165 @@ describe("公开描述包:debugMode / aslrEnabled 能力声明(WP-43 / ADR-DC1 �
   });
 });
 
-describe("公开描述包文本解析", () => {
-  it("从 JSON 文本解析出强类型", () => {
+describe("M10 出题者积木声明面(WP-80;D-MP-6 形状)", () => {
+  /** 在 authorBlocks 黄金样例上做定向破坏(JSON 层,绕开只读镜像类型)。 */
+  function breakAuthorBlocks(edit: (clone: Record<string, unknown>) => void): unknown {
+    const clone = JSON.parse(authorBlocksText) as Record<string, unknown>;
+    edit(clone);
+    return clone;
+  }
+
+  function firstBlock(clone: Record<string, unknown>): Record<string, unknown> {
+    const blocks = clone["authorBlocks"] as Record<string, unknown>[];
+    const first = blocks[0];
+    if (first === undefined) {
+      throw new Error("测试破坏点缺失:authorBlocks[0]");
+    }
+    return first;
+  }
+
+  it("黄金样例通过校验并解析出强类型模板清单", () => {
+    const descriptor = assertOk(validatePublicDescriptor(JSON.parse(authorBlocksText)));
+
+    expect(descriptor.authorBlocks).toHaveLength(2);
+    const first = descriptor.authorBlocks?.[0];
+    expect(first?.id).toBe("overwrite-return");
+    expect(first?.interfaceId).toBe(512);
+    expect(first?.slots.map((slot) => `${slot.key}:${slot.kind}`)).toEqual([
+      "target:address",
+      "padding:length",
+    ]);
+    expect(first?.actions[0]?.type).toBe("write_bytes");
+    expect(first?.actions[0]?.args["addressHex"]).toEqual({ slot: "target" });
+    // 零槽位形态(下界)同样受支持。
+    expect(descriptor.authorBlocks?.[1]?.slots).toEqual([]);
+  });
+
+  it("缺席 authorBlocks 是合法形态(可选顶层字段;既有题目包零改动)", () => {
+    const descriptor = assertOk(validatePublicDescriptor(parseFixture()));
+
+    expect(descriptor.authorBlocks).toBeUndefined();
+    expect(Object.keys(descriptor)).not.toContain("authorBlocks");
+  });
+
+  it("authorBlocks 非数组被拒绝(类型漂移)", () => {
+    expect(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        clone["authorBlocks"] = { id: "x" };
+      })).ok,
+    ).toBe(false);
+  });
+
+  it("动作 type 不在 12 公开动作内被拒绝(枚举即子集闸)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        const actions = firstBlock(clone)["actions"] as Record<string, unknown>[];
+        if (actions[0] !== undefined) {
+          actions[0]["type"] = "run_forever";
+        }
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/authorBlocks/0/actions/0/type"))).toBe(true);
+  });
+
+  it("参数位取值形态漂移(数字字面量)被拒绝", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        const actions = firstBlock(clone)["actions"] as Record<string, unknown>[];
+        const args = actions[0]?.["args"] as Record<string, unknown>;
+        args["addressHex"] = 12345;
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/args/addressHex"))).toBe(true);
+  });
+
+  it("参数位名称越界被拒绝(propertyNames 白名单)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        const actions = firstBlock(clone)["actions"] as Record<string, unknown>[];
+        const args = actions[0]?.["args"] as Record<string, unknown>;
+        args["effects"] = "exit";
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/args"))).toBe(true);
+  });
+
+  it("效果语义键出现在公开模板被拒绝(公开面不承载效果原语序列)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        firstBlock(clone)["effects"] = [{ effect: "exit" }];
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/authorBlocks/0"))).toBe(true);
+  });
+
+  it("槽位形态不在封闭枚举内被拒绝(未知 kind)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        const slots = firstBlock(clone)["slots"] as Record<string, unknown>[];
+        if (slots[0] !== undefined) {
+          slots[0]["kind"] = "offset";
+        }
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/slots/0/kind"))).toBe(true);
+  });
+
+  it("槽位数超过 4 被拒绝(D-MP-6 上限)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        firstBlock(clone)["slots"] = ["a", "b", "c", "d", "e"].map((key) => ({
+          key,
+          label: `槽位 ${key}`,
+          kind: "immediate",
+        }));
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/authorBlocks/0/slots"))).toBe(true);
+  });
+
+  it("interfaceId 越出保留带被拒绝(XS-ARCH-WIDTH 同类边界:接口号 ∈ [0x0100, 0xFFFF])", () => {
+    expect(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        firstBlock(clone)["interfaceId"] = 255;
+      })).ok,
+    ).toBe(false);
+    expect(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        firstBlock(clone)["interfaceId"] = 65536;
+      })).ok,
+    ).toBe(false);
+  });
+
+  it("模板缺少必填字段被拒绝(displayText 缺席)", () => {
+    const violations = assertFail(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        const block = firstBlock(clone);
+        const { displayText: _dropped, ...rest } = block;
+        void _dropped;
+        (clone["authorBlocks"] as Record<string, unknown>[])[0] = rest;
+      })),
+    );
+
+    expect(violations.some((v) => v.path.includes("/authorBlocks/0"))).toBe(true);
+  });
+
+  it("模板 id 形态漂移(大写 / 下划线)被拒绝(冻结标识符字符集)", () => {
+    expect(
+      validatePublicDescriptor(breakAuthorBlocks((clone) => {
+        firstBlock(clone)["id"] = "Overwrite_Return";
+      })).ok,
+    ).toBe(false);
+  });
+});
+
+describe("公开描述包文本解析", () => {  it("从 JSON 文本解析出强类型", () => {
     const descriptor = assertOk(parsePublicDescriptorText(basicText));
 
     expect(descriptor.challengeId).toBe("ret-basics");

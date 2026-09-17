@@ -155,13 +155,23 @@ describe("三预设 token 集(WP-73)", () => {
       "--sm-divider-faint",
       "--sm-badge-bg",
       "--sm-badge-bg-soft",
+      // M3 WP-80 增量 token(深底画布精灵处理;light `none` ⇒ 零视觉变化)。
+      "--sm-canvas-sprite-filter",
     ];
     expect(Object.keys(SM_THEME_VARIABLES.terminal).sort()).toEqual([...expected].sort());
+    // 键数精确锁定(20 → 21:新增一项必须同时更新本清单与
+    // docs/user/界面帮助手册.html §12.2 的 token 表)。
+    expect(expected).toHaveLength(21);
   });
 
   it("terminal 色板为具体色值(无系统颜色关键词),真机 axe 面可判定", () => {
     const colorTokens = Object.keys(SM_THEME_VARIABLES.terminal).filter(
-      (name) => name !== "--sm-font-mono" && !name.startsWith("--sm-scanline") && !name.startsWith("--sm-caret"),
+      (name) =>
+        name !== "--sm-font-mono" &&
+        !name.startsWith("--sm-scanline") &&
+        !name.startsWith("--sm-caret") &&
+        // 精灵滤镜不是颜色值(`none` / `brightness()`),不进色值判定。
+        !name.startsWith("--sm-canvas-sprite"),
     );
     for (const name of colorTokens) {
       expect(token("terminal", name), `terminal 需具体色值:${name}`).toMatch(
@@ -254,6 +264,16 @@ describe("字体与效果面(WP-73 落变量,实装归 WP-74)", () => {
     const caret = token("terminal", "--sm-caret-blink");
     expect(caret).toMatch(/^[\d.]+m?s$/);
     expect(parseFloat(caret)).toBeGreaterThan(0);
+  });
+
+  it("深底画布精灵处理:light = none(零视觉变化),dark / terminal 取提亮度", () => {
+    expect(token("light", "--sm-canvas-sprite-filter")).toBe("none");
+    for (const preset of ["dark", "terminal"] as const) {
+      const value = token(preset, "--sm-canvas-sprite-filter");
+      // 只允许 `brightness()`(灰度精灵不带色相 ⇒ 不做滤镜近似的着色)。
+      expect(value, `${preset} 精灵滤镜形态`).toMatch(/^brightness\([\d.]+\)$/);
+      expect(Number(/^brightness\(([\d.]+)\)$/.exec(value)?.[1] ?? "1")).toBeGreaterThan(1);
+    }
   });
 });
 

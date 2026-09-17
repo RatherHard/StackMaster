@@ -120,3 +120,18 @@ export const MAX_PREDICATE_EVAL_STEPS = 10_000_000;
 
 /** 每状态指令预算上限(7.2 循环上限)。 */
 export const MAX_STAGE_INSTRUCTION_STEPS = 10_000_000;
+
+/** 公开出题者积木模板条数上限(M10 WP-80 声明面资源护栏;与 MAX_INTERFACES 同量级)。 */
+export const MAX_AUTHOR_BLOCKS = 16;
+
+/** 单个积木模板参数槽位上限(M10 WP-80;D-MP-6 定案:≤ 4,与操作数槽上限同值)。 */
+export const MAX_AUTHOR_BLOCK_SLOTS = 4;
+
+/** 单个积木模板动作序列长度上限(M10 WP-80 声明面资源护栏)。 */
+export const MAX_AUTHOR_BLOCK_ACTIONS = 8;
+
+/** 积木模板 displayText / 槽位 label 长度上限(公开文本纪律;对齐 briefing.title)。 */
+export const MAX_AUTHOR_BLOCK_TEXT_LENGTH = 128;
+
+/** 积木模板动作参数位字面量长度上限(hex 串 / 标识符字面量;公开文本纪律)。 */
+export const MAX_AUTHOR_BLOCK_ARG_LITERAL_LENGTH = 64;

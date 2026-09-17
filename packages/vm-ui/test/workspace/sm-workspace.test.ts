@@ -625,14 +625,23 @@ describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
     );
     await settleFrames(2);
 
-    const content = shadowOf(workspace).querySelector("sm-payload-tab") as HTMLElement & {
+    // WP-83:payload 工厂已换**惰性宿主**(`<sm-payload-tab-host>`),真组件要等
+    // 动态 `import()` 完成 —— 宿主暴露 `whenReady()` 就绪钩子(WP-80 与 WP-83 的
+    // 共同接缝:注册表内容元素的 duck-typing 注入面现在落在宿主上)。直接断言
+    // 「连接后同步存在 `<sm-payload-tab>`」会随加载时序抖动(全量套件高负载下
+    // 实测红、单文件跑绿)。
+    const host = shadowOf(workspace).querySelector("sm-payload-tab-host") as HTMLElement & {
       actionSink?: unknown;
       stepOnce?: () => void;
+      whenReady: () => Promise<HTMLElement & { actionSink?: unknown; stepOnce?: () => void }>;
     };
-    expect(content).not.toBeNull();
-    // 组合根注入:actionSink 当前为 null(未接 client),但属性面已就位。
-    expect("actionSink" in content).toBe(true);
-    expect(typeof content.stepOnce).toBe("function");
+    expect(host).not.toBeNull();
+    // 组合根注入:actionSink 当前为 null(未接 client),但属性面已就位(宿主转发访问器)。
+    expect("actionSink" in host).toBe(true);
+    expect(typeof host.stepOnce).toBe("function");
+
+    const content = await host.whenReady();
+    expect(content.shadowRoot).not.toBeNull();
 
     // 焦点窗口 = payload → 菜单「积木步进」可用。
     workspace.focusWindow(PAYLOAD_TAB_TYPE);

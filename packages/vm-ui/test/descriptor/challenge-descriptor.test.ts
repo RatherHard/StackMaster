@@ -79,6 +79,18 @@ function makeDescriptor(): Record<string, unknown> {
     ],
     publicErrorMapping: [{ errorCode: "inaccessible_address", teachingNote: "正式通道教学注解" }],
     randomizationNotice: "固定布局,无随机化面。",
+    // M10/WP-80:出题者积木声明面(可选顶层字段;红灯矩阵以此为破坏基点)。
+    authorBlocks: [
+      {
+        id: "overwrite-return",
+        displayText: "覆写返回地址",
+        interfaceId: 512,
+        slots: [{ key: "target", label: "目标地址", kind: "address" }],
+        actions: [
+          { type: "write_bytes", args: { addressHex: { slot: "target" }, bytesHex: "4141" } },
+        ],
+      },
+    ],
     initialProjection: {
       visibleRegions: [
         {
@@ -458,6 +470,42 @@ describe("红灯:结构坏形态(parseDescriptorView 逐项)", () => {
     ["debugMode 非布尔", (clone) => { clone["debugMode"] = "true"; }],
     ["aslrEnabled 非布尔", (clone) => { clone["aslrEnabled"] = 1; }],
     ["randomizationNotice 非字符串", (clone) => { clone["randomizationNotice"] = 3; }],
+    // ── M10/WP-80 出题者积木声明面(可选顶层字段;形状锚 = 公开 Schema)──
+    ["authorBlocks 非数组(类型漂移)", (clone) => { clone["authorBlocks"] = { id: "x" }; }],
+    ["authorBlocks 空数组(minItems 1)", (clone) => { clone["authorBlocks"] = []; }],
+    ["authorBlocks 模板 id 形态漂移(大写 / 下划线)", (clone) => {
+      item(list(clone, "authorBlocks"), 0)["id"] = "Overwrite_Return";
+    }],
+    ["authorBlocks 缺 displayText(必填)", (clone) => {
+      delete item(list(clone, "authorBlocks"), 0)["displayText"];
+    }],
+    ["authorBlocks interfaceId 越出保留带 [256, 65535]", (clone) => {
+      item(list(clone, "authorBlocks"), 0)["interfaceId"] = 255;
+    }],
+    ["authorBlocks 槽位 kind 非封闭枚举", (clone) => {
+      item(list(item(list(clone, "authorBlocks"), 0), "slots"), 0)["kind"] = "offset";
+    }],
+    ["authorBlocks 槽位数超过 4(D-MP-6 上限)", (clone) => {
+      item(list(clone, "authorBlocks"), 0)["slots"] = ["a", "b", "c", "d", "e"].map((key) => ({
+        key,
+        label: `槽位 ${key}`,
+        kind: "immediate",
+      }));
+    }],
+    ["authorBlocks 动作 type 非 12 公开动作", (clone) => {
+      item(list(item(list(clone, "authorBlocks"), 0), "actions"), 0)["type"] = "run_forever";
+    }],
+    ["authorBlocks 参数位取值形态漂移(数字)", (clone) => {
+      const args = item(list(item(list(clone, "authorBlocks"), 0), "actions"), 0)["args"] as Record<string, unknown>;
+      args["addressHex"] = 4096;
+    }],
+    ["authorBlocks 参数位名称越界(效果语义键)", (clone) => {
+      const args = item(list(item(list(clone, "authorBlocks"), 0), "actions"), 0)["args"] as Record<string, unknown>;
+      args["effects"] = "exit";
+    }],
+    ["authorBlocks 模板携带效果语义键(未知键)", (clone) => {
+      item(list(clone, "authorBlocks"), 0)["effects"] = [{ effect: "exit" }];
+    }],
   ];
 
   for (const [name, edit] of redCases) {

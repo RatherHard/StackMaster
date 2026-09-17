@@ -1691,3 +1691,203 @@ describe("字段分类检查器:R14 P5 专项测试矩阵补齐", () => {
     expect(violation.message).toContain("越出代码区末尾");
   });
 });
+
+// ── M10/WP-80 出题者积木声明面规则(XS-BLOCK-*)────────────────────────────
+
+/** 出题者积木黄金样例(公开包)与私有接口声明面互证。 */
+const authorBlocksText = readFileSync(
+  join(import.meta.dirname, "fixtures", "public-descriptor", "author-blocks.json"),
+  "utf8",
+);
+
+/** 黄金样例声明的公开 ISA 引用(私有 interfaces[] 侧按此装配)。 */
+const AUTHOR_BLOCK_INTERFACE_IDS = [512, 768];
+
+function loadAuthorBlocksDescriptor(): PublicChallengeDescriptor {
+  const result = validatePublicDescriptor(JSON.parse(authorBlocksText));
+  if (!result.ok) {
+    throw new Error(`authorBlocks fixture 应通过校验:${JSON.stringify(result.violations, null, 2)}`);
+  }
+  return result.value;
+}
+
+/** 构造(可定向破坏的)「公开积木声明面 × 私有接口声明面」双包并执行联合检查。 */
+function checkAuthorPairWith(editPublic?: PairEdit, editPrivate?: PairEdit): CheckerResult {
+  const base = loadAuthorBlocksDescriptor();
+  const publicClone = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+  editPublic?.(publicClone);
+  const privateClone = JSON.parse(
+    JSON.stringify(buildPrivateBundle(base)),
+  ) as Record<string, unknown>;
+  // 私有声明面:公开引用的接口在本包声明(ZS-BLOCK-IFACE-REF 的互证对象)。
+  privateClone["interfaces"] = AUTHOR_BLOCK_INTERFACE_IDS.map((interfaceId) => ({
+    interfaceId,
+    displayText: `接口 ${interfaceId} 的公开展示文本`,
+    effects: [{ effect: "noop" }],
+  }));
+  editPrivate?.(privateClone);
+  return checkChallengePair(
+    publicClone as unknown as PublicChallengeDescriptor,
+    privateClone as unknown as PrivateChallengeBundle,
+  );
+}
+
+/** 取公开包 authorBlocks 指定下标模板(越界属测试自身错误)。 */
+function authorBlock(publicClone: Record<string, unknown>, index: number): Record<string, unknown> {
+  return at(publicClone["authorBlocks"] as Record<string, unknown>[], index);
+}
+
+describe("字段分类检查器:M10 出题者积木声明面规则红灯样例", () => {
+  it("绿灯基线:声明面与私有接口声明面互证成立时零违规", () => {
+    const result = checkAuthorPairWith();
+
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("未声明 authorBlocks 时新规则零触发(既有题目包零影响)", () => {
+    const base = loadPublicDescriptor();
+    const result = checkChallengePair(base, buildPrivateBundle(base));
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("XS-BLOCK-IFACE-REF:公开模板引用的接口未在私有 interfaces 声明被拒绝", () => {
+    const result = checkAuthorPairWith((pub) => {
+      authorBlock(pub, 0)["interfaceId"] = 999;
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-IFACE-REF");
+    expect(violation.path).toBe("/authorBlocks/0/interfaceId");
+    expect(violation.message).toContain("999");
+  });
+
+  it("XS-BLOCK-IFACE-REF:私有包未声明任何接口时公开引用一律被拒绝(隐藏声明不产生存在性信号)", () => {
+    const result = checkAuthorPairWith(undefined, (priv) => {
+      delete priv["interfaces"];
+    });
+
+    expectRule(result, "XS-BLOCK-IFACE-REF");
+    expect(result.ok).toBe(false);
+  });
+
+  it("XS-BLOCK-SLOT-FORM:槽位键重复被拒绝(引用歧义)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const slots = authorBlock(pub, 0)["slots"] as Record<string, unknown>[];
+      at(slots, 1)["key"] = "target";
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-SLOT-FORM");
+    expect(violation.message).toContain("重复");
+  });
+
+  it("XS-BLOCK-SLOT-FORM:动作引用的槽位未声明被拒绝", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const actions = authorBlock(pub, 0)["actions"] as Record<string, unknown>[];
+      const args = at(actions, 0)["args"] as Record<string, unknown>;
+      args["addressHex"] = { slot: "nonexistent" };
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-SLOT-FORM");
+    expect(violation.message).toContain("nonexistent");
+  });
+
+  it("XS-BLOCK-SLOT-FORM:悬空槽位声明(未被任何动作引用)被拒绝", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const slots = authorBlock(pub, 0)["slots"] as Record<string, unknown>[];
+      slots.push({ key: "unused", label: "未被引用的槽位", kind: "immediate" });
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-SLOT-FORM");
+    expect(violation.message).toContain("unused");
+  });
+
+  it("XS-BLOCK-SLOT-FORM:参数位取值既非字面量也非槽位引用被拒绝", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const actions = authorBlock(pub, 0)["actions"] as Record<string, unknown>[];
+      const args = at(actions, 0)["args"] as Record<string, unknown>;
+      args["bytesHex"] = { literal: "41414141" };
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-SLOT-FORM");
+    expect(violation.message).toContain("既非字面量");
+  });
+
+  it("XS-BLOCK-ARG-ALLOW:动作 type 越出 12 公开动作被拒绝(类型断言绕过 Schema 的纵深防御)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const actions = authorBlock(pub, 0)["actions"] as Record<string, unknown>[];
+      at(actions, 0)["type"] = "run_forever";
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-ARG-ALLOW");
+    expect(violation.message).toContain("run_forever");
+  });
+
+  it("XS-BLOCK-ARG-ALLOW:参数位越出该动作公开参数面被拒绝", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const actions = authorBlock(pub, 0)["actions"] as Record<string, unknown>[];
+      const args = at(actions, 0)["args"] as Record<string, unknown>;
+      args["checkpointId"] = "ckpt-1";
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-ARG-ALLOW");
+    expect(violation.message).toContain("checkpointId");
+  });
+
+  it("XS-BLOCK-ARG-ALLOW:必填参数位缺席被拒绝", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const actions = authorBlock(pub, 0)["actions"] as Record<string, unknown>[];
+      const args = at(actions, 0)["args"] as Record<string, unknown>;
+      delete args["bytesHex"];
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-ARG-ALLOW");
+    expect(violation.message).toContain("bytesHex");
+  });
+
+  it("XS-BLOCK-NO-EFFECT:公开模板携带效果语义键被拒绝(效果序列留私有包)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      authorBlock(pub, 0)["effects"] = [{ effect: "exit" }];
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-NO-EFFECT");
+    expect(violation.message).toContain("effects");
+  });
+
+  it("XS-BLOCK-NO-EFFECT:公开模板携带私有顶层属性名被拒绝(D2 实例级复锚)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      authorBlock(pub, 0)["customInstructions"] = [];
+    });
+
+    expectRule(result, "XS-BLOCK-NO-EFFECT");
+  });
+
+  it("XS-BLOCK-NO-EFFECT:公开展示文本注入隐藏区域名被拒绝(I-9 存在性信号)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      authorBlock(pub, 0)["displayText"] = "读取 canary-vault 区域的内容";
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-NO-EFFECT");
+    expect(violation.message).toContain("canary-vault");
+    expect(violation.path).toBe("/authorBlocks/0/displayText");
+  });
+
+  it("XS-BLOCK-NO-EFFECT:公开槽位标签注入 FLAG 寄存器名被拒绝(I-3 汇寄存器不显形)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      const slots = authorBlock(pub, 0)["slots"] as Record<string, unknown>[];
+      at(slots, 1)["label"] = "写入 FLAG0 的值";
+    });
+
+    const violation = expectRule(result, "XS-BLOCK-NO-EFFECT");
+    expect(violation.message).toContain("FLAG0");
+  });
+
+  it("XS-ID-UNIQUE:模板模板 id 重复被拒绝(公开面引用 ID 一族)", () => {
+    const result = checkAuthorPairWith((pub) => {
+      authorBlock(pub, 1)["id"] = "overwrite-return";
+    });
+
+    const violation = expectRule(result, "XS-ID-UNIQUE");
+    expect(violation.message).toContain("overwrite-return");
+  });
+});

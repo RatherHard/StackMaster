@@ -67,13 +67,18 @@ export const PAYLOAD_BLOCKLY_COMPONENT_STYLES: Blockly.Theme.ComponentStyle = {
  *    (`rgba(255,255,255,.2)`),在深底上仍可见,不改写。
  *
  * **未覆盖(真机取证后主动放弃,登记为遗留)**:
- *  - 垃圾桶 / 缩放为**光栅精灵**(`.blocklyTrash` 用 `<image>` 引 sprites),
- *    深底上需要 `filter: invert(1)` 一类补偿;但本样式表所在根 = 画布宿主的
- *    shadow 根,而主题锚 `data-sm-theme` 落在 shadow 树**之外**的宿主元素
- *    (`pwn-memory-vm`)—— shadow 树内的样式表不能匹配树外祖先,`[data-sm-theme
- *    ="dark"] … .blocklyTrash` 实测不命中(真机 `getComputedStyle(...).filter`
- *    恒为 `none`);CSS 亦无「按继承的 `color-scheme` 取 `filter` 值」的手段
- *    (`light-dark()` 只作用于颜色值)。故不写不命中的死规则,遗留见报告。
+ *  - (M1 遗留,**M3 WP-80 已修**)垃圾桶 / 缩放图标取自 `media/sprites.svg`
+ *    (`.trash{fill:#888}` / `.zoom{stroke:#888}`,整张精灵表经 `<image>` 引用),
+ *    在暗色 / terminal 近黑画布上偏暗。**不能**按主题锚改写:本样式表所在根 =
+ *    画布宿主所在的 shadow 根,而主题锚 `data-sm-theme` 落在 shadow 树**之外**
+ *    (嵌入形态 = `pwn-memory-vm`;独立形态 = `sm-workspace` 自身或更外层),
+ *    `[data-sm-theme="dark"] …` 在树内样式表里匹配不到树外祖先(M1 真机实测
+ *    `getComputedStyle(.blocklyTrash).filter` 恒为 `none`);CSS 亦无「按继承的
+ *    `color-scheme` 取 `filter` 值」的手段(`light-dark()` 只作用于颜色值)。
+ *    ⇒ **修法 = 变量承载**(WP-80 定案 (a) 支):新增 token
+ *    `--sm-canvas-sprite-filter`(light `none` / dark·terminal `brightness(1.6)`),
+ *    规则取 `var(...)`,靠**自定义属性继承穿透 shadow 边界**(与其余 token 同机制),
+ *    零祖先选择器、零重新 inject。
  */
 export const PAYLOAD_CANVAS_CSS = `
 .${PAYLOAD_CANVAS_HOST_CLASS} {
@@ -86,6 +91,11 @@ export const PAYLOAD_CANVAS_CSS = `
 
 .${PAYLOAD_CANVAS_HOST_CLASS} .blocklyToolboxCategoryLabel {
   color: var(--sm-fg, canvastext);
+}
+
+.${PAYLOAD_CANVAS_HOST_CLASS} .blocklyTrash,
+.${PAYLOAD_CANVAS_HOST_CLASS} .blocklyZoom {
+  filter: var(--sm-canvas-sprite-filter, none);
 }
 `;
 

@@ -508,6 +508,127 @@
       "type": "boolean",
       "description": "ASLR 开关(WP-43 / ADR-DC1 决议 2):缺省 = false。开启时 memoryLayout.regions[].startAddressHex 为结构描述(镜像内相对布局),真实基址会话期由调试/真实种子各自派生(SeedDeriver 应用面,WP-42);公开投影仍携带会话真实地址。aslrEnabled = true 时必须携带 randomizationNotice(XS-ASLR-NOTICE)。与调试变体镜像契约 aslrEnabled 同名同语义。"
     },
+    "authorBlocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "description": "出题者积木最小声明面(M10 / WP-80;D-MP-6 定案形状,可选顶层字段):出题人向玩家公开的积木模板清单。承载面 = 模板标识 / 公开展示文本 / 公开 ISA 引用(interfaceId,与 encodingTable[].operands[].kind=\"interface\" 同一公开语义——只揭示接口存在性与公开标识) / 参数槽位 / 指向 12 个公开动作的动作序列;不承载效果原语序列(仍留私有包 interfaces[].effects)、隐藏接口存在性、私有谓词或任何 SERVER_ONLY 语义。actions[].type 必须是 SESSION_ACTION_TYPES 子集(枚举即子集闸)。逐字段论证见 docs/contracts/数据分类与秘密零驻留清单.md §12.2 authorBlocks 行。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "displayText", "interfaceId", "slots", "actions"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "description": "模板标识(公开标识符;与私有包 interfaces[].interfaceId 是两套命名空间,条目间唯一,XS-ID-UNIQUE)。"
+          },
+          "displayText": {
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "积木上呈现的公开展示文本(走既有公开文本纪律:控制字符禁令 + 长度预算);不得注入私有语义(XS-BLOCK-NO-EFFECT 扫描)。"
+          },
+          "interfaceId": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 65535,
+            "description": "公开 ISA 引用:指向私有包 interfaces[].interfaceId(互证由 XS-BLOCK-IFACE-REF 承接)。仅揭示接口存在性与公开标识,不揭示效果语义;未在公开面引用的接口不产生存在性信号(I-9 / T-SC1)。"
+          },
+          "slots": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 4,
+            "description": "参数槽位数组(上限 4;D-MP-6 定案)。键唯一、形态取有限枚举(XS-BLOCK-SLOT-FORM)。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "label", "kind"],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                },
+                "label": {
+                  "type": "string",
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "kind": {
+                  "enum": ["address", "immediate", "length"]
+                }
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "动作序列(每项 type ∈ 12 公开动作;参数位取值为字面量或 { slot: <key> } 槽位引用)。编译为原子动作序列,受题目 allowedActions 裁剪。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "args"],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "write_bytes",
+                    "push",
+                    "pop",
+                    "call",
+                    "ret",
+                    "step",
+                    "run_to_event",
+                    "pause",
+                    "undo",
+                    "checkout_checkpoint",
+                    "reset",
+                    "create_checkpoint"
+                  ]
+                },
+                "args": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "addressHex",
+                      "bytesHex",
+                      "checkpointId",
+                      "label",
+                      "pauseOn",
+                      "targetHex",
+                      "valueHex"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*$",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["slot"],
+                        "properties": {
+                          "slot": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "initialProjection": {
       "type": "object",
       "additionalProperties": false,

@@ -35,6 +35,8 @@ import {
 } from "./encoding-rules.js";
 import { checkPrivateBundleRules } from "./private-rules.js";
 import {
+  checkAuthorBlockInterfaceReferences,
+  checkAuthorBlocksNoEffectSemantics,
   checkCanaryCorrespondence,
   checkFlagRegisterPolicy,
   checkHiddenObjectsDisjointFromPublic,
@@ -109,6 +111,9 @@ export function checkPairRules(
     ...checkCodeRegionWritability(publicDescriptor, privateBundle),
     ...checkEncodingTable(publicDescriptor, privateBundle),
     ...checkEncodingProbe(publicDescriptor, privateBundle),
+    // M10/WP-80 出题者积木声明面 × 私有声明面互证。
+    ...checkAuthorBlockInterfaceReferences(publicDescriptor, privateBundle),
+    ...checkAuthorBlocksNoEffectSemantics(publicDescriptor, privateBundle),
   ];
 }
 
