@@ -37,8 +37,10 @@ export interface E2EFixtures {
 
 /**
  * 经开发壳表单建立会话(题目登记 → 签发唯一 embed token → 表单填写 → 提交 →
- * 确认)。供 createdSession 夹具与需要「先注册 WS 注入点、再建会话」的用例
- * 共用。
+ * 确认)。确认含**两级**:①壳状态行(会话已创建)②工作区菜单的权威连接态
+ * `connection-status=connected`(WSS 升级为异步,壳文案不是就绪信号 —— 取证
+ * 与理由见函数内第 5 步)。供 createdSession 夹具与需要「先注册 WS 注入点、
+ * 再建会话」的用例共用。
  *
  * 租户隔离:compose 拓扑的并发会话预算是真实生产行为(D-API-50,默认按租户),
  * 用例间以唯一租户 + 该租户下的幂等题目登记隔离(同一题目内容重复登记确定性
@@ -92,8 +94,30 @@ export async function createSessionViaForm(
   await page.locator("form.session-form input[name=\"embedSessionId\"]").fill(embedSessionId);
   await page.locator("form.session-form input[name=\"embedToken\"]").fill(issued.embedToken);
   await page.locator("form.session-form button.create-button").click();
-  // 4. 壳状态行确认(会话已创建并连接;失败路径会改写为「会话创建失败」)。
+  // 4. 壳状态行确认(会话已创建;失败路径会改写为「会话创建失败」)。
   await expect(page.locator("#dev-status")).toContainText("会话已创建并连接");
+  // 5. **动作通道真实就绪**(必须先于任何 `client.sendAction` / 菜单动作)。
+  //
+  // 为什么必须有这一步(2026-09-17 逐项取证,`descriptor.spec.ts:88` 红灯的
+  // 真因)——壳文案「会话已创建并连接」在 `client.connect()` 调用之后**立即**
+  // 写入(`src/main.ts:399-403`),而 WSS 升级是**异步**的 ⇒ 该文案**不是**
+  // 连接就绪信号;`SessionClient#connect()` 只是把状态置为 `connecting` 并发起
+  // 握手(`packages/vm-ui/src/client/session-client.ts:413-429`)。真机实测
+  // (同一拓扑 / 同一题 / 同一 spec,2026-09-17):
+  //   chromium:文案置位 → `connection-status=connected` ≈ **11 ms**;
+  //   firefox :同口径 ≈ **1249 ms**(首连明显更慢,**但最终成功**)。
+  // 故既有的第 4 步门槛在 chromium 上"碰巧"够用,在 firefox 上不足:紧随其后
+  // 的首次 `sendAction` 抛 `not_connected`(「动作通道未连接:断线期间不投递
+  // 动作」),用例在 `page.evaluate` 处直接报错。
+  //
+  // **这是断言(就绪口径)问题,不是产品缺陷**:两引擎最终都到达 `connected`;
+  // vm-ui 在 `connecting` 期间拒绝投递动作是契约内的正确行为(该错误分支是
+  // 有意的对齐语义,不是缺陷);且与视口 / 像素几何无关(本用例不设视口,
+  // 原「视口几何敏感」挂账口径经取证被推翻)。
+  //
+  // 就绪门槛取工作区菜单的**权威连接态**(结构选择器 + 枚举值),不依赖任何
+  // 几何 / 像素 / 文案排版。
+  await expect(menuStatus(page, "connection-status")).toHaveText("connected");
   const status = await page.locator("#dev-status").textContent();
   const match = /sessionId=([^)]+)/.exec(status ?? "");
   return match === null ? null : (match[1] ?? null);

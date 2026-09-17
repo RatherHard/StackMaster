@@ -86,6 +86,22 @@ test.describe("M2 正式下发通道(compose 全拓扑 + plugin-dev 壳)", () =>
   });
 
   test("动作拒绝的错误解释由正式下发 teachingNote 驱动(FE-ED-07)", async ({ page }) => {
+    // ── 本用例 = M3 遗留移交清单第 3 项的红灯锚点(`descriptor.spec.ts:88`)──
+    // 归因与定案(2026-09-17 逐项取证;**原「视口 / 断言几何敏感」口径被推翻**):
+    //   现象:firefox 下长期红。实测 `--project=firefox --repeat-each=3` 稳定
+    //   **3/3 红**,失败点是下面 `page.evaluate` 里的**首次** `client.sendAction`
+    //   —— 抛 `not_connected`「动作通道未连接:断线期间不投递动作」,与几何无关
+    //   (本用例不设视口、不做任何像素断言)。
+    //   取证:失败瞬间页面快照 = 壳状态行已写「会话已创建并连接」,而工作区菜单
+    //   `connection-status` = **connecting**;探针实测「壳文案置位 → 真正
+    //   `connected`」的差值 **chromium ≈ 11 ms / firefox ≈ 1249 ms**(firefox
+    //   首连更慢但**最终成功**,两引擎均无连接缺陷)。
+    //   定案:**(b) 断言敏感(就绪口径过弱)**,非产品缺陷 —— 壳文案在
+    //   `client.connect()` 之后立即写入(`src/main.ts:399-403`),本身不是连接
+    //   信号;而 vm-ui 在 `connecting` 期间拒绝投递动作是契约内正确行为。
+    //   修复:就绪门槛改取权威连接态,落在共用夹具
+    //   `fixtures.ts#createSessionViaForm` 第 5 步。完整取证与影响面登记:
+    //   `docs/develop/decisions-m3/遗留-e2e-descriptor.md`(D-API-141)。
     const tenantId = `e2e-wp54-${randomBytes(4).toString("hex")}`;
     const challengeId = `chal-wp54-${randomBytes(5).toString("hex")}`;
     const sessionId = await createSessionViaForm(page, {
