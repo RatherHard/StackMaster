@@ -48,16 +48,25 @@ export function specialDisplaySemantic(byte: number): SpecialDisplaySemantic {
  *  - `byte` 为 null(窗口外)→ 统一占位 cell(`cell-outside`,D3 窗口外标记);
  *  - 否则 → 特殊显示字符 + 语义类名 + `data-byte`(2 位小写十六进制,便于
  *    视图层 / 测试按字节定位)。
+ *
+ * **模板空白收窄(M3 遗留-5 同族实例)**:`cell-special` 是
+ * `white-space: pre` 单元格(`views/byte/byte-view.ts` 的
+ * `.row-special .cell-special` 规则)⇒ 标签内部紧跟的换行 / 缩进会被**逐字
+ * 保留为行盒**:每个 cell 因此产生 2 个行盒,数据行实测 187.17px(免折行宽)/
+ * 236.8~259.6px(真实列宽),而应然值 = 行单位 20.8px。
+ * 故两处插值一律**紧贴标签尖括号**书写(开标签 `>` 与插值起始符之间零空白)。
+ * 只删排版空白:**不改内容、不删类名、不删 `data-byte` / `data-outside`、
+ * 不动 `SPECIAL_DISPLAY_PLACEHOLDER`**;属性之间的换行无害(pre 只保留
+ * **内容**空白,标签内部属性区的换行不进入任何行盒),故保留原有换行排版。
+ * 机检护栏见 `test/render/pre-whitespace-family.test.ts`。
  */
 export function renderSpecialDisplayCell(byte: number | null): TemplateResult {
   if (byte === null) {
-    return html`<span class="cell-special cell-outside" data-outside>
-      ${SPECIAL_DISPLAY_PLACEHOLDER}</span>`;
+    return html`<span class="cell-special cell-outside" data-outside>${SPECIAL_DISPLAY_PLACEHOLDER}</span>`;
   }
   const semantic = specialDisplaySemantic(byte);
   return html`<span
     class="cell-special cell-${semantic}"
     data-byte="${byte.toString(16).padStart(2, "0")}"
-  >
-    ${specialDisplayChar(byte)}</span>`;
+  >${specialDisplayChar(byte)}</span>`;
 }

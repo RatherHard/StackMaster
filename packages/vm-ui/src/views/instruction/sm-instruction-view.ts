@@ -645,17 +645,18 @@ export class SmInstructionView extends LitElement {
         data-instruction-address=${entry.addressHex}
         data-client-step-pause=${isClientPause ? "true" : nothing}
       >
-        <!-- 地址列 / 伪机器码列是 white-space: pre 单元格(M3 遗留-5 ①)⇒
-             模板排版换行会被**逐字保留为行盒**(幻影空行):修复前地址列 6 个
-             行盒、行高实测 113px(表头行 21px)、一屏仅 ≈1.5 行。此处一律用
-             「模板空白收窄」写法:插值紧贴标签尖括号书写(尖括号与插值起始符
-             之间零空白 —— 本注释内禁写反引号与插值起始符,否则模板字面量会被
-             提前闭合)、按钮内部文本同样紧贴(按钮继承 pre,内部换行照样计入
-             行高),列内只保留一个显式单空格分隔按钮与地址。**不改任何 CSS
-             属性**:pre 的禁换行 / 保序语义原样保留,被移除的只有「模板排版的
-             幻影换行」这一非语义产物。
+        <!-- 地址列 / 伪机器码列是 white-space: pre 单元格(M3 遗留-5 ①;伪汇编
+             列是 white-space: pre-wrap)⇒ 模板排版换行会被**逐字保留为行盒**
+             (幻影空行):修复前地址列 6 个行盒、行高实测 113px(表头行 21px)、
+             一屏仅 ≈1.5 行。此处一律用「模板空白收窄」写法:插值紧贴标签尖括号
+             书写(尖括号与插值起始符之间零空白 —— 本注释内禁写反引号与插值起始
+             符,否则模板字面量会被提前闭合)、按钮内部文本同样紧贴(按钮继承
+             pre / pre-wrap,内部换行照样计入行高),列内只保留一个显式单空格分隔
+             按钮与地址。**不改任何 CSS 属性**:pre 的禁换行 / 保序语义原样保留,
+             被移除的只有「模板排版的幻影换行」这一非语义产物。
              回归护栏见 test/views/instruction/sm-instruction-view.test.ts
-             「pre 单元格零保留换行」组;真机几何见 test/geometry/。 -->
+             「pre 单元格零保留换行」组 + 全包静态机检
+             test/render/pre-whitespace-family.test.ts;真机几何见 test/geometry/。 -->
         <span class="row-address" role="cell"
           >${this.#renderRowRegisterAnnotation(entry)}<button
             type="button"
@@ -683,9 +684,7 @@ export class SmInstructionView extends LitElement {
                 data-jump-target=${jumpTargetHex}
                 title=${t("instr.jumpTargetTitle", { target: safeFormat(jumpTargetHex, ADDRESS_MIN_DIGITS) })}
                 @click=${() => this.jumpToAddress(jumpTargetHex)}
-              >
-                → ${safeFormat(jumpTargetHex, ADDRESS_MIN_DIGITS)}
-              </button>`}</span
+              >→ ${safeFormat(jumpTargetHex, ADDRESS_MIN_DIGITS)}</button>`}</span
         >
       </div>
     `;

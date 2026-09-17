@@ -569,8 +569,24 @@ describe("M3 遗留-5 ①:pre 单元格零保留换行(指令行行高的根因)
     expect(address?.textContent).toBe("○ 0x00401000");
   });
 
-  it("命中行左缘标注(子组件 shadow 内)不因 pre 继承产生保留换行", async () => {
-    const source = new FakeDebugSource(ENTRIES);
+  it("伪汇编列(.row-text,pre-wrap)内的跳转目标按钮:按钮内部文本零保留换行", async () => {
+    // 同族实例(M3 遗留-5 ① 的漏网面):`.row-text` 声明 `white-space: pre-wrap`,
+    // 而跳转目标按钮**继承**该取值 ⇒ 按钮内部模板换行同样计进行高(修复前 3 个行盒)。
+    const view = await mountView(new FakeDebugSource(ENTRIES));
+    const text = rowsOf(view)[0]?.querySelector(".row-text");
+    expect(text, "伪汇编列单元格缺席").not.toBeNull();
+    const toggle = text?.querySelector(".jump-target");
+    expect(toggle, "跳转目标按钮缺席(ENTRIES[0] 带 jumpTargetHex)").not.toBeNull();
+    expect(
+      preservedLineBoxes(toggle),
+      `按钮保留换行:${JSON.stringify(toggle?.textContent)}`,
+    ).toBe(1);
+    // 槽内文本零前后空白:按钮内只有「→ 0x401010」(显式单空格,非模板缩进)。
+    expect(toggle?.textContent ?? "").not.toMatch(/^\s|\s$/);
+    expect(toggle?.textContent ?? "").toContain("→ 0x00401010");
+  });
+
+  it("命中行左缘标注(子组件 shadow 内)不因 pre 继承产生保留换行", async () => {    const source = new FakeDebugSource(ENTRIES);
     const view = await mountView(source);
     view.registerHits = [
       { registerName: "RIP", valueHex: "0x401004", targetAddressHex: "0x401004", regionId: "region-code", offset: 0 },
@@ -593,6 +609,8 @@ describe("M3 遗留-5 ①:pre 单元格零保留换行(指令行行高的根因)
     const cssText = styles.map((style) => style.cssText ?? "").join("\n").replace(/\s+/g, " ");
     expect(cssText).toMatch(/\.row-address \{ white-space: (pre|nowrap)/);
     expect(cssText).toMatch(/\.row-bytes \{ white-space: (pre|nowrap)/);
+    // 伪汇编列同为保留换行的空白语义(pre-wrap)⇒ 其槽内按钮不得再引入模板换行。
+    expect(cssText).toMatch(/\.row-text \{ white-space: (pre|pre-wrap|break-spaces)/);
   });
 });
 
