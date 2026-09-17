@@ -31,7 +31,8 @@
   投影经 ProjectionPolicy 白名单脱敏后才能离开
 
 ═══ 信任域 4:裁决审计域(独立部署)═══
-  独立 verifier(重放动作日志裁决)+ 管理后台
+  独立 verifier(重放动作日志裁决)+ admin 最小管理面(只读:题目登记列表 /
+  裁决查询 / 成绩导出;独立凭证与网络域,不入插件链路)
 ```
 
 由结构保证的三条规则:
@@ -59,7 +60,8 @@ stackmaster/
 ├── apps/                     # TS 应用(阶段三起落地)
 │   ├── session-api/          # 会话编排器(信任域 2;工程载体已落地,阶段三 WP-1)
 │   ├── verifier/             # 独立裁决服务(信任域 4)
-│   ├── admin/                # 管理后台
+│   ├── admin/                # 最小管理面(只读:题目登记 / 裁决查询 / 成绩导出;独立凭证 +
+│   │                         #   独立网络域 + 独立只读库角色 admin_ro,不入插件链路)——信任域 4
 │   └── plugin-dev/           # 插件 iframe 开发壳
 ├── packages/                 # TS 包(pnpm workspaces)
 │   ├── protocol/             # @stackmaster/protocol:Zod 契约 → JSON Schema(已落地,会话动作协议 v1)

@@ -13,6 +13,16 @@
  * apps/(session-api、verifier、admin、plugin-dev)自阶段二起搭建;
  * 规则中一并纳入,避免后续补规则时出现窗口期。
  *
+ * 中期 M3 WP-79(2026-09-17,D-MP-5 分支 A「落地 apps/admin 只读最小面」)
+ * 对本文件的两处演进(与 tooling/dependency-boundary-self-test.mjs 同批,
+ * 后者新增两组反例证明"改白名单不等于放松门禁"):
+ *  - `challenge-schema-dependents-restricted` 的 pathNot 由
+ *    `^apps/(session-api|verifier)/` 扩为 `^apps/(session-api|verifier|admin)/`
+ *    ——管理面按公开包 Schema 展示题目登记元数据,与 verifier 同款先例;
+ *  - 新增 `admin-workspace-deps-allowlist`(镜像 verifier 那条):
+ *    admin 对工作区包只允许 protocol / challenge-schema,禁 app→app 依赖
+ *    (管理面数据面 = 自有只读角色直连 PG,D-API-135)。
+ *
  * 阶段三 WP-1(2026-09-09):apps/session-api 工程载体落地,规则从两个方向
  * 接线 apps/——
  *  - 三个"后端消费者白名单"规则的 pathNot 增补 ^apps/ 形态(此前只排除
@@ -54,12 +64,12 @@ module.exports = {
       name: "challenge-schema-dependents-restricted",
       severity: "error",
       comment:
-        "challenge-schema 只能被后端 TS 包(challenge-compiler、session-api、verifier)依赖;浏览器侧与编排之外的应用不得依赖。排除包自身(其内部模块边不属于“依赖方”约束)。",
+        "challenge-schema 只能被后端 TS 包(challenge-compiler、session-api、verifier)与信任域 4 独立应用(session-api、verifier、admin)依赖;浏览器侧与其余应用不得依赖。排除包自身(其内部模块边不属于“依赖方”约束)。WP-79(2026-09-17)按 D-MP-5 分支 A 把 admin 纳入白名单:管理面必须按公开包 Schema 展示题目登记元数据(challenges / challenge_versions 语义),与 verifier 同款先例;白名单演进与 tooling/dependency-boundary-self-test.mjs 同批(自测新增 apps/plugin-dev → challenge-schema 反例,证明本规则对白名单外应用仍真实可红灯)。",
       from: {
         path: "^(packages|apps)/",
         pathNot: [
           "^packages/(challenge-compiler|session-api|verifier)/",
-          "^apps/(session-api|verifier)/",
+          "^apps/(session-api|verifier|admin)/",
           "^packages/challenge-schema/",
         ],
       },
@@ -166,6 +176,17 @@ module.exports = {
       comment:
         "verifier(信任域 4,WP-61)对工作区包只允许依赖 protocol / challenge-schema(5.5 依赖方向:verifier 零编排核心依赖——裁决面在引擎进程内,TS 侧纯搬运与落库);其余工作区包一律禁止。",
       from: { path: "^apps/verifier/" },
+      to: {
+        path: "^packages/",
+        pathNot: "^packages/(protocol|challenge-schema)/",
+      },
+    },
+    {
+      name: "admin-workspace-deps-allowlist",
+      severity: "error",
+      comment:
+        "admin(信任域 4 最小管理面,WP-79 / D-MP-5 分支 A)对工作区包只允许依赖 protocol(契约复用的唯一来源:HostScoresResponseSchema / VerdictQueryResponseSchema / PublicErrorSchema)与 challenge-schema(题目登记列的公开包 Schema 语义);其余工作区包一律禁止——**特别是不得依赖 apps/session-api 或 packages/session-core**:管理面数据面是自有只读角色 admin_ro 直连 PG,app→app 依赖会把信任域 4 与信任域 2 的构建图耦合,使“独立部署”退化为同一发布单元。新依赖进入允许清单须先过契约变更评审(WP-1 §1.3)。",
+      from: { path: "^apps/admin/" },
       to: {
         path: "^packages/",
         pathNot: "^packages/(protocol|challenge-schema)/",

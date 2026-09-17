@@ -30,6 +30,15 @@
  *                                                  (WP-F1:包内边经 pathNot 排除)
  *   正控 12 react-wrapper → embed-runtime / protocol 零违规
  *                                                  (WP-51 放行横向边 + protocol 公开入口)
+ *   反例 13 apps/admin → 未登记工作区包            admin-workspace-deps-allowlist
+ *                                                  (WP-79 新增规则;不得误伤其它应用的
+ *                                                   允许清单规则)
+ *   反例 14 apps/plugin-dev → challenge-schema     challenge-schema-dependents-restricted
+ *                                                  (WP-79 扩白名单后,规则对**名单外**
+ *                                                   应用仍真实可红灯——改白名单不等于放松)
+ *   正控 15 apps/admin → protocol / challenge-schema 零违规
+ *                                                  (WP-79 允许清单全量 + challenge-schema
+ *                                                   白名单入位后的正向对照)
  *   对照组  apps/session-api → protocol / challenge-schema /
  *           challenge-compiler / session-core       零违规(允许清单全量,无误报)
  *
@@ -103,6 +112,20 @@ const FIXTURE_FILES = {
   // 反例 9:embed-runtime → web-component(→ web-component 方向无放行边,WP-52)。
   "packages/embed-runtime/src/ce-web-component.ts":
     'export * from "../../../packages/web-component/src/ui/inner";\n',
+  // 反例 13(WP-79):apps/admin → 未登记工作区包(admin 允许清单只放行
+  // protocol / challenge-schema)。
+  "apps/admin/src/ce-foreign-package.ts":
+    'export * from "../../../packages/telemetry-extra/src/index";\n',
+  // 反例 14(WP-79):apps/plugin-dev → challenge-schema(白名单外应用;
+  // 证明 challenge-schema-dependents-restricted 扩白名单后仍真实可红灯)。
+  "apps/plugin-dev/src/ce-challenge-schema.ts":
+    'export * from "../../../packages/challenge-schema/src/index";\n',
+  // 正控 15(WP-79):apps/admin 允许清单全量(必须零违规)。
+  "apps/admin/src/clean-allowlist.ts": [
+    'export * from "../../../packages/protocol/src/index";',
+    'export * from "../../../packages/challenge-schema/src/index";',
+    "",
+  ].join("\n"),
   // 对照组:允许清单全量(必须零违规)。
   "apps/session-api/src/clean-allowlist.ts": [
     'export * from "../../../packages/protocol/src/index";',
@@ -117,6 +140,8 @@ const FIXTURE_FILES = {
 const ENTRY_FILES = Object.keys(FIXTURE_FILES).filter(
   (file) =>
     file.startsWith("apps/session-api/src/") ||
+    file.startsWith("apps/admin/src/") ||
+    file === "apps/plugin-dev/src/ce-challenge-schema.ts" ||
     file === "packages/session-core/src/ce-browser-package.ts" ||
     file === "packages/vm-ui/src/index.ts" ||
     file === "packages/vm-ui/src/ce-react-wrapper.ts" ||
@@ -140,8 +165,13 @@ const EDGE_EXPECTATIONS = [
   {
     label: "反例2 apps→未登记包",
     edgeSuffix: "telemetry-extra/src/index.ts",
+    fromSuffix: "apps/session-api/src/ce-foreign-package.ts",
     expect: ["session-api-workspace-deps-allowlist"],
-    reject: ["no-backend-dependency-on-browser-packages"],
+    reject: [
+      "admin-workspace-deps-allowlist",
+      "verifier-workspace-deps-allowlist",
+      "no-backend-dependency-on-browser-packages",
+    ],
   },
   {
     label: "反例3 apps→浏览器包(双规则)",
@@ -268,6 +298,49 @@ const EDGE_EXPECTATIONS = [
     ],
   },
   {
+    label: "反例13 apps/admin→未登记包(WP-79)",
+    edgeSuffix: "telemetry-extra/src/index.ts",
+    fromSuffix: "apps/admin/src/ce-foreign-package.ts",
+    expect: ["admin-workspace-deps-allowlist"],
+    reject: [
+      "session-api-workspace-deps-allowlist",
+      "verifier-workspace-deps-allowlist",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    label: "反例14 apps/plugin-dev→challenge-schema(WP-79 白名单外仍红灯)",
+    edgeSuffix: "challenge-schema/src/index.ts",
+    fromSuffix: "apps/plugin-dev/src/ce-challenge-schema.ts",
+    expect: ["challenge-schema-dependents-restricted"],
+    reject: [
+      "admin-workspace-deps-allowlist",
+      "session-api-workspace-deps-allowlist",
+      "verifier-workspace-deps-allowlist",
+    ],
+  },
+  {
+    label: "正控15a apps/admin→challenge-schema 放行(WP-79)",
+    edgeSuffix: "challenge-schema/src/index.ts",
+    fromSuffix: "apps/admin/src/clean-allowlist.ts",
+    expect: [],
+    reject: [
+      "admin-workspace-deps-allowlist",
+      "challenge-schema-dependents-restricted",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    label: "正控15b apps/admin→protocol 放行(WP-79)",
+    edgeSuffix: "protocol/src/index.ts",
+    fromSuffix: "apps/admin/src/clean-allowlist.ts",
+    expect: [],
+    reject: [
+      "admin-workspace-deps-allowlist",
+      "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
     label: "对照组 apps→允许清单全量",
     edgeSuffix: "packages",
     expect: [],
@@ -373,7 +446,9 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    console.log("[self-test] 依赖边界反例自检全绿:16 组边期望全部满足");
+    console.log(
+      `[self-test] 依赖边界反例自检全绿:${EDGE_EXPECTATIONS.length} 组边期望全部满足`,
+    );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
   }

@@ -49,6 +49,7 @@ services:
     networks:
       - default
       - verifier-net
+      - admin-net
   minio:
     networks:
       - default
@@ -241,6 +242,64 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # ── WP-79:管理面最小只读面(信任域 4;独立凭证 / 独立网络域 / 独立部署)──
+  # 权威口径 docs/项目计划书.md:807(管理面临时凭证不得复用会话凭证或宿主令牌)
+  # 与 :715(frame-ancestors 分离)。数据面 = 自有只读角色 admin_ro 直连 PG,
+  # **不 import** session-api 任何内部实现;服务复用 = 契约复用(protocol)。
+  admin-db-init:
+    # 一次性最小授权(幂等;执行前置 = 迁移已应用 ⇒ session-api healthy)。
+    image: postgres:16
+    environment:
+      PGHOST: postgres
+      PGUSER: stackmaster
+      PGPASSWORD: stackmaster-dev
+      PGDATABASE: session_api
+    volumes:
+      - ./admin-db-init.sql:/init/admin-db-init.sql:ro
+    entrypoint: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init/admin-db-init.sql"]
+    networks:
+      - admin-net
+    depends_on:
+      session-api:
+        condition: service_healthy
+      session-api-db-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  admin:
+    image: stackmaster/session-api:dev
+    command: ["node", "apps/admin/dist/index.js"]
+    environment:
+      ADMIN_HOST: 0.0.0.0
+      ADMIN_PORT: "3200"
+      # ── 独立凭证(摘要形态;明文只在运维侧持有,**不得复用**
+      #    SESSION_API_HOST_BACKEND_TOKEN / 会话凭证)──
+      # 合成 dev 值:明文 "admin-dev-credential-0123456789" 的 sha256。
+      ADMIN_CREDENTIAL_SHA256: "369a694186b2ea0c267c8f72ff95abbadec567840171ce3aee62f9bfcd259023"
+      # ── 凭证 × 租户绑定白名单(O-MP-6 同源;空 = 数据面整体 404 同形)──
+      ADMIN_TENANTS: "admin-tenant"
+      ADMIN_POSTGRES_URL: postgres://admin_ro:admin-ro-dev@postgres:5432/session_api
+    ports:
+      - "13200:3200"
+    networks:
+      - admin-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      admin-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3200/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    restart: "no"
+
 networks:
   verifier-net:
+    driver: bridge
+  # WP-79:管理面独立网络域(postgres 双宿;session-api / verifier / 插件链路
+  # 均不入该网)。管理面零浏览器可达面:不进插件链路、不进 CORS 白名单。
+  admin-net:
     driver: bridge

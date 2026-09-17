@@ -130,8 +130,8 @@ services:
         - CMD-SHELL
         - >-
           psql -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM pg_roles
-          WHERE rolname IN ('session_app', 'verifier')
-          AND NOT rolsuper AND NOT rolbypassrls" | grep -qx 2
+          WHERE rolname IN ('session_app', 'verifier', 'admin_ro')
+          AND NOT rolsuper AND NOT rolbypassrls" | grep -qx 3
       interval: 5s
       timeout: 5s
       retries: 30

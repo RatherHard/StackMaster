@@ -31,8 +31,8 @@
 -- CREATEDB / CREATEROLE ⇒ 缺省 false(RLS 强制保持的前提,见文件末只读
 -- 断言)。
 -- 口令的唯一来源 = 本文件(WP-79 后两个治理 init 不再含口令字面值;口径零变更:
--- session_app = session-app-dev,verifier = verifier-dev,与 compose/app.yaml /
--- integration.env 的连接串一致)。
+-- session_app = session-app-dev,verifier = verifier-dev,admin_ro = admin-ro-dev,
+-- 与 compose/app.yaml / integration.env 的连接串一致)。
 -- 凭据为本地开发 / CI 专用合成值,严禁用于任何真实环境。
 
 DO $$
@@ -42,6 +42,10 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'verifier') THEN
     CREATE ROLE verifier LOGIN PASSWORD 'verifier-dev';
+  END IF;
+  -- WP-79:信任域 4 管理面只读角色(独立凭证;与 session_app / verifier 不共享)
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'admin_ro') THEN
+    CREATE ROLE admin_ro LOGIN PASSWORD 'admin-ro-dev';
   END IF;
 END
 $$;
@@ -54,9 +58,9 @@ DO $$
 BEGIN
   IF EXISTS (
     SELECT FROM pg_roles
-    WHERE rolname IN ('session_app', 'verifier') AND (rolsuper OR rolbypassrls)
+    WHERE rolname IN ('session_app', 'verifier', 'admin_ro') AND (rolsuper OR rolbypassrls)
   ) THEN
-    RAISE EXCEPTION '角色 session_app / verifier 不得为超级用户或 BYPASSRLS 角色(行级租户策略强制前提,D-API-101)';
+    RAISE EXCEPTION '角色 session_app / verifier / admin_ro 不得为超级用户或 BYPASSRLS 角色(行级租户策略强制前提,D-API-101)';
   END IF;
 END
 $$;
