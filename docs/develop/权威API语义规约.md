@@ -1239,6 +1239,362 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **可复用的口径结论(重要,禁再犯)**:**`graytext` 在浅底与深底都不达标**(白底 ≈3.9:1、暗底 4.47:1)⇒ 「降低前景色」这一表达次要性的手段与 **13px 正文门槛结构性不相容**;凡需表达「次要 / 降级 / 占位」的文本,改用**字体族 / 文案 / 边框形态**等非对比度手段,不得靠压暗前景色。
 - **门禁形态自查**:`e2e-matrix` **不进 turbo 任务图**(保持 CI 承载;本地复跑命令与 env 清单在 `apps/plugin-dev/README.md`)。**E-3 未达成(如实口径 = 部分达成)**:job 已落地并**已实跑**(run 31 起),「在 CI 实跑绿至少一次」仍未取得。**2026-09-17 订正(勿沿用)**:原记「本机 webkit 为**环境级阻断**、非产品缺陷 ⇒ 这正是该义务被限定为 WebKit **linux** 复跑的原因」**已被彻底推翻** —— ubuntu 的 `e2e-matrix` job 跑起来后,webkit 以**同一形态**失败(矩阵 12 格全为 webkit 连接面,chromium / firefox 同格全绿);握手级 + 服务端双侧取证定案真因 = **WSS 升级被 `401` 拒**(WebKit 跨源握手**不携带会话 Cookie**;升级认证走凭证 preHandler,而客户端「**同源**升级自动携带 Cookie」的前提在「插件页 `:5174` ≠ API `:13000`」的拓扑下**不成立**)⇒ **真实产品缺陷,非环境阻断**。修法方向(三种)、两个未定分项与「属认证面改动、须走契约 + 安全审查」的处置纪律,登记于 `docs/phases/中期任务分解.md` §二 WP-74 末段与 M3 收口遗留移交清单第 1 项。
 
+## 三·二十三、中期 M3「成绩只读面 / 管理面 / 出题者声明面 / canary 收口 / 采集面 / 体积拆分」(中期 WP-78 ~ WP-83 与 M3 遗留项;D-API-122 ~ 148)
+
+> **本节并入纪律与引用解析(主控 2026-09-17 补注)**:
+> 1. 本节各条**逐字**取自 M3 各执行 lane 的片段文件 `docs/develop/decisions-m3/<来源>.md`,**零改写零精简**(并入时以脚本逐块机检 19/19 等同)。
+> 2. **只收 `### D-API-NNN` 条目本体及其要点列表**;片段文件里的非条目内容(**工作包定位 / 红灯与证据摘要表 / 「如实登记的限制与遗留」/ 事故记录 / 实测附录**)刻意**不重复进本节**,仍以片段文件为唯一落点。
+> 3. ⇒ **本节条目正文里出现的 `§x.y`、`§六 遗留 N`、`§2.1`、`§4` 一类内联引用,一律指回该条目所属的片段文件**(如 D-API-146 引 `§3.2` / `§六 遗留 2` ⇒ 见 `docs/develop/decisions-m3/WP-83.md` 的对应小节),**不指本文件**。请勿把这类引用当成权威规约内部锚点。
+> 4. 编号**有意非连续**:`127 ~ 130` 归 WP-80、`131 ~ 133` 归 WP-81、`145` 归 M3 遗留第 6 项 —— 三者在本节以**占位段**承载,待其片段产出后**原位替换**,无需调整顺序。
+
+### D-API-122 宿主成绩同步面 = **新契约族 + 宿主凭证**(路由 `GET /host/scores`)
+
+- **决策**:
+  1. **路由**:`GET /host/scores`(`/host/*` 是宿主后端(平台服务端)管理面命名空间;与单条呈现面 `/verdicts/:submissionId`、生命周期面 `/sessions*` 并列,零路径冲突)。GET 无请求体 ⇒ 契约面**只有响应体**(沿 D-API-76 / D-API-83 先例);查询参数属实现面登记(见 D-API-124)。
+  2. **认证 = 宿主凭证,复用同一实现**:`Authorization: Bearer <SESSION_API_HOST_BACKEND_TOKEN>`(与 embed token 签发端点同一把共享凭证),校验复用 `apps/session-api/src/auth/plugin.ts` 的 `hostBackendTokenMatches`(sha256 + `timingSafeEqual` 常数时间)。该函数原为模块私有,WP-78 **导出**(经 `auth/index.ts` 的 `export *` 自动露面)——**零副本**:宿主凭证校验在进程内只有一处实现。
+  3. **拒绝面 = 统一 401,逐字节沿 D-API-14**:缺失 / 畸形 / 长度不符 / 非 Bearer 方案 / 取值错误**全部**返回 `401` + `{code:"invalid_input_format", message:"authentication failed"}`,零原因差异(防枚举)。宿主凭证是**静态共享令牌**(无 TTL / 无 jti / 无签名面)⇒ 与本凭证相关的凭证矩阵只有「缺失 / 畸形 / 错误」三态,不存在过期态。
+  4. **会话凭证不得通行**:有效会话凭证(签名合法)在本接口同样 401——宿主面与会话面**凭证域严格分离**(宿主面的身份是「哪个平台」,不是「哪个用户」)。反向同理:宿主凭证不通行任何会话面。
+  5. **GET 免 CSRF 门**:宿主凭证经 `Authorization` 头呈递,浏览器不会自动附加(非 Cookie 向量)⇒ 不适用 D-API-17 的 CSRF 闸;沿既有 GET 面口径(与 D-API-83 的「GET 非变更方法不走 CSRF 闸」同款)。
+  6. **独立契约族**:`HOST_SCORES_PROTOCOL_VERSION = 1` + `SUPPORTED_HOST_SCORES_PROTOCOL_VERSIONS = [1]` + `$id` 命名空间 `https://stackmaster.dev/schemas/host-scores/v1`(先例:`VERDICT_CHANNEL_PROTOCOL_VERSION` / `DEBUG_CHANNEL_PROTOCOL_VERSION`);响应载荷**不携带版本字段**(N-1 受理是路由级事实,回显版本判定细节即扩大探测面,沿 §6.5 / §6.10 先例)。
+- **理由**:
+  - 宿主凭证而非新凭证:平台已有该凭证(签发 embed token 用它),不引入新秘密、不新增轮换面;分离凭证域 = 浏览器侧任何凭证都换不来批量成绩面(9.2「浏览器完全不可信」的直接兑现)。
+  - 不设「cookie 形态」宿主面:宿主面是服务端间调用,浏览器可达面为零(载荷不含按用户切分的能力,身份是租户级)——把面做成浏览器可达只会平白扩大探测面。
+  - 统一 401 而非 403:与 WP-2 统一失败面同码同文案,使「凭证不存在 / 凭证错误 / 面未开通」在响应面**不可区分**(面未开通另由 404 承载,见 D-API-124 第 1 条)。
+- **红灯位置**:`apps/session-api/test/routes/host-scores-routes.test.ts`「宿主凭证门」6 例(缺失 / 5 种畸形或错误形态 / 会话凭证不得通行 / 缺失与错误同形);compose 全拓扑实跑 1 例(无凭证 401 逐字节)。
+- **影响面**:`auth/plugin.ts` 导出一个既有函数(行为零改动);`server.ts` / `runtime.ts` 装配新增一路由;不新增数据库角色、不新增迁移、不新增 MinIO 桶。
+
+### D-API-123 载荷公开上限面、keyset 游标语义与终态确定性
+
+- **决策**:
+  1. **载荷 = 公开上限面,恰两键 + 恰七键**:
+     - 信封:`{ items: HostScoreRecord[], nextCursor: string | null }`
+     - 记录:`{ id, submissionId, sessionId, challengeId, challengeVersion, verdict, decidedAt }`(七字段,`strictObject`)
+     - `verdict` = WP-2 冻结 11 值结果类型(`VerdictResultSchema` 复用,**零新增字面**);`decidedAt` = epoch 秒整数(≥0);`challengeVersion` = 语义化版本图案 `^[0-9]+\.[0-9]+\.[0-9]+$`(复用 `CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE`,与 `session-command-request.ts` 同源)。
+  2. **结构性负面结论(契约层无表达位)**:零 `detail`(判题明细 / 谓词 / 隐藏测试命中 / 重放中间态)、零 `reference`(完整 IR / 原始快照 / 完整事件日志)、零 `verifierRunId`、零内部堆栈、零 **`tenantId` 回显**、零聚合统计(总数 / 通过率 / 分布 / 队列位置 / 进度)。`strictObject`(`additionalProperties: false`)使任何一项的出现即**拒绝**,不存在「忽略后接受」的弱路径。
+  3. **游标 = `verdicts.id` 的 UUID 全序 keyset**(`id > $cursor ORDER BY id ASC`),**禁止以时刻为游标**(D-API-92 教训:库内微秒时刻经 JS `Date` 截断会回退,导致末行被重复选中)。游标字段类型是**不透明标识符字符串**而非时间戳——结构上排除该缺陷类。`nextCursor` = 有下一页时的**末行 `id`**,否则 `null`;**键恒在**(不省略,"键缺席"与"终态"不做二义表达)。
+  4. **终态确定性(跨字段耦合)**:`items` 为空 ⇒ `nextCursor` 必须为 `null`(空页 + 非空游标 = 无限翻页回路)。TS 侧 `HostScoresResponseSchema.superRefine` + JSON Schema 生成管线注入等价 `if/then`(`HOST_SCORES_TERMINAL_COUPLING`,`ACTION_RESPONSE_REJECTED_COUPLING` 同机制),**双侧锁定**。**空批是合法终态,不是错误**(200 + `{items: [], nextCursor: null}`)。
+  5. **实测口径(实现期)**:游标参数须同时过「冻结标识符字符集 ∧ 规范 UUID 形态」两道闸(见 D-API-124 第 3 条)。契约面 `id` 保持**不透明**(不承诺 UUID 形态);若未来 keyset 键列变更(如改单调序列),属**additive 实现演进**,契约零改动。
+  6. **分页语义如实登记(不夸大)**:本 keyset 的保证是「**键全序确定 + 游标严格前进 + 分页零重复**」;**不承诺并发插入下零遗漏**——新行 id 由 `gen_random_uuid()` 生成、随机落位,可能落在游标之前。对账场景的正确用法(已写入用户文档 §7.2 第 ⑤ 条):以 `submissionId` 去重,并把「翻到 `nextCursor = null`」当作一次快照的边界。**增列单调序列**(如 `verdicts.seq`)属后续 additive 演进候选,触发条件 = 出现真实的「翻页期漏账」需求。
+- **理由**:
+  - 七字段是 `HostScoresResponse` 的**最小对账充分集**:平台需要「谁(会话)/ 哪题哪版 / 什么结果 / 何时」四要素;多一个字段就多一个泄露面,少一个字段平台无法对账(如缺 `sessionId` 则成绩无法归属到嵌入会话)。
+  - 复用 11 值字面而非另立「成绩枚举」:成绩语义与裁决语义必须同源,否则「批量面显示通过、单条面显示 engine_error」这类**契约内部矛盾**无从防御。
+  - 零 `tenantId`:租户是**查询入参**(认证上下文派生,见 D-API-124),不是载荷字段——回显租户在白名单机制下恒等于凭证已绑定的值,信息量为零而探测面为正。
+  - 终态耦合入契约(而非留给实现):「空页 + 非空游标」会让客户端进入无限翻页(工程上真实存在的挂死形态),把它做成契约级拒绝即在跨语言面同时堵住 TS 与 Rust 两侧消费方。
+- **红灯位置**:契约级 `packages/protocol/test/host-scores-response.test.ts`(**50 例**:字段数锁定 / 16 个非法样例全拒 / 4 个合法样例全收 / 空批非空游标拒 / 4 类信封越权字段拒 / 6 类记录私有面字段拒 / 11 值全收 / 非成绩方向同构 / keyset 序即载荷序);`packages/protocol/test/schema-drift.test.ts` 增 1 例(落盘产物断言 `$id` / 恰两键 / `x-sm-class: public` / `allOf` 终态耦合 / 记录面 `additionalProperties:false` + 七必填 / 私有面字段名零出现);实现期 `apps/session-api/test/routes/host-scores-routes.test.ts`「载荷公开上限面」4 例 + 「keyset 分页与终态确定性」5 例。
+- **影响面**:`packages/protocol` 新契约文件 + `version.ts` 三常量 + `index.ts` 导出 + `classification.ts`(`rootClass: public` + 两个顶层字段类)+ `schema/registry.ts` + `schema/generate.ts` 跨字段规则 + 重新生成的 `schema/host-scores-response.schema.json` + contract-smoke `PROTOCOL_CONTRACTS` 元组 + `canonical-digests.json`;分类论证落 `docs/contracts/数据分类与秘密零驻留清单.md` §6.11(v1.16)。
+
+### D-API-124 租户绑定 = 凭证 × 白名单(O-MP-6 落地面);查询参数白名单与子选语义
+
+- **决策**:
+  1. **新配置键 `SESSION_API_HOST_TENANTS`**:逗号分隔 tenantId 列表(形态与 `SESSION_API_ALLOWED_ORIGINS` 同款:KNOWN_ENV_KEYS + `envSchema` + `SessionApiConfig`)。**凭证 → 租户集合**绑定:该宿主凭证只在这批租户上有读取权。
+     - **缺省 / 空 ⇒ 宿主成绩面整体 404 同形**(fail-closed,防枚举);这是**合法配置形态**,不报配置错误(与 `ALLOWED_ORIGINS` 的「提供了键却解析不出条目即拒」同款:提供了键却全空白 = 配置错误)。
+     - **规范化**:去空白 → 去空项 → **去重** → **字典序排序**。排序不是装饰:限流键取「绑定集合的字典序最小项」为锚(D-API-125),排序使锚与配置书写顺序无关 ⇒ 等价写法产生同一限流键(确定性,I-4)。
+     - 集合项字符集 = 冻结标识符字符集(`IDENTIFIER_CHARSET_PATTERN` ∧ `OPAQUE_ID_MAX_LENGTH`),违规 = **拒绝启动**(配置面 fail-closed,与既有键同纪律)。
+  2. **租户只能从认证配置面派生**:请求体零身份字段(本接口无请求体);`?tenantId=` 只能在绑定集合内**子选**(过滤),**禁止由查询参数决定租户**;**集合外租户结构性不可达**(SQL `WHERE v.tenant_id = $1` + 行级政策双层强制,见 D-API-126)。
+  3. **查询参数白名单 = 恰三个**:`cursor` / `limit` / `tenantId`。任何未登记参数 ⇒ **400 冻结形态**(`{code:"invalid_input_format", message:"invalid request"}`,= `VALIDATION_ERROR`):未知面**不静默忽略**(静默忽略会让调用方误读调用语义——以为按 `?since=` 过滤了,实际拿到全量)。
+     - `cursor`:须过「冻结标识符字符集 ∧ 规范 UUID 形态」两道闸;**畸形游标在路由层拒绝(400),不进库层 `::uuid` cast**——否则会以 503 形态呈现调用方输入错误(既是错误精度错配,也让调用方无法区分自身输入错误与存储故障)。
+     - `limit`:见 D-API-125。
+     - `tenantId`:不在绑定集合内(含字符集违规 / 空值)⇒ **404,与白名单空态逐字节同形**(与「该租户不存在」不可区分)。
+  4. **集合外 / 未绑定的不可区分性是硬约束**:`404` 响应体恒为 `{code:"invalid_input_format", message:"resource not found"}`(`NOT_FOUND_ERROR`),与「面未开通」逐字节一致——探测者无法区分「这个租户不存在」「这个租户存在但没绑给我」「这家平台根本没开通」。
+- **理由**:
+  - O-MP-6(中期开放项)要求「宿主凭证 → 租户」有确定绑定面。选**配置白名单**而非「凭证自带租户集合」:(a) 共享凭证是无结构字符串,给它加结构等于新凭证格式(破坏既有签发面);(b) 白名单是**部署期**事实(哪家平台对应哪些租户),放配置面最自然;(c) 运维可见可控,不引入新表 / 新迁移。
+  - 空白名单 = 404 而非 400/403:**未开通的面不应该告诉探测者「这里有个面」**;404 同形是 anti-enumeration 的标准形态(与 D-API-32 会话定位失败同款)。
+  - 子选 = 过滤而非身份:平台可能为多个租户(如分校区)收集成绩,`?tenantId=` 提供便利,但它**只能收窄**,永远不能扩张。
+- **红灯位置**:`host-scores-routes.test.ts`「租户绑定白名单」5 例(空白名单 404 / 正常读取 / 集合内双租户子选 / 集合外 404 与空态逐字节同形 / 3 种畸形 tenantId 404 / 集合外租户有记录也零下发)+「查询参数白名单与批量上限」10 例(2 类未登记参数 400 / 5 类畸形 limit 400 / 超批量上限 400 / 越过 config 上限但低于默认值仍拒 / 3 类畸形 cursor 400);compose 实跑 1 例(未绑定租户 404 逐字节)。
+- **影响面**:`config.ts`(常量 + 键 + schema + 接口字段 + 规范化函数);`runtime.ts` / `session-rig.ts` 装配;`compose/app.yaml` / `compose/integration.env` / `compose/.env.example` 三处配置面;用户文档 §7.2 第 ② ③ 条。
+
+### D-API-125 批量上限三道闸 + 超限行为;限流键 = 凭证绑定锚
+
+- **决策**:
+  1. **新配置键 `SESSION_API_HOST_SCORES_BATCH`**:缺省 `500`(`DEFAULT_HOST_SCORES_BATCH`),天花板 `5000`(`HOST_SCORES_BATCH_CEILING`)。量化理由:单条记录最坏形态 ≈ 250 字节 JSON ⇒ 500 条 ≈ 125 KiB 响应体,与公开描述包默认上限(256 KiB,D-API-76)同量级;天花板 5000 ≈ 1.25 MiB,与描述包天花板(4 MiB)同档。
+  2. **三道闸**(与既有频率 / 配额的「常量默认 + 配置天花板」同形):① `KNOWN_ENV_KEYS` 登记(未知保留键拒绝启动);② `envSchema` 的 `.max(HOST_SCORES_BATCH_CEILING)`(配置超天花板**拒绝启动**);③ 请求面 `limit ≤ config.hostScoresBatch`。
+  3. **超限行为 = 400 确定性拒绝(冻结 `invalid_input_format` / "invalid request"),不钳制**:钳制会把调用方的分页逻辑错误**静默**变成「每页都取到上限」,页边界与调用方预期不符(调用方按 `limit` 算分页,服务端给另一批)⇒ 对账静默出错。`limit` 还须为**纯数字字符串**(`^[0-9]+$`):非数字 / 零 / 负数 / 小数 / 重复参数(数组)一律 400(不静默回退默认值)。
+  4. **新配置键 `SESSION_API_HOST_SCORES_QUERIES_PER_MINUTE`**:缺省 `120`(`DEFAULT_HOST_SCORES_QUERIES_PER_MINUTE`,与 D-API-50 的每租户 / 每用户请求频率同值),天花板 `100000`(与 `RATE_LIMIT_REQUESTS_PER_MINUTE_CEILING` 同值)。
+  5. **限流键 = `rate:{锚租户}:host_scores`**:`锚租户` = **凭证绑定集合的字典序最小项**(集合已排序)。固定窗口 60 s,载体 = 既有 `RateLimitCounter`(内存 / Redis 同端口),闸 = 既有 `FixedWindowRateGate`;`RateLimitDimension` 增第 5 值 `"host_scores_rate"`。**每次请求恰消费一个键的预算**:`?tenantId=` 子选**不改变限流键** ⇒ **无法通过轮换子选放大预算**(测试实证:交替两个租户仍第 3 次触顶)。
+  6. **触顶 = 429 冻结形态**:`{code:"budget_exhausted", message:"rate limit exceeded"}`(= `RATE_LIMITED_ERROR`),与 D-API-50 / D-API-84 频率类**共用同一冻结常量**(字节级一致)。
+  7. **闸序(冻结)**:凭证 → 面可用(白名单空 404)→ 参数闸(400 / `tenantId` 不在集合 404)→ **频率闸(429)**→ 查询。白名单空态**不消费限流预算**(面未开通时连计数都不发生,测试实证两次 404 不触顶)。
+- **理由**:
+  - 400 而非钳制:拒绝是**确定性**的(I-4),且让调用方的分页逻辑错误在第一次调用就暴露;钳制的「宽容」在分页场景是有害的宽容。
+  - 上限而非无限:批量上限的作用是**响应体护栏**(单次同步不得拖垮进程 / 网络),不是功能限制——平台翻页即可取全量。默认 500 对教学规模(每租户数百至数千条)是 1~2 页。
+  - 锚租户而非子选值:子选值是**请求参数**(可被调用方任意轮换),用它做限流键等于把预算上限交给调用方;锚是**配置事实**,一个凭证一个键,预算可预测。
+  - 频率与 D-API-50 同值(120/min):宿主面是服务端间批量拉取,单次吞吐远高于玩家面请求,给同一档位即可;天花板同值便于运维统一理解。
+- **红灯位置**:`host-scores-routes.test.ts`「限流」4 例(触顶 429 逐字节 / 子选不放大预算 / 限流键与配置书写顺序无关〔等价写法共享预算〕/ 白名单空态不消费预算)+「配置面闸」5 例(默认值 500 / 120 / 批量超天花板拒启动 / 频率超天花板拒启动 / 白名单字符集违规拒启动 / 未登记保留键拒启动);`test/config.test.ts` 缺省值断言增三字段。
+- **影响面**:`config.ts` 常量与键;`limits/errors.ts` 维度联合;`runtime.ts` 频率闸装配;用户文档 §7.2 第 ③ ④ ⑥ 条。
+
+### D-API-126 只读实现面:端口 + 双适配器、PG 查询计划、**零 DDL / 零新角色 / 复用既有 RLS**
+
+- **决策**:
+  1. **端口 `HostScoresQueryStore`(只读,零写入面)**:单方法 `listScores(query)`,入参 `{tenantIds: readonly string[], afterId: string | null, limit: number}`,**返回至多 `limit + 1` 行**(多取一行 = 「是否还有下一页」的探测法,零额外 `COUNT` 往返;调用方裁掉探测行并据此定 `nextCursor`——端口契约明文登记该上限)。
+     - 行类型 `HostScoreRecordRow` 七字段(`decidedAt` 以 `decidedAtEpochSeconds` 命名,明确秒级口径);端口面**无 `detail` / 无 `reference` / 无 `tenantId`** 字段。
+     - **端口不存在任何使 session-api 产生 / 改写裁决或提交的方法**(裁决唯一出处 = 信任域 4 verifier,硬门槛);零 INSERT / UPDATE / DELETE,零 DDL。
+  2. **PG 适配器 `PostgresHostScoresStore`**(`persistence/pg/host-scores-store.ts`):自有 `TenantScope` 实例,逐租户事务内 `SET LOCAL app.tenant_id`(D-API-101)。
+     - **查询计划**(三表内连接,全部连接条件带 `tenant_id` 全等——即使 RLS 已强制,查询层仍独立成立,D-API-20 双层纪律):
+       `verdicts v` ⋈ `submissions sub ON sub.id = v.submission_id AND sub.tenant_id = v.tenant_id` ⋈ `sessions s ON s.session_id = sub.session_id AND s.tenant_id = v.tenant_id`,`WHERE v.tenant_id = $1 AND ($2::uuid IS NULL OR v.id > $2::uuid) ORDER BY v.id ASC LIMIT $3`;SELECT 列表恰七个投影列(`v.id::text` / `v.submission_id::text` / `s.session_id` / `s.challenge_id` / `s.challenge_version` / `v.verdict` / `v.created_at`)——**私有列在 SQL 层即不出现**(不是「读了再脱敏」)。
+     - **多租户合并**:绑定集合含 N 个租户时逐租户 fan-out 取前 `limit+1` 行,再按 id 全局归并取前 `limit+1`。**正确性论证**:某租户第 `limit+2` 行不可能进入全局前 `limit+1`(它在本租户内已排在第 `limit+1` 之后)。UUID 规范文本的字典序与 PG `uuid` 字节序一致(hyphen 位置固定、十六进制小写)⇒ TS 侧归并与库内 `ORDER BY` **同序**。集合规模按 O-MP-6 是「单租户或少量租户」,顺序 fan-out 的往返成本可接受(不引入并发,保确定性)。
+  3. **内存同构实现 `MemoryHostScoresStore`**(`persistence/memory-stores.ts`):与 PG 适配器**逐条对齐**(租户集合强制过滤、`id` 升序 keyset、`limit + 1` 探测、跨租户归并);租户列只存在于内存表内部,**永不进入** `HostScoreRecordRow`(与生产 SELECT 列表同形)。测试 seed 面 `seed(row)` 是内存形态的显式入口(生产形态的记录由 verifier 裁决落库提供,内存侧没有裁决域写入面)。
+  4. **零 DDL / 零新角色 / 复用既有 RLS**:三张表(`verdicts` / `submissions` / `sessions`)已在 `TENANT_SCOPED_TABLES` 内并有 RLS 政策(007),`session_app` 角色已有 `GRANT SELECT ON verdicts` / `GRANT SELECT, INSERT ON submissions` / `GRANT SELECT, INSERT, UPDATE ON sessions`(compose/session-api-db-init.sql)⇒ **本工作包不新增迁移、不新增角色、不新增 GRANT、不新增桶**。跨租户读取由 RLS + 查询层 WHERE 双层封死(`session_app` 无 `BYPASSRLS`)。
+- **理由**:
+  - 端口先于适配器:测试用内存同构(零容器)即可覆盖全部路由语义,PG 适配器的差异面(RLS / 类型投影 / 时刻口径)只在下述集成面验证——这是既有裁决呈现面(D-API-83)的同一形制,已被证明可维护。
+  - 三表内连接而非宽表:成绩的公开四要素分散在三张权威表(`verdicts` 有结果与时刻、`submissions` 有会话锚、`sessions` 有题目身份对),**不引入去规范化副本**(副本 = 第二真源漂移面)。题目身份取 `sessions.challenge_id` / `challenge_version`(会话创建时锚定的值),而非从 `challenges` / `challenge_versions` 反查——前者是「该次会话用的版本」的权威记录。
+  - `limit + 1` 探测而非 `COUNT(*) OVER()` / 单独 `COUNT`:额外往返 + `COUNT` 在 keyset 语义下没有意义(总量与「还有没有下一页」是两个问题,客户端只需要后者)。探测行的代价是每租户多一行。
+  - 零 DDL 是本工作包**范围纪律**的直接表达:WP-78 的契约是「读既有权威数据的公开投影」,不需要任何新存储面;把「零 DDL」写进决策可防止实现期顺手加索引 / 加列。
+- **红灯位置**:`host-scores-routes.test.ts` 46 例(端口语义经内存同构全覆盖);compose 全拓扑 1 例(**真实 PG + 真实 RLS + 真实三表连接**:固定白名单租户 → 真实注册题目 → 真实会话 → 真实 submit → verifier 真机裁决落库 → `GET /host/scores` 读出该记录并逐字段比对 + 跨域载荷机检零命中);`postgres` 侧既有 `row-security.integration.test.ts` 的 `TENANT_SCOPED_TABLES` 覆盖三表(本包零改动)。
+- **契约/机制登记**:新增 `packages/protocol/src/host-scores/host-scores-response.ts`;`version.ts` 三常量;`common/classification.ts` 增 `"host-scores-response": {rootClass: "public", fieldClasses: {items: "public", nextCursor: "public"}}`;`schema/registry.ts` + `schema/generate.ts`;`schema/host-scores-response.schema.json` 重新生成(全量 18 文件,exit 0);`tooling/contract-smoke/src/smoke.rs` 的 `PROTOCOL_CONTRACTS` 增元组;`pnpm fixtures:manifest` 重生成。
+
+### D-API-127 ~ 130(待并入:WP-80 M10 出题者积木声明面)
+
+占位 —— 片段产出后由收口轮并入;编号已预分配。
+
+### D-API-131 ~ 133(待并入:WP-81 canary 契约收口)
+
+占位 —— 片段产出后由收口轮并入;编号已预分配。
+
+### D-API-134 管理面身份模型 = **独立凭证(摘要比对)+ 租户绑定白名单**;凭证不从 URL / Cookie 呈递
+
+- **决策**:
+  1. **独立凭证,零复用**(硬约束,`docs/项目计划书.md:807`):`ADMIN_CREDENTIAL_SHA256`(**只存摘要**,64 位小写十六进制)为唯一凭证事实;呈递形态 = `Authorization: Bearer <明文>`。**不读** `SESSION_API_*` / `VERIFIER_*` 任何环境键;控制台页把凭证保存在**内存**(零 Cookie、零 `localStorage` / `sessionStorage`、零 URL 参数、零 `document.cookie`),`fetch` 显式 `credentials: "omit"`。
+  2. **比对形态 = 摘要 + `timingSafeEqual`**:服务端对呈递明文做 sha256 后与配置摘要常数时间比对(**摘要等长 ⇒ 长度侧信道被折叠**;缺失 / 非 Bearer / 空值 / 长度不符 / 取值错误**一律** 401 + `{code:"invalid_input_format",message:"authentication failed"}`,零原因差异)。明文凭证**不进配置、不进日志**(配置面第三道闸拒绝非摘要形态,启动即拒)。
+  3. **租户绑定 = 配置白名单 `ADMIN_TENANTS`**(逗号分隔;去空白 → 去空项 → 去重保序;条目须过冻结标识符字符集 ∧ 长度上限,违规拒绝启动;条目数与批量的天花板同属三道闸)。
+     - **空 / 缺失 ⇒ 数据面整体 404 同形**(fail-closed,防枚举;这是**合法配置形态**,不报配置错误);空态下**零存储调用**(连查询都不发生)。
+     - **单租户绑定 ⇒ 无参数落到该唯一租户**(零仪式形态);**多租户绑定且无参数 ⇒ 404**(不猜、不回退第一个——静默选租户 = 静默改变查询作用域)。
+     - `?tenant=` **只能在绑定集合内子选**(收窄),**禁止由查询参数决定租户**;集合外租户与「不存在」**同形** 404(逐字节一致)。
+  4. **闸序(冻结)**:凭证(401)→ 频率(429)→ 租户解析(404)→ 参数闸(400)→ 查询 → **审计(披露点)** → 下发。参数错误**不消费**限流预算之外的东西;401 与 404 路径零存储调用。
+- **理由**:
+  - **摘要而非明文**:管理面凭证是长期共享秘密,配置面只放摘要 ⇒ 配置泄露(日志 / 环境回显 / 进程列表)不等于凭证泄露;且摘要定长使常数时间比较无长度前置条件。
+  - **独立凭证是硬门槛而非偏好**:会话凭证属选手(浏览器不可信),宿主令牌属平台服务端;管理面是运维读取面,三者信任级别与轮换节奏都不同——复用任一把都使「谁读走了成绩」在审计面不可归属。
+  - **空白名单 = 404 而非 403**:未开通的面不应告诉探测者「这里有个面」;404 同形与 D-API-32(会话定位失败)/ D-API-124(宿主成绩面空白名单)同款 anti-enumeration 形态,使「租户不存在」「租户存在但未绑给我」「面未开通」在响应面**不可区分**。
+- **红灯位置**:`apps/admin/test/config.test.ts` 8 例(缺必备键 / 未知保留键 / 越天花板 / 非摘要凭证 / 白名单条目非法 / 白名单超上限 / `PORT=0` 仅测试环境 / 空占位语义 + 解析去重保序);`test/credential.test.ts` 5 例(凭证矩阵 + **源码机检**:代码文本零 `SESSION_API_*` / `VERIFIER_*` 读取、零 `HOST_BACKEND_TOKEN` / `SIGNING_KEY` / `SESSION_CREDENTIAL` 引用);`test/tenant-binding.test.ts` 4 例(空态恒 404 / 单租户回落 / 多租户不猜 / 参数无法自造租户);`test/server.test.ts` 凭证与租户面 5 例(401 同形三态 + 零存储调用 / 集合内子选 / 跨租户与不存在同形 / 空态整体 404 / 多租户无参 404)。
+- **影响面**:新建 `apps/admin/src/auth/credential.ts` / `src/auth/tenant-binding.ts` / `src/config.ts`;compose 新增 `admin` 服务与 `admin-net`(**待应用片段**,见末节);管理面**不进入**任何插件链路或浏览器可达面。
+
+### D-API-135 数据面 = **自有只读 PG 角色 `admin_ro` 直连**;服务复用 = 契约复用(零 app→app 依赖);三张读面的上限与截断语义
+
+- **决策**:
+  1. **数据面 = 直连 PG 只读角色 `admin_ro`**,**不 import** `apps/session-api` 任何内部实现(禁 app→app 依赖,dependency-cruiser `admin-workspace-deps-allowlist` 强制;`apps/admin` 的工作区依赖面 = `@stackmaster/protocol` + `@stackmaster/challenge-schema`)。**服务复用 = 契约复用**:成绩导出必须**逐字**通过 `HostScoresResponseSchema.parse()`(WP-78 契约,D-API-123),裁决查询逐条通过 `VerdictQueryResponseSchema`,错误体复用 `PublicErrorSchema` 的冻结常量(401 / 404 / 429 / 503 与宿主面同码同文案)。**零第二套契约实现**。
+  2. **三张读面(恰三张,零写面)**:
+     - `GET /admin/challenges`——题目登记列表(题目标识 / 标题 / 版本链摘要:内容版本 + VM Profile 版本 + 登记时刻);版本链来自 `challenges` ⋈ `challenge_versions`。
+     - `GET /admin/verdicts`——裁决查询(按提交定位 / 题目过滤 / **有界时间窗**;pending 态经 `LEFT JOIN verdicts` 表达)。
+     - `GET /admin/scores`——**成绩导出,复用 WP-78 契约与游标语义**(`limit + 1` 探测、`nextCursor` = 末行 id、空页 ⇒ `null`)。
+  3. **裁决面不发明第二套游标**:裁决查询用**有界时间窗 + 显式 `truncated: boolean`**,而非再造一套 keyset 语义——**游标语义保持唯一**(归 WP-78 成绩面),避免「同一仓内两套分页语义」的契约内部矛盾。`truncated` 是**有界性的事实陈述**(命中上限),不是错误。
+  4. **查询参数严格白名单**(未知参数 ⇒ 400,不静默忽略):`tenant` / `limit`(有默认值与天花板,超限 400 而非钳制)/ `cursor` / `submissionId` / `challengeId` / `since` / `until`。畸形游标在路由层拒绝(400),**不进库层 `::uuid` cast**(否则调用方输入错误会以 503 形态呈现)。**零查询参数可扩权**:无法用参数把任意字符串变成合法租户。
+  5. **只读面在四层同时成立**(彼此独立):① **端口面**`AdminReadStore` 只有读方法(写方法不在类型上、不在运行时原型面);② **语句面**`assertReadOnlySql` 运行时护栏(前导关键字 ∈ {`SELECT`,`WITH`};写 / DDL / 授权 / 会话态语句逐条红灯;PG 适配器内**每条**数据语句的入参 = 护栏返回值,零 TOCTOU)+ 源码机检(剥注释后的代码文本零写语句形态、零 `client.query` 绕过护栏);③ **授权面**`admin_ro` 对五个只读表 SELECT 在场、INSERT / UPDATE / DELETE **全假**,`audit_log` **零授权**;④ **行级政策面**五表 `ENABLE + FORCE ROW LEVEL SECURITY` + `TO admin_ro` 的**仅 SELECT** 政策(写面无 permissive 政策 ⇒ 默认拒)。
+  6. **RLS 谓词 = 租户绑定**:`tenant_id = current_setting('app.tenant_id', true)`,注入点 = 管理面**自有**连接层每事务 `SET LOCAL`(D-API-101 同款形态,自实现,不 import 编排器代码);**GUC 缺失 ⇒ 谓词恒假 ⇒ 零行**(fail-closed,机检:不经连接层直连 `admin_ro` 读 `verdicts` / `challenge_versions` 恒 0 行)。迁移为**新增** `009_admin_row_level_security.sql`(不改 007;末段内置只读政策自检:若出现 TO `admin_ro` 的非 SELECT 政策,迁移确定性失败)。
+  7. **零 DDL 于既有表 / 零新表 / 零新列**:本包只新增角色授权脚本与政策迁移(`compose/admin-db-init.sql` + `009_admin_row_level_security.sql`);**不使用 008**(该号为主控预留)。
+- **理由**:
+  - **契约复用而非代码复用**:管理面与 session-api 属不同信任域、不同部署单元、不同发布节奏;`import` 内部实现会把两个独立部署单元耦合成同一构建图(独立部署退化为名义),而契约是**版本化序列化格式**——复用契约既拿到语义一致性,又保住独立演进。
+  - **直连只读角色而非「读 session-api 的 API」**:管理面要的是**运维读取**,经 session-api 会增加一条浏览器同款服务链路(并让管理面读权限继承编排器的写权限面);`admin_ro` 把「管理面能做什么」压到库层一句话:**五个表、只读、只见绑定租户**。
+  - **成绩导出逐字过 `HostScoresResponseSchema.parse()`**:这是**唯一出口**(单点退化 + 越界即抛),使「管理面导出」与「宿主面拉取」在字段集 / 游标语义 / 终态耦合上**结构性同源**——两侧任何漂移都在管理面测试红灯,而不是在跨系统对账时才发现。
+  - **三张面而非一张**:题目登记(运营要知道平台里有什么题)、裁决查询(运营要知道某次提交为什么这样判)、成绩导出(对账)是三种不同的**最小充分集**,合并成一张宽表必然多带私有面字段。
+- **红灯位置**:`test/scores-export.test.ts` 7 例(**契约一致性机检**:逐字过 `HostScoresResponseSchema.parse` / 顶层字段恰 `items`+`nextCursor` / 逐条字段集 = 契约七字段(`Object.keys(HostScoreRecordSchema.shape)` 派生,非手写清单)/ 载荷零 `detail`·`reference`·`tenantId` / 两页拼合零重零漏 + 游标恒为本页末行 id / 空页耦合 + 反例 / 租户隔离 / **存储返回越界裁决字面 ⇒ 导出抛错**);`test/read-only.test.ts` 7 例(护栏语句矩阵 4 正 + 14 反 / 整词匹配不误伤 `updated_at` / PG 适配器零未过闸语句 / 双实现原型面精确等于只读面 / 源码零写语句形态);`test/server.test.ts` 三面契约 4 例 + 只读零写 2 例(pending 三字段 / verdicted 五字段 / 时间窗与 `truncated` / 登记列表字段集 / 经 HTTP 的成绩载荷同契约);`test/compose-topology.test.ts` 5 例(**容器门控**,真实 PG:最小授权面 + `audit_log` 误写被库层拒 + RLS ENABLE/FORCE + 仅 SELECT 政策 + 三面真跑 + 租户隔离双层与 GUC 缺失零行)。
+- **影响面**:新建 `apps/admin/src/persistence/**`(`ports` / `pg-connection` / `pg-read-store` / `memory-read-store` / `read-only-guard`)、`src/scores/export.ts`、`src/routes/admin-routes.ts`;新增 `apps/session-api/compose/admin-db-init.sql` + `apps/session-api/migrations/009_admin_row_level_security.sql`;`tooling/dependency-cruiser.cjs` 两处演进(白名单 + 新规则)。
+
+### D-API-136 管理面查询的账目落点 = **受控日志 + 指标计数**,**不新增审计 kind**(十值封闭集零改动);披露点 fail-closed
+
+- **决策**:
+  1. **不新增审计 kind**:审计账 `audit_log.kind` 是**十值封闭集**(D-API-90,库层 CHECK `audit_log_kind_closed_set`)。管理面查询是**运维读取事实**,按 D-API-59 / D-API-92 口径**不进安全事件账**:落点 = **受控 Pino 日志**(结构化:`actor="admin"` / `surface` / `outcome` / `tenantId` / 行数)+ **指标计数器** `admin_queries_total{surface,outcome}`(**标签是有界枚举,零标识符**、零秘密)。
+  2. **结构性第二重保证**:`admin_ro` 对 `audit_log` **零授权**(连 SELECT 都没有)⇒ 即使实现被误改为写审计账,库层确定性拒绝(`permission denied for table audit_log`,容器门控用例逐字断言)。**账目归属由设计决定,授权面独立地把误写变成红灯。**
+  3. **披露点 fail-closed(不对称是刻意的)**:对**成功披露**路径,审计**先于**下发且**严格**——审计写失败 ⇒ **503 且零数据下发**(数据已被读出但不出进程,容器/服务级用例断言「读过 + 未下发」);对**拒绝**路径(401 / 400 / 404 / 429 / 存储 503)审计是 **best-effort**(拒绝本身不泄露数据,不能因日志面抖动把 401 变成 500)。
+  4. **错误体冻结**:401 `{invalid_input_format, authentication failed}` / 404 `{invalid_input_format, resource not found}` / 400 `{invalid_input_format, invalid request}` / 429 `{budget_exhausted, rate limit exceeded}`(与 D-API-50 / D-API-124 同码同文案)/ 503 `{internal_error, storage unavailable}`;审计面另用 `{internal_error, ...}` 同族 503 形态(**处置分歧留主控裁决**,见末节)。**响应体零内部细节**(库错误文本、探针名、存储故障原因一律不透出)。
+  5. **安全头与 CSP 分域**:管理面 CSP `frame-ancestors 'none'`(计划书 `:715` 的「`frame-ancestors` 分离」口径)——管理面**不是**可嵌入面,零宿主来源白名单(与插件链路的 `frame-ancestors` 白名单形态**结构性互斥**);另带 `nosniff` / `no-referrer` / COOP+CORP `same-origin` / `cache-control: no-store`。控制台页 = **最小只读页**(语义化 DOM + 表格 caption + `role="status" aria-live="polite"`、零内联脚本样式、零视觉改版、**不进 vm-ui 交付面**)。
+- **理由**:
+  - **不新增 kind 是封闭集的纪律表达**:十值集是「安全事件」的语义边界,运维读取事实塞进去会让「审计账 = 安全事件」这一前提失效(D-API-90 的封闭性正是为了让消费方可以穷举)。若主控判定「管理面读取必须进账」,那是**契约面改动**(新 kind = 新版本 + 消费方穷举表更新),应按 D-API-59 复开流程走,不在实现期顺手加。
+  - **审计严格性放在披露点**:审计的目的是「谁读走了什么」;**只有真正下发数据的路径需要「无账不下发」**;把拒绝路径也做成硬依赖,等于把日志可用性接入认证面(可用性攻击面)。
+  - **`frame-ancestors 'none'`**:管理面若可被任意页面 iframe 嵌入,等于给出一个「用运维已登录浏览器读成绩」的点击面;`none` 同时是「本面不在插件链路」的结构性声明。
+- **红灯位置**:`test/server.test.ts` 审计与限流 5 例(成功查询落账:系统主体 + 绑定租户 + 有界结局 / **审计失败 ⇒ 503 且零数据下发**(断言存储确被读过)/ 存储不可用 ⇒ 503 且失败查询也落账 / 429 冻结形态 / 503 常量形态);`test/server.test.ts` 运维面 3 例(healthz / readyz 探针失败 503 且失败方不透出 / **指标名 ⊆ 白名单 + 标签有界 + 零秘密零租户标识符**);安全头与只读页 2 例(CSP `frame-ancestors 'none'` + 全响应头 / 页面语义化 DOM + 零内联 + 凭证零持久化);`test/compose-topology.test.ts` 1 例(`audit_log` 四类授权全假 + 误写被拒)。
+- **影响面**:新建 `apps/admin/src/audit/admin-audit.ts`(端口 + 受控日志实现 + 内存实现)、`src/metrics.ts`(三指标族,名称白名单机检)、`src/rate-limit.ts`、`src/http/security-headers.ts`、`src/console/page-source.ts`、`src/server.ts`、`src/runtime.ts`、`src/index.ts`;`docs/user/出题人指南.md` / `docs/user/宿主平台接入指南.md` 需各回填一句(**待应用文本见末节**,两文件当前由其它 WP 占用)。
+
+### D-API-137 试用环境运维端点暴露面 = D-API-104 的选项②「反代准入」
+
+- **决策**:试用环境的 `/healthz`(liveness)、`/readyz`(readiness)、`/metrics`(Prometheus 文本)三个运维端点**不得公网裸暴露**,按 D-API-104 生产部署三选项择 **②反代准入**(反向代理侧做来源准入 / 路径收敛,应用侧保持未认证 GET 形态不变)。session-api 的 `13000` 现状绑定 `0.0.0.0`,收敛目标 = **仅反代可达**。
+- **理由**:三端点为**未认证 GET**(`apps/session-api/src/metrics/metrics-plugin.ts` 面零凭证),裸暴露既是信息面(指标族虽零秘密零标识符,但仍是运营拓扑指纹)也是滥用面;/metrics 的纪律(零秘密零标识符)由机检 `assertMetricsTextDiscipline` 保证,但**可达性本身**必须由网络面收敛。选②而非①(内网段基线)/③(独立端口)的理由 = 试用环境是 compose 单机公网拓扑,反代是本形态下唯一自然存在的准入点,且不需要额外网段规划或端口对外映射。
+- **红灯位置**:无新增机检(网络面准入不可由仓内代码单测承载)⇒ 证据面 = `docs/user/试用环境部署指南.md` §五 的暴露面口径 + §九 公网暴露面盘点表(端点 E6~E8 三条)。
+- **影响面**:不引入新配置键、不动应用代码;生产 / 试用部署文档义务;风险表「试用环境公网暴露面」行证据。
+
+### D-API-138 试用环境部署与回滚形态的文档落点与「未实测不给配置片段」纪律
+
+- **决策**:试用环境部署形态落 `docs/user/试用环境部署指南.md`(新建),含部署拓扑 / TLS 终止与域名(**待执行形态**)/ 最小授权角色连线 / 运维端点暴露面 / 环境变量与秘密注入 / 部署步骤 / 回滚步骤 / 公网暴露面盘点 / 试用前安全自查清单。回滚给两形态:`compose:app:down`(保卷,可重复部署)与**带 `-v` 清卷**(数据丢失,必须警示)。
+- **理由**:O-MP-5 未解除(主控暂无法提供域名 / 主机)⇒ 反代与 TLS **无实测环境**。按反伪造纪律,**不给出未实测的反代配置片段**,只给形态表 + 域名到位后的补取证清单(6 条);否则文档会产出「看起来可复跑、实际未验证」的命令,违反「命令原样可复跑」与「不得伪造证据」。证书策略 = ACME 自动签发,**不入仓**;`.env` 一律不入 git。
+- **红灯位置**:无(文档面)。证据 = 指南 §三 标题即标「**待执行形态**;阻塞编号 O-MP-5」+ §十一 遗留与待补取证。
+- **影响面**:O-MP-5 阻塞如实登记;E-7「公网可访问」记**部分达成**;不改变任何代码 / 配置 / SQL。
+
+### D-API-139 教学事件采集载体 = 新增 `teaching_events` 表(v1 三类服务端可派生)
+
+- **决策**:教学事件(题目开始 / 通过 / 回退次数)走**新增 `teaching_events` 表**(迁移 008 + RLS 租户政策 + 保留期),与安全事件账 `audit_log` **分离**;**不经 `/metrics` 通道**承载。v1 采集面 = 服务端**可派生三类**:题目开始(`sessions` 创建事件)、通过(`verdicts` 成绩方向)、回退次数(`action_log` 中 `undo` 动作计数)。**「提示使用」v1 如实登记「暂不可采集」**。
+- **理由**(O-MP-1 定案):复用 `audit_log` 需新增 kind,而审计 kind 是**十值封闭集**,改动须按 D-API-59 口径重开「安全事件账 vs 运维 / 数据事件账」论证 ⇒ 新表免开该论证且边界更干净。提示使用**不得靠客户端自报**(违反「不接受自报身份」基线),而服务端 `hintLadder` 只存在于公开描述包、无记录入口 ⇒ v1 只能如实登记不可采集。
+- **红灯位置**:采集面实现落地时新增 —— 六类观察点中「提示使用等级 / 动作级错误码分类 / 重复错误率 / 断线恢复率 / 探针行为 / `inaccessible_address` 分布 / 协议错误分类」共 **7 项 v1 结构性不可采集**,共同原因 = **被拒动作不入 `action_log`**(只记已执行动作)与**无对应计数族**;该项由报告模板以「v1 暂不可采集 + 原因 + 触发条件 + 归属」逐条登记,**不得填数、不得伪造计数**。
+- **影响面**:WP-82 的迁移号(008)、RLS 与保留期;首轮试用报告模板的「v1 可得性」列;影响 E-7 的采集最小面证据。
+
+### D-API-140 首轮试用报告模板落点与 24 观察点可得性分类
+
+- **决策**:首轮试用报告模板落 `docs/phases/中期试用报告模板.md`(择 `phases/` 而非 `user/`:模板是**阶段交付物 / 验收证据面**,面向执行者与验收者,不面向最终用户)。按计划书第十五章 **13 项观察项**组织,每项标注「数据来源 / 判据 / v1 可得性」三列;另附 D-API-107 八题 × 3 项对齐表、试用启动判据(引阶段六扩展评估报告 §观察启动判据)、隐私与合规自查。
+- **理由**:三列口径强制每项都落到**具体出处**(指标族名 / 受控查询表名 / 人工访谈),使「可得性」不可含混;对齐表使 D-API-107 的每题观察点与十五章 13 项建立可核查映射。
+- **红灯位置**:无(文档面)。可得性分类实测 = 8 题 × 3 项 = 24 格:**12 可采集 / 2 部分可采集 / 7 v1 暂不可采集 / 2 人工抽样 / 1 待补取证**。
+- **影响面**:E-7「报告模板就绪」达成;7 项不可采集项转为**采集面扩展工作包**的登记依据(见 D-API-139 红灯位置)。数字纪律:全文 k6 / 冷启动数字均带出处(`docs/phases/阶段六扩展评估报告.md:32-34` 与 `apps/session-api/k6/results/*`),试用环境数字一律「待补取证」。
+
+### D-API-141 `descriptor.spec.ts:88` 定案 = **断言(就绪口径)敏感,非产品缺陷**;已改断言
+
+- **决策**:该红灯判为 **(b) 断言 / 就绪口径问题**,**不动产品代码**;修复落点为**共用 E2E 夹具的就绪门槛**——`apps/plugin-dev/e2e/fixtures.ts#createSessionViaForm` 新增第 5 步「动作通道真实就绪」:`await expect(menuStatus(page, "connection-status")).toHaveText("connected")`(结构选择器 + 枚举值,零像素 / 零几何依赖)。原挂账口径「**视口 / 断言几何敏感**」经取证**被推翻并订正**为「**动作通道就绪口径过弱(时序敏感)**」,该用例不设视口、不含任何几何断言。
+- **理由**(逐项取证,2026-09-17;拓扑 = compose 全拓扑 + plugin-dev 壳,单机 Windows):
+  1. **失败点与几何无关**:`--project=firefox --repeat-each=3` 稳定 **3/3 红**,失败在**该用例第 103 行 `page.evaluate` 内的首次 `client.sendAction`**,抛 `SessionClientError(not_connected)` —— 原文「**动作通道未连接:断线期间不投递动作(等待重连对齐后重试)**」;失败瞬间页面快照:`#dev-status` 已写「会话已创建并连接(sessionId=…)」,而工作区菜单 `connection-status` = **`connecting`**,运行组按钮全 `disabled`。**无任何几何 / 溢出 / 视口断言参与**。
+  2. **真因 = 壳文案不是连接信号**:`apps/plugin-dev/src/main.ts:399-403` 在 `client.connect()` 调用之后**立即**写「会话已创建并连接」;而 `SessionClient#connect()`(`packages/vm-ui/src/client/session-client.ts:413-429`)只把状态置为 `connecting` 并发起**异步** WSS 升级。原夹具第 4 步仅校验该文案 ⇒ 门槛在 chromium 上"碰巧"够用、在 firefox 上不足。
+  3. **两引擎均无连接缺陷**(探针实测,取证后已删除):「壳文案置位 → `connection-status=connected`」差值 **chromium ≈ 11 ms / firefox ≈ 1249 ms**。firefox 首连明显更慢,**但最终成功**;差异只在握手耗时,不是"建不起通道"(后者是 webkit 的形态:恒定 `reconnecting`,见移交清单第 1 项)。
+  4. **产品行为正确**:`connecting` 期间拒绝投递动作是**契约内的对齐语义**(断线期不排队投递),该错误分支有意为之;投影面在通道未就绪时已可用(快照中栈 / 寄存器 / VMA 全部渲染)。故**不存在需修的产品路径**,改动 `packages/vm-ui/src` 反而会破坏对齐语义。**默认未触碰 `packages/vm-ui/src`**(本轮该目录有并发 agent 活动)。
+- **红灯位置**:修复前 `e2e/descriptor.spec.ts:88:3`(用例声明行锚点**保持不变**;取证原文见该用例体内首行注释,理由 = 不得因新增文件头注释位移这一被多处引用的锚点)+ 失败行 `e2e/descriptor.spec.ts:103:16`。修复后同锚点转绿。
+- **影响面**:
+  - 修复位于**全 spec 共用**的 `createSessionViaForm`(经 `createdSession` 夹具被 `session` / `payload` / `workspace-*` / `breakpoint-linkage` / `axe-contrast` / `browser-matrix` 等 spec 复用)⇒ **同类潜在竞态一并收敛**:`disconnect-recovery.spec.ts:43-55` 曾同样依赖「夹具返回时通道已建立」(`channel === null` 即抛「动作通道尚未建立」),现由同一门槛前置兜底。
+  - **对 webkit 矩阵格的可预期影响**:webkit 恒不 `connected`,该门槛会把 webkit 的壳体面失败**提前到夹具层**并以 `Expected "connected" / Received "reconnecting"` 报错(原形态 = 下游 `step-button` 恒 `disabled`)。**红格数量与单一根因不变**(仍是移交清单第 1 项的跨源 WS 认证面),但**报错形态与失败位置改变**,与 §二 WP-74 末段「12 格逐条为 `[webkit]` 连接面」的描述并存时须按本条订正阅读。**未在本机取得 webkit 复跑证据**(本机 webkit 属已知 401 阻断形态),此为如实登记的未取证面。
+  - **无生产代码改动**:`packages/vm-ui/src` / `packages/protocol` / `apps/session-api` 零改动;无契约、无 golden fixture、无 token 面变化。
+- **证据(命令原样可复跑)**:
+  ```bash
+  # 1) 修复前(红):firefox 稳定 3/3 红
+  E2E_MATRIX=1 E2E_SKIP_COMPOSE=1 pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/descriptor.spec.ts --project=firefox --repeat-each=3
+  #    → 3 failed / 6 passed;失败原文 `page.evaluate: 动作通道未连接…`(descriptor.spec.ts:103:16)
+  # 2) 修复后(绿):同命令 + chromium
+  E2E_MATRIX=1 E2E_SKIP_COMPOSE=1 pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/descriptor.spec.ts --project=firefox --project=chromium --repeat-each=3
+  #    → 18 passed(firefox 9 + chromium 9)
+  # 3) 回归:全量 chromium 门禁
+  E2E_SKIP_COMPOSE=1 pnpm --filter @stackmaster/plugin-dev test:e2e
+  ```
+  - 修复前 chromium 基线:`--project=chromium` **3 passed**(该用例在 chromium 上原即"碰巧"绿,与失败机理一致)。
+  - 修复后逐用例:`descriptor.spec.ts` firefox ×3 + chromium ×3 = **18 passed / 0 failed**。
+  - **回归(firefox 全量,含矩阵格)**:`E2E_MATRIX=1 … playwright test --project=firefox`(全 spec)⇒ **43 passed / 11 skipped / 0 failed**(4.4 min)⇒ firefox 侧**全绿**,本项不再有任何红点,且共用夹具改动**零回归**。
+  - **回归(firefox 320px 格,独立复核)**:`… e2e/browser-matrix.spec.ts --project=firefox --grep "320"` ⇒ **2 passed**(含红灯锚点 `browser-matrix.spec.ts:78` 的嵌入面用例)⇒ 与本节附条(320px 修复磁盘在位)互为印证,且该格在 firefox 上现为**真绿**。
+  - **回归(chromium 全量门禁)**:`pnpm --filter @stackmaster/plugin-dev test:e2e` 共跑 **3 次**,每次均为 **36 passed / 1 failed**;3 次的唯一失败项**全部落在 `e2e/embed-protocol.spec.ts`**(`host-mock-state` 未达 `ready` / `waitFor` 20s 超时;两次为 `:388`,一次为 `:228`)。**已证明与本改动无关**:①该 spec 只从 `fixtures.js` 取 `test`,**不使用** `createSessionViaForm` / `createdSession`(`embedViaHostMock` 自带独立会话路径,租户每用例唯一);②**基线对照运行** —— 把本改动的新增断言临时中和后复跑同一条全量命令,**同样 36 passed / 1 failed 且失败点同为 `embed-protocol.spec.ts:228`**;③该 spec **单独整文件复跑 9 passed 全绿**(两个失败点 `:388` / `:228` 同次均绿)。⇒ 判为**本机长会话下的既有偶发竞争**(与 §二 WP-74 末段登记的「非缺陷偶发红」同类),**非本次改动引入**;本轮**如实登记、不粉饰**。
+  - 拓扑由外部托管(`E2E_SKIP_COMPOSE=1`;compose 先经 `docker compose … up -d --wait` 起妥,`/readyz` = `{"status":"ok"}`)。**说明**:本机 `docker compose up --build` 不可用 —— 本机 Docker 配置的代理 `127.0.0.1:7897` 未监听,`load metadata` 阶段对 `node:22-bookworm-slim` / `rust:1-bookworm` 报 `connectex refused`;故改用**已在本地的 `stackmaster/session-api:dev` 镜像**免重建起拓扑(该阻断与本项结论无关,如实登记)。
+  - 探针产物已删除(`e2e/tmp-probe-connect.spec.ts`,诊断后即删,未留残件);`eslint` 对两个改动文件 **exit 0**。
+- **遗留 / 风险**:
+  1. **开发壳文案本身仍乐观**(`main.ts:403` 的「已连接」在 `connected` 之前写出)。本轮**未改产品侧文案**:改它需要给 `SessionDemoClientLike` 增加状态订阅面(跨文件 + 影响壳测试),超出本项"改断言"的窄幅范围。**如实登记为候选增量**(非阻塞;E2E 侧已不再依赖该文案做就绪判定)。
+  2. 本机 **webkit 复跑证据未取得**(跨源 WS 401 阻断,移交清单第 1 项);本文对 webkit 的影响面为**推演口径**,非实测。
+  3. 真机取证环境与 CI 的差异:本文全部结论以**本机真机**四条命令(见上「证据」)为准;CI `e2e-matrix` job 是否曾复现本红灯,取决于该 job 的 spec 集合,本文不作推断。**未在 CI 侧复跑取证。**
+
+### D-API-142 ① 指令行行高 113px 的根因 = `white-space: pre` 单元格里的**模板排版换行**;修法择 **「收窄模板空白」**,零 CSS 改动
+
+- **决策**:在 `packages/vm-ui/src/views/instruction/sm-instruction-view.ts#renderRow` 的地址列 / 伪机器码列,与 `packages/vm-ui/src/workspace/sm-register-annotation.ts` 的标注容器,统一改用**插值紧贴标签尖括号**的写法(行内零排版空白:开标签 `>` 后立刻接插值、闭合尖括号另起一行承前,按钮内部文本同样紧贴)。**不新增、不修改任何 CSS 属性** —— `.row-address` / `.row-bytes` 保持 `white-space: pre`。
+- **理由**(为何不取「`white-space: pre-wrap` + 受控拼接」):
+  1. **`pre` 的语义面被逐字保留**:`pre` 负责的两件事是「禁自动换行」与「空白保序」。幻影换行**不是** `pre` 的语义产物,而是 Lit 模板里写在单元格内部的**排版空白被 `pre` 忠实呈现**的结果 ⇒ 删除排版空白即删除非语义产物,渲染语义零变化。改 `pre-wrap` 则**新增**自动换行语义:16 字节分组后的伪机器码序列与 `→ 0x…` 跳转按钮会在 14ch / 18ch 定宽列内折行,列对齐(`text-align: end` 成组右对齐)与「一行一条指令」的行语义双双被破坏 ⇒ 与「不改变渲染语义」的判据相冲。
+  2. **同文件既有惯例**:`.row-text` 单元格早已使用 `>${` 收窄写法,表头行(同一个 `.instruction-row` 网格、同 `line-height: 1.6`)实测 **21px** 即为佐证 —— 修复只是把既有惯例推广到另外两个 `pre` 单元格,不引入新模式。
+  3. **修法成本对等而风险更低**:`pre-wrap` 需同时新增「受控拼接」(手工插入分隔空白)与列宽/折行回归用例,而收窄写法零行为面新增,回归护栏可直接断言「单元格内保留换行数 = 0」这一**根因指纹**。
+- **红灯位置**:
+  - 单测(jsdom 行盒代理):`packages/vm-ui/test/views/instruction/sm-instruction-view.test.ts` 的「M3 遗留-5 ①:`pre` 单元格零保留换行(指令行行高的根因)」组 —— 修复前 `.row-address` **6** / 断点按钮 **3** / 标注容器 **4** 个保留行盒,修复后各 **1**;同组并用「修法边界」断言把 `.row-address` / `.row-bytes` 的 `white-space` 取值钉在 `pre|nowrap`(防被 `pre-wrap` 悄悄改掉)。
+  - 真机(chromium):`packages/vm-ui/test/geometry/measure-instruction-geometry.cjs`(新入口,一键复跑:拉起 Vite 测量服务器 + Playwright chromium)。**修复前形态 = 修复前构建产物** `packages/vm-ui/dist/sm-workspace-CpaZ0UGg.js`(2026-09-17 17:15,自带 `customElements.define`;其 `.row-address` 字面量见该文件 31311~31327 行),**同一页面骨架 / 同一 CSS / 同一数据夹具 / 同一浏览器**下与当前源码对测。
+- **真机实测证据(2026-09-17,chromium headless,1440×900,13px × line-height 1.6 ⇒ 行盒 20.8px)**:
+
+  | 指标 | 修复前 | 修复后 |
+  |---|---|---|
+  | 数据行高 | **113.38px** | **20.8px** |
+  | 表头行高 | 20.8px | 20.8px |
+  | 地址列:保留换行数 / 几何行盒 | 5 / 5.45 | **0 / 1** |
+  | 伪机器码列:保留换行数 / 几何行盒 | 2 / 3.0 | **0 / 1** |
+  | 断点按钮:保留换行数 / 几何行盒 | 2 / 2.35 | **0 / 0.85** |
+  | 寄存器标注:保留换行数 / 几何行盒 | 3 / 4.1 | **0 / 1.1** |
+  | 锚点行(含标注)行高 | 177.77px | **22.8px** |
+  | 一屏行数(列表视口 197px) | 1.74 | **9.47** |
+  | 一屏行数(面板 231px,按 M2 记录的面板高折算) | 2.04 | **11.11** |
+  | 锚点行列表内可见比例(锚点滚动后,按列表视口裁剪) | 0.852 | **1.0** |
+
+  ⇒ 修复前实测 **113.38px** 与 M2 登记的 113px 逐位吻合(同量级、同根因),「一屏 ≈1.5 行」复现为 1.74/2.04;**全部 18 条阈值断言通过**(脚本退出码 0)。
+- **收紧后的断言(取代 M2「真绿但很薄」的写法)**:
+  - 已落地面(本席位写入面内):真机脚本 `measure-instruction-geometry.cjs` 的阈值 = 行高 ∈ [20.8, 28] px、`pre` 单元格保留换行数 **= 0**、`pre` 单元格几何行盒 ≤ 1.05、面板折算一屏行数 **≥ 8**、锚点行列表内可见比例 **≥ 0.9**;任一不满足即非零退出(修复前形态仅作对照读数,不作通过条件,但断言其显著劣于修复后:行高 ≥ 90px、一屏 ≤ 2.2 行、保留换行数 ≥ 4/≥ 2,且要求 `修复后行高 × 4 ≤ 修复前行高`)。
+  - **未落地面(如实登记,该文件不在本席位写入面)**:`apps/plugin-dev/e2e/breakpoint-linkage.spec.ts:224-230` 的 `await expect(...).toBeInViewport();` 仍是薄断言(可见比例仅需 > 0)。应交由该文件 owner 收紧为:
+
+    ```ts
+    if (anchor.addressHex !== null) {
+      const anchorRow = instructionView.locator(
+        `.instruction-row[data-instruction-address="${anchor.addressHex}"]`,
+      );
+      // 收紧(M3 遗留-5 ①):原 toBeInViewport() 在 113px 行高下「真绿但很薄」(比例 0.14)。
+      await expect(anchorRow).toBeInViewport({ ratio: 0.9 });
+      const box = await anchorRow.boundingBox();
+      expect(box?.height ?? 0).toBeLessThanOrEqual(28);
+    }
+    ```
+
+- **影响面**:
+  - 仅改**模板排版空白**,零 CSS / 零属性 / 零事件 / 零 i18n 键变更;指令视图的渲染语义(`pre` 禁换行 + 保序)、行 DOM 结构、`role`/`grid` 列宽、可访问性面(axe)与交互面不变。
+  - 用户面文档 `docs/user/界面帮助手册.html` **无需同步**:已逐节复核,§8/§8.2 及全文无「行高 / 一屏行数 / 每行高度」表述(仅结构描述)。
+  - 面板 231px 与视图固定 `24rem` 的既有几何张力**未动**(M2 已登记为既有事实);真机脚本同时记录 `visibleRatioInPanel`(两形态均为 0,因为测量舞台按 231px 裁剪、而视图高 384px)⇒ 该读数**不属本项修复面**,仅作如实记录,不得与本项的「列表内可见比例」混读。
+  - 回归护栏分层:jsdom 侧钉「保留换行数」根因指纹,真机侧钉几何数值;两者都在 `packages/vm-ui/test/**` 内,可 `pnpm --filter @stackmaster/vm-ui exec vitest run` 与 `node packages/vm-ui/test/geometry/measure-instruction-geometry.cjs` 复跑。**注意**:真机脚本依赖修复前构建产物 `dist/sm-workspace-CpaZ0UGg.js` 作对照;该文件被后续构建清理后,脚本会明确报错(不静默降级为单形态)。
+
+### D-API-143 ② 寄存器视图只读链 tooltip = 新增 `copyMode` 属性 + 新增 `chain.copyTitle` 键(与点击行为对齐)
+
+- **决策**:`<sm-jump-chain>` 新增只读复制形态开关 `@property({ type: Boolean }) copyMode = false`;`title` 按形态取词 —— `copyMode === false` 取既有 `chain.jumpTitle`(「跳转到 {address}」),`copyMode === true` 取**新增** `chain.copyTitle`(zh-CN「点击复制 {address}」/ en「Click to copy {address}」)。寄存器视图的逐行绑定传 `.copyMode=${true}`(**property 面**,非 kebab 属性)。组件**仍只派发 `viewport-jump`**,复制仍由宿主截停实现。
+- **理由**:tooltip 是**行为承诺面**,与点击实际动作必须一致(可访问性 / 可解释性纪律:面向用户的提示不得撒谎)。取「新增独立键 + 显式形态开关」而非「就地改 `chain.jumpTitle` 文案」的理由:(a) 同组件在**跳转形态**(指令视图跳转链)与**复制形态**(寄存器视图只读链)下语义相反,单一文案无法同时正确;(b) 取词属 i18n 面,须走 `catalog-zh-CN.ts` + `catalog-en.ts` 双catalog(键集 / 占位符对齐由 `test/i18n/i18n.test.ts` 机检);(c) 开关是**纯展示形态位**,不进 `viewport-jump` 载荷 ⇒ 事件契约与宿主截停实现零改动。
+- **红灯位置**:`packages/vm-ui/test/views/register/sm-register-view.test.ts`「链芯片 tooltip 与点击行为一致:只读形态取「点击复制」(M3 遗留-5 ②)」(断言 `chain.copyMode === true`、`title === "点击复制 0x1004"`、窗口外段 `"点击复制 0x1010(窗口外)"`、且 `not.toContain("跳转到")`);`packages/vm-ui/test/views/chain/sm-jump-chain.test.ts`「SmJumpChain 只读复制形态 tooltip(M3 遗留-5 ②)」3 例(缺省形态保 `chain.jumpTitle` 现状零变化 / `copyMode = true` 取 `chain.copyTitle` 且窗口外后缀合成口径两形态一致 / **事件语义不变**:仍只派发 `viewport-jump` 且 detail 逐字段相等)。修复前上述断言取词为「跳转到 …」⇒ 红。
+- **影响面**:新增 2 个 i18n 键(zh / en 各 1,键集与占位符由既有 parity 测试锁定);新增 1 个组件属性(缺省 `false` ⇒ 指令视图跳转链行为零变化,已在红灯位置第 1 例固定);`docs/user/界面帮助手册.html` 无需改动(该形态未在手册中描述 tooltip 文案)。
+
+### D-API-144 ③ `debugMode` 缺省语义 = **保留重复 + 跨包恒等机检**(不选物理共享 / 不选「单点权威 + 引用」)
+
+- **决策**:三个定义点**各自就地保留**声明,不引入物理共享面;新增机检把「三者恒等」钉死为可复跑断言(含反例自检)。**`apps/session-api` 侧定义点未动,由机检锁定**。
+  - 定义点 1(正式通道归一化):`packages/vm-ui/src/descriptor/challenge-descriptor.ts:452` —— `debugMode: input["debugMode"] === undefined ? true : value`。
+  - 定义点 2(开发壳夹具通道):`apps/plugin-dev/src/main.ts` —— `export const DEBUG_MODE_DEFAULT = true` + `return debugMode ?? DEBUG_MODE_DEFAULT;`。
+  - 定义点 3(服务端门控):`apps/session-api/src/debug/debug-channel-orchestrator.ts` —— 仅 `descriptor.debugMode === false` 判否。
+- **理由**(三选项逐条排除):
+  1. **不选「单物理源」**:`apps/plugin-dev` **禁止**静态导入浏览器包(dependency-cruiser `no-backend-dependency-on-browser-packages`),`packages/vm-ui` **禁止**依赖 `challenge-schema`(`challenge-schema-dependents-restricted`);唯一跨域共享面是 `protocol`,而本席位文件锁不含 `packages/protocol`(并发在改)⇒ 仓内**不存在**本席位可用的合法跨包物理共享面。
+  2. **不选「单点权威 + 引用」**:同一原因 —— 「引用」需要一个可被三包同时依赖的载体,该载体只能是 `protocol`(越界)或新建包(越界);且 JSON Schema 侧对该字段**只有文字描述、无机器可读 `"default": true`** ⇒ Schema 也不能充当权威面(以 schema 为权威会引入「文字描述即契约」的反模式)。
+  3. **择「保留重复 + 机检恒等」**:该语义是**三处各自独立实现**的既有事实(M2 §二 WP-75#9 已登记开发壳与正式通道同语义),物理合并不可行时,把「漂移」变成**红灯**是可达的最强护栏。
+- **红灯位置**:`packages/vm-ui/test/descriptor/debug-mode-default-cross-package.test.ts`(共 9 例):
+  - 恒等面 4 例:①vm-ui 侧口径合规 **且 `src/**` 内缺省语义定义点**恰一处**(防 vm-ui 内部再长出第二份);②开发壳常量 + 归一化形态合规;③服务端门控形态合规;④**行为面三档恒等** —— 缺省 / 显式 `true` / 显式 `false` 三档取值完全一致(缺省档三处同为「启用」,且 vm-ui 侧走真实 `parseDescriptorView` 解析、开发壳取源码常量字面值、服务端取 `=== false` 判否的等价谓词)。
+  - **机检器自检 5 例(反例必须判红)**:反例①就是 WP-75#9 修复前的**真实缺陷形态**(开发壳按 `=== true` 判真 ⇒ 缺省关闭)、②开发壳常量翻转为 `false`、③正式通道归一化为 `undefined ? false`、④服务端门控改为 `=== true` 判真;另 1 例为正例不误报。⇒ 机检器不可能「永远绿」。
+  - 机检仅 `readFileSync` 三个源文件做**文本形态 + 行为等价**断言,**不建立任何 import 边** ⇒ 不触碰依赖方向规则(`pnpm lint:deps` 绿)。
+- **影响面**:三处定义点中,**仅 vm-ui 侧一处**在本席位写入面内(且本项**未改动任何**定义点,只新增测试);`apps/plugin-dev` / `apps/session-api` 两处**零改动**(并发 agent 正在编辑 `apps/session-api`,已按纪律默认不碰)。**代价与义务**:三行中任一行被独立改动(改名 / 翻转缺省 / 改判真形态),本机检即红 —— 这正是本决策想要的锁;反之若将来 `protocol` 文件锁解除,可另开 WP 走「单物理源」并把本机检降级为迁移护栏。
+
+### D-API-145(待并入:M3 遗留移交清单第 6 项)
+
+占位 —— 片段产出后由收口轮并入;编号已预分配。
+
+### D-API-146 体积口径与「单点惰性 = 假绿」陷阱
+
+- **决策**:主 chunk 体积的**判定口径**固定为 `dist/sm-workspace-*.js`(被两入口共享的静态 chunk),
+  并**必须同时登记**「首屏静态图」= 入口文件 + 其全部静态 import 闭包;体积单位 `kB = bytes/1000`;
+  gzip 由 Node `zlib.gzipSync` 重算而非采信打包器自报值。任何「把字节搬到另一个 chunk」的手段
+  (`manualChunks` 单点隔离、只改注册表一处)**不构成拆分收益**,必须用首屏静态图口径复核。
+- **理由**:本波次实测反例 —— 只把 `tab-registry.ts` 的 payload 工厂改惰性时,主 chunk 由 1,379.02 kB
+  降到 428.19 kB(表面达标),但入口桶 `src/index.ts` 仍静态再导出 Blockly 承载模块,而该入口是插件
+  文档页直接加载的首屏文件 ⇒ **首屏静态图 1,397.53 kB ≈ 拆分前 1,396.71 kB(甚至 +827 B)**,即
+  「主 chunk 达标 + 用户首屏零收益」的假绿。两处同改后首屏静态图 1,396.71 → **452.51 kB**。
+- **红灯位置**:体积回归机检若只看 `dist/sm-workspace-*.js` 单项,会在「L1 形态」下报绿 ⇒ 机检须
+  **两条同时断言**(主 chunk < 1.3MB **且** 入口 `index.js` 的静态 import 闭包不含 `payload` chunk;
+  可直接 grep `dist/index.js` 的静态 import 边 + 全 dist「谁静态 import 了 payload chunk = 空集」)。
+  > 口径说明:中期回报里曾给出早期部分构建的 **382.96 / 1,385 / 1,392.05 / 440.31 kB**;本文件一律采用
+  > **同快照忠实构建**的最终口径(§2.1 / §3.1 / §4),两套数字**结论同向**(单点惰性 = 零收益)。
+- **影响面**:后续任何拆分 / 懒加载 / 依赖瘦身波次的验收口径与机检脚本;`docs/phases/中期任务分解.md`
+  §一.2.3 与 §九 风险行的「1.3MB」判据解释权;`packages/web-component`(D-API-147)沿用同一「首屏静态图」思维。
+
+### D-API-147 `packages/web-component` 单产物 = 结构性限制(维持不拆)
+
+- **决策**:`packages/web-component` 维持 `rollupOptions.output.codeSplitting: false` 的**单产物**
+  形态,**不做拆分**;其动态 import 被压平 ⇒ 该拓扑下 `import()` 拆分**零收益**,登记为**结构性限制**
+  (触发条件 = 若未来 web-component 改为多产物入口,则适用同一拆分手段)。
+- **理由**:单产物是该包的**嵌入契约**(消费者以单个 `<script>` / 单入口加载,`dist/index.js` 实测
+  1,686,014 B,非根路径部署 = 文档页内相对路径引用),为体积改多产物会**改变消费者加载方式**
+  = 破坏性变更(红线);且体积义务的判定口径本身是 `dist/sm-workspace-*.js`,以该口径结清。
+  另经核实:`packages/web-component/src/index.ts` **不存在**入口桶承载 Blockly 的再导出
+  (六行 `export *` 全是本包模块),故「入口桶退场」手段对该包**无适用对象**,改动为零。
+- **红灯位置**:无新增机检;该限制登记在本文件与 `docs/develop/decisions-m3/` 中,
+  防止后续波次重复评估同一问题(或误把 `codeSplitting:false` 当缺陷「顺手修掉」而破坏嵌入契约)。
+- **影响面**:`packages/web-component` 构建配置保持冻结;体积义务的举证责任固定在 `packages/vm-ui`
+  产物口径上;不影响 `packages/vm-ui` 的拆分收益(插件文档页拓扑与本包相互独立)。
+
+### D-API-148 拆分实施与判定(主 chunk 由 1,379.02 kB → 428.65 kB,义务关闭)
+
+- **决策**:按「**注册表惰性宿主 + 入口桶承载面退场**」两处同改实施拆分(实现文件与行号见 §3.2),
+  判定 **主 chunk 428.65 kB < 1.3MB ⇒ 中期风险表 §一.2.3 / §九 的体积义务关闭**;同时登记
+  「首屏静态图 452.51 kB(−67.6%)」与「惰性 chunk 945.82 kB 按需加载」两项实测,
+  以及首屏可交互时间的同口径代理量(tImport −40% / tPaint −21%)与其**测量手段局限**。
+- **理由**:Blockly 占拆分前主 chunk 的 65.5% raw / 64.1% gzip(隔离实测 903.56 kB / 215.57 kB),而窗口集
+  是常驻模型(D-MP-1)⇒ 引擎结构性进入主 chunk;Blockly 的四条静态 import 边全在 `payload/**` 内,
+  其中三条只服务 payload 页,具备「不进首屏、按需取回」的语义正当性(用户未打开 payload 页时不必下载)。
+  实现上以**零样式透传壳**承载全部 duck-typing 消费面(含 `refresh` / `breakpointAddresses` /
+  `stepOnce` 与两个事件冒泡),避免改 `<sm-payload-tab>` 内部而触碰并发占用文件。
+- **红灯位置**:① 接口收窄机检 = `test/public-api.test.ts`(入口桶值面断言改为「惰性取回后逐条断言」);
+  ② 组件登记机检 = `test/theming/theme.test.ts` 的「源码 `@customElement` 清单 = 消费清单 ∪ 豁免清单」
+  (新组件 `sm-payload-tab-host` 已登记豁免并附理由);③ 体积机检按 D-API-146 的两条断言。
+  **未复跑 axe**(同日归档覆盖风险,见 §六 遗留 2)⇒ 该项为**如实登记的局限**,不得视为通过。
+- **影响面**:`packages/vm-ui` 入口包面收窄(**公开 API 收窄**:`SmPayloadTab` / `compilePayload` /
+  `registerPayloadBlocks` / `PAYLOAD_*` 由值导出改为**类型导出 + `loadPayloadEngine()` 惰性取回**)
+  ⇒ 任何宿主 / 消费者若直接使用这些值,须在需要时 `await loadPayloadEngine()`;测试面 3 文件随动;
+  `packages/web-component` / `react-wrapper` / `embed-runtime` 均未使用该值面(已核实 web-component,
+  其余包零引用),故无连带改动。
+
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:
