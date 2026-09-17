@@ -509,6 +509,93 @@ describe("WP-75 #7:伪汇编列右对齐与初始视角锚定", () => {
   });
 });
 
+// ── M3 遗留移交清单第 5 项 ①:指令行「模板幻影空行」回归护栏 ─────────────────
+
+/**
+ * M2 末轮登记的既有缺陷(113px / 行):`.row-address` / `.row-bytes` 是
+ * `white-space: pre` 单元格 ⇒ **模板内的换行被逐字保留为行盒**,每条指令行实测
+ * 行高 113px(表头行 21px),一屏仅 ≈1.5 行。
+ *
+ * 判定口径:jsdom 不做级联,但**文本节点是真实可观测的** —— `white-space: pre`
+ * 下的行盒数 = `文本中的换行数 + 1`,故「单元格文本零换行」等价于「该单元格恰
+ * 一个行盒」。这条不变量把「模板排版」与「行高」直接绑定:任何一次重排把插值
+ * 前后的换行重新引入(例如把插值换行书写),本组用例即红,不必等真机 E2E。
+ *
+ * 真机几何证据(卷尺面)= `test/geometry/instruction-row-geometry.spec.mjs`
+ * (真实 Chromium 量行高 / 一屏行数 / 锚点行可见比例)。
+ */
+describe("M3 遗留-5 ①:pre 单元格零保留换行(指令行行高的根因)", () => {
+  /** pre 语义下的行盒数:换行数 + 1(单元格无内容时也是 1 个空行盒)。 */
+  function preservedLineBoxes(cell: Element | null | undefined): number {
+    return (cell?.textContent ?? "").split("\n").length;
+  }
+
+  it("数据行:地址列 / 伪机器码列各自恰一个行盒,且不含连续空白", async () => {
+    const view = await mountView(new FakeDebugSource(ENTRIES));
+    const rows = rowsOf(view);
+    expect(rows).toHaveLength(3);
+
+    for (const row of rows) {
+      const address = row.querySelector(".row-address");
+      const bytes = row.querySelector(".row-bytes");
+      expect(address, "地址列单元格缺席").not.toBeNull();
+      expect(bytes, "伪机器码列单元格缺席").not.toBeNull();
+      // 幻影空行 = 被 pre 保留的模板换行 ⇒ 行盒数必须恰为 1。
+      expect(preservedLineBoxes(address), `地址列保留换行:${JSON.stringify(address?.textContent)}`).toBe(1);
+      expect(preservedLineBoxes(bytes), `伪机器码列保留换行:${JSON.stringify(bytes?.textContent)}`).toBe(1);
+      // pre 同样保留连续空白:列内只允许单空格分隔(断点按钮与地址之间)。
+      expect(address?.textContent ?? "").not.toMatch(/[ \t\u00a0]{2,}/);
+      expect(bytes?.textContent ?? "").not.toMatch(/[ \t\u00a0]{2,}/);
+    }
+  });
+
+  it("列头行与数据行同构:列头单元格同样零保留换行", async () => {
+    const view = await mountView(new FakeDebugSource(ENTRIES));
+    const header = queryShadow(view, ".instruction-row.header-row");
+    expect(header).not.toBeNull();
+    for (const selector of [".row-address", ".row-bytes", ".row-text"]) {
+      expect(preservedLineBoxes(header?.querySelector(selector)), `列头保留换行:${selector}`).toBe(1);
+    }
+  });
+
+  it("断点按钮与地址同处一个行盒(按钮内部文本不撑高行)", async () => {
+    const view = await mountView(new FakeDebugSource(ENTRIES));
+    const address = rowsOf(view)[0]?.querySelector(".row-address");
+    const toggle = address?.querySelector(".breakpoint-toggle");
+    expect(toggle).not.toBeNull();
+    // 按钮是行内元素:其内部文本换行同样被 pre 继承保留 ⇒ 一并计入口径。
+    expect(preservedLineBoxes(toggle)).toBe(1);
+    // 地址列内容 = 按钮 + 单空格 + 地址(不缺间隔,也不多空行)。
+    expect(address?.textContent).toBe("○ 0x00401000");
+  });
+
+  it("命中行左缘标注(子组件 shadow 内)不因 pre 继承产生保留换行", async () => {
+    const source = new FakeDebugSource(ENTRIES);
+    const view = await mountView(source);
+    view.registerHits = [
+      { registerName: "RIP", valueHex: "0x401004", targetAddressHex: "0x401004", regionId: "region-code", offset: 0 },
+    ];
+    await view.updateComplete;
+    await settleFrames(3);
+
+    const annotation = queryShadow(view, "sm-register-annotation");
+    expect(annotation).not.toBeNull();
+    // pre 穿透 shadow 边界继承:标注容器内的模板换行同样会撑高宿主行。
+    expect(preservedLineBoxes(annotation?.shadowRoot?.querySelector(".annotation"))).toBe(1);
+    expect(preservedLineBoxes(annotation?.shadowRoot?.querySelector(".reg-annotation"))).toBe(1);
+  });
+
+  it("修法边界:禁换行语义仍由 pre / nowrap 承载(只收窄模板空白,零 CSS 语义变更)", async () => {
+    const view = await mountView(new FakeDebugSource(ENTRIES));
+    void view;
+    const styles = (SmInstructionView as unknown as { elementStyles?: { cssText?: string }[] })
+      .elementStyles ?? [];
+    const cssText = styles.map((style) => style.cssText ?? "").join("\n").replace(/\s+/g, " ");
+    expect(cssText).toMatch(/\.row-address \{ white-space: (pre|nowrap)/);
+    expect(cssText).toMatch(/\.row-bytes \{ white-space: (pre|nowrap)/);
+  });
+});
+
 /**
  * 高度链死选择器回归护栏(WP-76 真机发现,同族缺陷见 `__tmp-probe` 归档口径):
  *

@@ -82,8 +82,21 @@ export class SmJumpChain extends LitElement {
   @property({ attribute: false })
   pseudoAsmProvider: ((addressHex: string) => { readonly text: string } | null) | null = null;
 
+  /**
+   * 只读复制形态(WP-75#5 / D-MP-3;M3 遗留-5 ②):宿主(寄存器视图特殊显示列)
+   * 复用本组件时**截停** `viewport-jump` 并把点击改为**复制该地址**,故链上地址
+   * 芯片的 tooltip 取 `chain.copyTitle`(默认跳转形态取 `chain.jumpTitle`)——
+   * 文案与真实行为一致。
+   *
+   * **组件行为零变化**:本属性只决定 tooltip 取词,仍只发 `viewport-jump` 事件,
+   * 复制由宿主实现(组件内不接触剪贴板)。
+   */
+  @property({ type: Boolean })
+  copyMode = false;
+
   /** 延伸进行中(按钮 aria-busy;防重入)。 */
   #extending = false;
+
   /** 延伸反馈(已延伸至缓存边界 / 失败文案;短暂承载)。 */
   #extendStatus: string | null = null;
 
@@ -340,15 +353,14 @@ export class SmJumpChain extends LitElement {
     `;
   }
 
-  /** 地址芯片(链上每个地址可点击,FE-ST-09)。 */
+  /** 地址芯片(链上每个地址可点击,FE-ST-09);tooltip 取词随宿主形态(见 `copyMode`)。 */
   #renderAddressChip(addressHex: string, withinWindow: boolean): TemplateResult {
+    const address = addressHex + (withinWindow ? "" : t("chain.outsideSuffix"));
     return html`<button
       type="button"
       class="chain-address"
       data-address="${addressHex}"
-      title=${t("chain.jumpTitle", {
-        address: addressHex + (withinWindow ? "" : t("chain.outsideSuffix")),
-      })}
+      title=${this.copyMode ? t("chain.copyTitle", { address }) : t("chain.jumpTitle", { address })}
       @click=${() => this.#emitJump(addressHex, withinWindow)}
     >${addressHex}</button>`;
   }

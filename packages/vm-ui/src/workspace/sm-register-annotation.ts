@@ -92,11 +92,19 @@ export class SmRegisterAnnotation extends LitElement {
     }
     return html`
       <!-- 展开态语义(aria-expanded)由 renderRegisterAnnotationCell 落在
-           真实 button 上(WP-55 axe 真机修正);外层容器保持 generic。 -->
-      <span class="annotation" @click=${this.#onToggle}>
-        ${renderRegisterAnnotationCell(this.hits, { expanded: this.expanded })}
-        ${this.expanded ? this.#renderValues() : nothing}
-      </span>
+           真实 button 上(WP-55 axe 真机修正);外层容器保持 generic。
+           **模板空白收窄**(M3 遗留-5 ①):本组件的宿主可能是地址列这类
+           white-space: pre 单元格,而 white-space 是继承属性、**穿透 shadow
+           边界** ⇒ 这里的排版换行会被逐字保留为行盒,把宿主行撑高(修复前实测
+           4 个行盒)。故两个插值均紧贴标签尖括号书写(本注释内禁写反引号与
+           插值起始符,否则模板字面量会被提前闭合)。
+           回归护栏见 test/views/instruction/sm-instruction-view.test.ts
+           「pre 单元格零保留换行」组。 -->
+      <span class="annotation" @click=${this.#onToggle}
+        >${renderRegisterAnnotationCell(this.hits, { expanded: this.expanded })}${this.expanded
+          ? this.#renderValues()
+          : nothing}</span
+      >
     `;
   }
 

@@ -268,6 +268,9 @@ export const zhCN = {
 
   // ── chain(<sm-jump-chain> 跳转链)─────────────────────────────────────────
   "chain.jumpTitle": "跳转到 {address}",
+  // 只读复制形态(WP-75#5 / D-MP-3 寄存器视图特殊显示列复用面;M3 遗留-5 ②):
+  // 该形态下点击被宿主截停并**改为复制地址**,故 tooltip 与行为对齐。
+  "chain.copyTitle": "点击复制 {address}",
   "chain.outsideSuffix": "(窗口外)",
   "chain.loopAria": "回环:目标 {target} 已在链中出现",
   "chain.loopTitle": "回环:该地址已在链中出现",
@@ -529,6 +532,12 @@ export const zhCN = {
   "block.catString": "字符串",
   "block.catProjection": "公开投影读取",
   "block.catBreakpoint": "断点",
+  "block.catAuthorBlocks": "题目积木",
+  "block.authorBlock.tooltip":
+    "题目「{name}」声明的积木(M10 出题者积木声明面):填好参数槽位后编译为公开会话动作。",
+  "compile.errUnknownAuthorBlock": "未知的题目积木类型:{type}(题目未声明该模板)",
+  "compile.errAuthorBlockSlotUnknown": "题目积木的槽位引用 {slot} 未在模板声明中定义({type})",
+  "compile.stepAuthorBlock": "题目积木:{name}",
 } as const;
 
 /** zh-CN 目录类型(键集即消息键全集)。 */

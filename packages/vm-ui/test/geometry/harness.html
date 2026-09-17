@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>指令视图真机几何测量(M3 遗留-5 ①)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+        color: #111111;
+      }
+      /* 舞台 = 应用内窗口面板的几何约束复刻:面板高 231px(M2 真机实测值),
+         overflow: hidden 使祖先裁剪参与可见比例(与 Playwright toBeInViewport
+         的 IntersectionObserver 语义一致)。两变体同法。 */
+      #stage {
+        inline-size: 420px;
+        block-size: 231px;
+        overflow: hidden;
+        outline: 1px solid #cccccc;
+      }
+      #report {
+        font: 12px/1.4 monospace;
+        white-space: pre-wrap;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <pre id="report"></pre>
+    <script type="module" src="./mount-instruction-view.mjs"></script>
+  </body>
+</html>

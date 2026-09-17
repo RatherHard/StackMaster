@@ -254,6 +254,7 @@ export class SmRegisterView extends LitElement {
                 class="cell-special cell-chain"
                 .dataSource=${this.dataSource}
                 .startAddressHex=${hit.targetAddressHex}
+                .copyMode=${true}
                 @viewport-jump=${(event: CustomEvent<ViewportJumpDetail>) =>
                   this.#onChainAddressClick(event, row)}
               ></sm-jump-chain>

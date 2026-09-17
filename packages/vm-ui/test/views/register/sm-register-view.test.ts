@@ -192,6 +192,22 @@ describe("SmRegisterView 特殊显示列只读跳转链(D-MP-3)", () => {
     element.remove();
   });
 
+  it("链芯片 tooltip 与点击行为一致:只读形态取「点击复制」(M3 遗留-5 ②)", async () => {
+    const element = await mountedElement(dataSourceWith(projectionWithChain()));
+    const chain = await chainOf(element);
+
+    // M2 核查表登记项:`chain.jumpTitle`(「跳转到 {address}」)在只读形态下与
+    // 实际行为(点击 = 复制)不符 ⇒ 本视图须以只读复制形态接线,芯片 tooltip
+    // 取 `chain.copyTitle`。窗口内段无后缀,窗口外段保留「(窗口外)」后缀。
+    expect(chain.copyMode).toBe(true);
+    expect(chipOf(chain, "0x1004").getAttribute("title")).toBe("点击复制 0x1004");
+    expect(chipOf(chain, "0x1010").getAttribute("title")).toBe("点击复制 0x1010(窗口外)");
+    // 断言锚:不得回潮为跳转文案。
+    expect(chipOf(chain, "0x1004").getAttribute("title")).not.toContain("跳转到");
+
+    element.remove();
+  });
+
   it("点击链上地址 → 复制该地址且 viewport-jump 不冒泡(点击不跳转)", async () => {
     const writer = vi.fn().mockResolvedValue(undefined);
     const element = await mountedElement(dataSourceWith(projectionWithChain()));

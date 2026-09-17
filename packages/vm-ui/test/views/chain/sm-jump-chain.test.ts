@@ -178,7 +178,7 @@ describe("SmJumpChain 视角跳转事件(FE-ST-09,组件只发事件)", () => {
     element.remove();
   });
 
-  it("窗口外段(区域范围但字节未下发)→ withinWindow = false(宿主给'窗口外'反馈)", async () => {
+  it("窗口外段(区域范围但字节未下发)→ withinWindow = false(宿主给「窗口外」反馈)", async () => {
     const dataSource = dataSourceWith({
       byteLength: 4096,
       bytesHex: littleEndianHex(0x1100),
@@ -212,7 +212,7 @@ describe("SmJumpChain 超限展开(竖向完整链)", () => {
     });
   }
 
-  it("链超过 3 段:横向截断 3 段 + 尾随目标芯片 + '展开完整链'入口", async () => {
+  it("链超 3 段:横向截断 3 段 + 尾随目标芯片 + '展开完整链'入口", async () => {
     const element = await mountedElement("0x1000", fiveChainDataSource());
 
     expect(chips(element).map((chip) => chip.textContent?.trim())).toEqual([
@@ -247,7 +247,7 @@ describe("SmJumpChain 超限展开(竖向完整链)", () => {
       element.shadowRoot?.querySelector("button.chain-expand")?.getAttribute("aria-expanded"),
     ).toBe("true");
 
-    // 收起:竖向链撤销,回到横向 ≤3 段形态。
+    // 收起:竖向链撤销,回到横向 3 段形态。
     (element.shadowRoot?.querySelector("button.chain-expand") as HTMLButtonElement).click();
     await element.updateComplete;
     expect(element.shadowRoot?.querySelector(".chain-vertical")).toBeNull();
@@ -255,7 +255,7 @@ describe("SmJumpChain 超限展开(竖向完整链)", () => {
     element.remove();
   });
 
-  it("链自然终止(≤3 段)→ 无展开入口", async () => {
+  it("链自然终止(≤3 段)⇒ 无展开入口", async () => {
     const dataSource = dataSourceWith({
       byteLength: 4096,
       bytesHex: windowHexFrom([[0, littleEndianHex(0x1008)]], 16),
@@ -269,7 +269,7 @@ describe("SmJumpChain 超限展开(竖向完整链)", () => {
 
 describe("SmJumpChain 链末可见字符延伸(FE-ST-10)", () => {
   it("链末地址内容为可见字符时追加引号字符显示", async () => {
-    // 0x1000 → 0x1041(窗口内);0x1041 处内容 "Hello\0" → 值非指针,链终止。
+    // 0x1000 → 0x1041(窗口内);0x1041 处内容 "Hello\0" ⇒ 值非指针,链终止。
     const dataSource = dataSourceWith({
       byteLength: 0x2000,
       bytesHex: windowHexFrom(
@@ -288,7 +288,7 @@ describe("SmJumpChain 链末可见字符延伸(FE-ST-10)", () => {
     element.remove();
   });
 
-  it("链末内容不可见(指针字节)→ 无可见字符延伸", async () => {
+  it("链末内容不可解(指针字节)⇒ 无可见字符延伸", async () => {
     const dataSource = dataSourceWith({
       byteLength: 4096,
       bytesHex: windowHexFrom([[0, littleEndianHex(0x1008)]], 16),
@@ -344,6 +344,56 @@ function pseudoAsm(element: SmJumpChain): HTMLElement | null {
   return element.shadowRoot?.querySelector<HTMLElement>("[data-pseudo-asm]") ?? null;
 }
 
+describe("SmJumpChain 只读复制形态 tooltip(M3 遗留-5 ②)", () => {
+  /**
+   * 链 = 0x1000 → 0x1800。区域范围 4096 字节(0x1000..0x2000)覆盖 0x1800,
+   * 但已下发窗口只有 16 字节 ⇒ 第二段 `outsideWindow`(带「(窗口外)」后缀)。
+   */
+  function copyModeDataSource(): MemoryDataSource {
+    return dataSourceWith({
+      byteLength: 4096,
+      bytesHex: windowHexFrom([[0, littleEndianHex(0x1800)]], 16),
+    });
+  }
+
+  it("默认(跳转形态):芯片 tooltip 取 chain.jumpTitle,现状零变化", async () => {
+    const element = await mountedElement("0x1000", copyModeDataSource());
+    expect(element.copyMode).toBe(false);
+    expect(chips(element)[0]?.getAttribute("title")).toBe("跳转到 0x1000");
+    expect(chips(element)[1]?.getAttribute("title")).toBe("跳转到 0x1800(窗口外)");
+
+    element.remove();
+  });
+
+  it("copyMode = true(寄存器视图只读形态):芯片 tooltip 取 chain.copyTitle(与点击实为复制一致)", async () => {
+    const element = await mountedElement("0x1000", copyModeDataSource());
+    element.copyMode = true;
+    await element.updateComplete;
+
+    expect(chips(element)[0]?.getAttribute("title")).toBe("点击复制 0x1000");
+    // 窗口外段的后缀合成口径在两种形态下一致(只有动作词不同)。
+    expect(chips(element)[1]?.getAttribute("title")).toBe("点击复制 0x1800(窗口外)");
+
+    element.remove();
+  });
+
+  it("copyMode 只改 tooltip:事件语义不变(仍只发 viewport-jump,复制由宿主截停实现)", async () => {
+    const element = await mountedElement("0x1000", copyModeDataSource());
+    element.copyMode = true;
+    await element.updateComplete;
+
+    const jumps: ViewportJumpDetail[] = [];
+    element.addEventListener("viewport-jump", (event) => {
+      jumps.push((event as CustomEvent<ViewportJumpDetail>).detail);
+    });
+    chips(element)[0]?.click();
+
+    expect(jumps).toEqual([{ addressHex: "0x1000", withinWindow: true }]);
+
+    element.remove();
+  });
+});
+
 describe("SmJumpChain 伪汇编延伸 chip(WP-76 调试档 / 解题档双形态)", () => {
   it("链延伸落到代码区 + 调试档指令流命中 → 呈现真实伪汇编 chip(地址 + 语句)", async () => {
     const dataSource = codeChainDataSource([[0, littleEndianHex(0x400000)]]);
@@ -389,7 +439,7 @@ describe("SmJumpChain 伪汇编延伸 chip(WP-76 调试档 / 解题档双形态)
     element.remove();
   });
 
-  it("链未落到代码区 → 不追加 chip", async () => {
+  it("链未落到代码区 ⇒ 不追加 chip", async () => {
     const dataSource = codeChainDataSource([[0, littleEndianHex(0x1008)]]);
     const element = await mountedElement("0x1000", dataSource);
     element.pseudoAsmProvider = () => ({ text: "push rbp" });

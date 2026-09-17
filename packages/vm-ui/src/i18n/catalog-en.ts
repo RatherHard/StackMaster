@@ -278,6 +278,9 @@ export const en: Record<SmMessageKey, string> = {
 
   // ── chain ─────────────────────────────────────────────────────────────────
   "chain.jumpTitle": "Jump to {address}",
+  // Read-only copy form (WP-75#5 / D-MP-3 register-view special column; M3 item ②):
+  // the host intercepts the click and copies the address instead of jumping.
+  "chain.copyTitle": "Click to copy {address}",
   "chain.outsideSuffix": "(outside window)",
   "chain.loopAria": "Loop: target {target} already appears in the chain",
   "chain.loopTitle": "Loop: this address already appears in the chain",
@@ -566,4 +569,12 @@ export const en: Record<SmMessageKey, string> = {
   "block.catString": "Strings",
   "block.catProjection": "Projection reads",
   "block.catBreakpoint": "Breakpoints",
+  "block.catAuthorBlocks": "Challenge blocks",
+  "block.authorBlock.tooltip":
+    "Block declared by the challenge “{name}” (M10 author block declaration): fill the parameter slots, then compile to public session actions.",
+  "compile.errUnknownAuthorBlock":
+    "Unknown challenge block type: {type} (the challenge declares no such template)",
+  "compile.errAuthorBlockSlotUnknown":
+    "Challenge block slot reference {slot} is not declared by the template ({type})",
+  "compile.stepAuthorBlock": "Challenge block: {name}",
 };
