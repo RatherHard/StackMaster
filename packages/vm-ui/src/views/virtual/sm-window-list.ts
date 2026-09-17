@@ -14,7 +14,7 @@
  *    实测为 0,自动退化为全量渲染——测试与打印路径零特殊处理);
  *  - scroll / ResizeObserver 触发,rAF 合帧重算窗口。
  */
-import { LitElement, css, html } from "lit";
+import { LitElement, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 /** 可见切片渲染回调(返回宿主视图的 Lit 模板;light DOM 渲染保样式)。 */
@@ -22,6 +22,30 @@ export type WindowListItemRenderer = (item: unknown, index: number) => unknown;
 
 /** 无布局环境(clientHeight=0)下的回退视口行数:窗口化在任何环境有界。 */
 const FALLBACK_VIEWPORT_ROWS = 16;
+
+/**
+ * 结构样式(light DOM 形态下 `static styles` 不可达:渲染根 = 宿主自身,
+ * Lit 的 `adoptStyles` 只对 shadow root 生效 ⇒ 必须以 `<style>` 随模板落到
+ * **父视图的 shadow 树**内)。选择器一律以宿主标签收窄 —— 同一 shadow 树内
+ * 可能有多个列表实例,规则按标签作用于全部实例(与 `:host` 语义等价)。
+ */
+const STRUCTURAL_STYLES = `
+sm-window-list {
+  display: block;
+  position: relative;
+  overflow-y: auto;
+}
+sm-window-list > .sizer {
+  /* 流内撑高:滚动条几何 = items × 行高;空元素无绘制成本。 */
+  width: 1px;
+}
+sm-window-list > .window {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  will-change: transform;
+}
+`;
 
 @customElement("sm-window-list")
 export class SmWindowList extends LitElement {
@@ -51,23 +75,14 @@ export class SmWindowList extends LitElement {
     this.#scheduleWindowUpdate();
   };
 
-  static override styles = css`
-    :host {
-      display: block;
-      position: relative;
-      overflow-y: auto;
-    }
-    .sizer {
-      /* 流内撑高:滚动条几何 = items × 行高;空元素无绘制成本。 */
-      width: 1px;
-    }
-    .window {
-      position: absolute;
-      inset-inline: 0;
-      top: 0;
-      will-change: transform;
-    }
-  `;
+  /**
+   * **不声明 `static styles`**:本组件 `createRenderRoot()` 返回宿主自身
+   * (light DOM 形态,与 lit-virtualizer 同款架构),而 Lit 的 `adoptStyles`
+   * 只对 shadow root 生效 ⇒ `static styles` 在此架构下是**死代码**(WP-76
+   * 真机发现:列表因此不是滚动容器,行被排到 sizer 之后的流内位置)。
+   * 结构样式唯一来源 = 模板内 `<style>${STRUCTURAL_STYLES}</style>`
+   * (落到宿主所在 shadow 树内,可级联到行内容)。
+   */
 
   /** light DOM 渲染(照 lit-virtualizer 同款架构):宿主视图的 shadow 样式直接作用于行内容。 */
   protected override createRenderRoot(): HTMLElement {
@@ -110,6 +125,7 @@ export class SmWindowList extends LitElement {
       }
     }
     return html`
+      <style>${STRUCTURAL_STYLES}</style>
       <div class="sizer" aria-hidden="true" style="height:${total}px"></div>
       <div class="window" style="transform:translateY(${this.#first * rowH}px)">${slice}</div>
     `;

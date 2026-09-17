@@ -158,7 +158,7 @@ export class SmInstructionView extends LitElement {
       font-size: 0.8125rem;
     }
 
-    .layout {
+    .instruction-view {
       display: flex;
       flex-direction: column;
       block-size: 100%;

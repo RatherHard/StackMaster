@@ -509,3 +509,32 @@ describe("WP-75 #7:伪汇编列右对齐与初始视角锚定", () => {
   });
 });
 
+/**
+ * 高度链死选择器回归护栏(WP-76 真机发现,同族缺陷见 `__tmp-probe` 归档口径):
+ *
+ * 渲染根此前是 `<section class="instruction-view">`,而样式表把 flex 高度链写在
+ * `.layout` 上(渲染输出里根本没有该类名)⇒ `display:flex` / `block-size:100%`
+ * 从未生效,视图高度退化为**内容高度**(真机实测 3833px ≫ 面板 231px),
+ * `sm-window-list` 拿不到有界视口,锚点行落在视口之外。
+ *
+ * jsdom 不做级联计算,故此处断言**类名与样式表的对应关系**(结构事实),
+ * 真机几何由 `e2e/breakpoint-linkage.spec.ts` 调试档用例覆盖。
+ */
+describe("高度链:渲染根类名必须与自身样式表同名(防死选择器回潮)", () => {
+  it("`section.instruction-view` 在自身样式表内有 flex 高度链规则,`.layout` 无残留规则", async () => {
+    const view = await mountView(new FakeDebugSource(ENTRIES));
+    const section = view.shadowRoot?.querySelector("section.instruction-view");
+    expect(section, "渲染根仍须是 section.instruction-view").toBeTruthy();
+
+    const styles = (SmInstructionView as unknown as { elementStyles?: { cssText?: string }[] })
+      .elementStyles ?? [];
+    const cssText = styles.map((style) => style.cssText ?? "").join("\n");
+    expect(cssText).toContain(".instruction-view {");
+    expect(cssText).toContain("flex-direction: column");
+    expect(cssText).toContain("block-size: 100%");
+    // 死选择器不得回潮:`.layout` 在渲染输出里不存在。
+    expect(cssText.includes(".layout {")).toBe(false);
+    expect(view.shadowRoot?.querySelector(".layout")).toBeNull();
+  });
+});
+
