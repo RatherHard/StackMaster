@@ -426,7 +426,7 @@ test.describe("axe color-contrast 真机补测(阶段四条件 6 遗留关闭;WP
     await closeEmbedSessionBestEffort(handle);
   });
 
-  test("降级显示面(§4.3 静态文案 + 重试入口)light + terminal 零 violations", async ({
+  test("降级显示面(§4.3 静态文案 + 重试入口)light 零 violations;terminal 格登记不可达", async ({
     page,
   }) => {
     // 降级形态含两个面(light + terminal),加本用例的握手超时等待,放宽上限。
@@ -440,15 +440,16 @@ test.describe("axe color-contrast 真机补测(阶段四条件 6 遗留关闭;WP
 
     await expectFaceClean(pluginFrameOf(page), faceTarget("plugin-degraded", "light"));
 
-    // terminal(承载路径 2 = 运行期外部锚写入):降级形态没有握手完成,宿主
-    // `theme_changed` 通道不存在 ⇒ light / dark 的协议路径不可用(宿主元素外部
-    // 锚会被插件按自身 resolvedTheme 写回,terminal 是该写回的唯一例外);
-    // 写入后锚变更观察(#observeAnchor)即生效,无需会话。
+    // terminal 格**登记为不可达**(与 `shell dark` / `degraded dark` 同列,如实登记):
+    // 降级形态**不安装文档级主题 token 样式表**——该样式表由组件侧
+    // `ensureSmThemeStyles` 安装,而降级形态没有 sm-workspace / 没有 themed 组件
+    // 树(只有静态文案 + 重试入口)⇒ 锚写上去也没有变量可级联,`--sm-bg-base`
+    // 取不到值(实测:锚 attribute 在场且被保留,但 computed 为空串)。
+    // 处置:**只断言锚写回的结构事实**,不声称 token 已生效、不扫描该格 ——
+    // 不用 harness 注入产品路径不会产生的样式表来制造假绿。
     const frame = pluginFrameOf(page);
     await setTerminalAnchorOnPluginHost(frame);
     await expect(pluginVm(plugin)).toHaveAttribute(THEME_ANCHOR_ATTRIBUTE, TERMINAL_THEME_VALUE);
-    await expectTerminalTokensActive(pluginVm(plugin));
-    await expectFaceClean(frame, faceTarget("plugin-degraded", "terminal"));
   });
 
   test("plugin-dev 壳形态(表单 + 会话工作区)light + terminal 零 violations", async ({

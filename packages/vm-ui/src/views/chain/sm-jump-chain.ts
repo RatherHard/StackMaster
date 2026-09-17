@@ -222,10 +222,19 @@ export class SmJumpChain extends LitElement {
       white-space: nowrap;
     }
 
-    /* 降级形态(解题档无指令流 / 调试档推送覆盖面外):灰字引导,不冒充指令。 */
+    /* 降级形态(解题档无指令流 / 调试档推送覆盖面外):引导文案,不冒充指令。
+       用系统字体 + 「(暂无伪汇编数据)」标题与真指令区分即可,**不再降前景色**:
+       真机 axe 实测 graytext(#808080)落在 .pseudo-asm 的底
+       (--sm-bg-panel,dark #131921 / light 近白)上只有 **4.47:1**,低于正文
+       4.5:1 门槛(solve 形态「切换调试模式查看指令」命中 color-contrast/serious)
+       —— 且 graytext 在浅底上同样不达标(≈3.9:1),故唯一稳健修法是取正文
+       前景 --sm-fg(继承自基态规则,与之同源)。红点只在新链右段才可达:
+       WP-76 修掉跳转链死绑定(D-API-117)后这枚 chip 才第一次真机渲染。
+       注:本注释内**禁用反引号** —— css 模板字面量里出现反引号会提前闭合并
+       让整份样式表语法失效(TS1005 连锁错;本包已踩过一次,登记于此)。 */
     .pseudo-asm[data-pseudo-asm-source="solve"],
     .pseudo-asm[data-pseudo-asm-source="no-coverage"] {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg, canvastext);
       font-family: system-ui, sans-serif;
     }
   `;

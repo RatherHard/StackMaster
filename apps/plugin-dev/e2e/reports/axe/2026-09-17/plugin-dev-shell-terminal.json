@@ -1,0 +1,64 @@
+{
+  "url": "http://localhost:5173/",
+  "violations": [],
+  "colorContrastStatus": "passed",
+  "colorContrastCheckedNodes": 19,
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "count": 134,
+      "nodes": [
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".window-group-label"
+            ]
+          ],
+          "html": "<span class=\"group-label window-group-label\"><!--?lit$659006522$-->窗口</span>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"stack\"]"
+            ]
+          ],
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"stack\" aria-pressed=\"false\" title=\"聚焦「栈视图」并滚动到该窗口\">\n        <!--?lit$659006522$-->栈视图\n      </button>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"free\"]"
+            ]
+          ],
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"free\" aria-pressed=\"false\" title=\"聚焦「自由视图」并滚动到该窗口\">\n        <!--?lit$659006522$-->自由视图\n      </button>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"registers\"]"
+            ]
+          ],
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"registers\" aria-pressed=\"true\" title=\"聚焦「寄存器视图」并滚动到该窗口\">\n        <!--?lit$659006522$-->寄存器视图\n      </button>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"payload\"]"
+            ]
+          ],
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"payload\" aria-pressed=\"false\" title=\"聚焦「Payload 搭建」并滚动到该窗口\">\n        <!--?lit$659006522$-->Payload 搭建\n      </button>"
+        }
+      ]
+    }
+  ]
+}

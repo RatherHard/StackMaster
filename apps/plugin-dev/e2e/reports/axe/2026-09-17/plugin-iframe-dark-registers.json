@@ -1,0 +1,64 @@
+{
+  "url": "http://localhost:5174/axe.html#esid=ONYZQZGyAE7Wpgh9kA8X8A",
+  "violations": [],
+  "colorContrastStatus": "passed",
+  "colorContrastCheckedNodes": 132,
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "count": 7,
+      "nodes": [
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-4\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-4.label\" class=\"blocklyToolboxCategoryLabel\">会话动作</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-5\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-5.label\" class=\"blocklyToolboxCategoryLabel\">变量</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-6\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-6.label\" class=\"blocklyToolboxCategoryLabel\">列表</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-7\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-7.label\" class=\"blocklyToolboxCategoryLabel\">分支</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-8\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-8.label\" class=\"blocklyToolboxCategoryLabel\">循环</span>"
+        }
+      ]
+    }
+  ]
+}
