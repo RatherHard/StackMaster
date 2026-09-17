@@ -448,7 +448,9 @@ fn debug_commands_are_rejected_in_real_session_phase() {
         .handle_frame(&frame(&command))
         .expect("真实字节模式装载必须成功");
     assert!(matches!(outbound, WorkerOutbound::Loaded { .. }));
-    let error = harness.send_raw(json!({ "type": "debug_step" })).unwrap_err();
+    let error = harness
+        .send_raw(json!({ "type": "debug_step" }))
+        .unwrap_err();
     assert!(matches!(error, ProtocolViolation::StateViolation { .. }));
 }
 
@@ -486,7 +488,11 @@ fn debug_read_window_truncates_at_region_boundary() {
         json!({ "addressHex": "0x405ff8", "byteLength": 16 }),
     );
     match outbound {
-        WorkerOutbound::DebugWindowData { bytes_hex, truncated, .. } => {
+        WorkerOutbound::DebugWindowData {
+            bytes_hex,
+            truncated,
+            ..
+        } => {
             assert_eq!(bytes_hex.len(), 16, "恰 8 字节(截断后)");
             assert!(truncated);
         }
@@ -498,7 +504,10 @@ fn debug_read_window_truncates_at_region_boundary() {
 fn debug_read_window_rejects_unmapped_and_oversize() {
     let mut harness = loaded_harness();
     // 未映射地址 → inaccessible_address。
-    let outbound = harness.send("debug_read_window", json!({ "addressHex": "0x0", "byteLength": 1 }));
+    let outbound = harness.send(
+        "debug_read_window",
+        json!({ "addressHex": "0x0", "byteLength": 1 }),
+    );
     expect_command_error(outbound, WorkerErrorCode::InaccessibleAddress);
     // 超协议上限 / 非法地址 / 零长度 → invalid_input_format。
     for extra in [
@@ -520,7 +529,11 @@ fn debug_step_pauses_step_by_step_until_program_halt() {
     for expected_reason in ["step", "step", "program_halt"] {
         let outbound = harness.send("debug_step", json!({}));
         match outbound {
-            WorkerOutbound::DebugHalted { reason, steps_executed, .. } => {
+            WorkerOutbound::DebugHalted {
+                reason,
+                steps_executed,
+                ..
+            } => {
                 assert_eq!(reason_str(reason), expected_reason);
                 assert_eq!(steps_executed, 1);
             }
@@ -546,7 +559,12 @@ fn debug_run_to_breakpoint_hits_breakpoint() {
         json!({ "breakpoints": ["0x400002"], "maxSteps": 100 }),
     );
     match outbound {
-        WorkerOutbound::DebugHalted { reason, address_hex, steps_executed, .. } => {
+        WorkerOutbound::DebugHalted {
+            reason,
+            address_hex,
+            steps_executed,
+            ..
+        } => {
             assert_eq!(reason_str(reason), "breakpoint");
             assert_eq!(address_hex, "0x400002");
             assert_eq!(steps_executed, 2);
@@ -576,7 +594,11 @@ fn debug_run_to_breakpoint_reports_program_halt_and_budget() {
         json!({ "breakpoints": ["0x400002"], "maxSteps": 1 }),
     );
     match outbound {
-        WorkerOutbound::DebugHalted { reason, steps_executed, .. } => {
+        WorkerOutbound::DebugHalted {
+            reason,
+            steps_executed,
+            ..
+        } => {
             assert_eq!(reason_str(reason), "budget");
             assert_eq!(steps_executed, 1);
         }
@@ -600,9 +622,14 @@ fn debug_run_to_breakpoint_rejects_empty_breakpoints() {
 fn debug_search_finds_pattern_across_whole_memory() {
     let mut harness = loaded_harness();
     // 命中隐藏区域内容(全内存检索;含 isHidden 区)。
-    let outbound = harness.send("debug_search", json!({ "patternHex": "d3adb33f", "maxHits": 256 }));
+    let outbound = harness.send(
+        "debug_search",
+        json!({ "patternHex": "d3adb33f", "maxHits": 256 }),
+    );
     match outbound {
-        WorkerOutbound::DebugSearchResults { hits, truncated, .. } => {
+        WorkerOutbound::DebugSearchResults {
+            hits, truncated, ..
+        } => {
             assert_eq!(hits.len(), 1);
             assert_eq!(hits[0].address_hex, VAULT_START);
             assert_eq!(hits[0].bytes_hex, "d3adb33f");
@@ -613,7 +640,9 @@ fn debug_search_finds_pattern_across_whole_memory() {
     // pad token(ret = c3)遍布代码区:命中数超过 maxHits → truncated。
     let outbound = harness.send("debug_search", json!({ "patternHex": "c3", "maxHits": 2 }));
     match outbound {
-        WorkerOutbound::DebugSearchResults { hits, truncated, .. } => {
+        WorkerOutbound::DebugSearchResults {
+            hits, truncated, ..
+        } => {
             assert_eq!(hits.len(), 2);
             assert!(truncated);
         }
@@ -637,7 +666,11 @@ fn debug_instruction_stream_renders_display_text() {
         json!({ "addressHex": CODE_START, "maxItems": 3 }),
     );
     match outbound {
-        WorkerOutbound::DebugInstructionStreamData { instructions, truncated, .. } => {
+        WorkerOutbound::DebugInstructionStreamData {
+            instructions,
+            truncated,
+            ..
+        } => {
             assert_eq!(instructions.len(), 3);
             assert_eq!(instructions[0].address_hex, CODE_START);
             assert_eq!(instructions[0].text, "push RBP");
@@ -655,7 +688,11 @@ fn debug_function_table_derives_entry_function() {
     let mut harness = loaded_harness();
     let outbound = harness.send("debug_function_table", json!({}));
     match outbound {
-        WorkerOutbound::DebugFunctionTableData { functions, truncated, .. } => {
+        WorkerOutbound::DebugFunctionTableData {
+            functions,
+            truncated,
+            ..
+        } => {
             // 线性扫描:入口 + pad ret,无 call → 恰 1 条(入口)。
             assert_eq!(functions.len(), 1);
             assert_eq!(functions[0].start_address_hex, CODE_START);
@@ -698,7 +735,9 @@ fn debug_replay_write_bytes_is_visible_via_window() {
         json!({ "action": { "type": "write_bytes", "args": { "addressHex": STACK_START, "bytesHex": "41414141" } } }),
     );
     match outbound {
-        WorkerOutbound::DebugApplied { revision, status, .. } => {
+        WorkerOutbound::DebugApplied {
+            revision, status, ..
+        } => {
             assert_eq!(revision, 1);
             assert_eq!(status, "running");
         }
@@ -728,10 +767,7 @@ fn debug_replay_undo_create_checkpoint_align_with_authority() {
     // write → undo → write:三条已接受动作,revision 恒对齐(1 → 2 → 3)。
     for (action, expected_revision) in [
         (write, 1u64),
-        (
-            json!({ "action": { "type": "undo", "args": {} } }),
-            2,
-        ),
+        (json!({ "action": { "type": "undo", "args": {} } }), 2),
         (
             json!({ "action": { "type": "write_bytes", "args": { "addressHex": STACK_START, "bytesHex": "41414141" } } }),
             3,
@@ -739,7 +775,9 @@ fn debug_replay_undo_create_checkpoint_align_with_authority() {
     ] {
         let outbound = harness.send("debug_apply_recorded", action);
         match outbound {
-            WorkerOutbound::DebugApplied { revision, .. } => assert_eq!(revision, expected_revision),
+            WorkerOutbound::DebugApplied { revision, .. } => {
+                assert_eq!(revision, expected_revision)
+            }
             other => panic!("预期 DebugApplied,实得 {other:?}"),
         }
     }

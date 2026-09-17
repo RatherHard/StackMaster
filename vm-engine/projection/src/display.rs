@@ -82,10 +82,13 @@ fn immediate_jump_target(instruction: &vm_core::instr::Instruction) -> Option<u6
     if !is_control_transfer {
         return None;
     }
-    instruction.operands.iter().find_map(|operand| match operand {
-        Operand::Immediate(value) => Some(value.get()),
-        _ => None,
-    })
+    instruction
+        .operands
+        .iter()
+        .find_map(|operand| match operand {
+            Operand::Immediate(value) => Some(value.get()),
+            _ => None,
+        })
 }
 
 /// 伪指令流批量生成(调试通道;ADR-DC1 条款 8)。
