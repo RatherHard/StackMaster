@@ -1,0 +1,63 @@
+{
+  "url": "http://localhost:5173/",
+  "violations": [],
+  "colorContrastStatus": "passed",
+  "colorContrastCheckedNodes": 164,
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "count": 9,
+      "nodes": [
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "section[data-tab-id=\"stack\"] > .tab-content > sm-byte-tab",
+              "sm-byte-view[view-kind=\"stack\"]",
+              ".row-special[role=\"columnheader\"]"
+            ]
+          ],
+          "html": "<span class=\"row-special\" role=\"columnheader\"><!--?lit$669302948$-->特殊显示</span>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "section[data-tab-id=\"free\"] > .tab-content > sm-byte-tab",
+              "sm-byte-view[view-kind=\"free\"]",
+              ".row-special[role=\"columnheader\"]"
+            ]
+          ],
+          "html": "<span class=\"row-special\" role=\"columnheader\"><!--?lit$669302948$-->特殊显示</span>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "#blockly-1g\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-1g.label\" class=\"blocklyToolboxCategoryLabel\">会话动作</span>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "#blockly-1h\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-1h.label\" class=\"blocklyToolboxCategoryLabel\">变量</span>"
+        },
+        {
+          "target": [
+            [
+              "sm-workspace",
+              "#blockly-1i\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-1i.label\" class=\"blocklyToolboxCategoryLabel\">列表</span>"
+        }
+      ]
+    }
+  ]
+}

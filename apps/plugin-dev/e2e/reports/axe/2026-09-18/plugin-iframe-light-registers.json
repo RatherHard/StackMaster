@@ -1,0 +1,68 @@
+{
+  "url": "http://localhost:5174/axe.html#esid=nPVqPi61pxnv1KUgIqiqAw",
+  "violations": [],
+  "colorContrastStatus": "passed",
+  "colorContrastCheckedNodes": 150,
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "count": 9,
+      "nodes": [
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "section[data-tab-id=\"stack\"] > .tab-content > sm-byte-tab",
+              "sm-byte-view[view-kind=\"stack\"]",
+              ".row-special[role=\"columnheader\"]"
+            ]
+          ],
+          "html": "<span class=\"row-special\" role=\"columnheader\"><!--?lit$252234391$-->特殊显示</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "section[data-tab-id=\"free\"] > .tab-content > sm-byte-tab",
+              "sm-byte-view[view-kind=\"free\"]",
+              ".row-special[role=\"columnheader\"]"
+            ]
+          ],
+          "html": "<span class=\"row-special\" role=\"columnheader\"><!--?lit$252234391$-->特殊显示</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-14\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-14.label\" class=\"blocklyToolboxCategoryLabel\">会话动作</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-15\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-15.label\" class=\"blocklyToolboxCategoryLabel\">变量</span>"
+        },
+        {
+          "target": [
+            [
+              "pwn-memory-vm",
+              "sm-workspace",
+              "#blockly-16\\.label"
+            ]
+          ],
+          "html": "<span id=\"blockly-16.label\" class=\"blocklyToolboxCategoryLabel\">列表</span>"
+        }
+      ]
+    }
+  ]
+}
