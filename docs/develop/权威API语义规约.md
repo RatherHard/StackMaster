@@ -1239,13 +1239,13 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **可复用的口径结论(重要,禁再犯)**:**`graytext` 在浅底与深底都不达标**(白底 ≈3.9:1、暗底 4.47:1)⇒ 「降低前景色」这一表达次要性的手段与 **13px 正文门槛结构性不相容**;凡需表达「次要 / 降级 / 占位」的文本,改用**字体族 / 文案 / 边框形态**等非对比度手段,不得靠压暗前景色。
 - **门禁形态自查**:`e2e-matrix` **不进 turbo 任务图**(保持 CI 承载;本地复跑命令与 env 清单在 `apps/plugin-dev/README.md`)。**E-3 未达成(如实口径 = 部分达成)**:job 已落地并**已实跑**(run 31 起),「在 CI 实跑绿至少一次」仍未取得。**2026-09-17 订正(勿沿用)**:原记「本机 webkit 为**环境级阻断**、非产品缺陷 ⇒ 这正是该义务被限定为 WebKit **linux** 复跑的原因」**已被彻底推翻** —— ubuntu 的 `e2e-matrix` job 跑起来后,webkit 以**同一形态**失败(矩阵 12 格全为 webkit 连接面,chromium / firefox 同格全绿);握手级 + 服务端双侧取证定案真因 = **WSS 升级被 `401` 拒**(WebKit 跨源握手**不携带会话 Cookie**;升级认证走凭证 preHandler,而客户端「**同源**升级自动携带 Cookie」的前提在「插件页 `:5174` ≠ API `:13000`」的拓扑下**不成立**)⇒ **真实产品缺陷,非环境阻断**。修法方向(三种)、两个未定分项与「属认证面改动、须走契约 + 安全审查」的处置纪律,登记于 `docs/phases/中期任务分解.md` §二 WP-74 末段与 M3 收口遗留移交清单第 1 项。
 
-## 三·二十三、中期 M3「成绩只读面 / 管理面 / 出题者声明面 / canary 收口 / 采集面 / 体积拆分」(中期 WP-78 ~ WP-83 与 M3 遗留项;D-API-122 ~ 148)
+## 三·二十三、中期 M3「成绩只读面 / 管理面 / 出题者声明面 / canary 收口 / 采集面 / 体积拆分」(中期 WP-78 ~ WP-83 与 M3 遗留项;D-API-122 ~ 151)
 
-> **本节并入纪律与引用解析(主控 2026-09-17 补注)**:
-> 1. 本节各条**逐字**取自 M3 各执行 lane 的片段文件 `docs/develop/decisions-m3/<来源>.md`,**零改写零精简**(并入时以脚本逐块机检 19/19 等同)。
-> 2. **只收 `### D-API-NNN` 条目本体及其要点列表**;片段文件里的非条目内容(**工作包定位 / 红灯与证据摘要表 / 「如实登记的限制与遗留」/ 事故记录 / 实测附录**)刻意**不重复进本节**,仍以片段文件为唯一落点。
-> 3. ⇒ **本节条目正文里出现的 `§x.y`、`§六 遗留 N`、`§2.1`、`§4` 一类内联引用,一律指回该条目所属的片段文件**(如 D-API-146 引 `§3.2` / `§六 遗留 2` ⇒ 见 `docs/develop/decisions-m3/WP-83.md` 的对应小节),**不指本文件**。请勿把这类引用当成权威规约内部锚点。
-> 4. 编号**有意非连续**:`127 ~ 130` 归 WP-80、`131 ~ 133` 归 WP-81、`145` 归 M3 遗留第 6 项 —— 三者在本节以**占位段**承载,待其片段产出后**原位替换**,无需调整顺序。
+> **本节并入纪律与引用解析(主控 2026-09-17 补注;第 1 / 4 条于同日收口轮按磁盘状态订正)**:
+> 1. 本节各条**逐字**取自 M3 各执行 lane 的片段文件 `docs/develop/decisions-m3/<来源>.md`,**零改写零精简**。并入分**两批**完成并各自机检:第一批 **19 条**(122~126 / 134~140 / 141~144 / 146~148)机检 **19/19** 逐块等同;第二批 **11 条**(127~130 取自 WP-80、131~133 取自 WP-81、145 取自 `遗留-6-debug-clone.md`、149~151 取自 WP-82)**机检 11/11** 逐块等同 ⇒ 本节现有 **30 条,编号连续覆盖 122 ~ 151,严格升序、无重号无缺号**。
+> 2. **只收 `### D-API-NNN` 条目本体及其要点列表**;片段文件里的非条目内容(**工作包定位 / 红灯与证据摘要表 / 「如实登记的限制与遗留」/ 事故记录 / 实测附录**)刻意**不重复进本节**,仍以片段文件为唯一落点。**一处例外已如实登记**:`D-API-145` 的片段(`遗留-6-debug-clone.md:11-57`)内**没有第二个 `###` 标题** ⇒ 其「补充登记(本机环境 / 并发纪律 / 待主控裁决)」与「建议回填 `docs/phases/中期任务分解.md:436` 文案」两段在该文件里**属该条目本体**,故一并**逐字全取**(未裁剪;如需回撤可直接按片段裁剪)。
+> 3. ⇒ **本节条目正文里出现的 `§x.y`、`§六 遗留 N`、`§2.1`、`§4` 一类内联引用,一律指回该条目所属的片段文件**(如 D-API-146 引 `§3.2` / `§六 遗留 2` ⇒ 见 `docs/develop/decisions-m3/WP-83.md` 的对应小节),**不指本文件**。请勿把这类引用当成权威规约内部锚点。**唯一例外** = 指向本文件内部的正向引用(如 D-API-150 引 `见 D-API-151 影响面`),按字面读即可。
+> 4. 编号**有意非连续**,分派固定为:`122 ~ 126` WP-78 / `127 ~ 130` WP-80 / `131 ~ 133` WP-81 / `134 ~ 136` WP-79 / `137 ~ 140` WP-82(文档面)/ `141` 遗留-e2e-descriptor / `142 ~ 144` 遗留-5 / `145` M3 遗留第 6 项 / `146 ~ 148` WP-83 / `149 ~ 151` WP-82(实现子集)。**第二批并入前,`127~130` / `131~133` / `145` 曾以占位段承载;现已全部原位替换,占位残骸扫描 = 0。**
 
 ### D-API-122 宿主成绩同步面 = **新契约族 + 宿主凭证**(路由 `GET /host/scores`)
 
@@ -1341,13 +1341,84 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **红灯位置**:`host-scores-routes.test.ts` 46 例(端口语义经内存同构全覆盖);compose 全拓扑 1 例(**真实 PG + 真实 RLS + 真实三表连接**:固定白名单租户 → 真实注册题目 → 真实会话 → 真实 submit → verifier 真机裁决落库 → `GET /host/scores` 读出该记录并逐字段比对 + 跨域载荷机检零命中);`postgres` 侧既有 `row-security.integration.test.ts` 的 `TENANT_SCOPED_TABLES` 覆盖三表(本包零改动)。
 - **契约/机制登记**:新增 `packages/protocol/src/host-scores/host-scores-response.ts`;`version.ts` 三常量;`common/classification.ts` 增 `"host-scores-response": {rootClass: "public", fieldClasses: {items: "public", nextCursor: "public"}}`;`schema/registry.ts` + `schema/generate.ts`;`schema/host-scores-response.schema.json` 重新生成(全量 18 文件,exit 0);`tooling/contract-smoke/src/smoke.rs` 的 `PROTOCOL_CONTRACTS` 增元组;`pnpm fixtures:manifest` 重生成。
 
-### D-API-127 ~ 130(待并入:WP-80 M10 出题者积木声明面)
+### D-API-127 公开面字段名取 `authorBlocks`,形状 = 顶层**可选**字段(不进 `required`)
 
-占位 —— 片段产出后由收口轮并入;编号已预分配。
+- **决策**:M10 出题者积木的公开声明面命名为 **`authorBlocks`**(`AuthorBlockDecl[]`),作为公开描述包第 17 个顶层字段,**可选**(不进 `required`),`CHALLENGE_PACKAGE_SCHEMA_VERSION` **维持 1**。每项 = 一个积木模板 `{id, displayText, interfaceId, slots, actions}`;`slots` ≤ 4(`{key, label, kind}`,`kind ∈ {address, immediate, length}`);`actions` ≤ 8(`{type, args}`,`type` ∈ 12 公开动作冻结枚举 `SESSION_ACTION_TYPES`;`args` 参数名封闭为该动作冻结参数名,值 = 字面量字符串或 `{slot: <本模板槽键>}` = **结构化引用**)。上限:16 模板 / 4 槽 / 8 动作 / 标题 128 字符 / 字面量 64 字符。
+- **理由**:(1) **字段名裁决**:`interfaces` 一名被既有元检查 `D2-NO-HIDDEN-IN-PUBLIC` / `FORBIDDEN_PUBLIC_PROPERTIES`(**递归**扫描公开 Schema 任意层的键与字符串值)命中 —— 私有包顶层属性名不得出现在公开面,故公开字段必须另起名;取 `authorBlocks` 既避开与私有 `interfaces[].effects` 的命名混淆,也直述产品语义(出题人给学习者准备的积木)。(2) **可选形态**:新增公开字段的向后兼容先例是可选字段增补(v1.4 `archBits` / v1.7 `encodingTable` / v1.12 `debugMode`·`aslrEnabled` 均不进 `required`),既有题目包零改动即通过校验 ⇒ 不构成破坏性变更,版本号维持 1(若进 `required` 则既有全部题目包立即失效,属破坏性变更)。(3) **形状来源**:教师面「让初学者拖积木而不写汇编」的最小表达面 —— 模板(展示名 + 目标接口 + 槽位)足以生成 Blockly 积木并把玩家填的值展开为**已冻结的 12 公开动作**序列;动作 `type` 用 `SESSION_ACTION_TYPES` 枚举 = **子集闸**,不新增任何动作字面,故公开面不扩权。(4) **非图灵完备**:无变量绑定 / 循环 / 条件 / 表达式,每个参数位只能取字面量或已声明槽引用 ⇒ 不存在可注入逻辑的语法位置(与 v1.6/v1.7「声明式映射表 = 数据」同论证路径,CLAUDE.md 底线 4「DSL 不执行任意宿主代码」原样保持)。(5) **效果语义不在公开面**:效果原语序列仍只在私有包 `interfaces[].effects`(`SERVER_ONLY`),公开面**无表达位**。
+- **红灯位置**:`packages/challenge-schema/test/strictness.test.ts`(顶层字段数锁 16 → 17、`authorBlocks` 各层 `maxItems` / `maxLength` / 枚举锚、`additionalProperties: false` 递归断言、`AUTHOR_BLOCK_ACTION_ARGS` 键集 ≡ 12 动作且并集 ≡ `AUTHOR_BLOCK_ARG_NAMES`);`test/public-descriptor.test.ts`(11 例红绿灯);`test/checker.test.ts`(16 例红灯样例);`test/fixture-consistency.test.ts`(5 例漂移变异 + 旧语料无 `authorBlocks` 断言);契约侧 `docs/contracts/数据分类与秘密零驻留清单.md` §12.2 v1.17 行 + `packages/challenge-schema/docs/双包Schema语义.md` §2.1 行。
+- **影响面**:公开描述包顶层字段 16 → **17**(`classification.json` 与 `PUBLIC_DESCRIPTOR_FIELDS` 同源双锚);`challenge-schema` 公开 Schema / 类型镜像 / 常量面;vm-ui 描述包解析面(`ChallengeDescriptorView.authorBlocks`);`pnpm fixtures:manifest` 摘要重算;不改私有判题包任何字段,不改 12 动作 / 16 错误码 / 嵌入协议。
 
-### D-API-131 ~ 133(待并入:WP-81 canary 契约收口)
+### D-API-128 四条新检查器规则 + `XS-ID-UNIQUE` 扩展(声明面 = 公开投影,不是判题面、不是授权放大)
 
-占位 —— 片段产出后由收口轮并入;编号已预分配。
+- **决策**:新增 **`XS-BLOCK-IFACE-REF`**(`authorBlocks[].interfaceId` 必须指向私有包已声明接口,保留带 [256, 65535];未声明即拒)、**`XS-BLOCK-SLOT-FORM`**(槽键唯一 / ≤ 4 / `kind` 封闭枚举 / `{slot}` 引用可解析且无悬空槽 / 字面量非空)、**`XS-BLOCK-ARG-ALLOW`**(动作 `type` ⊆ 12 公开动作;`args` 参数名 ⊆ 该动作冻结参数名;必填参数在场)、**`XS-BLOCK-NO-EFFECT`**(对 `authorBlocks` 子树**递归**扫描效果原语序列 / 私有字段名 `effects`·`semantics`·`flagRegister`·`fileId` / 隐藏区域 `regionId` / 隐藏对象 `objectId` / `secretSinkRegisters` / FLAG 寄存器名,命中即拒),并把 `authorBlocks[].id` 纳入既有 **`XS-ID-UNIQUE`** 唯一性域。
+- **理由**:(1) **存在性信号封堵(I-9 承接)**:`interfaceId` 只在作者**主动引用**时产生存在性信号,且未声明引用被硬拒 —— 与 v1.8 R1/R2 公开 ISA 引用面(`encodingTable[].operands[].interfaceId`)、`XS-IFACE-REF` 同一纪律,故公开包不得据声明面反推隐藏接口集合。(2) **效果语义封堵(I-3 承接)**:`effects` 是**嵌套**私有字段名(`FORBIDDEN_PUBLIC_PROPERTIES` 只覆盖顶层键),故需独立的递归键扫描 + 隐藏标识符哨兵扫描(隐藏区域 / 隐藏对象 / 秘密汇 / FLAG 名);哨兵集由**私有包实例**现场构造(不硬编码包内容),扫描覆盖面 = 全部键 + 全部展示文本,与 `XS-CUSTOM-DISPLAY`(v1.3,E-4/E-6)同族纪律。(3) **参数名表的本地常量**:`challenge-schema` 是**叶子包**(依赖纪律 5.5:不得依赖 `@stackmaster/protocol`),故逐动作参数名表在本包内为本地常量 `AUTHOR_BLOCK_ACTION_ARGS`(**有意重复**protocol 的参数名);漂移风险以两道机检封堵 —— 包内 `strictness.test.ts` 锁定键集 ≡ 12 动作、并集 ≡ 参数名全集、`required ⊆ allowed`,包外由服务端对由积木产出的每个动作按 6.2 **重新校验**(客户端声明不构成授权)。(4) **声明不是判题**:服务端不因公开声明放宽任何动作校验;`allowedActions` 裁剪是**权威**面,客户端编译面同则裁剪,越界动作以 `unauthorized_action` 携带积木 `id` 拒绝(错误码零新增)。(5) **规则分工**:单包形态(`type` 枚举、字符串长度、键封闭)由公开 Schema 直接拒绝(红灯样例落 `public-descriptor.test.ts`,不设重复 checker 规则),跨包语义(接口引用、无效果语义)落 `pair-rules.ts`,单包语义(槽形态、参数允许表)落 `public-rules.ts`。
+- **红灯位置**:`packages/challenge-schema/test/checker.test.ts`「字段分类检查器:M10 出题者积木声明面规则红灯样例」16 例(绿基线 / 未声明面不触发 / 接口引用 ×2 / 槽形态 ×4 / 参数允许表 ×3 / 无效果语义 ×4 / id 唯一 ×1);`test/strictness.test.ts` 的 D2 递归禁名 + 禁效果原语扫描;规则文档 `packages/challenge-schema/docs/双包Schema语义.md` §五 四行 + §六 分工表一行;分类清单 `docs/contracts/数据分类与秘密零驻留清单.md` §12.6 四行 + §八 I-3 / I-9 承接面。
+- **影响面**:`challenge-schema/src/server-only/checker/{public-rules,pair-rules,index}.ts`;新增常量面 `src/common/author-blocks.ts`(`AUTHOR_BLOCK_ACTION_ARGS` / `AUTHOR_BLOCK_SLOT_KINDS` / `AUTHOR_BLOCK_ARG_VALUE_KIND` / `AUTHOR_BLOCK_FORBIDDEN_PRIVATE_KEYS`);不新增错误码、不新增协议字段。
+
+### D-API-129 公开声明面的**双层验收口径**:契约期(TS 双包)与客户端编译面(vm-ui)**同则**但**不同源**
+
+- **决策**:`authorBlocks` 的验收分两层,且**两层的判定表各自独立实现、语义必须同则**:(1) **契约层**(`challenge-schema`,服务端 / 编译前置):Schema + 四条规则为权威,决定"该题目包是否被受理";(2) **客户端层**(`vm-ui` 描述包解析器 + 载荷编译面):轻量形状闸(`parseAuthorBlocks`)+ 动作枚举闸 ⊆ `SESSION_ACTION_TYPES` + **参数名禁令**(`effects` / `semantics` / `flagRegister` / `fileId`)+ 封闭键集 —— 决定"该描述包是否被渲染"。客户端闸的**唯一目的**是把明显的坏形态挡在渲染面之外(不渲染即不产生误导性工具箱),**不是**权威校验:权威校验仍在服务端,客户端**不**做接口存在性判定(它没有私有包)。
+- **理由**:(1) **依赖纪律 5.5 决定双源是结构性事实**:vm-ui 只依赖 `protocol`,**不得** import `challenge-schema`(浏览器构建图不得含题目包校验器),故客户端只能持有本地结构镜像类型 + 本地校验收窄;把客户端做成权威会让"改客户端即改判题面"的红线破防。(2) **失败方向必须一致**:客户端闸只允许**更严不更宽**的拒绝(坏形态早拒),不得对权威校验已拒的形态放行渲染;`XS-BLOCK-IFACE-REF` 是客户端**结构上不可实现**的一条(无私有包),故客户端只保证"接口号在保留带内"这一形态前提,存在性由服务端与编译链兜底。(3) **同则锚点**:两侧共用同一动作枚举单一来源(protocol 的 `SESSION_ACTION_TYPES`),`args` 参数名禁令两侧逐字同表(`challenge-schema` 的 `AUTHOR_BLOCK_FORBIDDEN_PRIVATE_KEYS` ↔ vm-ui 的 `AUTHOR_BLOCK_FORBIDDEN_ARG_NAMES`),红灯样例两侧各备一套。
+- **红灯位置**:客户端侧 `packages/vm-ui/test/descriptor/challenge-descriptor.test.ts`(11 例 `authorBlocks` 坏形态红灯:非数组 / 空数组 / id 形态 / 缺必填 / `interfaceId` 越界 / 槽 `kind` 越界 / 槽数 > 4 / 动作 type 越界 / 参数值数字 / 参数名 `effects` / 模板带未知键);编译面 `packages/vm-ui/test/payload/author-blocks.test.ts`(15 例:零声明回归 / 类型名往返 / 定义形态 / 工具箱追加 / 幂等注册 / 编译槽求值与字面量 / `allowedActions` 裁剪 + `unauthorized_action` 携带积木 id / `missing_input` / 未声明类型 `unknown_block_type`);注入面 `packages/vm-ui/test/payload/author-blocks-injection.test.ts`(4 例)。
+- **影响面**:vm-ui `src/descriptor/challenge-descriptor.ts`(封闭键集 + 动作枚举闸 + 参数名禁令 + `OPTIONAL_TOP_LEVEL_FIELDS`)、`src/payload/compiler/blocks.ts`(动态块定义 + 工具箱 + 注册)、`src/payload/compiler/compile.ts`(`compileAuthorBlock` 展开 + 参数格式化)、`src/payload/sm-payload-tab.ts`(声明集属性 + 工具箱重建 + 编译入参)、`src/i18n/catalog-{zh-CN,en}.ts`(5 个新文案键)。
+
+### D-API-130 深底画布精灵处理 = **新增主题 token**(选项 a),不取「镜像主题锚进 shadow 树」(选项 b)
+
+- **决策**:M1 移交的「深色画布上垃圾桶 / 缩放图标可见性」遗留项,**取选项 (a)**:新增第 **21** 个主题 token **`--sm-canvas-sprite-filter`**(light = `none`(零视觉变化)/ dark = `brightness(1.6)` / terminal = `brightness(1.6)`),画布样式表以 `.payload-canvas-host .blocklyTrash, .payload-canvas-host .blocklyZoom { filter: var(--sm-canvas-sprite-filter, none); }` 消费;**不**取选项 (b)(把主题锚 `data-sm-theme` 镜像进 shadow 树)。**token 名与值就此定案**,`theme-terminal.test.ts` 的键数精确锁 20 → 21。
+- **理由**:(1) **机制同源**:其余 20 个 token 靠**自定义属性继承**穿透 shadow 边界(自定义属性沿 composed 树继承),`var()` 在**元素自身**求值 ⇒ **不需要任何祖先选择器**;而 (b) 要求"把锚镜像进 shadow 树"= 在每个 shadow 根内复制锚或观察外部锚变化,既放大状态面(两处锚可能漂移)又与"锚 = 树外宿主元素"的既有机制(D-API-110)冲突。(2) **M1 已实测 (b) 的替代物不成立**:画布样式表注入**画布宿主所在根**(生产形态 = 工作区 shadow 根),`[data-sm-theme="dark"] …` 这类**树内样式表匹配不到树外祖先**的规则恒为死规则(M1 真机 `getComputedStyle(.blocklyTrash).filter` 恒 `none`);CSS 亦无"按继承的 color-scheme 取 filter 值"的手段(`light-dark()` 只作用于颜色值)。(3) **值为 `brightness()` 而非 `invert()`**:图标基准色是 `#888` 灰(`media/sprites.svg` 的 `.trash{fill:#888}` / `.zoom{stroke:#888}`,整张精灵表经 `<image>` 引用),`invert(1)` 把 `#888` 变 `#777`(**更暗**,方向相反);`brightness(1.6)` 提亮且不改色相(灰度无色相)。不做"磷光着色"的滤镜近似(sepia/hue-rotate 链)以避免不可验证的色彩数学。(4) **滤镜挂在 SVG 容器 `<g>` 上**:`.blocklyTrash` / `.blocklyZoom` 都是 `<g>`(内含 `<image>`);真机像素级取证已证明 CSS filter 在 SVG 容器元素上**实际参与绘制**(截图包围盒平均亮度上升,见影响面)。(5) **真机证据(M3 收口,chromium,真 dist 产物 + 真 Blockly 画布,宿主在另一层 shadow 根内、锚在树外 = 生产形态)**:
+  - `getComputedStyle('.blocklyTrash')`:`filter` = light `none` / dark `brightness(1.6)` / terminal `brightness(1.6)`;`opacity` = `0.4`(Blockly 自带基态,三预设一致);
+  - token 经继承跨 shadow 边界解析成功(从 `.payload-canvas-host` 读回 `none` / `brightness(1.6)`);
+  - **合成后非文本对比度**(该元素 `opacity = 0.4` 与画布底混合后,按 WCAG 相对亮度公式算):light **1.56 → 1.56**(不变)/ dark **1.84 → 3.07** / terminal **1.82 → 3.04** —— dark / terminal 由"低于 3:1"升到"**达到 WCAG 1.4.11 非文本 3:1**";
+  - **像素级**:垃圾桶包围盒截图平均相对亮度 dark **+0.0102**、terminal **+0.0098**、light **±0.0000**(证明属性真的画出来了,不是只计算不绘制);
+  - `.blocklyZoom` 元素在场数为 **0**(payload 工作区未启用缩放控件,Blockly 默认 `zoom.controls = false`)⇒ 规则的缩放半边是**前向兼容的惰性规则**(今日零命中,启用缩放时即生效),如实登记。
+- **红灯位置**:`packages/vm-ui/test/payload/canvas-sprite-filter.test.ts`(3 例:样式表以 `var(--sm-canvas-sprite-filter, none)` 承载 / 样式表**不含** `data-sm-theme` 与 `:host(` 锚选择器(死规则禁回潮)/ 三预设键齐备且 light = `none`);`test/theming/theme-terminal.test.ts`(键数锁 21 + 新 token 值域断言 `^brightness\([\d.]+\)$` 且因子 > 1);证据脚本为临时 harness(真机取证后删除,失败值与命令已归档于本文件与交付报告)。
+- **影响面**:`src/theme/theme-tokens.ts`(三预设表 + 族表 + 头注释 20 → 21);`src/payload/blockly-theme.ts`(画布样式表 + 遗留说明改写为已修);`test/theming/theme-terminal.test.ts`(键数锁 + 色值判定过滤);`docs/user/界面帮助手册.html` §12.2 token 表(20 → 21 行);**不动**嵌入协议 `EMBED_THEMES`(冻结三值)、`SM_THEME_PRESET_VALUES`、既有 20 个 token 的任何值(light / dark 像素级零变化)。
+
+### D-API-131 canary 契约收口 = 双层语义分离(哨兵槽模式 / 参考值模式);引擎零必需改动
+
+- **决策**:
+  1. **冲突定性订正**:`XS-CANARY-CORR`(`packages/challenge-schema/src/server-only/checker/pair-rules.ts:476-506`)与引擎 `build_canary_slots`(`vm-engine/vm-worker/src/session/assemble.rs:661-709`)不相容的**实质是规则面缺一种模式**,而非可见性语义有争议 —— 引擎的 canary happy-path 测试本身用的就是 `visibility:"public"` + `containsSecret:false`(`vm-engine/vm-worker/tests/session_lifecycle.rs:848-870`,**本轮实跑 ok**)。
+  2. **两模式,按既有字段对判别且互斥**:①**哨兵槽模式(T)** `visibility="public"` ∧ `containsSecret=false` ∧ 区间**完全落在某个公开区域内**、期望值 = 槽位初始内存字节(引擎 `vm-core/src/exec.rs:288-301` 的截取语义);②**参考值模式(R)** `visibility="hidden"` ∧ `containsSecret=true` ∧ 区间与全部公开区域不相交(沿 `I2-OBJ-NOT-PUBLIC`)。
+  3. **规则面**:重写 `XS-CANARY-CORR` 为两模式判别 + 模式互斥;新增 `XS-CANARY-MODE` 承接哨兵槽模式的几何约束(把运行期 `highlight_target_invisible` 的拒绝提前到编译期)。**规则 ID 数量 +1**,`CHALLENGE_PACKAGE_SCHEMA_VERSION` **维持 1**(规则面非 Schema 结构面)。
+  4. **公开 Schema 结构零改动**:仅替换 `vmProfile.canary` 的 `description`(`schema/public-descriptor.schema.json:174`);**不新增任何公开属性名**(否则 `D2-NO-HIDDEN-IN-PUBLIC` 命中)。
+  5. **引擎零必需改动**:模式 T 已实跑可装载、错误面已实跑正确;模式 R 的 `canary_slot_not_visible` 保留为**模式语义**。仅可选地更新注释并补一条 Rust 红灯。
+  6. **否决候选**:见 §二 对照表 —— (a) 引擎放宽"必须可见"**否决**(隐藏槽不可被玩家触碰 ⇒ canary 退化为永真控制;且 `canary_violation` 的 required-real 形态不可满足);(b) 检查器仅改为允许 `visibility=public` **否决**(字面形态因几何约束 + 投影 fail-closed 而不可实现;且会砸掉 ZR-B13 隐藏 canary 承载面);"让 `containsSecret` 对象可见"的读法**正面拒绝**(触碰红线第 1/4 条与 I-3 / I-9)。
+- **理由**:
+  1. **canary 值是否判题秘密必须分模式**:引擎的期望值不是另存的秘密而是**装载期从初始内存截取**(`exec.rs:288-301`),故可见区域内的 canary 槽,其期望值就是可见区域的初始内容 —— 按 §4.1 `visibleRegions` 论证(`数据分类与秘密零驻留清单.md:150`)与 XS-PROJ-VALUES(`:200`)该内容**本来就公开**,模式 T 的值**结构性不是秘密**;隐藏模式下的 canary 值才是 SERVER_ONLY 秘密。因此"canary 参与判胜条件"在模式 T 下不构成泄漏 —— 泄漏的那部分恰是设计上公开的哨兵值;真正的判题秘密(谓词结构 / 隐藏测试 / 失败条件)零下发路径未变。
+  2. **模式 T 的判胜角色是"绊线"而非"口令"**:`stack_canary_intact` 比较"当前 == 初始",值公开不影响其效力(选手仍须精准绕过);要教"值不可猜"须走模式 R,而模式 R 不可交互。
+  3. **模式 R 必须保留**:`zrB13FixturePair`(`apps/session-api/test/mvp-challenges/corpus.ts:1481-1531`)走 `loadChallengePair` 全量管线并被 `zr-b13-derivation.test.ts:65-81` 断言 `hidden + containsSecret` —— 保留它是 (c) 相对 (b) 的决定性优势。
+  4. **引擎零改动有实跑依据**:见 §五 5.1 E2 / E3。
+- **红灯位置**:
+  - 检查器:`packages/challenge-schema/test/checker.test.ts:945-951`(R0 保留)+ 新增 R1(`I3-SINK-HIDDEN`)/ R2(`XS-CANARY-MODE`,核心)/ R3(模式互斥)/ R4(R 模式几何)与绿灯 R6(`zr-b13-derivation.test.ts:65-81` 保留)/ R7(模式 T 新绿灯);详见本文件 §八。
+  - 引擎:`vm-engine/vm-worker/tests/session_lifecycle.rs:848-870`(模式 T 绿灯,现文注释补模式名)+ 新增"模式 R 被交互装配确定性拒绝"红灯;`vm-engine/projection/src/error.rs:1077-1117`(现文已含 hidden 槽 ⇒ `canary_slot_not_visible` 断言,保留)。
+  - 跨语言互证:见 D-API-132 的待跑项 P6。
+- **影响面**:
+  - 改动面:`packages/challenge-schema`(检查器 + 规则表文档 + Schema description + 红灯语料 + helper);`docs/contracts/数据分类与秘密零驻留清单.md` §12.2(现 `:662`)/ §12.3(现 `:701`)/ §12.6 + 变更记录 **v1.18**(已落);可选 `vm-engine` 注释与 1 条红灯。
+  - **零改动面**:`packages/protocol/**`、投影七字段、16 错误码、11 值裁决、嵌入协议 v1、`vm-engine` 行为、CH-05 语料(本轮不切换)。
+  - golden fixture:`packages/challenge-schema/test/fixtures/public-descriptor/basic.json` 若按 §七 #7 调整 ⇒ 必须同批 `pnpm fixtures:manifest` 重算 `tooling/contract-smoke/canonical-digests.json`(否则 §3 键集合比对 + `fixtures:manifest --check` 必红);Rust `contract-smoke` 消费面(`smoke.rs:150-191`)只做 Schema + 冻结语义校验,**不跑 TS 检查器** ⇒ 规则面改动**不产生**新的跨语言映射义务(该义务由 D-API-132 的 P6 单独承接)。
+  - 文档回填(归 WP-77):`出题人指南.md:244`、`1B-虚拟机.html:104-117`、`T4-排查手册.html:61`、`30-精确参考.html:68`;文本见本文件 §九。
+
+### D-API-132 安全论证重跑:可见性语义对齐后的隐藏性结论(**实跑 / 待跑分离**)
+
+- **决策**:
+  1. **实跑已得结论(3 项)**:①`XS-CANARY-CORR` 现语义红灯成立(vitest,1 passed);②**引擎在 `visibility:"public"` + `containsSecret:false` 上装载成功**(`cargo test -p vm-worker --test session_lifecycle canary` → `canary_spec_happy_path_assembles_slots ... ok`);③`canary_violation` 的可见槽形态带**真实地址** + **玩家写入回显**、隐藏槽形态 ⇒ `ChallengeInvalid("canary_slot_not_visible")`(`cargo test -p projection canary` → ok)。
+  2. **隐藏性论证结论(成文)**:模式 T 不产生新秘密面(`containsSecret=false` ⇒ I-3 空真;值来源属 I-10"可见区域内容"类;错误载荷值来源 = {公开布局常量, 玩家输入}),论证**闭合**;模式 R 沿 I-2 / I-3 原样成立且**不可交互装载** ⇒ 无"玩家可触碰的隐藏对象"灰区;**I-9 无需例外登记**(两模式地址均落在各自可见性允许的公开面内);投影粗化矩阵**零回归**。
+  3. **待跑计划(6 项)**:P1 模式 T 全链路装载、P2 模式 T 破坏路径的 `canary_violation` 前置语义、P3 T-SC1 变体集口径修正(含**反向红灯**:模式 T 槽字节变体**必须**产生可观测差异 ⇒ `§10.2` 声明秘密变体集不得含模式 T 的 canary 值)、P4 I-9 探针在两模式题上复跑、P5 ZR-B12 / ZR-B13 复算面覆盖模式 T、P6 **新增跨语言互证机检**(模式 T 双语言同判接受;模式 R TS 接受 / Rust 交互装配确定性拒绝)。逐项判据见本文件 §五 5.2。
+  4. **未闭合项登记**:`semanticHighlights.label := privateObjects[].objectId`(`vm-engine/vm-worker/src/session/assemble.rs:1151`)使私有标识符进入浏览器,而 I-10(`数据分类与秘密零驻留清单.md:461`)对 `semanticHighlights.label` 的值来源集不含 `objectId`;该越界在本轮之前即存在于全部 8 题,收口会经同一路径送出新的 `objectId` ⇒ 建议与收口同批修或独立立项(见 §十 R-2)。
+- **理由**:`阶段六扩展评估报告.md:73` 明文要求"canary 契约收口的安全评审 = 可见性语义对齐后**隐藏性论证重跑**(`containsSecret` 对象的 I-9 面)";本条目是该要求的兑现面。区分实跑 / 待跑的理由:本阶段无代码改动,模式 T 尚不存在于任何语料,故端到端与 T-SC1 重跑**在实现落地前不可执行** —— 不得把计划写成结论。
+- **红灯位置**:实跑命令与原始判定见本文件 §五 5.1;待跑项 P1 ~ P6 的落点建议 = `apps/session-api/test/mvp-challenges/`(P1/P2/P5)、`t-sc1-secret-variants.test.ts`(P3/P4)、新增跨语言互证套件(P6,建议落 `tooling/contract-smoke` 或 `apps/session-api/test/scan/`)。
+- **影响面**:E-6 的 canary 面达成口径(§十 R-4);`docs/phases/阶段六扩展评估报告.md:69` / `:73` 的回填;ZR-B12 包含性语料口径(P5)。
+
+### D-API-133 CH-05 切换评估结论 = **不切换**;语料与判胜条件改造范围(评估即交付,不承诺切换)
+
+- **决策**:**CH-05(sm-ch05-canary-guard)维持"守护标记 + `memory_equals` 谓词"形态,本轮不切换到真实 canary 哨兵槽。** 收口有效性的举证**不依赖**该切换,改由"不进发布题目集的门禁 fixture 覆盖模式 T 全链路"(D-API-132 的 P1 / P2 / P6)承接。
+- **理由(判据)**:
+  1. **观察启动判据未达成**:`docs/phases/阶段六扩展评估报告.md:71` 把 canary 真实化教学的价值判定绑定在试用数据上("若学习者普遍能精准绕过守护标记……则真实随机化教学有明确增量价值"),WP-82 试用未启动 ⇒ 无数据。
+  2. **切换的代价是"发布面级"**:踩碎哨兵的语料期望将由 `running` + `wrong_answer`(`corpus.ts:1024-1034`)变为 `failed` + `canary_violation`(`exec.rs:606-608` 的 ret/leave 前置检查),即 13.2 发布前 26 条语料矩阵 / verifier 裁决回归 / compose 生产链路都要同步 —— 属改一道题的裁决语义,非加字段。
+  3. **教学目标等价**:CH-05 现已交付"越过哨兵即失败、精准绕过放行"(`corpus.ts:983-985` 题面、`:1004-1007` 条件、`:1010` 提示);模式 T 带来的是**机制真实感**(真实 `canary_violation` 现场 + 引擎生成的真实 `canary_slot` 语义高亮)而非能力缺口。
+  4. **收口验收不应被产品决策挟持**:若"收口是否可用"只能靠切换证明,则收口会被一个待数据的产品决策无限期挂起。
+- **红灯位置**:不切换 ⇒ 无新红灯;须补的守卫 = ①"模式 T 全链路可用"的门禁 fixture(进 §五 P1/P2);②**反向红灯**:断言发布题目集中不含 `canary.enabled=true` 的题(CH-05 维持 `false`),使"本阶段不切换"成为可机检事实而非口头承诺(建议落 `apps/session-api/test/mvp-challenges/mvp-challenge-set.test.ts`)。
+- **影响面**:**若将来切换**,改造范围精确清单(7 项)= 公开包 `corpus.ts:422`;私有对象 `:363-388`;公开语义高亮 `:464-472`;判胜条件 `:601-622` / `:1004-1007`;语料期望 `:1019-1043`;T-SC1 变体集 `:1046-1070`;裁决回归 / compose 期望(1 条语料)。**本阶段零改动**;`docs/user/**` 相关措辞回填见本文件 §九(归 WP-77)。
 
 ### D-API-134 管理面身份模型 = **独立凭证(摘要比对)+ 租户绑定白名单**;凭证不从 URL / Cookie 呈递
 
@@ -1537,9 +1608,53 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
   - 机检仅 `readFileSync` 三个源文件做**文本形态 + 行为等价**断言,**不建立任何 import 边** ⇒ 不触碰依赖方向规则(`pnpm lint:deps` 绿)。
 - **影响面**:三处定义点中,**仅 vm-ui 侧一处**在本席位写入面内(且本项**未改动任何**定义点,只新增测试);`apps/plugin-dev` / `apps/session-api` 两处**零改动**(并发 agent 正在编辑 `apps/session-api`,已按纪律默认不碰)。**代价与义务**:三行中任一行被独立改动(改名 / 翻转缺省 / 改判真形态),本机检即红 —— 这正是本决策想要的锁;反之若将来 `protocol` 文件锁解除,可另开 WP 走「单物理源」并把本机检降级为迁移护栏。
 
-### D-API-145(待并入:M3 遗留移交清单第 6 项)
+### D-API-145 调试克隆对齐源:改用**在途会话的权威动作日志**(`SubmitReference.actionLog`)⊕ 已落库日志的在途基线前缀
 
-占位 —— 片段产出后由收口轮并入;编号已预分配。
+- **决策**:
+
+  1. **对齐源 = 在途会话的权威动作日志。** `LiveSessionManager.getSessionSummary` 的返回面扩为 `LiveSessionSummary`(`apps/session-api/src/sessions/session-manager.ts`),新增字段 `acceptedActionLog` = `SubmitReference.actionLog`(`packages/session-core/src/session.ts:501` —— 编排核心 `acceptedActions` 账本的同源投影,仅已接受动作)。`revision` 与 `acceptedActionLog` 取自**同一次** `submit()` 只读调用并浅拷贝为快照(`submit()` 对该账本是纯构造、零副作用、零 worker 往返),因此二者恒自洽 —— 调试 attach 与真实动作分属两条串行链,分两次读取会撕裂。
+  2. **已落库日志降级为「前缀补齐」来源。** 合并规则:已落库 `action_log` 只贡献 `revisionAfter ≤ 在途账本基线` 的区间(基线 = 在途日志首条前一条;账本为空时 = 当前权威 revision);基线之后的条目一律以在途账本为准。重启恢复会话(`SessionOrchestrator.recover`)的真实产物是「revision = 快照 envelope revision + `acceptedActions` 账本自恢复点重启、为空」,此时基线之前的条目**只**存在于已落库日志里 —— 这正是前缀补齐的必要性;缺了它,恢复会话的克隆会退化为种子态或错误态。
+  3. **合并与覆盖判定是纯函数。** 新模块 `apps/session-api/src/sessions/debug-alignment.ts`(`resolveDebugAlignment` / `inFlightLedgerBase`):零 IO、零时钟、零随机,同一输入逐字节同一输出。
+  4. **`origin.revision` 语义收紧为「精确对齐点」。** 合并日志必须**从 revision 0 起连续**覆盖到该 revision,克隆才成立;否则**确定性失败**(冻结 `invalid_input_format` / `"revision is not available"`;新增常量 `DEBUG_REVISION_UNAVAILABLE_ERROR`,`apps/session-api/src/debug/debug-channel-constants.ts`,载荷与既有「起点超出权威 revision」分支**逐字节同形**,16 错误码封闭枚举零扩展)。判定在**变体供给与 spawn 之前**完成 ⇒ 不留半开实例。**明确禁止静默退回种子态** —— 旧实现的静默退化正是本缺陷的成因。
+  5. **不采用更窄修法「种子题栈上预置返回地址」。** 那只是**症状补丁**:它只让当前演示题的栈行恰好含一个像地址的 8 字节,对任何非种子题、以及玩家已改动内存的未提交会话**结构性无效**;而本定案修的是「克隆从哪里取状态」这一**根因**,与题目形态、是否预置返回地址、玩家是否提交**全部解耦** —— 故为一般解。
+
+- **理由**:
+
+  1. **缺陷的本质是「对齐源选错」而非「日志不够」。** 权威动作日志在任何时刻都存在两份投影:编排核心的**在途账本**(`acceptedActions`,随动作即时推进)与**已落库表**(`action_log`,只在 `submit` 时增量落库,D-API-56)。旧实现只读后者 ⇒ 「玩家是否提交过」泄漏成了「克隆是否等于种子态」的隐式开关。改用前者后,未提交会话的克隆与已提交会话的克隆走**同一条**确定性路径。
+  2. **秘密面零变化(ADR-DC1 条款 3 未动)。** 对齐源只含**动作对象**(类型 + 参数 = 玩家输入,公开面),不含快照字节、不含 seed、不含私有包字段 ⇒ 真实 checkpoint 快照、seed 值、私有判题包**仍然零装载**;`checkpoint` 起点依旧只解析日志位置。本决策**只换了对齐源的读取面**,没有放宽任何装载面。
+  3. **精确语义是可测的义务,「尽量接近」不是。** 旧回执的 `revision` 是「重放进度锚点」(可合法落后于请求起点),调用方无法区分「已精确对齐」与「对齐源缺失导致退化」;新语义下二者由**不同形状**表达(精确成功 vs 冻结错误帧),退化不再可能被误读为成功。这与 M3 收口「不得以沉默结案」的纪律同向。
+  4. **确定性可机检。** 对齐源解析是纯函数;attach 幂等(既有冻结口径)保证同一会话重复 attach 返回同一实例态;合并序只依赖 `revisionAfter` 升序与连续性,不依赖时钟 / 网络序 / 并发调度 ⇒ 「同一会话同一 `origin.revision` 多次 attach 得到逐字节一致的克隆」是结构性的,且已由断言固定(见下)。
+  5. **零装配面改动(并发纪律)。** `getSessionSummary` 的两处显式闭包(`apps/session-api/src/runtime/runtime.ts:402`、`apps/session-api/test/routes/helpers/session-rig.ts:278`)都是**逐字转发 manager 返回值**的写法 ⇒ 会话摘要新增字段**随既有结构缝自动下发**,`runtime.ts` 与共享 rig 文件**零改动**(二者正是 WP-78 / WP-82 等并发席位的编辑面,避免冲突)。同时摘要的「定位 + 权威进度锚 + 对齐源」三件事**一次同步读取**完成,优于另开一条查询缝(后者需两次读取才能自洽)。
+
+- **红灯位置**(TDD:先红后绿;红灯形态与 M2 取证同源):
+
+  | 测试文件 | 门控 | 红灯原文(修前) | 修后 |
+  |---|---|---|---|
+  | `apps/session-api/test/debug/debug-clone-alignment.test.ts`(通道级,假调试 worker;**新增**) | 无(常跑) | `AssertionError: expected +0 to be 2 // Object.is equality`(未提交会话 attach `origin.revision = 2` ⇒ 回执 `revision` 恒 **0** = 种子初始态);恢复缺口 2 例红:`expected { revision: 3, status: 'running' } to be an instance of DebugChannelError`、`expected undefined to deeply equal { code: 'invalid_input_format', …(1) }` | **5 passed** |
+  | `apps/session-api/test/debug/debug-clone-alignment.integration.test.ts`(真机 vm-worker;**新增**) | `SESSION_API_IT=1` | `AssertionError: expected +0 to be 2 // Object.is equality` + **字节级**:`AssertionError: expected '00000000' to be '41414141'`(栈区 = 种子零填充) | **3 passed** |
+  | `apps/session-api/test/debug/debug-clone-alignment-source.test.ts`(纯函数;**新增**) | 无(常跑) | 语义面(缺口 / 基线 / 丢弃越界前缀)在旧实现下无对应行为 | **13 passed** |
+
+  - 红灯固定方式:临时把 `debug-channel-orchestrator.ts` 的对齐源改回「只读已落库日志」(逐字复现旧实现),跑出上表红灯原文后**立即还原**;还原后复跑全绿 —— 红灯归属**明确落在对齐源这一处**。
+  - 红灯语料自证:第一个红灯用例显式断言前提锚 `会话权威 revision = 2` **且** `actionLog.countBySession = 0`(未提交),使「对齐到 0」只能解释为对齐源缺在途账本,而非会话本身没有动作。
+
+- **影响面**:
+
+  - **改动文件**(全部在 `apps/session-api`):`src/sessions/debug-alignment.ts`(新增,纯函数 79 行)、`src/sessions/session-manager.ts`(`LiveSessionSummary` + `getSessionSummary`)、`src/debug/debug-channel-orchestrator.ts`(deps 的 manager 摘要形状 + attach 精确对齐 + `#resolveAlignment` / `#replayEntries` 取代 `#replayTo`)、`src/debug/debug-channel-constants.ts`(+1 冻结载荷常量并纳入装配期自检)。**`runtime.ts` / `test/routes/helpers/session-rig.ts` / `persistence/**` / `migrations/**` / `packages/**` / `vm-engine/**` 零改动。**
+  - **冻结契约零改动(逐条)**:①**帧族** —— 12 值判别联合、字段、方向集**零改动**(未新增 / 未删除 / 未改字段);②**推送时机** —— `debug_attached → debug_function_table →(若 paused)debug_instruction_stream`、每次 `debug_paused → debug_instruction_stream`、requestId 回显例外,全部**零改动**(回执形状与推送帧序由既有用例继续锁定);③**错误码** —— 复用既有 `invalid_input_format`(`PublicError`,16 错误码封闭枚举**零扩展**),新增常量只是把原本**内联在 attach 分支里的同一字节形态**提到常量面并纳入装配期自检;④**attach 回执形状** —— `{revision, status, paused?}` **零改动**,变的只是 `revision` 的**取值语义**(由「重放进度锚点」收紧为「精确对齐点」,与协议 §四.3「重放到请求起点」的原文一致 —— 旧实现才是偏离契约的一方)。
+  - **底线 1 / 2 未触碰**:对齐源是服务端进程内的权威账本读取,零浏览器参与;未引入任何浏览器端本地权威执行或本地判题;投影白名单与脱敏面零改动。
+  - **资源面**:未提交会话的克隆现在会真的重放 N 条动作(旧行为重放 0 条)⇒ 调试 attach 的 worker 往返次数上升为 `origin.revision` 次。这是**正确性所需**且被既有约束兜住:每会话动作预算 / clientSeq 上限限制了 revision 上界;attach 幂等使重放只发生一次/会话。
+  - **语义收紧的可见后果(须登记的既有行为变化)**:重启恢复会话若在「快照 revision」与「已落库日志覆盖」之间存在缺口(快照点之后的动作**未**随 submit 落库),则缺口内的 revision 由「静默退回种子态 / 落后对齐」变为**确定性拒绝**。这是**有意的 fail-closed**:克隆态在该区间无法仅由日志复现(状态只存在于禁止入调试进程的快照里)。恢复会话的**可达**区间(≤ 已落库连续覆盖)仍逐条精确对齐,已由新增用例固定。
+  - **回归护栏**:`test/debug` + `test/scan` 真机 IT **12 files / 120 passed**(M2 基线 99 + 本项新增 21);`test/debug` 无 IT **43 passed | 5 skipped**;CH-07 派生面真实 canary 槽用例(`test/mvp-challenges/zr-b13-derivation.test.ts`,承载 `corpus.ts:1490-1531` 的 `zrB13FixturePair`)在整包复跑中通过(该用例只走调试变体派生链路,与本项对齐源无交界,属独立回归锚点)。
+
+- **补充登记(本机环境 / 并发纪律 / 待主控裁决)**:
+
+  - **本机不可达项(如实登记)**:`SESSION_API_IT=1` 的**整包** vitest 在本机不可运行 —— 包级 `vitest.config.ts` 的 `globalSetup`(`test/persistence/compose-lifecycle.ts`)会执行 `docker compose -f compose/deps.yaml up -d --wait`,而本机运行中的 **`compose:app:up` 拓扑**(`session-api-app-*`,旧镜像)已占用宿主端口 15432 / 16379 / 19000 ⇒ `Bind for 0.0.0.0:19000 failed: port is already allocated`,globalSetup 抛错即整轮失败(与 daemon 代理 `127.0.0.1:7897` 拒连无关,非镜像拉取问题)。**清偿载体 = CI**(deps 拓扑独占端口)。本项真机 IT 的等效取证改用**临时旁路配置** `apps/session-api/vitest.it-bypass.config.ts`(与包级配置同形,仅去掉 `globalSetup`;`test/debug` / `test/scan` 的真机 IT 只用内存存储 + 真实 `vm-worker.exe`,不依赖 deps 容器),该文件在取证完成后由本席位**保留在盘**以便主控复跑,并在报告中标注为「临时取证件,可删」。失败尝试产生的 `session-api-deps` 悬空容器 / 卷 / 网络已 `docker compose -f compose/deps.yaml down -v` 清理,`compose:app:up` 拓扑未被触碰(42 分钟后复验仍 6 容器全 healthy)。**注意**:该悬空态会随**其他席位**的同类 `SESSION_API_IT=1` 尝试复现(23:35:31 观察到另一批 `Created` 状态容器,非本席位产生)⇒ `docker ps -a` 里见到 `session-api-deps-*` 属"端口冲突下的失败残留",不代表任一席位成功拉起过 deps 拓扑。
+  - **写入面偏离(须主控知悉)**:本项的必要改动落在 `src/debug/**`(缺陷客体所在文件)与本项新增的纯函数模块 `src/sessions/debug-alignment.ts`;`src/runtime/**`、`packages/**`、`persistence/**`、`migrations/**`、`teaching/**`、`compose/**` 与全部禁改文档**零触碰**。`src/debug/**` 未出现在派单的「只允许改」白名单里,但它是本缺陷的唯一实现客体,且无并发席位编辑该目录(对照 D-API-144 登记「并发 agent 正在编辑 apps/session-api」的实际情况:并发面在 `persistence/` + `teaching/` + `runtime` 装配)。已按「窄幅 edit + 改前读盘」纪律执行。
+  - **待裁决点(不阻塞本项收口)**:①`DEBUG_REVISION_UNAVAILABLE_ERROR` 的 message 文案是否要与「超出权威 revision」保持同一句(现为同一句,便于前端统一呈现);②恢复缺口语义是否需要一条**面向用户**的解释文案(现仅受控日志 + 冻结错误帧,前端呈现为通用 `invalid_input_format`);③是否把「已落库日志的保留窗 / 裁剪」提前登记为契约面缺口(现 `ActionLogStore.listBySession` 无裁剪参数,裁剪一旦引入,本项的连续覆盖判定**无需改动**即可正确拒绝 —— 语义已就位)。
+  - **门禁时点纪律(如实登记)**:本项改动落地后 `pnpm --filter @stackmaster/session-api typecheck` **曾于 23:33 全绿**;23:38 起的复跑出现**唯一一条**诊断 `test/persistence/teaching-events.integration.test.ts(38,3): error TS2305: Module './helpers/it.js' has no exported member 'createPostgresPool'` —— 该文件由**并发席位(WP-82 教学采集面)于 23:37:02 新建**(`createPostgresPool` 的既有正确来源是 `../../src/persistence/index.js`,其余 11 个 IT 文件即如此导入),与本项零交集(本项未触碰 `test/persistence/**`)。整包 vitest 同期(23:36 / 23:38)的 5 条红灯亦**全部**位于 `test/teaching/**`(并发 lane 的在途状态:两轮复跑的总用例数由 837 → 854 变化,即该 lane 正在落盘)。**该 lane 落盘完成后本席位复跑,typecheck 与整包 vitest 均转全绿**(23:40 `typecheck` exit 0;23:41 整包 **72 files passed | 13 skipped / 757 passed | 119 skipped,0 failed**,exit 0)⇒ 结论:上述红灯**确系并发 lane 在途态**,非本项回归。本项回归结论以 `test/debug` + `test/scan`(**12 files / 120 passed**,真机)为锚,容器门控集成交付门以 CI 复跑为准。
+  - **建议回填 `docs/phases/中期任务分解.md:436` 的勾选与证据行**(该文件不在本席位写入面,文案供主控直抄):
+    - **勾选**:`[x]`
+    - **证据行(建议文案)**:「**已修(D-API-145;2026-09-17)** · 对齐源 = **在途会话权威动作日志**(`SubmitReference.actionLog`,经 `getSessionSummary` 随摘要下发)⊕ 已落库 `action_log` 的在途基线前缀(补重启恢复);合并 / 覆盖判定 = 纯函数 `src/sessions/debug-alignment.ts`;`origin.revision` 收紧为**精确对齐点**,不可得 ⇒ 冻结 `invalid_input_format` / "revision is not available"(spawn 前判定),**禁止静默退回种子态**。红灯:`test/debug/debug-clone-alignment.test.ts`(`expected +0 to be 2`)、`test/debug/debug-clone-alignment.integration.test.ts`(真机 `expected '00000000' to be '41414141'`)+ `debug-clone-alignment-source.test.ts`(13 例);绿:`test/debug`+`test/scan` 真机 **12 files / 120 passed**(基线 99 + 新增 21),`test/debug` 无 IT 43 passed | 5 skipped。冻结契约(帧族 / 推送时机 / 错误码 / attach 回执)**零改动**;`runtime.ts` / rig / 持久化面零改动。本机 `SESSION_API_IT=1` 整包不可达(compose 端口冲突,清偿载体 = CI),真机取证经临时旁路配置 `apps/session-api/vitest.it-bypass.config.ts`。」
 
 ### D-API-146 体积口径与「单点惰性 = 假绿」陷阱
 
@@ -1594,6 +1709,40 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
   ⇒ 任何宿主 / 消费者若直接使用这些值,须在需要时 `await loadPayloadEngine()`;测试面 3 文件随动;
   `packages/web-component` / `react-wrapper` / `embed-runtime` 均未使用该值面(已核实 web-component,
   其余包零引用),故无连带改动。
+
+### D-API-149 采集载体重建落地:迁移 008 的形态与「授权面随表同批单源」
+
+- **决策**:教学事件载体落 `apps/session-api/migrations/008_teaching_events.sql`(新表 `teaching_events`,11 列)。形态**逐条同构**迁移 007 的行级租户策略,四点定案:
+  1. **RLS `ENABLE` + `FORCE`**(表属主同受约束,无 `BYPASSRLS` 旁路角色);租户绑定政策 `teaching_events_tenant_isolation`(`TO session_app`,`USING` + `WITH CHECK` 双侧谓词逐字 = `tenant_id = current_setting('app.tenant_id', true)`,fail-closed:is_missing 形态 ⇒ GUC 缺失即零行);
+  2. **保留期例外 = 两段式**(007 同款论证):`teaching_events_retention_tenant_scan` 政策(仅 `FOR SELECT`)在 `app.retention_purge` GUC 下放行**跨租户租户枚举读**,删除逐租户经租户绑定政策承载 —— **零跨租户 DELETE 政策行**(PG 对 DELETE 施加「SELECT 可见 + DELETE 政策」双重谓词,窄面 DELETE 例外会连带打开读面);
+  3. **append-only 一处分野**:`UPDATE` 与 `TRUNCATE` 由触发器库层抛异常(改账 / 毁账不可能);**`DELETE` 不设触发器** —— 本表带保留期(定案三项之一),`DELETE` 由保留期制裁路径唯一承载。这是与 `audit_log`(无保留期、零 `DELETE`)的**登记差异**,不是纪律松动;
+  4. **授权面与本表同批单源**:`GRANT SELECT, INSERT, DELETE ON teaching_events TO session_app` + `GRANT USAGE, SELECT ON SEQUENCE teaching_events_id_seq TO session_app`,并 `REVOKE UPDATE, TRUNCATE ... FROM PUBLIC`。
+- **理由**:(1/2) 与既有表一致的租户隔离与保留期是 D-API-101 / D-API-55 的原样落地,不引入第二种机制。(3) 保留期需要 `DELETE`,而 `UPDATE` 与 `DELETE` 在触发器层面**难以只放行其一**(同一 `TG_OP` 判别可行但会让「改账」有表达位);拆成两个 `BEFORE` 触发器把「禁止变更」与「允许保留期删除」结构性分开,并用政策面(两段式)约束删除范围。(4) **迁移面是唯一可行落点**:007 面内 `GRANT` 只出现在 `action_log` 分区辅助函数里,其余表的授权归部署面 `compose/session-api-db-init.sql`(D-API-93),而**部署面 init 脚本在 PG 容器首启时执行、早于应用启动迁移** ⇒ `GRANT ... ON ALL SEQUENCES` 无法覆盖本迁移**新建**的序列;故本表授权只能随表同批落在迁移 008(零第二处 GRANT 字面)。**下次修订部署面 init 脚本时应把本段 GRANT 字面与那里统一** —— 属部署面义务,如实登记为遗留。
+- **红灯位置**:静态 + 真库双侧机检 —— `test/teaching/surface-discipline.test.ts`(迁移 008 结构:列清单零 `user_id` / `session_id`、kind 封闭集 CHECK 不含 `hint_used`、RLS ENABLE + FORCE、政策两条且谓词逐字、零 `USING (true)` / 零 `FOR DELETE`、两触发器在场、唯一索引 + 索引面、授权三条、幂等可重放形态、语句面零 `audit_log` 与零审计 kind 字面)与 `test/persistence/teaching-events.integration.test.ts`(真库:RLS 属性、`pg_policies` 两条、`hint_used` 插入拒、`event_count < 1` 拒、`UPDATE` / `TRUNCATE` 拒、`session_app` 跨租户读零行 / 写拒 / 删零行 / GUC 缺失零行、本租户写成功)。
+- **影响面**:迁移号 008 与 `_session_api_migrations` 记账;部署面 init 脚本的授权统一义务(D-API-93 延伸);`compose/**` 零改动。
+
+### D-API-150 服务端可派生三类的口径与「采集旁路账」失败语义
+
+- **决策**:采集面 = `apps/session-api/src/teaching/**`(kinds / derive / ports / collector / memory / pg / assembly / index)。三点定案:
+  1. **口径单源**:三类派生自**权威行**,字面只在 `src/teaching/kinds.ts` 定义并以**绑定参数**注入 SQL(PG 适配器 SQL 文本内不出现 `'success'` / `'undo'` / 三 kind 字面):题目开始 = `sessions` 创建事件(`occurredAt = sessions.created_at`);通过 = `verdicts` 中 `verdict = PASSING_VERDICT`(冻结 11 值中的 `success`)**且**已落库的行(双层过滤);回退次数 = `action_log` 中 `action->>'type' = 'undo'` 的**已接受动作计数**(被拒动作不入 `action_log`,与 D-API-139 登记的不可采集原因同源);
+  2. **零学习者标识的结构性保证**:采集行形态 = `{kind, occurredAt, challengeId, challengeVersion, subjectDigest, sourceRef, eventCount, derivation}`——无 `userId`、无原始 `sessionId`;`subjectDigest = SHA-256(tenantId ‖ 0x00 ‖ sessionId)` 只用于库内幂等分组与逐会话去重 / 首次通过耗时分组,**端口面无返回位**;源锚 `session:<sha256hex>` / `verdict:<uuid>` / `action:<id>` 不含原始会话标识文本。**端口方法面逐条冻结**(五个方法,无任何返回行级数据的方法);
+  3. **失败语义 = 旁路账,与审计账不同(本包显式定案)**:`TeachingEventCollector.collect` **永不抛错** —— 源读失败 / 派生失败 / 落库失败一律折叠为 `{failed: true, failureReason: "教学事件采集旁路失败(不影响会话主链路与裁决面)"}`(稳定文案、零载荷细节),原始错误只交给可选 `onFailure` 回调(受控日志面)。**审计面维持 append-only + fail-closed 不动**。
+- **理由**:
+  - (2) 「读了再脱敏」在此**没有架构位置**:端口不暴露行级读面、PG 聚合在库内 `GROUP BY subject_digest` 而不 `SELECT` 该列、摘要不可反解(会话标识是 128-bit 随机签发值)⇒ 零标识符是**结构性**而非流程性保证。
+  - (3) 两张账的失败语义差异**是设计不是不一致**:教学事件是**观察数据**(缺失不改变任何权威状态),让采集失败打断学习者的动作直接违反「编排器串行执行不因观测面失败而中断」的可用性口径;审计事件是**安全事实**(fail-closed 必须保持)。「不静默」由两处保证:结果如实携带 `failed` / `failureReason`(调用方可判定)+ `onFailure` 回调。采集是**运维可调用入口**(T0 无 cron 先例:`TerminalSessionCleaner` / `purgeExpired` 同形),**不在会话主链路内联调用**。
+  - 「提示使用」**零采集路径**:`TEACHING_EVENT_COLLECTABILITY` 登记 `not_collectible_v1`(原因 = 服务端无 hint 使用记录入口且不得靠客户端自报;触发条件 = 采集面扩展),`CLIENT_REPORTED_TEACHING_KINDS = []`,库层 kind 封闭集不含 `hint_used` ⇒ 伪造计数**无表达位**;采集结果键集冻结(无 `hintUsed` 类字段)。
+- **红灯位置**:`test/teaching/kinds.test.ts`(两账分离:审计 kind 仍十值且与教学种类逐值不相交、通过方向 ∈ 冻结 11 值、`undo` ∈ 12 冻结动作类型、登记表键集恒等语义集、`hint_used` 登记项原因 / 触发条件在场、编译期断言「派生输入面只接受权威行集合」);`test/teaching/derive.test.ts`(逐类口径、摘要 64 hex / 稳定 / 租户绑定 / 不含原始标识、键集冻结、确定性、非法时刻确定性失败);`test/teaching/collector.test.ts`(幂等重放零新增、源读 / 落库失败均折叠不外抛且零载荷细节、截断如实透出、窗口左界透传、结果键集冻结、端口方法面冻结);`test/teaching/surface-discipline.test.ts`(字面单源、零 `hint_used` 分支、零 metrics / 审计 / HTTP 依赖、零 `user_id` / `userId`)。
+- **影响面**:`src/sessions/**`、`src/routes/**`、`src/runtime/**` 零改动(采集不接入会话主链路与运行时装配 —— 见 D-API-151 影响面);`packages/**` 零改动(无新契约面)。
+
+### D-API-151 聚合与受控查询面:冻结九键、零标识符外泄、D-API-107 逐字同源
+
+- **决策**:聚合与查询面落 `src/teaching/aggregate.ts` / `discipline.ts` / `observation-points.ts`,三点定案:
+  1. **输出面 = 冻结九键**(`TEACHING_AGGREGATE_FIELDS`):`challengeId` / `challengeVersion` / `startedSessions` / `passedSessions` / `completionRatio` / `undoneActions` / `firstPassSamples` / `firstPassSecondsP50` / `firstPassSecondsP95`;组装点唯一(`assembleAggregates`),PG 与内存两条适配器**共用同一数学**(口径等价由集成测试逐字段断言);规范化渲染键序 = 冻结字段序、行序 = 题目 + 版本升序(确定性);`completionRatio` 四位小数,分母为 0 ⇒ `null`(**不伪造 0**);空输入 ⇒ 空输出(无占位行)。
+  2. **纪律机检 = 与 `/metrics` 面同款、独立实现**(`assertTeachingAggregateDiscipline`,八类违例:顶层形态非法 / 越面字段 / 缺冻结字段 / 非标量值 / 域违规与计数不自洽 / 越界枚举 / **标识符形态值**(会话 / 请求 / checkpoint / 提交前缀、UUID、64 hex)/ 秘密语料命中)——教学事件不经 `/metrics` 通道(定案原文),故纪律机检必须有自己的落点。按数据分类清单 §九「扫描器自检纪律」,八类逐条有红灯反例。
+  3. **观察点对齐**(`D_API_107_OBSERVATION_ALIGNMENT`):8 题 × 恰 3 项 = 24 格,`corpusPoints` **逐字引用**题目集 `meta.observationPoints`(机检断言两侧恒等,任一漂移即红),归类计数 = **12 可采集 / 2 部分 / 7 暂不可采集 / 2 人工抽样 / 1 待补取证**(与 `docs/phases/中期试用报告模板.md` §三 结论表逐数一致);「提示使用等级」三格(CH-01 / 02 / 06)逐格 `not_collectible_v1`。
+- **理由**:(1) 聚合数值 + 有界枚举(题目标识 / 版本字面)是**受控查询**的全部载荷,零学习者标识 ⇒ 汇总面不构成新的标识符外泄面;冻结键集使「新增字段」必须走机检与文档变更(与 §十三 逐字段分类同步)。(2) 越名 / 越域 / 标识符形态 / 秘密语料四类是**可机检的最小面**,与运维面同款但独立实现,避免「借 `/metrics` 机检」的隐性依赖。(3) 逐字同源把「观察点登记」从文案约定变成**漂移即红**的机器约束;可得性计数使「暂不可采集」不可被静默填数。
+- **红灯位置**:`test/teaching/aggregate.test.ts`(数值口径 / 去重 / 完成率 / 分位规则 / 分组排序 / 零标识符键集 / 8 × 3 逐字同源 / 计数 12-2-7-2-1 / 来源面 → 可得性映射封闭 / 未登记题返回 `null`);`test/teaching/discipline.test.ts`(八类违例逐条红灯 + 真实输出零违例绿线);集成测试(载体聚合 ≡ 权威面直接派生聚合、聚合输出经纪律机检零违例、保留期两段式与过期 / 窗口内行为)。
+- **影响面与遗留(如实登记)**:(a) `teaching_events` **未接入生产运行时装配** —— `src/runtime/runtime.ts` 不在本工作包的允许改动面内;采集面经 `buildTeachingCollection(pool)` **单点装配**交付(装配后即得 source / store / aggregates / collector 四件),生产接线 = 在 runtime 增加一行持有该装配结果(与 `TerminalSessionCleaner` 的运维可调用入口同形)。**本包已按「测试接缝绕开生产装配」缺陷族(D-API-120)的纪律处理**:单元与集成测试**都经该单点装配函数**装配(不各自 `new` 适配器)。(b) 容器门控集成测试落 `test/persistence/teaching-events.integration.test.ts`(在既有 `test:integration` 的纳入路径内,无需改 `package.json`);(c) 保留期天数(180)以**端口参数**承载而非新增配置键 —— 避免与共享配置面(`src/config.ts`)的其他 lane 冲突,接线成运行时后再评估是否升为配置键。
 
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
