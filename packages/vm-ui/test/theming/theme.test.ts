@@ -87,6 +87,11 @@ const THEME_COMPONENT_TAGS: readonly { readonly tag: string; readonly type: unkn
 const THEME_EXEMPT_TAGS: readonly { readonly tag: string; readonly reason: string }[] = [
   { tag: "sm-byte-tab", reason: "视图分派壳:仅按 viewKind 渲染 sm-byte-view / sm-vma-list,自身无颜色声明" },
   { tag: "sm-window-list", reason: "虚拟列表容器:只承载滚动与行定位,无颜色声明" },
+  {
+    tag: "sm-payload-tab-host",
+    reason:
+      "WP-83 payload 惰性宿主:零样式、零颜色声明、零渲染输出的透传壳(真组件 sm-payload-tab 在引擎按需取回后挂入并自带主题消费)",
+  },
 ];
 
 /** 字号下限 13px(`0.8125rem` = 13px;等价推导见 `src/workspace/layout-presets.ts`)。 */

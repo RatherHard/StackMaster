@@ -58,13 +58,29 @@ export * from "./views/ed/sm-error-explainer.js";
 // ── 指令视图(WP-F8 / FE-IN-01~08,调试档)──
 export * from "./views/instruction/sm-instruction-view.js";
 
-// ── Payload 搭建(WP-F6)──
-export * from "./payload/sm-payload-tab.js";
+// ── Payload 搭建(WP-F6;WP-83:Blockly 承载面退场为「类型 + 惰性访问器」)──
+// 背景(实测):`sm-payload-tab` / `compiler/blocks` / `compiler/compile` 静态
+// import `blockly`(blockly_compressed.js 等,合计约 904 kB raw / 216 kB gzip),
+// 而本入口桶被 plugin-dev 与宿主以 `<script type="module" src="…/index.js">`
+// **直接加载** ⇒ 静态再导出会把 Blockly 拉进首屏静态图。故值面只保留与
+// Blockly 无关的三个模块,Blockly 承载面改为**类型再导出 + 惰性访问器**;
+// 工作区内的取值路径 = `<sm-payload-tab-host>`(payload/lazy-payload-tab.ts)。
+// 前后实测与「只改注册表 = 假绿」陷阱见 docs/develop/decisions-m3/WP-83.md。
 export * from "./payload/executor.js";
 export * from "./payload/compiler/types.js";
-export * from "./payload/compiler/blocks.js";
-export * from "./payload/compiler/compile.js";
 export * from "./payload/compiler/eval.js";
+export type * from "./payload/sm-payload-tab.js";
+export type * from "./payload/compiler/blocks.js";
+export type * from "./payload/compiler/compile.js";
+/**
+ * 惰性取回 Payload 引擎(`<sm-payload-tab>` 组件 + Blockly 画布侧)。
+ *
+ * 需要值面(`SmPayloadTab` 类 / `breakpointAddresses` 等实例面)的消费者经此
+ * 取回;**禁止**改回静态再导出 —— 那会把约 904 kB 的 Blockly 重新放回首屏
+ * 静态图(实测:首屏静态图 450.53 kB → 1,396.71 kB)。
+ */
+export const loadPayloadEngine = (): Promise<typeof import("./payload/sm-payload-tab.js")> =>
+  import("./payload/sm-payload-tab.js");
 
 // ── 字节视图(WP-F3)──
 export * from "./views/byte/byte-view.js";

@@ -495,16 +495,24 @@ describe("<sm-payload-tab> Blockly 画布消费主题 token(暗色可读性的�
 // ── 标签页注册表登记(F5 接线形态)────────────────────────────────────────
 
 describe("payload 标签页类型登记(defaultTabTypeRegistry)", () => {
-  it("registry 出现 payload 类型:label Payload 搭建 + 工厂产出 SmPayloadTab", async () => {
+  it("registry 出现 payload 类型:label Payload 搭建 + 工厂产出惰性宿主(WP-83)", async () => {
     const { defaultTabTypeRegistry, PAYLOAD_TAB_TYPE } = await import(
       "../../src/workspace/tab-registry.js"
     );
+    const { SmPayloadTabHost } = await import("../../src/payload/lazy-payload-tab.js");
     const descriptor = defaultTabTypeRegistry.get(PAYLOAD_TAB_TYPE);
     expect(descriptor?.label).toBe("Payload 搭建");
     expect(descriptor?.createContent).toBeTypeOf("function");
     const content = descriptor?.createContent?.({ dataSource: null });
-    expect(content).toBeInstanceOf(SmPayloadTab);
-    content?.remove();
+    // WP-83:工厂产出 = 惰性宿主(Blockly 不进主 chunk);真组件在就绪后挂入
+    // 宿主内部,workspace 消费的 duck-typing 面由宿主全量透传。
+    expect(content).toBeInstanceOf(SmPayloadTabHost);
+    const host = content as InstanceType<typeof SmPayloadTabHost>;
+    document.body.appendChild(host);
+    const tab = await host.whenReady();
+    expect(tab).toBeInstanceOf(SmPayloadTab);
+    expect(host.querySelector("sm-payload-tab")).toBe(tab);
+    host.remove();
   });
 });
 

@@ -68,21 +68,30 @@ describe("公开入口导出面", () => {
     expect(vmUi.PAYLOAD_TAB_TYPE).toBe("payload");
   });
 
-  it("WP-F6 payload 编译器 / 执行器 / 组件 / 积木定义全部导出", () => {
-    expect(vmUi.SmPayloadTab).toBeTypeOf("function");
+  it("WP-F6 payload 编译器 / 执行器 / 组件 / 积木定义派生面(WP-83 惰性化后)", async () => {
+    // WP-83:Blockly 承载面(sm-payload-tab / compiler blocks / compile)不再静态
+    // 再导出——静态再导出会把约 904 kB 的 Blockly 引擎放回首屏静态图(实测
+    // 1,396.71 → 450.53 kB);值面改经惰性取回后判定(断言项与惰性化前逐条一致)。
+    expect(vmUi.loadPayloadEngine).toBeTypeOf("function");
     expect(vmUi.PayloadStepExecutor).toBeTypeOf("function");
-    expect(vmUi.compilePayload).toBeTypeOf("function");
     expect(vmUi.createPublicEvalEnvironment).toBeTypeOf("function");
     expect(vmUi.createEmptyEvalEnvironment).toBeTypeOf("function");
-    expect(vmUi.registerPayloadBlocks).toBeTypeOf("function");
-    expect(vmUi.PAYLOAD_MAX_EXPANDED_ACTIONS).toBe(256);
-    expect(vmUi.PAYLOAD_MAX_CALL_DEPTH).toBe(32);
-    expect(vmUi.PAYLOAD_MAX_EVAL_STEPS).toBe(4096);
-    expect(vmUi.PAYLOAD_START_BLOCK_TYPE).toBe("payload_start");
-    expect(vmUi.PAYLOAD_TOOLBOX_CATEGORIES.length).toBeGreaterThanOrEqual(9);
+    const [tabModule, compileModule, blocksModule] = await Promise.all([
+      vmUi.loadPayloadEngine(),
+      import("../src/payload/compiler/compile.js"),
+      import("../src/payload/compiler/blocks.js"),
+    ]);
+    expect(tabModule.SmPayloadTab).toBeTypeOf("function");
+    expect(compileModule.compilePayload).toBeTypeOf("function");
+    expect(compileModule.PAYLOAD_MAX_EXPANDED_ACTIONS).toBe(256);
+    expect(compileModule.PAYLOAD_MAX_CALL_DEPTH).toBe(32);
+    expect(compileModule.PAYLOAD_MAX_EVAL_STEPS).toBe(4096);
     // 12 动作裁剪口径:缺省 allowedActions = 全动作 − run_to_event。
-    expect(vmUi.PAYLOAD_DEFAULT_ALLOWED_ACTIONS).not.toContain("run_to_event");
-    expect(vmUi.PAYLOAD_DEFAULT_ALLOWED_ACTIONS).toHaveLength(11);
+    expect(compileModule.PAYLOAD_DEFAULT_ALLOWED_ACTIONS).not.toContain("run_to_event");
+    expect(compileModule.PAYLOAD_DEFAULT_ALLOWED_ACTIONS).toHaveLength(11);
+    expect(blocksModule.registerPayloadBlocks).toBeTypeOf("function");
+    expect(blocksModule.PAYLOAD_START_BLOCK_TYPE).toBe("payload_start");
+    expect(blocksModule.PAYLOAD_TOOLBOX_CATEGORIES.length).toBeGreaterThanOrEqual(9);
   });
 
   it("WP-F8 调试档:调试通道客户端 / DebugDataSource / 指令视图 / ED 组件全部导出", () => {

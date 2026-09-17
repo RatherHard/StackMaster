@@ -26,7 +26,9 @@
  */
 import { SmByteTab } from "./byte-tab.js";
 import { SmRegisterView } from "../views/register/sm-register-view.js";
-import { SmPayloadTab } from "../payload/sm-payload-tab.js";
+// WP-83:payload 窗口工厂改经**惰性宿主**(见 payload/lazy-payload-tab.ts)——
+// 真组件与 Blockly 引擎(903.56 kB raw / 215.57 kB gzip)不再进主 chunk 静态图。
+import { SmPayloadTabHost } from "../payload/lazy-payload-tab.js";
 import { SmInstructionView } from "../views/instruction/sm-instruction-view.js";
 import { SmStructureView } from "../views/ed/sm-structure-view.js";
 import { SmCallStack } from "../views/ed/sm-call-stack.js";
@@ -158,12 +160,15 @@ export function createDefaultTabTypeRegistry(): WorkspaceTabTypeRegistry {
   // dataSource 属性(workspace 约定);动作提交面(actionSink)由工作区
   // 组合根按同一约定注入(FE-WS-04b「积木步进」经工作区菜单驱动);
   // FE-WS-07(F8):payload 元素状态跨模式共用(标签页不销毁即保留)。
+  // WP-83:工厂产出 = **惰性宿主**(`SmPayloadTabHost`),同一 duck-typing 面
+  // 全量透传;真组件 `<sm-payload-tab>` 在宿主首次连接后经 `import()` 取回
+  // (测试可用 `host.whenReady()` 等待就绪)。
   registry.register({
     type: PAYLOAD_TAB_TYPE,
     label: "Payload 搭建",
     labelKey: "tab.payload",
     createContent: ({ dataSource }) => {
-      const element = new SmPayloadTab();
+      const element = new SmPayloadTabHost();
       element.dataSource = dataSource;
       return element;
     },
