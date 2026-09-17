@@ -136,15 +136,14 @@ export class SmJumpChain extends LitElement {
       outline-offset: 1px;
     }
 
-    /* 系统色 colortext:非有效 CSS 颜色关键词(声明被浏览器丢弃 ⇒ 实际取值 =
-       父级继承色:寄存器视图内为 linktext,工作区字节视图行右段内为该视图
-       前景)。改为任何 token 都会在上述上下文之一改变渲染 ⇒ 逐字保留,待主控
-       按真机 axe 裁决;零风险归一化候选 = color: inherit(与本处有效计算值
-       完全等价,不消费 token)。 */
+    /* 原为无效 CSS 颜色关键词 colortext(系统色只有 CanvasText):该声明被浏览器
+       整条丢弃 ⇒ 有效计算值本就是「继承父级」。此处归一为显式 color: inherit
+       (与有效计算值完全等价、零像素变化),并登记事实:本处语义 = 继承父级色
+       (寄存器视图内为 linktext,工作区字节视图行右段内为该视图前景)。 */
     .chain-loop {
       display: inline-flex;
       align-items: center;
-      color: colortext;
+      color: inherit;
     }
 
     .chain-expand {
@@ -199,23 +198,24 @@ export class SmJumpChain extends LitElement {
       font-size: 0.8125rem;
     }
 
-    /* 可见字符延伸段:同 .chain-loop 的 colortext 情形(无效关键词 ⇒ 继承色),
-       逐字保留,理由与建议见上。 */
+    /* 可见字符延伸段:同 .chain-loop,原为无效关键词 colortext ⇒ 归一为 inherit
+       (继承父级色,零像素变化;事实登记见上)。 */
     .visible-run {
       margin-inline-start: 0.25rem;
-      color: colortext;
+      color: inherit;
     }
 
     /* 伪汇编 chip(WP-76 §2.3 #2):链延伸落到代码区时追加一条指令语句展示。
        只读展示面(非交互):链上地址芯片已承载跳转。
-       底 = canvas 92% + highlight 8% 淡染,按「基底关键词原样落回退位」的嵌套
-       写法消费(--sm-bg-base 的 light / dark 值即 canvas ⇒ 明暗逐像素不变)。 */
+       底:原字面量 canvas 92% + highlight 8% 逐字等于 --sm-bg-panel 的 light /
+       dark 值 ⇒ 直接归该 token(明暗逐像素不变,terminal 取设计好的面板色
+       #101610);嵌套重组写法只用于「字面量不等于任何 token 值」的 field 基底淡染。 */
     .pseudo-asm {
       margin-inline-start: 0.375rem;
       padding: 0 0.25rem;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
-      background: color-mix(in srgb, var(--sm-bg-base, canvas) 92%, var(--sm-warn, highlight) 8%);
+      background: var(--sm-bg-panel, color-mix(in srgb, canvas 92%, highlight 8%));
       color: var(--sm-fg, canvastext);
       font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       font-size: 0.8125rem;

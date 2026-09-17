@@ -250,15 +250,17 @@ export class SmPayloadTab extends LitElement {
       flex: 1 1 50%;
     }
 
-    /* 面板标题条底(原为 canvas 92% + highlight 8% 淡染):按「基底关键词原样
-       落回退位」的嵌套写法消费——本处基底是 canvas,故用 --sm-bg-base(其
-       light / dark 值即 canvas ⇒ 明暗逐像素不变,terminal 下自动换档);
-       不可改用 --sm-bg-inset(值为 field,会改掉 light 底)。 */
+    /* 面板标题条底:原字面量 canvas 92% + highlight 8% 逐字等于 --sm-bg-panel 的
+       light / dark 值 ⇒ 直接归该 token(明暗逐像素不变,terminal 取设计好的面板色
+       #101610,不产生 20 token 面外的新颜色)。本处**不用**嵌套重组写法:口径 =
+       字面量逐字等于某 token 值 ⇒ 直接用该 token;字面量不等于任何 token 值、但
+       可由 token 重组而明暗不动 ⇒ 才用嵌套 var(),并把基底关键词原样落回退位
+       (该形态仅适用于 field 基底那一类淡染底)。 */
     .pane h3 {
       margin: 0;
       padding: 0.25rem 0.5rem;
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      background: color-mix(in srgb, var(--sm-bg-base, canvas) 92%, var(--sm-warn, highlight) 8%);
+      background: var(--sm-bg-panel, color-mix(in srgb, canvas 92%, highlight 8%));
       font-size: 0.8125rem;
       font-weight: 600;
     }
