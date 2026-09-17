@@ -1177,6 +1177,45 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **同族扫描(全仓,已做)**:扫描全部自定义组件的 kebab 特性绑定 —— **仅此一例为死绑定**;`packages/vm-ui/src/workspace/byte-tab.ts` 的 `view-kind=${this.viewKind}` **合法**(其消费方 `views/byte/byte-view.ts` 显式声明了 `attribute: "view-kind"`,即「显式特性名」是仓库既有惯例,本例是唯一漏用者)。
 - **红灯承载位置**:`packages/vm-ui/test/workspace/sm-workspace.test.ts` →「跳转链:8 字节小端解释形似地址的行挂载 `<sm-jump-chain>`,非地址行不挂(FE-ST-07)」(修复前实测红灯原文:`expected null to be '0x1000'`,即旧断言在新绑定下必然为 null)。运行证据:该文件 29 例全绿;`test/workspace` + `test/views/chain` 合跑 **20 files / 261 passed**。
 
+### D-API-118 主题 token 消费口径与「明暗零变化」硬约束(WP-74)
+
+- **触发 WP**:WP-74(终端主题全组件落地)。**本条只登记「消费侧」口径 —— token 面本身由 WP-73 定案(D-API-110),WP-74 不新增任何 token。**
+- **定案 1(零新增 token,硬约束)**:`SM_THEME_VARIABLES` 的 **20 枚**名清单是硬约束 —— `test/theming/theme-terminal.test.ts:159` 有**精确键集断言**,且「20 token × 3 预设」已作为既成事实登记于 `CLAUDE.md` 与 `packages/vm-ui/README.md` ⇒ **加 token 必然打红三处**。WP-74 因此只做**消费**。无法用现有 token 表达的系统色(`mark` / `highlighttext` 等)一律**逐字保留**,并登记为「**待 axe 真机裁决**的候选 token 表」,由主控按真机 color-contrast 结果决定是否立项(先量后定,不先改 token 面)。
+- **定案 2(「明暗零变化」硬约束与其保证机制)**:light / dark 两档**必须像素零变化**。保证机制 = 既有 token 的 light / dark 值**逐字就是**该处原先的系统色关键字 / 字面量,故消费时写成 `var(--sm-*, <原字面量>)`,**回退值逐字等于原值**。仓库既有惯例形态(= 51 处)即此写法;因主题锚走文档级样式表且**无 `:root` 规则**,回退值在「未授予 theme 的插件侧禁用锚」路径上是**承重**的,不可省略为裸 `var(--sm-*)`。
+- **定案 3(`highlight` 的三分归属,像素级论证)**:同一系统色按语义分归三处 ——
+  1. `color-mix(… highlight 14%, transparent …)` 作**选择 / 锚点底** ⇒ `--sm-selection`(其 light / dark 值逐字等于该混色 ⇒ 零变化);
+  2. 裸 `highlight` 作**不透明标记 / 强调边框** ⇒ `--sm-warn`(其 light / dark 值逐字等于 `highlight` ⇒ 零变化;terminal 下随之转琥珀,与「断点 / 暂停 / 标记」族一致);
+  3. `field` 与 `highlight` 的**淡染面板底** ⇒ **嵌套** `color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%)`。**否决**归 `--sm-bg-panel`:其 light 值是 `canvas 92% + highlight 8%`,会把 **dark 下的 `field` 灰底换成近黑 `canvas` 底 = 可见变化**,违反定案 2。
+  - 另:`accentcolor` 族(含其淡染)统一归 `--sm-focus-ring`(其 light / dark 值即 `accentcolor`)。
+- **定案 4(字号下限 13px)**:`< 13px` 的 `font-size` 一律提到 **`0.8125rem`(=13px)**;`0.75rem`(12px)是本次主要来源。单位取 `rem` 是仓库既有惯例(`src/workspace/layout-presets.ts:26/58` 已按 `0.8125rem` = 13px 推导)。**接口约定**:后续「13px 机检」若按 `px` 字面量解析,须按该等价关系折算,否则会误判。
+- **定案 5(等宽字体栈的消费形态与 `unsafeCSS` 否决)**:`font-family` 写作 `var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace)` —— **整条长栈作为 `var()` 回退值字面量内联**。**否决 `unsafeCSS`**:全仓 `src/**` 中 `unsafeCSS` **0 处先例**,引入即新增机制。**否决字符串插值**:`css` 模板内插 `SM_MONO_FONT_STACK`(裸 `string`)会在**模块求值时抛错**(Lit `css` 只接受 `CSSResult` / 数字)⇒ 该组件及其 importers 的测试套件**整体加载失败**,且失败以 `Failed Suites` + `(0 test)` 呈现、**不计入 passed 汇总**(本次实际踩中,是 WP-74 前半最严重的在途事故)。**同批第二个同类事故**:`css` 模板**注释内出现反引号**会提前终止模板串 ⇒ `PARSE_ERROR`(亦已实际踩中)。
+- **遗留(交主控)**:①12 处字体栈回退值是 `SM_MONO_FONT_STACK` 的**逐字副本**,存在漂移风险 ⇒ 建议 13px 机检同处加一条「组件内 `var(--sm-font-mono, …)` 的回退值与 `SM_MONO_FONT_STACK` **逐字一致**」的断言,防止下次只改一处;②候选 token 表待 axe 三预设真机结果裁决。
+- **红灯承载位置**:`packages/vm-ui/test/theming/`(27 passed,含 20 名清单与冻结对比度断言)、`test/views/byte/`、`test/views/ed/`、`test/workspace/{sm-workspace-menu,sm-register-annotation}.test.ts` —— 合跑 **15 files / 168 passed**,零 `Failed Suites`。
+
+### D-API-119 断点联动与跳转链伪汇编延伸的承载面(WP-76)
+
+- **触发 WP**:WP-76(断点联动 + 跳转链伪汇编延伸);依赖 D-API-117 的绑定面修复(修复前该链在真机上**恒空渲染**,两个 chip 形态**全都不可达** —— 这也是本包缺陷长期未被 E2E 抓到的原因)。
+- **定案 1(断点积木地址的字段面)**:payload 断点积木变体新增 `readonly addressHex?: string`,**明确为非协议面字段**(编译期投影,不进 `protocol` 契约、不进公开描述包)。解析不到时**该键根本不出现**(而非写 `undefined` / 空串),使「无地址形态」在结构上可判别。
+- **定案 2(地址的唯一来源与红线)**:断点地址**唯一来源** = **公开投影的当前指令指针**(求值环境 `registerValue("rip")`,与「公开投影读取」积木**同一来源**)。**不新增通道、不读隐藏面、不猜不造**。**否决**「从动作目标(call 目标 / 写地址)推断未来地址」:①属**推断未下发信息**(违 ADR-DC1);②数据地址断点结构上永远不会被指令断点命中 ⇒ 推断无意义。
+- **定案 3(不可解析边界)**:①默认空求值环境;②题目投影白名单不含 `rip`;③取值越界(不在 `0n..MASK_64`)—— 三者**一律落为「无地址形态」且不报错**,故**解题档语义与既有测试零变化**。推论:两个断点积木可能解析到同一地址 ⇒ `breakpointAddresses()` **按首现顺序去重**。
+- **定案 4(工作区合流 = add-only 幂等)**:`#mergePayloadBreakpoints` 只做**追加**、**不自动清除**陈旧的 payload 断点地址 —— 理由:自动清除会**误删用户在指令视图手工添加的断点**(两者共用同一调试断点集合)。重入触发 = 进入调试模式 + `payload-breakpoints-changed` 事件。
+- **定案 5(两个暂停分面互不覆盖)**:指令视图行断点由 `DebugDataSource` 自身持有并切换;payload 单步落到某地址时以**独立行**呈现(「客户端步进暂停」+ 行属性 `data-client-step-pause` + 视角跟随),服务端 `debug_paused` 原因行**原样保留**。二者是**两个分面**,不得互相覆盖(否则调试档会丢失「谁暂停了」这一关键信息)。
+- **定案 6(伪汇编 chip 的三值形态与「不伪造」纪律)**:机检锚 = `data-pseudo-asm-source`,取值:
+  - `debug` = 真指令文本(`"<addressHex> <instr.text>"`,来源 = 调试通道下发的指令流);
+  - `no-coverage` = 调试档指令流未覆盖该地址 ⇒ 明示文案;
+  - `solve` = 解题档 ⇒ **引导文案**(「切换调试模式查看指令」)。
+  chip **只读不可点**,且**绝不伪造指令、绝不把解题档引导冒充指令**。共址判定由纯函数 `chainCodeEndAddress(segments, regions)` 承担(顺序取 `addressHex` / `targetAddressHex`,只保留落在**可执行区域**(`permissions.includes("x")`)且区间内的最后一跳地址)。每条链**恰一个** chip,与 `visible-run` 延伸段为**兄弟节点**(故 `views/chain/visible-run.ts` 零改动,WP-F3/F4 组件契约不变)。
+- **定案 7(指令视图 #6 / #7)**:#6 交叉标注命中面扩到指令视图行左缘(复用 `views/register/cross-annotation.ts` 与工作区注解缓存;`SmRegisterAnnotation` / `SmRegisterView` **契约零改动**);#7 伪汇编列右对齐 = `.row-text { text-align: end }`(旧值 `text-align: start`)+ 单元格机检锚 `data-col-align="end"`,并补「**初始视角锚定 rip**(dataSource 变更即复位)+ **未暂停时也可回锚**」语义。
+- **红灯承载位置**:`packages/vm-ui/test/workspace/sm-workspace-breakpoint-linkage.test.ts`(3 例,**全链路**:payload 断点 → 切调试模式 → 并入后 `debugDataSource.breakpoints === ["0x401000"]` 且菜单 `run-to-breakpoint` 由禁用转可用 → `debug_run_to_breakpoint` 帧 → `debug_paused(reason=breakpoint)` → 指令视图 `anchorAddressHex` 命中 + `.paused-row` + 行左缘 `data-registers="RIP"` 注解 → 链 chip `data-pseudo-asm-source="debug"` + `push rbp` → 客户端暂停行)、`test/views/chain/`(resolve 19 + visible-run 7 + extend 4 + jump-chain 14)、`test/payload/`。合跑 **5 files / 47 passed**。
+- **遗留(交主控,真机面)**:chip 的 `debug` / `no-coverage` 两形态与 #7 的**真机 computed 值**受**服务端调试通道两个缺陷**阻塞(见 D-API-120),修复前**不得宣称真机可达**;`solve` 形态真机已通过。
+
+### D-API-120 调试通道的两处既有实现缺陷(生产装配面 + 变体构建面;WP-76 暴露)
+
+- **触发 WP**:WP-76(断点联动与伪汇编 `debug` 档形态必须走**真机调试通道**才可达 ⇒ 该通道此前从未在生产形态下被端到端跑通)。
+- **缺陷 1(生产装配面;已修,commit `a35bb01`)**:`apps/session-api/src/index.ts` 的 `main()` 调用 `buildServer(config, logger, {...})` 时**漏传** `debugChannel: runtime.debugChannel`。而 `runtime/runtime.ts:650` **已构好**该插件、`server.ts:171` 仅在 `deps.debugChannel !== undefined` 时注册 ⇒ **生产入口从未挂载 `/sessions/debug-channel`**(实测该路由 **404**,对照 `/sessions/channel` **401** 即路由在场未认证)。**后果**:调试档在生产形态下完全不可用。**修法** = 补传该依赖(一行 + 注释)。
+- **漏网根因(本条的核心价值)**:集成测试一律走 `test/routes/helpers/session-rig.ts:458` 的**测试接缝**(那里传了 `debugChannel`),故**所有调试通道集成测试全绿而生产装配路径无人覆盖**。此与 WP-70 已登记的「装配路径无集成测试 ⇒ 缺陷漏网」**属同一类缺陷的第二次现形**(第一次为 `createDebugDataSource` 装配路径)。**待办(交主控)**:补一条**装配完整性机检**(例如断言生产入口传给 `buildServer` 的依赖集合覆盖 `BuildServerDeps` 的全部可选键),把该类缺陷从「靠人发现」变为「机器拦截」。
+- **缺陷 2(变体构建面;诊断中)**:缺陷 1 接线后,真机 `debug_attach` 收到的**不是** `debug_attached`,而是 `{"type":"error","payload":{"code":"internal_error","message":"internal error"}}`;session-api 日志 `component=debug-channel … type="DebugVariantBuildError" … msg="debug frame failed with unknown error"` ⇒ **调试实例变体构建失败** ⇒ 无 attach 回执、无 `debug_pausedAddressHex`、指令流为空(`instructions().length === 0`),前端指令视图落为「调试实例:尚未 attach」空态。**判定**:与缺陷 1 是**两个独立故障**(路由是否挂载 vs 变体能否构建)。**状态**:已派诊断 agent 沿**真实装配路径**定位;修复前,WP-76 的 `debug` / `no-coverage` 两形态与 `#7` 真机 computed 值**一律标注「真机不可达 / 待复验」,不得宣称已达成**。
+
 ## 四、登记中的决策(后续 WP 回填;阶段三已全量回填)
 
 以下决策点已在阶段三任务分解 §六登记,由对应 WP 交付时在此回填;WP-0 只冻结其契约前提:
