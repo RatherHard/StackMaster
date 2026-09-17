@@ -1189,8 +1189,19 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
   - 另:`accentcolor` 族(含其淡染)统一归 `--sm-focus-ring`(其 light / dark 值即 `accentcolor`)。
 - **定案 4(字号下限 13px)**:`< 13px` 的 `font-size` 一律提到 **`0.8125rem`(=13px)**;`0.75rem`(12px)是本次主要来源。单位取 `rem` 是仓库既有惯例(`src/workspace/layout-presets.ts:26/58` 已按 `0.8125rem` = 13px 推导)。**接口约定**:后续「13px 机检」若按 `px` 字面量解析,须按该等价关系折算,否则会误判。
 - **定案 5(等宽字体栈的消费形态与 `unsafeCSS` 否决)**:`font-family` 写作 `var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace)` —— **整条长栈作为 `var()` 回退值字面量内联**。**否决 `unsafeCSS`**:全仓 `src/**` 中 `unsafeCSS` **0 处先例**,引入即新增机制。**否决字符串插值**:`css` 模板内插 `SM_MONO_FONT_STACK`(裸 `string`)会在**模块求值时抛错**(Lit `css` 只接受 `CSSResult` / 数字)⇒ 该组件及其 importers 的测试套件**整体加载失败**,且失败以 `Failed Suites` + `(0 test)` 呈现、**不计入 passed 汇总**(本次实际踩中,是 WP-74 前半最严重的在途事故)。**同批第二个同类事故**:`css` 模板**注释内出现反引号**会提前终止模板串 ⇒ `PARSE_ERROR`(亦已实际踩中)。
-- **遗留(交主控)**:①12 处字体栈回退值是 `SM_MONO_FONT_STACK` 的**逐字副本**,存在漂移风险 ⇒ 建议 13px 机检同处加一条「组件内 `var(--sm-font-mono, …)` 的回退值与 `SM_MONO_FONT_STACK` **逐字一致**」的断言,防止下次只改一处;②候选 token 表待 axe 三预设真机结果裁决。
-- **红灯承载位置**:`packages/vm-ui/test/theming/`(27 passed,含 20 名清单与冻结对比度断言)、`test/views/byte/`、`test/views/ed/`、`test/workspace/{sm-workspace-menu,sm-register-annotation}.test.ts` —— 合跑 **15 files / 168 passed**,零 `Failed Suites`。
+- **定案 6(映射优先级的裁决口径;裁定于 WP-74 后半)**:**先比字面量,再谈重组**。
+  1. **字面量逐字等于某 token 的值 ⇒ 直接用该 token**(三预设按该 token 的既定值走,不必也不该手工重组);
+  2. **字面量不等于任何 token 值、但可由 token 重组而明暗两档不动 ⇒ 才用嵌套重组的 `var()`,并把基底关键词原样落回回退位**(如 field 基底的 `color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%)`)。
+  - **本条的裁定实例**:`canvas` 基底的淡染底 `color-mix(in srgb, canvas 92%, highlight 8%)` **逐字等于 `--sm-bg-panel` 的 light/dark 值** ⇒ 归 `--sm-bg-panel`(仅 terminal 取设计面板色 `#101610`,不再产生 20 token 面外的第 21 种颜色),**不**用嵌套重组;而定案 3 的 **field** 基底淡染因 `--sm-bg-panel` 的 light 值是 canvas 基底(换过去会改变 dark 呈现)⇒ **仍用嵌套重组**。两者的分野是**基底关键词是否与 token 值同源**,不是「同一种写法」。
+- **定案 7(登记的有意偏差两则;WP-74 后半实测登记)**:
+  1. **`--sm-divider-faint` 的 dark 档变化(「明暗零变化」的唯一例外)**:表行分隔的裸字面量 `rgb(0 0 0 / 8%)` 归 `--sm-divider-faint` 后,dark 档由 `rgb(0 0 0 / 8%)` 变为 `rgb(255 255 255 / 10%)`。**判定为修正而非疏漏**:8% 黑在近黑底上**实际不可见**,该 token 的 dark 值正是 WP-53 登记的暗色对比度档;两处(register-view 表行分隔、call-stack)口径一致 ⇒ **明暗零变化在此处有一处经登记的有意例外**,其余全部逐字等价。
+  2. **`.client-step-pause` 的 terminal 语义张力**:该行字面量为 `linktext`,`--sm-accent` 三档值即 `linktext` ⇒ 按字面量映射(定案 6)取 `--sm-accent`(明暗零变化)。**张力**:§2.1 语义映射把「暂停」归琥珀(`--sm-warn`),而 `--sm-warn` 的 light 值是 `highlight` ⇒ 归 warn **必然**破坏明暗零变化。**裁决 = 保持 `--sm-accent`**(零变化硬约束优先于语义归类);代价 = **terminal 下该行呈青绿而非琥珀**。恢复琥珀语义需**新增 token** 或**接受明暗变化**,二者均须单独立项 ⇒ 本处登记为已知偏差,`--sm-pause-*` 不入 20 token 面。
+- **定案 8(无效 CSS 声明的归一)**:`sm-jump-chain` 的 `.chain-loop` / `.visible-run` 原写 `color: colortext`,而 **`colortext` 不是有效 CSS 颜色关键词**(系统色为 `CanvasText`)⇒ 声明被浏览器**整条丢弃**,有效计算值实为**继承父级**。归为 **`color: inherit`**:与其有效计算值**完全等价(零像素变化)**,但把无效声明变为显式正确声明。**登记该事实的理由**:这是一处真实隐患 —— 后续任何人「顺手修正拼写」为 `CanvasText` 都会真的改变颜色(寄存器视图内为 `linktext`、工作区行右段为视图前景)。
+- **遗留(交主控)**:①**字体栈回退值漂移风险** —— 全仓 `var(--sm-font-mono, …)` 的回退值是 `SM_MONO_FONT_STACK` 的**逐字副本**(多处),任一处单独改动即产生不一致 ⇒ 收口时应加一条机检:**组件内该回退值与 `theme-tokens.ts` 的常量逐字一致**;②**13px 字号下限的机检**须处理单位等价(`0.8125rem` = 13px,`layout-presets.ts:26/58` 已按此推导),按 `px` 字面量解析会误判;③**候选 token 表**(`mark` / `highlighttext` 等无法用现有 token 表达的语义色)待 **axe 三预设真机结果**裁决,不先改 token 面;④**`--sm-pause-*` 类语义 token** 待定案(见定案 7.2 的张力),当前不进 20 token 面。
+- **红灯承载位置**:
+  - 组件面:`packages/vm-ui/test/views/instruction/`(24)、`test/payload/`(22 + 3 + 4 + 14 + 28 + 11)、`test/views/chain/`(14 + 4 + 19 + 7)、`test/views/register/`(15 + 10)—— 定向合跑 **13 files / 175 passed**;
+  - 主题机制面:`test/theming/`(27 passed,含 20 名清单与冻结对比度断言)、`test/views/byte/`、`test/views/ed/`、`test/workspace/{sm-workspace-menu,sm-register-annotation}.test.ts` —— 合跑 **15 files / 168 passed**;
+  - 整包 vm-ui **63 files / 795 passed**(零 `Failed Suites`,零 `(0 test)`)。
 
 ### D-API-119 断点联动与跳转链伪汇编延伸的承载面(WP-76)
 
