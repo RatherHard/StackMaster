@@ -8,8 +8,19 @@
  *   WP-43 Schema 定稿前形态)→ 经 DebugVariantProvider 取变体 → 按需 spawn
  *   调试 worker(第二 per-session 承载体,经执行形态启动器建立连接
  *   (WP-66:进程 / 容器同构;每会话至多一个调试实例,attach 幂等)→ load_variant
- *   → 从权威动作日志(ActionLogStore.listBySession)按 origin 截断逐条
- *   debug_apply_recorded 确定性重放 → debug_attached 回执。
+ *   → 从**对齐源**按 origin **精确**截断逐条 debug_apply_recorded 确定性重放
+ *   → debug_attached 回执。
+ *
+ * # 对齐源(D-API-145;遗留移交第 6 项定案)
+ *
+ *   对齐源 = **在途会话的权威动作日志**(`SubmitReference.actionLog`,随
+ *   `manager.getSessionSummary` 摘要下发)⊕ 已落库 `action_log` 的在途基线
+ *   **前缀**(重启恢复场景)。旧实现只读已落库日志,而该日志只在 `submit`
+ *   时落库 ⇒ **未提交会话**的克隆恒为种子初始态(静默退化)。
+ *   `origin.revision` 为**精确对齐点**:合并日志无法连续覆盖该 revision 时
+ *   确定性拒绝(冻结 `invalid_input_format` / `"revision is not available"`,
+ *   在 spawn 之前判定),**不静默退回种子态**。合并与覆盖判定是纯函数
+ *   (`../sessions/debug-alignment.ts`,可独立断言)。
  *
  *   空闲回收照 session-recycling 范式:每实例登记 lastActivity,清扫节拍
  *   (注入时钟)对空闲超过窗口(复用断线保持窗口预算,不设新配置键)的
@@ -36,7 +47,7 @@
  *
  * 每实例一条串行链(帧序 = 执行序);重放对齐期间实例不可服务其他帧。
  */
-import type { PublicError } from "@stackmaster/protocol";
+import type { ActionObject, PublicError } from "@stackmaster/protocol";
 import { DEBUG_SEARCH_MAX_HITS } from "@stackmaster/protocol";
 import { DebugVariantBundleSchema } from "@stackmaster/protocol/server-only";
 import {
@@ -50,7 +61,13 @@ import type { Logger } from "pino";
 
 import type { ActionLogStore, ChallengeBundleStore } from "../persistence/ports.js";
 import type { SessionMetrics } from "../metrics/metrics.js";
-import { DEBUG_INTERNAL_ERROR } from "./debug-channel-constants.js";
+import {
+  inFlightLedgerBase,
+  resolveDebugAlignment,
+  type DebugAlignmentEntry,
+  type DebugAlignmentResolution,
+} from "../sessions/debug-alignment.js";
+import { DEBUG_INTERNAL_ERROR, DEBUG_REVISION_UNAVAILABLE_ERROR } from "./debug-channel-constants.js";
 import type { DebugVariantProvider } from "./debug-variant-provider.js";
 
 /** attach 起点(WP-40 `DebugAttachOrigin` 的编排器侧形态)。 */
@@ -112,11 +129,21 @@ function sessionNotFoundError(): DebugChannelError {
 
 export interface DebugChannelOrchestratorDeps {
   readonly manager: {
-    /** 会话定位(存在性 + 租户绑定 + 题目身份与权威 revision)。 */
+    /**
+     * 会话定位(存在性 + 租户绑定 + 题目身份 + 权威 revision + 在途权威
+     * 动作日志)。`acceptedActionLog` 是调试克隆的**对齐源**(D-API-145):
+     * 与已落库日志不同,它不依赖 submit 落库。见 `LiveSessionManager`.
+     * getSessionSummary 与 `../sessions/debug-alignment.ts`。
+     */
     getSessionSummary(
       sessionId: string,
       tenantId: string,
-    ): { challengeId: string; challengeVersion: string; revision: number } | null;
+    ): {
+      challengeId: string;
+      challengeVersion: string;
+      revision: number;
+      acceptedActionLog: readonly DebugAlignmentEntry[];
+    } | null;
     /** checkpoint 账本查询(checkpoint 起点 → 日志位置)。 */
     listCheckpoints(
       sessionId: string,
@@ -221,7 +248,7 @@ export class DebugChannelOrchestrator {
     if (origin.kind === "revision") {
       if (origin.revision > summary.revision) {
         throw new DebugChannelError(
-          { code: "invalid_input_format", message: "revision is not available" },
+          DEBUG_REVISION_UNAVAILABLE_ERROR,
           `attach origin revision ${origin.revision} beyond authoritative ${summary.revision}`,
         );
       }
@@ -237,6 +264,11 @@ export class DebugChannelOrchestrator {
       }
       targetRevision = checkpoint.revision;
     }
+
+    // 对齐源解析(D-API-145):在途权威动作日志 ⊕ 已落库前缀 → 精确覆盖判定。
+    // 不可得 = 确定性拒绝(spawn **之前**即拒,不留下半开进程),禁止静默退回
+    // 种子态(旧实现的对齐源只含已落库日志 ⇒ 未提交会话恒退化为种子态)。
+    const alignment = await this.#resolveAlignment(sessionId, tenantId, summary, targetRevision);
 
     // 变体(零装载;装配点即过冻结 Schema)+ 公开描述包(公开面)。
     const variant = await this.#deps.variantProvider.forSession({
@@ -281,7 +313,7 @@ export class DebugChannelOrchestrator {
     try {
       const aligned = await this.#enqueue(instance, async () => {
         await this.#loadVariant(instance.connection, variant, publicDescriptor, summary);
-        const revision = await this.#replayTo(sessionId, tenantId, instance.connection, targetRevision);
+        const revision = await this.#replayEntries(instance.connection, alignment.entries);
         return this.#queryStateToRevision(instance.connection, revision);
       });
       this.#instances.set(sessionId, instance);
@@ -471,30 +503,58 @@ export class DebugChannelOrchestrator {
   // ── 内部:重放对齐与 worker 通信 ─────────────────────────────────────────
 
   /**
-   * 确定性重放对齐(条款 3):权威动作日志按 origin 截断(revisionAfter ≤
-   * target,append-only 序)逐条 debug_apply_recorded;每条回执 revision 必须
-   * 与权威日志一致,错位即中止(呈现 internal_error;编排侧缺陷方向)。
-   * 返回实际对齐到的 revision(动作日志随 submit 落库,可合法落后于请求
-   * 起点——回执如实登记对齐进度锚点)。
+   * 对齐源解析(D-API-145):在途权威动作日志(`SubmitReference.actionLog`)
+   * ⊕ 已落库 `action_log` 的在途基线前缀 → **精确**覆盖判定(纯函数,见
+   * `../sessions/debug-alignment.ts`)。
+   *
+   * 不可精确覆盖 ⇒ 确定性拒绝(冻结 `invalid_input_format` /
+   * `"revision is not available"`;细节只进受控日志)。两条"不可得"来源同形:
+   *  - 超出会话权威 revision(调用方已先拦一道,此处兜底);
+   *  - 连续覆盖缺口(重启恢复:在途账本自快照 revision 重启,基线之前的条目
+   *    只在已落库日志里,而该日志可能只覆盖到上次 submit;或未来日志裁剪)。
    */
-  async #replayTo(
+  async #resolveAlignment(
     sessionId: string,
     tenantId: string,
-    connection: WorkerConnection,
+    summary: { readonly revision: number; readonly acceptedActionLog: readonly DebugAlignmentEntry[] },
     targetRevision: number,
+  ): Promise<DebugAlignmentResolution> {
+    const inFlightBase = inFlightLedgerBase(summary.revision, summary.acceptedActionLog);
+    const persisted = await this.#deps.actionLog.listBySession(sessionId, tenantId);
+    const resolution = resolveDebugAlignment({
+      targetRevision,
+      inFlight: summary.acceptedActionLog,
+      inFlightBase,
+      // 已落库行的 action 在进入权威日志时已过 12 动作契约复验(D-W8-9 账本
+      // 同源);此处纯搬运,零再解释。
+      persisted: persisted.map((entry) => ({
+        clientSeq: entry.clientSeq,
+        revisionAfter: entry.revisionAfter,
+        action: entry.action as ActionObject,
+      })),
+    });
+    if (!resolution.aligned) {
+      throw new DebugChannelError(
+        DEBUG_REVISION_UNAVAILABLE_ERROR,
+        `attach origin revision ${targetRevision} is not replayable from the alignment source ` +
+          `(contiguous coverage ${resolution.availableMax}, in-flight ledger base ${inFlightBase})`,
+      );
+    }
+    return resolution;
+  }
+
+  /**
+   * 确定性精确重放(条款 3):对齐源条目自 revision 1 起连续逐条
+   * `debug_apply_recorded`;每条回执 revision 必须与权威日志一致,错位即中止
+   * (呈现 internal_error;编排侧缺陷方向)。返回实际对齐到的 revision ——
+   * 由对齐源解析保证恒等于请求的 `origin.revision`(精确对齐,非"尽量接近")。
+   */
+  async #replayEntries(
+    connection: WorkerConnection,
+    entries: readonly DebugAlignmentEntry[],
   ): Promise<number> {
-    const entries = await this.#deps.actionLog.listBySession(sessionId, tenantId);
     let aligned = 0;
     for (const entry of entries) {
-      if (entry.revisionAfter > targetRevision) {
-        break;
-      }
-      if (entry.revisionAfter !== aligned + 1) {
-        throw new DebugChannelError(
-          DEBUG_INTERNAL_ERROR,
-          `authoritative action log is not contiguous at revision ${entry.revisionAfter}`,
-        );
-      }
       const frame = await connection.request({
         type: "debug_apply_recorded",
         action: entry.action,

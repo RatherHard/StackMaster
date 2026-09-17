@@ -101,6 +101,18 @@ export const DEBUG_INTERNAL_ERROR: PublicError = PublicErrorSchema.parse({
   message: "internal error",
 });
 
+/**
+ * attach 起点在途不可得(对齐源不可精确覆盖该 revision:超出会话权威
+ * revision,或恢复基线 / 日志裁剪造成的连续覆盖缺口)。载荷与既有
+ * "起点超出权威 revision" 分支**逐字节同形**(同一 code 与 message),
+ * 16 错误码封闭枚举零扩展;语义见 D-API-145:**确定性拒绝,禁止静默退回
+ * 种子态**(静默退化正是遗留第 6 项的成因)。
+ */
+export const DEBUG_REVISION_UNAVAILABLE_ERROR: PublicError = PublicErrorSchema.parse({
+  code: "invalid_input_format",
+  message: "revision is not available",
+});
+
 // 装配期自检:错误帧载荷必须能作为调试通道 error 帧过冻结 Schema
 // (契约漂移即模块加载失败,拒绝启动)。
 for (const payload of [
@@ -112,6 +124,7 @@ for (const payload of [
   DEBUG_SEND_BUFFER_OVERFLOW_ERROR,
   DEBUG_IDLE_TIMEOUT_ERROR,
   DEBUG_INTERNAL_ERROR,
+  DEBUG_REVISION_UNAVAILABLE_ERROR,
 ]) {
   DebugFrameSchema.parse({
     protocolVersion: 1,

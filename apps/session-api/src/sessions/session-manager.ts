@@ -67,6 +67,7 @@ import {
   type CheckpointQuotaVerdict,
 } from "../limits/index.js";
 import { ConcurrentSessionBudgetExhausted } from "../limits/errors.js";
+import type { DebugAlignmentEntry } from "./debug-alignment.js";
 
 /** 题目装载拒绝(注册表缺失 / 双包缺失 / 装载管线任一层拒绝;细节只进日志)。 */
 export class ChallengeLoadRejected extends Error {
@@ -111,6 +112,27 @@ export interface CreateSessionOutcome {
   readonly sessionId: string;
   readonly revision: number;
   readonly projection: PublicStateProjection;
+}
+
+/**
+ * 会话定位摘要(WP-41 调试实例编排的会话锚定面;D-API-145 起随摘要下发
+ * **在途权威动作日志**,调试克隆的对齐源)。
+ *
+ * 摘要的两次读取都在同一个 `submit()` 账本投影快照上完成 ⇒ `revision` 与
+ * `acceptedActionLog` 相互一致(调试 attach 与真实动作在各自串行链上并发,
+ * 分两次读取会撕裂)。
+ */
+export interface LiveSessionSummary {
+  readonly challengeId: string;
+  readonly challengeVersion: string;
+  readonly revision: number;
+  /**
+   * 在途权威动作日志(`SubmitReference.actionLog` 同源;仅已接受动作)。
+   * 动作 = 玩家输入(公开面),可作为调试克隆的对齐源;与已落库日志不同,
+   * 它**不依赖 submit**(未提交会话同样完整可用)——这正是遗留第 6 项的
+   * 定案修法(D-API-145)。空数组 = 该会话自其账本基线起尚无已接受动作。
+   */
+  readonly acceptedActionLog: readonly DebugAlignmentEntry[];
 }
 
 export interface LiveSessionManagerDeps {
@@ -224,21 +246,27 @@ export class LiveSessionManager {
 
   /**
    * 会话摘要定位(WP-41 调试实例编排的会话锚定面):存在性 + 租户绑定 +
-   * 题目身份与权威 revision。不存在 / 已关闭 / 租户不匹配同形返回 null
+   * 题目身份 + 权威 revision + **在途权威动作日志**(D-API-145:调试克隆的
+   * 对齐源,不依赖 submit 落库)。不存在 / 已关闭 / 租户不匹配同形返回 null
    * (防枚举,与 #lookup 同纪律)。
+   *
+   * `revision` 与 `acceptedActionLog` 取自**同一次** `submit()` 账本投影
+   * (`SubmitReference.actionLog` = 编排核心 `acceptedActions` 账本;`submit()`
+   * 对该账本是纯读取——零副作用、零 worker 往返,故可作只读对齐源使用),
+   * 并浅拷贝成快照:attach 期间真实动作可能在另一条串行链上继续推进,拷贝
+   * 使本次对齐源固定为一个自洽前缀。
    */
-  getSessionSummary(
-    sessionId: string,
-    tenantId: string,
-  ): { challengeId: string; challengeVersion: string; revision: number } | null {
+  getSessionSummary(sessionId: string, tenantId: string): LiveSessionSummary | null {
     const entry = this.#lookup(sessionId, tenantId);
     if (entry === null) {
       return null;
     }
+    const reference = entry.session.submit();
     return {
       challengeId: entry.challengeId,
       challengeVersion: entry.challengeVersion,
-      revision: entry.session.revision,
+      revision: reference.revision,
+      acceptedActionLog: [...reference.actionLog],
     };
   }
 
