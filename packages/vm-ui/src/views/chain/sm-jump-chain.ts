@@ -100,7 +100,7 @@ export class SmJumpChain extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       font-size: 0.8125rem;
     }
 
@@ -112,15 +112,15 @@ export class SmJumpChain extends LitElement {
     }
 
     .chain-arrow {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     .chain-address {
       padding: 0 0.25rem;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
-      background: canvas;
-      color: linktext;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-accent, linktext);
       font: inherit;
       cursor: pointer;
     }
@@ -132,10 +132,15 @@ export class SmJumpChain extends LitElement {
     .chain-address:focus-visible,
     .chain-expand:focus-visible,
     .chain-extend-button:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
+    /* 系统色 colortext:非有效 CSS 颜色关键词(声明被浏览器丢弃 ⇒ 实际取值 =
+       父级继承色:寄存器视图内为 linktext,工作区字节视图行右段内为该视图
+       前景)。改为任何 token 都会在上述上下文之一改变渲染 ⇒ 逐字保留,待主控
+       按真机 axe 裁决;零风险归一化候选 = color: inherit(与本处有效计算值
+       完全等价,不消费 token)。 */
     .chain-loop {
       display: inline-flex;
       align-items: center;
@@ -147,9 +152,9 @@ export class SmJumpChain extends LitElement {
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
       background: none;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font: inherit;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
       cursor: pointer;
     }
 
@@ -158,22 +163,22 @@ export class SmJumpChain extends LitElement {
       padding: 0 0.375rem;
       border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 4px;
-      background: canvas;
-      color: linktext;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-accent, linktext);
       font: inherit;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
       cursor: pointer;
     }
 
     .chain-extend-button:disabled {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       cursor: not-allowed;
     }
 
     .chain-extend-status {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-family: system-ui, sans-serif;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     /* 竖向完整链(展开态):一行一段,段号 + 地址 + 值。 */
@@ -189,34 +194,38 @@ export class SmJumpChain extends LitElement {
     .chain-value,
     .chain-outside {
       margin-inline-start: 0.5rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-family: system-ui, sans-serif;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
+    /* 可见字符延伸段:同 .chain-loop 的 colortext 情形(无效关键词 ⇒ 继承色),
+       逐字保留,理由与建议见上。 */
     .visible-run {
       margin-inline-start: 0.25rem;
       color: colortext;
     }
 
     /* 伪汇编 chip(WP-76 §2.3 #2):链延伸落到代码区时追加一条指令语句展示。
-       只读展示面(非交互):链上地址芯片已承载跳转。 */
+       只读展示面(非交互):链上地址芯片已承载跳转。
+       底 = canvas 92% + highlight 8% 淡染,按「基底关键词原样落回退位」的嵌套
+       写法消费(--sm-bg-base 的 light / dark 值即 canvas ⇒ 明暗逐像素不变)。 */
     .pseudo-asm {
       margin-inline-start: 0.375rem;
       padding: 0 0.25rem;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
       border-radius: 4px;
-      background: color-mix(in srgb, canvas 92%, highlight 8%);
-      color: canvastext;
-      font-family: ui-monospace, monospace;
-      font-size: 0.75rem;
+      background: color-mix(in srgb, var(--sm-bg-base, canvas) 92%, var(--sm-warn, highlight) 8%);
+      color: var(--sm-fg, canvastext);
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-size: 0.8125rem;
       white-space: nowrap;
     }
 
     /* 降级形态(解题档无指令流 / 调试档推送覆盖面外):灰字引导,不冒充指令。 */
     .pseudo-asm[data-pseudo-asm-source="solve"],
     .pseudo-asm[data-pseudo-asm-source="no-coverage"] {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-family: system-ui, sans-serif;
     }
   `;

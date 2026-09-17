@@ -164,7 +164,7 @@ export class SmPayloadTab extends LitElement {
       min-block-size: 24rem;
       font-family: system-ui, sans-serif;
       font-size: 0.8125rem;
-      color: canvastext;
+      color: var(--sm-fg, canvastext);
     }
 
     .layout {
@@ -194,7 +194,7 @@ export class SmPayloadTab extends LitElement {
     .canvas-fallback {
       margin: 0;
       padding: 1rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
     }
 
     /* 右区:工具栏 + 程序区 + 输出区(纵向分割)。 */
@@ -216,21 +216,21 @@ export class SmPayloadTab extends LitElement {
       padding: 0.125rem 0.5rem;
       border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
       border-radius: 6px;
-      background: canvas;
-      color: canvastext;
+      background: var(--sm-bg-base, canvas);
+      color: var(--sm-fg, canvastext);
       font: inherit;
       cursor: pointer;
     }
 
     .toolbar button:disabled {
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       cursor: not-allowed;
     }
 
     .executor-status {
       margin-inline-start: auto;
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
     }
 
     .pane {
@@ -250,12 +250,16 @@ export class SmPayloadTab extends LitElement {
       flex: 1 1 50%;
     }
 
+    /* 面板标题条底(原为 canvas 92% + highlight 8% 淡染):按「基底关键词原样
+       落回退位」的嵌套写法消费——本处基底是 canvas,故用 --sm-bg-base(其
+       light / dark 值即 canvas ⇒ 明暗逐像素不变,terminal 下自动换档);
+       不可改用 --sm-bg-inset(值为 field,会改掉 light 底)。 */
     .pane h3 {
       margin: 0;
       padding: 0.25rem 0.5rem;
       border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      background: color-mix(in srgb, canvas 92%, highlight 8%);
-      font-size: 0.75rem;
+      background: color-mix(in srgb, var(--sm-bg-base, canvas) 92%, var(--sm-warn, highlight) 8%);
+      font-size: 0.8125rem;
       font-weight: 600;
     }
 
@@ -264,12 +268,12 @@ export class SmPayloadTab extends LitElement {
       margin: 0;
       padding: 0.25rem 0.5rem 0.25rem 1.5rem;
       overflow: auto;
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .program-list li.current {
       font-weight: 700;
-      color: highlight;
+      color: var(--sm-warn, highlight);
     }
 
     .program-list li.breakpoint {
@@ -281,14 +285,14 @@ export class SmPayloadTab extends LitElement {
       margin: 0;
       padding: 0.25rem 0.5rem;
       color: var(--sm-danger, crimson);
-      font-size: 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem;
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
     }
 
     .output-log li.error {

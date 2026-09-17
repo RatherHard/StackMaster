@@ -131,17 +131,17 @@ export class SmRegisterView extends LitElement {
     td {
       padding: 0.25rem 0.5rem;
       text-align: left;
-      border-block-end: 1px solid rgb(0 0 0 / 8%);
+      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
     }
 
     thead th {
-      color: graytext;
-      font-size: 0.75rem;
+      color: var(--sm-fg-dim, graytext);
+      font-size: 0.8125rem;
       font-weight: 600;
     }
 
     tbody tr:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: -2px;
     }
 
@@ -153,13 +153,13 @@ export class SmRegisterView extends LitElement {
       background: none;
       color: inherit;
       font: inherit;
-      font-family: ui-monospace, monospace;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
       text-align: left;
       cursor: copy;
     }
 
     .value-button:focus-visible {
-      outline: 2px solid accentcolor;
+      outline: 2px solid var(--sm-focus-ring, accentcolor);
       outline-offset: 1px;
     }
 
@@ -170,8 +170,8 @@ export class SmRegisterView extends LitElement {
       flex-wrap: wrap;
       align-items: center;
       gap: 0.25rem;
-      font-family: ui-monospace, monospace;
-      color: linktext;
+      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      color: var(--sm-accent, linktext);
     }
 
     .cell-chain {
@@ -181,8 +181,8 @@ export class SmRegisterView extends LitElement {
     /* 复制反馈:行内 status,透明度过渡(compositor 友好)。 */
     .copy-feedback {
       margin-inline-start: 0.5rem;
-      font-size: 0.75rem;
-      color: graytext;
+      font-size: 0.8125rem;
+      color: var(--sm-fg-dim, graytext);
       opacity: 1;
       transition: opacity 150ms ease;
     }
@@ -190,7 +190,7 @@ export class SmRegisterView extends LitElement {
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: graytext;
+      color: var(--sm-fg-dim, graytext);
       font-size: 0.875rem;
     }
   `;
