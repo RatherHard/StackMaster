@@ -128,8 +128,18 @@ jobs:
       #    CI 形态 `retries: 1` 承载(GitHub 自动注入 CI=true),本 job 不再叠加;
       #  - 本步 E2E_KEEP_COMPOSE=1:保留拓扑给下一步(避免第二次冷构建),
       #    收尾由本 job 末尾的 `if: always()` 步骤显式执行。
+      #  - `--reporter=…,github`(2026-09-17 补)是**可诊断性**要求,不是装饰:
+      #    `list` 只写控制台、`json` 只落文件 —— 两者都**不产生 check-run
+      #    annotations**,而 GitHub 的 job 日志下载与 artifacts 下载**都要认证**
+      #    (实测 `GET /actions/runs/<id>/logs` = 403 Must have admin rights、
+      #    artifacts = 401)。后果:CI 上矩阵红成 `Process completed with exit
+      #    code 1` 一句,谁都无法在不登录的前提下知道**哪个用例**红了。
+      #    `github` reporter 为每个失败用例发 `::error file=…,line=…::标题`,
+      #    而 **annotations 是公开可读的**(`GET /check-runs/<job_id>/annotations`)
+      #    ⇒ 无凭证也能逐条定位。**请勿移除本 reporter**;若注解数量被 GitHub
+      #    截断,仍足以看到首批失败用例。
       - name: 矩阵 spec(chromium + firefox + webkit;E2E_MATRIX=1)
-        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/browser-matrix.spec.ts --reporter=list,json
+        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/browser-matrix.spec.ts --reporter=list,json,github
         env:
           E2E_MATRIX: "1"
           # 拓扑保留给下一步(步骤 2 在其上复跑;末尾统一下线)。
@@ -145,7 +155,7 @@ jobs:
       # 此处再显式 --project=chromium:门禁口径不变,且不随 E2E_MATRIX 膨胀。
       # 拓扑已在跑 ⇒ global-setup 的 readyz 探测直接复用(不再 compose:app:up)。
       - name: axe 三预设真机门禁 + reduced-motion(chromium)
-        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/axe-contrast.spec.ts e2e/reduced-motion.spec.ts --project=chromium
+        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/axe-contrast.spec.ts e2e/reduced-motion.spec.ts --project=chromium --reporter=list,github
         env:
           E2E_KEEP_COMPOSE: "1"
           SESSION_API_HOST_BACKEND_TOKEN: host-backend-shared-credential-0123456789
