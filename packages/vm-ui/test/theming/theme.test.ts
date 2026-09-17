@@ -18,6 +18,8 @@
 import axe from "axe-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LitElement } from "lit";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import "../../src/workspace/sm-workspace.js";
 import "../../src/views/ed/sm-call-stack.js";
@@ -27,6 +29,16 @@ import "../../src/views/ed/sm-hint-ladder.js";
 import "../../src/views/ed/sm-memory-diff.js";
 import "../../src/views/ed/sm-structure-view.js";
 import "../../src/views/ed/sm-timeline.js";
+import "../../src/payload/sm-payload-tab.js";
+import "../../src/views/byte/byte-view.js";
+import "../../src/views/byte/vma-list.js";
+import "../../src/views/chain/sm-jump-chain.js";
+import "../../src/views/instruction/sm-instruction-view.js";
+import "../../src/views/register/sm-register-view.js";
+import "../../src/views/virtual/sm-window-list.js";
+import "../../src/workspace/byte-tab.js";
+import "../../src/workspace/sm-register-annotation.js";
+import "../../src/workspace/sm-workspace-menu.js";
 import type { SmCallStack } from "../../src/views/ed/sm-call-stack.js";
 import type { SmCheckpoints } from "../../src/views/ed/sm-checkpoints.js";
 import type { SmErrorExplainer } from "../../src/views/ed/sm-error-explainer.js";
@@ -36,13 +48,19 @@ import type { SmStructureView } from "../../src/views/ed/sm-structure-view.js";
 import type { SmTimeline } from "../../src/views/ed/sm-timeline.js";
 import type { SmWorkspace } from "../../src/workspace/sm-workspace.js";
 import {
+  SM_MONO_FONT_STACK,
   SM_THEME_ANCHOR_STYLESHEET_TEXT,
   SM_THEME_VARIABLES,
   ensureSmThemeStyles,
   type SmThemeValue,
 } from "../../src/theme/theme-tokens.js";
 
-/** 参与机械护栏与 axe 的组件清单(标签名 → 元素类)。 */
+/**
+ * 参与机械护栏的**消费清单**(标签名 → 元素类)。WP-74 由 8 个扩到全部消费主题
+ * 变量的 vm-ui 组件;未消费者见 `THEME_EXEMPT_TAGS`。两者**并集**由「护栏覆盖
+ * 全部注册组件」一条与源码 `@customElement` 清单机检对齐 ⇒ **新增组件若不登记
+ * 即变红**,杜绝手写清单漏项。
+ */
 const THEME_COMPONENT_TAGS: readonly { readonly tag: string; readonly type: unknown }[] = [
   { tag: "sm-workspace", type: undefined },
   { tag: "sm-structure-view", type: undefined },
@@ -52,7 +70,77 @@ const THEME_COMPONENT_TAGS: readonly { readonly tag: string; readonly type: unkn
   { tag: "sm-checkpoints", type: undefined },
   { tag: "sm-hint-ladder", type: undefined },
   { tag: "sm-error-explainer", type: undefined },
+  { tag: "sm-byte-view", type: undefined },
+  { tag: "sm-vma-list", type: undefined },
+  { tag: "sm-instruction-view", type: undefined },
+  { tag: "sm-jump-chain", type: undefined },
+  { tag: "sm-register-view", type: undefined },
+  { tag: "sm-workspace-menu", type: undefined },
+  { tag: "sm-register-annotation", type: undefined },
+  { tag: "sm-payload-tab", type: undefined },
 ];
+
+/**
+ * **豁免清单**(不消费主题变量、结构上亦无颜色声明)。每项必须给出理由,并由
+ * 「护栏覆盖全部注册组件」机检保证其不会成为"漏网组件"的藏身处。
+ */
+const THEME_EXEMPT_TAGS: readonly { readonly tag: string; readonly reason: string }[] = [
+  { tag: "sm-byte-tab", reason: "视图分派壳:仅按 viewKind 渲染 sm-byte-view / sm-vma-list,自身无颜色声明" },
+  { tag: "sm-window-list", reason: "虚拟列表容器:只承载滚动与行定位,无颜色声明" },
+];
+
+/** 字号下限 13px(`0.8125rem` = 13px;等价推导见 `src/workspace/layout-presets.ts`)。 */
+const MIN_FONT_SIZE_PX = 13;
+
+/** rem → px 换算基准(浏览器默认根字号)。 */
+const ROOT_FONT_SIZE_PX = 16;
+
+/**
+ * 定位 vm-ui 的 `src/` 目录。
+ * 注:Vitest 下 `import.meta.url` 不保证是 `file:` scheme(实测抛
+ * `TypeError: The URL must be of scheme file`)⇒ 以 cwd 为锚向上探测包根
+ * (兼容「在 packages/vm-ui 下跑」与「在仓库根用聚合配置跑」两种形态)。
+ */
+function resolveSrcDir(): string {
+  let dir = process.cwd();
+  for (let depth = 0; depth < 5; depth += 1) {
+    for (const candidate of [join(dir, "src"), join(dir, "packages", "vm-ui", "src")]) {
+      if (existsSync(join(candidate, "theme", "theme-tokens.ts"))) {
+        return candidate;
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  throw new Error("未定位到 vm-ui 的 src/ 目录(主题护栏扫描失败)");
+}
+
+/** 源码内全部 `@customElement("…")` 登记面(递归扫描 src/,用于覆盖率机检)。 */
+function sourceComponentTags(): string[] {
+  const found = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+      } else if (entry.endsWith(".ts")) {
+        for (const match of readFileSync(full, "utf8").matchAll(/@customElement\("([^"]+)"\)/gu)) {
+          found.add(match[1] ?? "");
+        }
+      }
+    }
+  };
+  walk(resolveSrcDir());
+  return [...found].sort();
+}
+
+/** 归一空白后比较(源码换行 / 缩写差异不影响判定)。 */
+function normalizeCss(text: string): string {
+  return text.replace(/\s+/gu, " ").trim();
+}
 
 /**
  * light / dark 变量面冻结语料(WP-73 light / dark 零变化证明):
@@ -180,6 +268,52 @@ describe("变量消费机械护栏(组件零硬编码颜色)", () => {
       expect(stripped.includes("crimson"), `${tag} 存在 var() 外 crimson 硬编码`).toBe(false);
       expect(cssTextOf(tag).includes("var(--sm-"), `${tag} 未消费主题变量`).toBe(true);
     }
+  });
+
+  it("护栏覆盖全部注册组件:源码 @customElement 清单 = 消费清单 ∪ 豁免清单", () => {
+    const declared = sourceComponentTags();
+    // 防"扫描失效"导致假绿:源码里必须真的扫到组件。
+    expect(declared.length).toBeGreaterThanOrEqual(18);
+    const covered = [
+      ...THEME_COMPONENT_TAGS.map((entry) => entry.tag),
+      ...THEME_EXEMPT_TAGS.map((entry) => entry.tag),
+    ].sort();
+    // 新增 / 改名组件若不登记即在此变红(手写清单不可能漏项)。
+    expect(covered).toEqual(declared);
+    for (const tag of declared) {
+      expect(customElements.get(tag), `组件未注册:${tag}`).toBeTruthy();
+    }
+    // 两份清单不得重叠,豁免不得藏身于消费清单。
+    const consuming = new Set(THEME_COMPONENT_TAGS.map((entry) => entry.tag));
+    for (const { tag } of THEME_EXEMPT_TAGS) {
+      expect(consuming.has(tag), `${tag} 同时在消费与豁免清单`).toBe(false);
+    }
+  });
+
+  it("字号下限 13px:全部组件 font-size 折算后不低于 13px(rem 按 16px 折算)", () => {
+    for (const { tag } of THEME_COMPONENT_TAGS) {
+      for (const match of cssTextOf(tag).matchAll(/font-size:\s*([\d.]+)(px|rem)/gu)) {
+        const size = Number(match[1]);
+        const px = match[2] === "rem" ? size * ROOT_FONT_SIZE_PX : size;
+        expect(px, `${tag} 字号低于下限:${match[0]} → ${String(px)}px`).toBeGreaterThanOrEqual(
+          MIN_FONT_SIZE_PX,
+        );
+      }
+    }
+  });
+
+  it("等宽字体栈回退值与 SM_MONO_FONT_STACK 逐字一致(防多处副本漂移)", () => {
+    const expected = normalizeCss(SM_MONO_FONT_STACK);
+    let checked = 0;
+    for (const { tag } of THEME_COMPONENT_TAGS) {
+      // 回退值内含逗号但无括号 ⇒ 用 [^)]+ 取到 var() 收尾前的内容。
+      for (const match of cssTextOf(tag).matchAll(/var\(--sm-font-mono,\s*([^)]+)\)/gu)) {
+        checked += 1;
+        expect(normalizeCss(match[1] ?? ""), `${tag} 的 --sm-font-mono 回退值漂移`).toBe(expected);
+      }
+    }
+    // 全仓必须至少有一处消费(防"删掉声明即通过")。
+    expect(checked, "未发现任何 --sm-font-mono 消费点").toBeGreaterThan(0);
   });
 });
 
