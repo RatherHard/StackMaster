@@ -17,6 +17,13 @@
  *  - 函数表:attach 推送的 `debug_function_table`(恰一次);
  *  - 暂停态:`debug_paused`(step / breakpoint / program_halt / budget);
  *  - 断点集合:调试档 UI 状态(FE-IN-08);
+ *  - **首个暂停(WP-76 UX 定案 (a1))**:attach 回执**未携带**对齐暂停时
+ *    (`debug_attached.payload.paused` 缺席 —— 真机常态,status:"running"),
+ *    用**公开投影的 RIP** 发一次 `debug_run_to_breakpoint([rip])`。理由:冻结
+ *    推送模型(§九)保证指令流**只随 `debug_paused` 下发**,而演示 / E2E 种子题
+ *    是单 `ret` 字节模式程序(唯一可达断点 = 入口自身)⇒ 没有这次触发就形成
+ *    「断点开关挂在指令行上 / 指令行需要暂停」的死循环,用户进入调试模式后
+ *    看不到任何上下文。见 `#pauseAtCurrentRip`。
  *  - `regions()` / `registers()` = 解题模式公开投影的**结构同构映射**
  *    (v1 夹具 aslrEnabled 恒缺席/false,区域地址与调试实例一致;aslr-on
  *    题目的调试档区域列表精度 = 结构描述级——D-J8 / D-J10 演进项,登记于
@@ -136,6 +143,12 @@ interface CachedSegment {
 
 /** 缺省 prefetch 窗口字节数(地址跳转 / 跳转链延伸的教学展示量级)。 */
 export const DEBUG_PREFETCH_DEFAULT_BYTES = 256;
+
+/**
+ * RIP 寄存器名(公开投影 `visibleRegisters` 的展示名;大小写不敏感比较)。
+ * 与 `<sm-instruction-view>` 的 rip 锚点回退同口径 —— 只读公开投影寄存器面。
+ */
+const DEBUG_RIP_REGISTER_NAME = "rip";
 
 // ── 会话装配 ───────────────────────────────────────────────────────────────
 
@@ -519,6 +532,13 @@ export class DebugDataSource implements MemoryDataSource {
         this.#pausedAddressHex =
           event.payload.paused === undefined ? null : normalizeAddressHex(event.payload.paused.addressHex);
         this.#emit({ kind: "attached" });
+        // 首个暂停(模块头 # 首个暂停):attach **未携带**对齐暂停 ⇒ 服务端按
+        // §九 推送模型不会下发指令流(指令流只随 `debug_paused` 下发)⇒ 进入
+        // 调试模式即主动用当前 RIP 触发一次暂停,用户才看得到上下文。
+        // attach 已携带 `paused` 时服务端会自行推送暂停落点上下文,此处不重复请求。
+        if (event.payload.paused === undefined) {
+          this.#pauseAtCurrentRip();
+        }
         return;
       case "window-data":
         this.#mergeWindow(event.payload);
@@ -552,6 +572,53 @@ export class DebugDataSource implements MemoryDataSource {
         this.#emit({ kind: "connection" });
         return;
     }
+  }
+
+  /**
+   * 进入调试模式后的**首个暂停**(WP-76 UX 定案 (a1);模块头 # 首个暂停)。
+   *
+   * 契约面依据(冻结《调试通道协议语义》§九):指令流**只随 `debug_paused`
+   * 下发**,attach 不推。而演示 / E2E 种子题是单 `ret` 字节模式程序
+   * (`k6/seed-challenge.mjs`:代码区入口 0xc3 = ret,入口即当前 RIP),唯一
+   * **可达**断点就是入口自身 —— 而断点开关挂在指令行上、指令行又需要暂停,
+   * 用户不步进就永远看不到任何上下文(死循环)。
+   *
+   * 解法:**不触碰冻结协议面**,attach 完成后用**公开投影的 RIP** 请求一次
+   * 「运行到当前 RIP」。服务端 `run_to_breakpoint` 起点即命中(0 步,
+   * `vm-worker` `variant.rs::run_to_breakpoint`)⇒ 回 `debug_paused
+   * {reason:"breakpoint"}` + 该地址的 `debug_instruction_stream`,冻结帧族与
+   * 推送时机零改动,只是**补上一次本就允许的常规请求**。
+   *
+   * 地址来源纪律:只用 `registers()`(公开投影寄存器面的结构同构映射),
+   * RIP 不可解析(未接投影 / 无 RIP 行 / 值非法)时**确定性跳过** —— 不发帧、
+   * 不伪造地址、不猜测。失败也不叠加呈现:错误经 `onChange(error)` 与连接态
+   * 反馈(与菜单「运行到断点」同纪律),首个暂停只增强上下文可见性,不得
+   * 影响已下发的 attach 回执与连接存活。
+   */
+  #pauseAtCurrentRip(): void {
+    const addressHex = this.#currentRipHex();
+    if (addressHex === null) {
+      return;
+    }
+    void this.#client.runToBreakpoint([addressHex]).catch(() => {
+      // 见方法头:失败呈现归 onChange(error) / 连接态,此处不重复、不吞错误语义。
+    });
+  }
+
+  /** 当前 RIP(`registers()` = 公开投影寄存器面;缺失 / 非法 = null)。 */
+  #currentRipHex(): string | null {
+    for (const row of this.registers()) {
+      if (row.name.trim().toLowerCase() !== DEBUG_RIP_REGISTER_NAME) {
+        continue;
+      }
+      try {
+        return normalizeAddressHex(row.valueHex);
+      } catch {
+        // 值非法(契约面不会出现):按「无 RIP」处理,不猜地址。
+        return null;
+      }
+    }
+    return null;
   }
 
   /** 窗口回执 → 缓存段归并(重叠 / 相邻段合并为单一连续段)。 */

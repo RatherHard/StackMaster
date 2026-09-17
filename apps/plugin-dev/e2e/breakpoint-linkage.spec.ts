@@ -14,7 +14,7 @@
  * `compileNow` + `runProgram`)——与宿主恢复程序同一入口;E2E 不做积木拖拽
  * (拖拽稳定性属 Blockly 面,不在本 WP 交付范围)。
  *
- * ⚠ 调试档用例的两处前置(中期 WP-76 缺陷 1 / 2,均已修):
+ * ⚠ 调试档用例的前置与**未达成项**(中期 WP-76;缺陷 1 / 2 / 3 已修,遗留 4 未修):
  *  ① 路由 404 —— `apps/session-api/src/index.ts` 生产入口未把
  *    `runtime.debugChannel` 传入 `buildServer`(测试桩传了、生产入口漏了)。
  *    已修:commit a35bb01;
@@ -22,19 +22,37 @@
  *    error/internal_error)—— 演示拓扑登记的题目是 **IR 模式**,
  *    而调试变体契约不携带程序 IR(确定性拒绝 XC-DEBUG-MODE-IR)。已修:
  *    种子题改字节模式 + 初始 RIP 对齐代码区入口(`k6/seed-challenge.mjs`),
- *    机器锚 = `apps/session-api/test/debug/demo-challenge-debug-capability.test.ts`。
- *
- * ⚠ **仍未闭合**:本用例第 2 步断言「进入调试模式后**不步进**即可见指令行」,
- * 与冻结的推送模型(调试通道协议语义 §九:`debug_paused` 才推
- * `debug_instruction_stream`)**不一致**。真机实测(真实 vm-worker + 生产变体
- * 供给,Node 侧):attach 对齐到 running 时只推 `debug_attached` +
- * `debug_function_table`,**不推指令流**;推 `debug_run_to_breakpoint`(断点
- * 取当前 RIP)后依次得到 `debug_paused` + `debug_instruction_stream`(4 条)。
- * 故需二选一定案,本 spec 未擅自改口径:
- *  (a)用例侧补「触发首个暂停」(如 payload 断点并入后点菜单「运行到断点」),
- *     断言保持不动 —— 不触碰冻结面,由后续真机时段实施并验证;
- *  (b)扩展 §九 推送模型(attach 时补推一次上下文)—— **属冻结契约面**
- *     (`packages/protocol/docs/**`),须主控定案。
+ *    机器锚 = `apps/session-api/test/debug/demo-challenge-debug-capability.test.ts`;
+ *  ③ **「不步进即见指令行」与冻结推送模型冲突**(本文件第 2 步的原断言)。
+ *    冻结面事实(`packages/protocol/docs/调试通道协议语义.md` §九):attach 只推
+ *    `debug_attached` + `debug_function_table`,**指令流随 `debug_paused` 才下发**;
+ *    真机实测 attach 回执恒 `status:"running"`(无对齐暂停)⇒ 不步进时指令视图
+ *    必然为空。而定案 **不得改冻结协议**,故按 UX 口径 (a1) 在产品侧补齐:
+ *    attach 未携带对齐暂停时,前端用**公开投影的 RIP** 触发一次
+ *    `debug_run_to_breakpoint([rip])`(落地 = `packages/vm-ui/src/datasource/
+ *    debug-data-source.ts#pauseAtCurrentRip`)。服务端 `run_to_breakpoint` 起点即
+ *    命中(0 步)⇒ 回 `debug_paused {reason:"breakpoint"}` + 该地址的
+ *    `debug_instruction_stream`,冻结帧族 / 推送时机 / 错误码零改动。
+ *    种子题是单 `ret` 程序,唯一可达断点就是入口自身,「先设断点再运行」在此题
+ *    上不可行(断点开关挂在指令行上、指令行需要暂停 = 死循环)⇒ 只能用 (a1)。
+ *    本文件据此**新增**「首个暂停落在当前 RIP」断言(原「指令行可见」断言不动)。
+ *    (a1) 的用户可见性还依赖两处产品侧布局修复(均为死选择器族缺陷):指令视图
+ *    渲染根为 `section.instruction-view` 而 flex 高度链写在无对应节点的 `.layout`
+ *    上;<sm-window-list> 结构样式改随模板落到 light DOM(此前 `static styles`
+ *    在 light DOM 架构下不可达 ⇒ 列表不是滚动容器、锚点行落在视口外数千像素);
+ *  ④ **未达成:第 7 步「调试档伪汇编 chip」不可达(本用例当前唯一红点)**。
+ *    成因(已实测取证,非本 WP 前端代码缺陷):调试实例 = attach 时按
+ *    `origin.revision` **重放权威动作日志**得到的克隆,而动作日志只在 `submit`
+ *    时落库(`apps/session-api/src/sessions/session-manager.ts#persistActionLogDelta`)
+ *    ⇒ 未提交会话的克隆恒等于**种子初始态**(栈区全 0)。真机取证:调试档
+ *    `prefetchWindow("0x7ffff000",16) = "00…00"` 而权威投影
+ *    `head="0010400000000000"`,且 session-api 日志为
+ *    `"revision":0,"targetRevision":1,"msg":"debug instance attached (deterministic
+ *    replay aligned)"`(请求对齐到 revision 1,实际只对齐到 0)。栈行 8 字节非地址
+ *    ⇒ 跳转链不成立 ⇒ `<sm-jump-chain>` 不挂载 ⇒ `[data-pseudo-asm]` 不存在。
+ *    最小修法(需产品侧定案,不属本次改动面):调试变体对齐源改用**在途会话的
+ *    权威动作日志**(`SubmitReference.actionLog`)或种子题栈上预置一个指向代码区的
+ *    返回地址。本断言**未削弱**,原样保留等待修法落地。
  */
 import { expect, focusWindowButton, menuButton, test, workspaceWindow } from "./fixtures.js";
 
@@ -64,6 +82,7 @@ interface WorkspaceFace {
     readonly breakpoints: readonly string[];
     readonly connectionStatus: string;
     readonly attached: unknown;
+    readonly paused: { readonly reason: string; readonly addressHex: string } | null;
   } | null;
 }
 
@@ -170,11 +189,32 @@ test.describe("WP-76 断点联动 + 伪汇编延伸(chromium 真机)", () => {
     await focusWindowButton(page, "debug").click();
     await enterDebugModeReachable(page);
 
+    // 2) 首个暂停(契约面事实):attach **不推**指令流(§九,只随 debug_paused 下发)
+    //    ⇒ 产品侧进入调试模式即用当前 RIP 触发一次暂停(UX 定案 (a1))。断言
+    //    「暂停已发生且落点 = 当前 RIP」(种子题初始 RIP = 代码区入口),而不是
+    //    仅断言「有指令行」—— 后者在推送面变化时会假绿。
+    await expect
+      .poll(
+        async () =>
+          page.locator("sm-workspace").evaluate((element) => {
+            const paused = (element as unknown as WorkspaceFace).debugDataSource?.paused ?? null;
+            return paused === null ? "none" : `${paused.reason}@${paused.addressHex}`;
+          }),
+        {
+          timeout: 15_000,
+          message:
+            "进入调试模式后未观察到首个暂停:attach 未携带对齐暂停时前端应以公开投影 RIP " +
+            "触发 debug_run_to_breakpoint(debug-data-source.ts#pauseAtCurrentRip);仍为 none " +
+            "⇒ 该触发路径未生效(检查 vm-ui dist 是否重建)。",
+        },
+      )
+      .toBe(`breakpoint@${CODE_BASE}`);
+
     const instructionView = page.locator("sm-instruction-view");
     const rows = instructionView.locator(".instruction-row[data-instruction-address]");
     await expect(rows.first()).toBeVisible();
 
-    // 2) 初始视角锚定(WP-75 #7):进入视图即按 rip 锚定一次,锚点行落在真实视口。
+    // 3) 初始视角锚定(WP-75 #7):进入视图即按 rip 锚定一次,锚点行落在真实视口。
     const anchor = await instructionView.evaluate((element) => {
       const view = element as unknown as InstructionViewFace;
       return { addressHex: view.anchorAddressHex, applied: view.initialAnchorApplied };
@@ -189,14 +229,14 @@ test.describe("WP-76 断点联动 + 伪汇编延伸(chromium 真机)", () => {
       ).toBeInViewport();
     }
 
-    // 3) 伪汇编列右侧单独对齐(真实计算样式)。
+    // 4) 伪汇编列右侧单独对齐(真实计算样式)。
     const textAlign = await instructionView
       .locator(".instruction-row .row-text")
       .first()
       .evaluate((element) => getComputedStyle(element).textAlign);
     expect(["end", "right"]).toContain(textAlign);
 
-    // 4) 行断点 ↔ 调试档数据源联动(FE-IN-08 × FE-WS-04c)。
+    // 5) 行断点 ↔ 调试档数据源联动(FE-IN-08 × FE-WS-04c)。
     const toggle = instructionView
       .locator(`.instruction-row[data-instruction-address="${anchor.addressHex}"]`)
       .locator(".breakpoint-toggle");
@@ -205,7 +245,7 @@ test.describe("WP-76 断点联动 + 伪汇编延伸(chromium 真机)", () => {
     const runToBreakpoint = menuButton(page, "run-to-breakpoint-button");
     await expect(runToBreakpoint).toBeEnabled();
 
-    // 5) payload 断点积木真实编译 → 断点地址并入调试档集合(非空 + 含编译期地址)。
+    // 6) payload 断点积木真实编译 → 断点地址并入调试档集合(非空 + 含编译期地址)。
     const payloadTab = page.locator("sm-payload-tab");
     const addresses = await payloadTab.evaluate(async (element, state) => {
       const tab = element as unknown as PayloadTabFace;
@@ -225,7 +265,7 @@ test.describe("WP-76 断点联动 + 伪汇编延伸(chromium 真机)", () => {
     );
     expect(breakpoints).toContain(addresses[0]);
 
-    // 6) 伪汇编延伸 chip 调试档形态:指令流命中 = 真指令;未覆盖 = 显式降级文案
+    // 7) 伪汇编延伸 chip 调试档形态:指令流命中 = 真指令;未覆盖 = 显式降级文案
     //    (两档都不伪造指令;绝不回落解题档引导)。
     await focusWindowButton(page, "stack").click();
     const stackView = workspaceWindow(page, "stack").locator("sm-byte-view");

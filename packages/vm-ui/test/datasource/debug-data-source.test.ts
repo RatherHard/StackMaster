@@ -377,6 +377,79 @@ describe("函数表(attach 推送)", () => {
   });
 });
 
+describe("首个暂停(attach 未携带对齐暂停 → 用公开投影 RIP 触发)", () => {
+  /**
+   * 挂载「attach 回执**不带** paused」形态(真机常态:status = running)。
+   * 返回已发完 attach 帧的套接字;请求序 = attach(req-1)。
+   */
+  function mountRunningAttach(options: { readonly projection?: PublicStateProjection | null } = {}): Harness {
+    FakeWebSocket.reset();
+    let requestSeq = 0;
+    const client = new DebugChannelClient({
+      sessionId: SESSION_ID,
+      origin: { kind: "revision", revision: 3 },
+      webSocketFactory: fakeWebSocketFactory,
+      generateRequestId: () => `req-${(requestSeq += 1)}`,
+    });
+    const source = new DebugDataSource(client, {
+      projectionProvider: () => (options.projection === undefined ? projection : options.projection),
+    });
+    const events: string[] = [];
+    source.onChange((event) => {
+      events.push(event.kind);
+    });
+    source.attach();
+    const socket = FakeWebSocket.last;
+    socket.serverAccepts();
+    socket.serverSends(serverFrame("debug_attached", { revision: 3, status: "running" }, 1));
+    return { source, socket, events };
+  }
+
+  it("attach 无 paused:发一次 debug_run_to_breakpoint([公开投影 RIP]);暂停 + 指令流推送后指令行可见", async () => {
+    const { source, socket } = mountRunningAttach();
+    await settle();
+    // 冻结推送模型(§九):attach 不推指令流 ⇒ 无这次请求则指令视图恒空。
+    const request = socket.sent[1] as Record<string, unknown>;
+    expect(request.type).toBe("debug_run_to_breakpoint");
+    expect(request.payload).toEqual({ breakpoints: ["0x401000"] });
+    expect(source.instructions()).toEqual([]);
+
+    socket.serverSends(
+      serverFrame("debug_paused", { reason: "breakpoint", addressHex: "0x401000" }, 2, requestIdOf(request)),
+    );
+    socket.serverSends(
+      serverFrame(
+        "debug_instruction_stream",
+        { instructions: [{ addressHex: "0x401000", bytesHex: "c3", text: "ret" }] },
+        3,
+      ),
+    );
+    await settle();
+    expect(source.paused).toEqual({ reason: "breakpoint", addressHex: "0x401000" });
+    expect(source.instructions().map((entry) => entry.text)).toEqual(["ret"]);
+  });
+
+  it("attach 已携带 paused:不重复请求(服务端按 §九 自行推送暂停落点上下文)", async () => {
+    const { socket } = mount();
+    await settle();
+    expect(socket.sent).toHaveLength(1); // 仅 attach 一帧。
+  });
+
+  it("公开投影无 RIP:确定性跳过(不发帧、不伪造地址)", async () => {
+    const { socket } = mountRunningAttach({
+      projection: PublicStateProjectionSchema.parse({ ...projection, visibleRegisters: [] }),
+    });
+    await settle();
+    expect(socket.sent).toHaveLength(1); // 仅 attach 一帧:零地址来源即零请求。
+  });
+
+  it("未接公开投影(独立使用形态):确定性跳过", async () => {
+    const { socket } = mountRunningAttach({ projection: null });
+    await settle();
+    expect(socket.sent).toHaveLength(1);
+  });
+});
+
 describe("step / runToBreakpoint(帧发送,fake transport)", () => {
   it("step:debug_step 空载荷;debug_paused 回执更新暂停态 + 事件", async () => {
     const { source, socket, events } = mount();
