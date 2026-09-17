@@ -17,10 +17,12 @@
  */
 import { createPrivateKey } from "node:crypto";
 import {
+  IDENTIFIER_CHARSET_PATTERN,
   MAX_CHECKPOINTS_PER_SESSION,
   MAX_EMBED_TOKEN_TTL_SECONDS,
   MAX_SESSION_CREDENTIAL_TTL_SECONDS,
   MAX_WSS_FRAME_BYTES,
+  OPAQUE_ID_MAX_LENGTH,
 } from "@stackmaster/protocol";
 import { z } from "zod";
 
@@ -170,6 +172,28 @@ export const DEFAULT_VERDICT_QUERIES_PER_MINUTE = 30;
 export const VERDICT_QUERIES_PER_MINUTE_CEILING = 100000;
 
 /**
+ * 中期 M3 WP-78 宿主成绩同步只读接口(D-API-122 ~ D-API-126):与既有面
+ * 同一形态——常量默认值 + 配置天花板双闸(配置超过天花板拒绝启动)。
+ */
+/**
+ * 宿主成绩单批行数默认值(500)。量化理由:单条记录最坏形态 ≈ 250 字节 JSON
+ * (七个公开字段,含两个 UUID 与一个语义化版本),500 条 ≈ 125 KiB 响应体
+ * ——与公开描述包默认上限(256 KiB,D-API-76)同量级,单次同步在一条
+ * 网络往返内交付教学规模的租户成绩(数百至数千条)。
+ */
+export const DEFAULT_HOST_SCORES_BATCH = 500;
+/** 宿主成绩单批行数天花板(5000;≈ 1.25 MiB 响应体,与描述包天花板同档)。 */
+export const HOST_SCORES_BATCH_CEILING = 5000;
+/**
+ * 宿主成绩同步频率默认值(次/分钟;`rate:{tenant}:host_scores` 固定窗口 60 s)。
+ * 与每租户 / 每用户请求频率默认值(D-API-50 的 120)同值:宿主面是服务端间
+ * 批量拉取,单次吞吐远高于玩家面请求,故给足同一档位。
+ */
+export const DEFAULT_HOST_SCORES_QUERIES_PER_MINUTE = 120;
+/** 宿主成绩同步频率天花板(次/分钟)。 */
+export const HOST_SCORES_QUERIES_PER_MINUTE_CEILING = 100000;
+
+/**
  * 阶段六 WP-66 容器级 Worker 隔离(Q4 定案,D-API-105):缺省 = 进程池
  * (dev / CI 拓扑零回退);容器池 = 显式启用形态,启用前置 = MVP 验收通过
  * (边界裁决 1,登记不翻转)。与既有面同一形态——常量默认值 + 天花板双闸。
@@ -294,6 +318,10 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_WORKER_CONTAINER_CPUS",
   "SESSION_API_WORKER_CONTAINER_MEMORY",
   "SESSION_API_WORKER_CONTAINER_PIDS_LIMIT",
+  // ── 中期 M3 WP-78 宿主成绩同步只读接口(2026-09-17;D-API-122 ~ D-API-126)──
+  "SESSION_API_HOST_TENANTS",
+  "SESSION_API_HOST_SCORES_BATCH",
+  "SESSION_API_HOST_SCORES_QUERIES_PER_MINUTE",
 ];
 
 const envSchema = z.object({
@@ -550,6 +578,41 @@ const envSchema = z.object({
     .min(1)
     .max(WORKER_CONTAINER_PIDS_LIMIT_CEILING)
     .default(DEFAULT_WORKER_CONTAINER_PIDS_LIMIT),
+  // ── 中期 M3 WP-78 宿主成绩同步只读接口(D-API-122 ~ D-API-126)──
+  // 宿主凭证 × 租户绑定白名单(O-MP-6 定案;形态与 SESSION_API_ALLOWED_ORIGINS
+  // 同款:逗号分隔、空 / 缺失 = 空集合):凭证 → 租户集合绑定。**空集合 =
+  // 宿主成绩面整体 404 同形**(fail-closed,防枚举)——这是合法配置形态,
+  // 故缺省不报错(与 ALLOWED_ORIGINS 的"提供了却为空即拒"同形:提供了键
+  // 却解析不出任何条目 = 配置错误)。
+  SESSION_API_HOST_TENANTS: z
+    .string()
+    .superRefine((value, ctx) => {
+      const tenants = splitHostTenants(value);
+      if (tenants.length === 0) {
+        ctx.addIssue({ code: "custom", message: "至少提供一个 tenantId,或直接不提供该键" });
+      }
+      for (const tenantId of tenants) {
+        if (!isFrozenIdentifier(tenantId)) {
+          ctx.addIssue({
+            code: "custom",
+            message: "每一项必须是冻结标识符字符集(A-Z a-z 0-9 下划线 连字符)的 tenantId",
+          });
+        }
+      }
+    })
+    .optional(),
+  SESSION_API_HOST_SCORES_BATCH: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(HOST_SCORES_BATCH_CEILING)
+    .default(DEFAULT_HOST_SCORES_BATCH),
+  SESSION_API_HOST_SCORES_QUERIES_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(HOST_SCORES_QUERIES_PER_MINUTE_CEILING)
+    .default(DEFAULT_HOST_SCORES_QUERIES_PER_MINUTE),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -662,6 +725,17 @@ export interface SessionApiConfig {
   readonly workerContainerMemory: number;
   /** 容器 pids 上限(缺省 64;防 fork 炸弹,9.1"无子进程创建")。 */
   readonly workerContainerPidsLimit: number;
+  // ── 中期 M3 WP-78 宿主成绩同步只读接口(D-API-122 ~ D-API-126)──
+  /**
+   * 宿主凭证绑定的租户集合(O-MP-6;规范化:去空白、去空项、字典序排序、
+   * 去重)。**空数组 = 宿主成绩面整体 404 同形**(fail-closed,防枚举)。
+   * 查询参数只能在集合内子选,**禁止由查询参数决定租户**。
+   */
+  readonly hostTenants: readonly string[];
+  /** 宿主成绩单批行数上限(缺省 500);≤ HOST_SCORES_BATCH_CEILING。 */
+  readonly hostScoresBatch: number;
+  /** 宿主成绩同步频率(次/分钟;rate:{tenant}:host_scores 固定窗口 60 s)。 */
+  readonly hostScoresQueriesPerMinute: number;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -812,6 +886,12 @@ export function loadSessionApiConfig(
     workerContainerCpus: raw.SESSION_API_WORKER_CONTAINER_CPUS,
     workerContainerMemory: raw.SESSION_API_WORKER_CONTAINER_MEMORY,
     workerContainerPidsLimit: raw.SESSION_API_WORKER_CONTAINER_PIDS_LIMIT,
+    hostTenants:
+      raw.SESSION_API_HOST_TENANTS === undefined
+        ? []
+        : splitHostTenants(raw.SESSION_API_HOST_TENANTS),
+    hostScoresBatch: raw.SESSION_API_HOST_SCORES_BATCH,
+    hostScoresQueriesPerMinute: raw.SESSION_API_HOST_SCORES_QUERIES_PER_MINUTE,
   };
 }
 
@@ -851,6 +931,27 @@ function splitAllowedOrigins(value: string): readonly string[] {
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+/**
+ * WP-78:宿主凭证绑定的租户白名单拆分与规范化(去空白、去空项、去重、
+ * **字典序排序**)。
+ *
+ * 排序不是装饰:宿主面限流键取"绑定集合的规范化锚 = 字典序最小 tenantId"
+ * (D-API-125),排序使该锚与配置书写顺序无关 ⇒ 同一配置的任何等价写法
+ * 产生同一限流键(确定性,I-4)。查询参数子选仍按集合语义(排序不改成员)。
+ */
+function splitHostTenants(value: string): readonly string[] {
+  const tenants = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return [...new Set(tenants)].sort();
+}
+
+/** WP-78:冻结标识符字符集校验(与 OpaqueIdSchema 同源常量,长度上限同值)。 */
+function isFrozenIdentifier(value: string): boolean {
+  return value.length <= OPAQUE_ID_MAX_LENGTH && IDENTIFIER_CHARSET_PATTERN.test(value);
 }
 
 /** WP-2:精确来源形态(URL 可解析、origin 与输入完全一致、仅 http/https)。 */

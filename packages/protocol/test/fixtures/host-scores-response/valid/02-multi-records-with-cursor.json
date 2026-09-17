@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "id": "0a11b22c-3d44-4e55-8f66-778899aabbcc",
+      "submissionId": "8c1d2e3f-4a5b-4c6d-9e7f-0a1b2c3d4e5f",
+      "sessionId": "sess-01J9KD5EXAMPLE003",
+      "challengeId": "chal-stack-escape",
+      "challengeVersion": "1.2.3",
+      "verdict": "wrong_answer",
+      "decidedAt": 1789200001
+    },
+    {
+      "id": "1b22c33d-4e55-4f66-9a77-8899aabbccdd",
+      "submissionId": "9d2e3f4a-5b6c-4d7e-8f90-1a2b3c4d5e6f",
+      "sessionId": "sess-01J9KD5EXAMPLE004",
+      "challengeId": "chal-stack-escape",
+      "challengeVersion": "1.2.3",
+      "verdict": "engine_error",
+      "decidedAt": 1789200002
+    },
+    {
+      "id": "2c33d44e-5f66-4a77-8b88-99aabbccddee",
+      "submissionId": "ae3f4a5b-6c7d-4e8f-90a1-2b3c4d5e6f70",
+      "sessionId": "sess-01J9KD5EXAMPLE005",
+      "challengeId": "chal-heap-basics",
+      "challengeVersion": "2.0.1",
+      "verdict": "cancelled",
+      "decidedAt": 1789200003
+    }
+  ],
+  "nextCursor": "2c33d44e-5f66-4a77-8b88-99aabbccddee"
+}

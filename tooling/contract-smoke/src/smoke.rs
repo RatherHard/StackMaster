@@ -43,6 +43,13 @@ const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
         "verdict-query-response",
         "verdict-query-response.schema.json",
     ),
+    // 宿主成绩同步只读接口响应(中期 M3 WP-78):载荷公开上限面 + 终态耦合
+    // (空批 ⇒ nextCursor 恒 null)由落盘产物注入的 if/then 承接,Rust
+    // jsonschema 校验器与 TS safeParse 结论一致。
+    (
+        "host-scores-response",
+        "host-scores-response.schema.json",
+    ),
 ];
 const CHALLENGE_CONTRACTS: &[(&str, &str)] =
     &[("public-descriptor", "public-descriptor.schema.json")];

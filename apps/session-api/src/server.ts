@@ -78,6 +78,8 @@ export interface SessionApiServerDeps {
   readonly descriptorRoutes?: FastifyPluginAsync;
   /** 裁决呈现路由(GET /verdicts/:submissionId;阶段六 WP-63,D-API-83)。 */
   readonly verdictRoutes?: FastifyPluginAsync;
+  /** 宿主成绩同步只读路由(GET /host/scores;中期 M3 WP-78,D-API-122)。 */
+  readonly hostScoresRoutes?: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5 装配,D-API-40)。 */
   readonly wssChannel?: FastifyPluginAsync;
   /** 调试通道插件(GET /sessions/debug-channel;阶段四 WP-41,须在 wssChannel 之后注册)。 */
@@ -164,6 +166,9 @@ export function buildServer(
   }
   if (deps.verdictRoutes !== undefined) {
     app.register(deps.verdictRoutes);
+  }
+  if (deps.hostScoresRoutes !== undefined) {
+    app.register(deps.hostScoresRoutes);
   }
   if (deps.wssChannel !== undefined) {
     app.register(deps.wssChannel);

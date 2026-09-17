@@ -157,6 +157,16 @@
         "decidedAt": "public"
       }
     },
+    "host-scores-response": {
+      "file": "host-scores-response.schema.json",
+      "title": "HostScoresResponse",
+      "baseId": "https://stackmaster.dev/schemas/host-scores/v1",
+      "rootClass": "public",
+      "fieldClasses": {
+        "items": "public",
+        "nextCursor": "public"
+      }
+    },
     "projection-policy": {
       "file": "projection-policy.schema.json",
       "title": "ProjectionPolicy",

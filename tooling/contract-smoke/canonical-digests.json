@@ -3,6 +3,12 @@
   "generator": "tooling/generate-canonical-manifest.mjs",
   "spec": "docs/contracts/规范化JSON序列化.md",
   "fixtures": {
+    "packages/challenge-schema/test/fixtures/public-descriptor/author-blocks-minimal.json": {
+      "sha256": "dd394475ff7bbd8edcbd68c4bf6faaac1dbcb837e8c7ed758fcabde920ad0c8d"
+    },
+    "packages/challenge-schema/test/fixtures/public-descriptor/author-blocks.json": {
+      "sha256": "2e07756dbf5987e2035ae031fc1cb9e2a9770db5ca1bfcf1aa972256e92b0f6b"
+    },
     "packages/challenge-schema/test/fixtures/public-descriptor/basic.json": {
       "sha256": "74081d069c7b0f05b55e1e733464206ffe6697fe8ce71c183d8e940272e365c0"
     },
@@ -377,6 +383,66 @@
     },
     "packages/protocol/test/fixtures/embed-token-claims/valid/01-full-claims.json": {
       "sha256": "07f96b89ab71e73e744e9e60ae60c50a017b79072d658bdccb769599f915a6c6"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/01-empty-items-with-cursor.json": {
+      "sha256": "0c484f4105457a07460b05d00d65e247c381c53647eec8c4903c4654d1e02b5b"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/02-missing-next-cursor.json": {
+      "sha256": "4d508586e2dd7f8c8971ca3aa75628362591876f0d22bbb204cf246bdb672f73"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/03-unknown-verdict-value.json": {
+      "sha256": "140dad3ce49bf3b6d7663ff538f7247cf892dc330adc2c1fc0e4ab11d3edd642"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/04-judging-detail-tamper.json": {
+      "sha256": "4127ddb20f775fcdc4d9bc31e8520c710a457f0ccfa984d2014eba06259aa62f"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/05-hidden-test-hit-detail-tamper.json": {
+      "sha256": "c557d349db714a9a50b8fafad48b65c5920ea298615d6294dfd50b994a305f55"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/06-tenant-id-echo-tamper.json": {
+      "sha256": "b5caefdf6e306bf2aa487957371f4a4acb5cc5f8d5b1191fda5580b0f6d037db"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/07-unfrozen-revision-field-tamper.json": {
+      "sha256": "80572550a426daff0c804c242e7c19747e820ad080e993efb82ca890d8e7edc7"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/08-unknown-envelope-key-tamper.json": {
+      "sha256": "e55b71d4d8b28fbbeb9df7a1ca0e3d60bfeb51bca1dbcf3cdb0e5f60459cf26d"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/09-challenge-version-format-violation.json": {
+      "sha256": "6a51b8aeea185d3948974e2d7a0296b8ac5ef48252546ea139ca86a8f3404ceb"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/10-negative-decided-at.json": {
+      "sha256": "79438692663572114e7b8656c68029674dcc371e86657fb8ffad8893e983cb16"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/11-float-decided-at.json": {
+      "rejected": "non_integer_number"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/12-cursor-id-charset-violation.json": {
+      "sha256": "655a761e77b41a2e736ef783978fe60ac287755f19f43e2b787bfc65962431bc"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/13-missing-session-id.json": {
+      "sha256": "3bf938f49bfbaa6a6ddb4befd4be268566e33d807a762a05b9870f060fb18773"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/14-items-not-array.json": {
+      "sha256": "7878ba4568ecd6cf4e44abd28dfc28d3a2810edee16cdeee815241c6ede71cff"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/15-next-cursor-type-violation.json": {
+      "sha256": "e4d1e90687d89b4bd6386ca949b60451ede2e6df19c844df91c1fc8ae27ca0c6"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/invalid/16-internal-stack-and-run-id-tamper.json": {
+      "sha256": "93f178c637f1245d5ae91417dedc09ba2f89a7e11b839909cd01457288c73c33"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/valid/01-single-record.json": {
+      "sha256": "eec26b796be18e94d1c51b804516c3d348e289c1b3ffb7ffd3c7897d130714f0"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/valid/02-multi-records-with-cursor.json": {
+      "sha256": "e7a2f36c3bc9d903ed69f1a96fbade72f76e85b8bb4aaf924db67f2091a67472"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/valid/03-empty-batch-terminal.json": {
+      "sha256": "d47160c01f441269d023ff1a0e5126668c511828d22da948a5f6f4ed033367a5"
+    },
+    "packages/protocol/test/fixtures/host-scores-response/valid/04-non-score-direction-record.json": {
+      "sha256": "cfb61e6f4a3eb2047cf604b52b55858f0bbae67865a0dfb17f8357665e9b5089"
     },
     "packages/protocol/test/fixtures/projection-delta/invalid/01-unknown-field-full-projection.json": {
       "sha256": "ad774bdf4fc0e262f9ce4691b3781975b0313cc59788dddc7c94438b5c55ca20"

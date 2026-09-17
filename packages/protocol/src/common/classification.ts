@@ -60,6 +60,17 @@ export const SCHEMA_CLASSIFICATIONS = {
       decidedAt: "public",
     },
   },
+  "host-scores-response": {
+    // 宿主成绩同步只读接口的响应载荷(中期 M3 WP-78,D-API-122 ~ D-API-126):
+    // 整体 PUBLIC —— 信封只有批量记录数组与游标两个顶层字段,逐条记录的值
+    // 来源全部是公开面(11 值裁决字面 / 契约定位字段 / 落库时刻 / 游标主键),
+    // 零判题明细、零租户回显(论证:WP-1 清单 §6.11)。
+    rootClass: "public",
+    fieldClasses: {
+      items: "public",
+      nextCursor: "public",
+    },
+  },
   "public-state-projection": {
     rootClass: "public",
     fieldClasses: {

@@ -28,6 +28,7 @@ export {
   MemoryChallengeBundleStore,
   MemoryChallengeRegistry,
   MemoryIdempotencyWindow,
+  MemoryHostScoresStore,
 } from "./memory-stores.js";
 export type { Clock, ChallengeObjectKey } from "./memory-stores.js";
 export {
@@ -57,6 +58,7 @@ export type { Migration, MigrationRunResult } from "./pg/run-migrations.js";
 export { PostgresSessionRepository } from "./pg/session-repository.js";
 export { PostgresSnapshotStore } from "./pg/snapshot-store.js";
 export { PostgresActionLogStore, PostgresSubmissionStore } from "./pg/log-stores.js";
+export { PostgresHostScoresStore } from "./pg/host-scores-store.js";
 export { PostgresChallengeRegistry } from "./pg/challenge-registry.js";
 export { PgAuditSink } from "./pg/audit-sink.js";
 export {

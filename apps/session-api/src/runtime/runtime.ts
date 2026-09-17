@@ -49,6 +49,7 @@ import {
   PgAuditSink,
   PostgresActionLogStore,
   PostgresChallengeRegistry,
+  PostgresHostScoresStore,
   PostgresSessionRepository,
   PostgresSnapshotStore,
   PostgresSubmissionStore,
@@ -76,6 +77,7 @@ import {
 import { buildSessionRoutes } from "../routes/session-routes.js";
 import { buildDescriptorRoutes } from "../routes/descriptor-routes.js";
 import { buildVerdictRoutes } from "../routes/verdict-routes.js";
+import { buildHostScoresRoutes } from "../routes/host-scores-routes.js";
 import { createSessionAuthContext } from "../auth/auth-context.js";
 import { LiveSessionManager } from "../sessions/session-manager.js";
 import { SessionMetrics, buildMetricsPlugin } from "../metrics/index.js";
@@ -225,6 +227,8 @@ export interface SessionApiRuntime {
   readonly descriptorRoutes: FastifyPluginAsync;
   /** 裁决呈现路由(GET /verdicts/:submissionId;阶段六 WP-63,D-API-83)。 */
   readonly verdictRoutes: FastifyPluginAsync;
+  /** 宿主成绩同步只读路由(GET /host/scores;中期 M3 WP-78,D-API-122)。 */
+  readonly hostScoresRoutes: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5,D-API-40)。 */
   readonly wssChannel: FastifyPluginAsync;
   /**
@@ -315,6 +319,9 @@ export async function buildSessionApiRuntime(
   const sessions = new PostgresSessionRepository(pool);
   const snapshots = new PostgresSnapshotStore(pool);
   const submissions = new PostgresSubmissionStore(pool);
+  // 宿主成绩同步读取端口(中期 M3 WP-78;只读,零写入面、零 DDL——复用
+  // 既有 session_app 角色与既有 RLS 政策,D-API-126)。
+  const hostScores = new PostgresHostScoresStore(pool);
   const registry = new PostgresChallengeRegistry(pool);
   const actionLog = new PostgresActionLogStore(pool);
   const cipher = SnapshotCipher.fromBase64Key(config.snapshotEncryptionKey);
@@ -525,6 +532,26 @@ export async function buildSessionApiRuntime(
     maxJsonDepth: config.maxJsonDepth,
   });
 
+  // ── 8.6 宿主成绩同步只读接口(中期 M3 WP-78,D-API-122 ~ D-API-126):
+  //    宿主凭证(Authorization: Bearer,常数时间比较;非会话凭证)+ 凭证
+  //    绑定的租户白名单(O-MP-6)+ keyset 游标批量读取,零写入面、零 DDL
+  //    ——复用既有 session_app 角色与既有 RLS 政策(D-API-126)。──
+  const hostScoresRateGate = new FixedWindowRateGate({
+    counter: rateLimitCounter,
+    limitPerWindow: config.hostScoresQueriesPerMinute,
+  });
+  const hostScoresRoutes = buildHostScoresRoutes({
+    hostBackendToken: config.hostBackendToken,
+    hostTenants: config.hostTenants,
+    hostScoresBatch: config.hostScoresBatch,
+    scores: hostScores,
+    hostScoresRateGate: (anchorTenantId) =>
+      hostScoresRateGate.acquireOrThrow(
+        `rate:${anchorTenantId}:host_scores`,
+        "host_scores_rate",
+      ),
+  });
+
   // ── 9. WSS 动作通道(WP-5;WP-6 每会话闸与保持到期回收钩子在此挂载)──
   const wssChannelAssembly = buildWssChannel({
     manager,
@@ -645,6 +672,7 @@ export async function buildSessionApiRuntime(
     sessionRoutes,
     descriptorRoutes,
     verdictRoutes,
+    hostScoresRoutes,
     wssChannel: wssChannelAssembly.plugin,
     wssRegistry: wssChannelAssembly.registry,
     debugChannel: debugChannelPlugin,

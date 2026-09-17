@@ -93,6 +93,22 @@ const VERDICT_QUERY_STATUS_COUPLINGS = [
 ] as const;
 
 /**
+ * HostScoresResponse 的终态耦合(中期 M3 WP-78,D-API-123):
+ * `items` 为空 ⇒ `nextCursor` 必须为 `null`(空批是终态;空页 + 非空游标会
+ * 让客户端陷入无限翻页)。TS 侧等价规则在 HostScoresResponseSchema.superRefine;
+ * 本常量是其 JSON Schema 形态——两侧必须同步修改。
+ */
+const HOST_SCORES_TERMINAL_COUPLING = {
+  if: {
+    properties: { items: { maxItems: 0 } },
+    required: ["items"],
+  },
+  then: {
+    properties: { nextCursor: { const: null } },
+  },
+} as const;
+
+/**
  * DebugVariantBundle 的 ASLR 跨字段耦合(阶段四 WP-40,WP-1 清单 §6.9):
  * aslrEnabled = false ⇒ derivation.baseAddresses 必须缺席(基址与真实镜像
  * 一致);aslrEnabled = true ⇒ derivation.draws ≥ 1(首个 draw 为基址派生)。
@@ -179,6 +195,12 @@ function injectCrossFieldRules(
     const injected: JsonSchemaDocument = structuredClone(document);
     const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
     injected.allOf = [...existing, ...VERDICT_QUERY_STATUS_COUPLINGS];
+    return injected;
+  }
+  if (entryName === "host-scores-response") {
+    const injected: JsonSchemaDocument = structuredClone(document);
+    const existing = Array.isArray(injected.allOf) ? injected.allOf : [];
+    injected.allOf = [...existing, HOST_SCORES_TERMINAL_COUPLING];
     return injected;
   }
   if (entryName === "debug-variant-bundle") {

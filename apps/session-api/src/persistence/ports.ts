@@ -237,6 +237,67 @@ export interface VerdictQueryStore {
   ): Promise<VerdictRecordPublic | null>;
 }
 
+// ── 宿主成绩同步读取(中期 M3 WP-78;D-API-122 ~ D-API-126)───────────────
+
+/**
+ * 宿主成绩记录行(公开上限面七字段;D-API-123 纪律的结构化落实):
+ *
+ *  - 本端口**不暴露** `verdicts.detail`(判题明细 / 谓词 / 隐藏测试命中)、
+ *    `submissions.reference`(完整 IR / 原始快照 / 完整事件日志)、
+ *    `verifier_runs` 任何列——三者整体 SERVER_ONLY,结构性无表达位;
+ *  - 本端口**不暴露** `tenantId`:租户是查询入参(认证上下文派生),不是
+ *    载荷字段(回显即扩大探测面且无用途,O-MP-6 / 6.2)。
+ */
+export interface HostScoreRecordRow {
+  /** 本行游标值(`verdicts.id` 的公开投影;keyset 唯一排序键)。 */
+  readonly id: string;
+  readonly submissionId: string;
+  readonly sessionId: string;
+  readonly challengeId: string;
+  readonly challengeVersion: string;
+  /** 11 值结果类型字面(字面合法性由响应面冻结契约自检兜底)。 */
+  readonly verdict: string;
+  /** 裁决落库时刻(Unix epoch 秒;`verdicts.created_at` 的秒级投影)。 */
+  readonly decidedAtEpochSeconds: number;
+}
+
+/** 宿主成绩分页查询(租户集合显式入参;零请求体身份,零查询参数决定租户)。 */
+export interface HostScorePageQuery {
+  /**
+   * 凭证绑定的租户集合(**唯一**租户来源;认证上下文派生 —— 服务端从
+   * 认证上下文派生租户,不接受请求体 / 查询参数自报身份,6.2)。
+   * 实现必须对集合内**每个**租户做租户作用域查询(行级政策 + 查询层 WHERE
+   * 双层强制),集合外租户结构性不可达。
+   */
+  readonly tenantIds: readonly string[];
+  /**
+   * keyset 游标 = 上一页末行 `id`;null = 首页。
+   * **禁止以时刻为游标**(D-API-92 教训:库内微秒时刻经 JS Date 截断会回退,
+   * 末行被重复选中)——本字段类型是标识符字符串而非时间戳,结构上排除了
+   * 时刻游标形态。
+   */
+  readonly afterId: string | null;
+  /** 单批行数上限(正整数,由路由按 config.hostScoresBatch 钳定)。 */
+  readonly limit: number;
+}
+
+/**
+ * 宿主成绩同步读取端口(中期 M3 WP-78,D-API-126):只读,零写入面
+ * ——本端口不存在任何使 session-api 产生 / 改写裁决或提交的方法(裁决唯一
+ * 出处 = 信任域 4 verifier,硬门槛);零 DDL、零新角色(复用 session_app
+ * 角色与既有 RLS 政策)。
+ */
+export interface HostScoresQueryStore {
+  /**
+   * 按 `id` 升序取一页成绩(keyset 分页)。
+   *
+   * 返回**至多 `limit + 1` 行**:多取一行是"是否还有下一页"的探测法——
+   * 零额外 COUNT 往返,且与 keyset 语义一致(有第 limit+1 行 ⇒ 本页末行的
+   * id 即可作为 `nextCursor`)。调用方负责裁掉探测行并据此决定 `nextCursor`。
+   */
+  listScores(query: HostScorePageQuery): Promise<readonly HostScoreRecordRow[]>;
+}
+
 // ── 题目域:对象存储 + 注册表 ─────────────────────────────────────────────
 
 /**

@@ -53,6 +53,7 @@ import {
   MemoryActionLogStore,
   MemoryChallengeBundleStore,
   MemoryChallengeRegistry,
+  MemoryHostScoresStore,
   MemoryRateLimitCounter,
   MemoryRouteStore,
   MemorySessionRepository,
@@ -65,6 +66,7 @@ import {
 } from "../../../src/persistence/index.js";
 import { buildDescriptorRoutes } from "../../../src/routes/descriptor-routes.js";
 import { buildVerdictRoutes } from "../../../src/routes/verdict-routes.js";
+import { buildHostScoresRoutes } from "../../../src/routes/host-scores-routes.js";
 import type { Logger } from "pino";
 import { createLogCapture, type LogCapture } from "../../helpers/log-capture.js";
 import { OutboundFrameRecorder } from "../../wss/helpers/outbound-frame-recorder.js";
@@ -191,6 +193,11 @@ export interface SessionTestRig {
   readonly actionLog: MemoryActionLogStore;
   /** 固定窗口计数器(WP-6 限流执行点的内存实现)。 */
   readonly rateLimitCounter: MemoryRateLimitCounter;
+  /**
+   * 宿主成绩同步只读端口的内存同构实现(中期 M3 WP-78;测试 seed 面 =
+   * `seed()`,生产形态的记录由 verifier 裁决落库提供)。
+   */
+  readonly hostScores: MemoryHostScoresStore;
   /** 终态会话保留窗口清理入口(WP-6,D-API-55;T0 无 cron,可调用)。 */
   readonly terminalCleaner: TerminalSessionCleaner;
   /** 每会话动作频率限制(WP-6,D-API-53;与每连接令牌桶叠加)。 */
@@ -252,6 +259,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
   const actionLog = new MemoryActionLogStore(now);
   const routeStore = new MemoryRouteStore(now);
   const rateLimitCounter = new MemoryRateLimitCounter(now);
+  const hostScores = new MemoryHostScoresStore();
   const idempotencyWindow = new MemoryIdempotencyWindow(config.idempotencyWindowTtlSeconds, now);
 
   const cipher = SnapshotCipher.fromBase64Key(config.snapshotEncryptionKey);
@@ -322,6 +330,12 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
   const verdictRateGate = new FixedWindowRateGate({
     counter: rateLimitCounter,
     limitPerWindow: config.verdictQueriesPerMinute,
+  });
+  // 宿主成绩同步频率闸(中期 M3 WP-78,D-API-125):与 runtime.ts 同一拓扑
+  // (rate:{绑定集合锚租户}:host_scores 固定窗口)。
+  const hostScoresRateGate = new FixedWindowRateGate({
+    counter: rateLimitCounter,
+    limitPerWindow: config.hostScoresQueriesPerMinute,
   });
   const createSessionGuard = new RateLimitedCreateSessionGuard({
     rateGate: requestRateGate,
@@ -456,6 +470,17 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     }),
     wssChannel: wssChannel.plugin,
     ...(debugChannelPlugin === undefined ? {} : { debugChannel: debugChannelPlugin }),
+    // 宿主成绩同步只读路由(中期 M3 WP-78,D-API-122 ~ D-API-126):与
+    // runtime.ts 同一装配拓扑(内存只读端口 + 宿主凭证 + 绑定白名单 +
+    // rate:{锚租户}:host_scores 频率闸)。
+    hostScoresRoutes: buildHostScoresRoutes({
+      hostBackendToken: config.hostBackendToken,
+      hostTenants: config.hostTenants,
+      hostScoresBatch: config.hostScoresBatch,
+      scores: hostScores,
+      hostScoresRateGate: (anchorTenantId) =>
+        hostScoresRateGate.acquireOrThrow(`rate:${anchorTenantId}:host_scores`, "host_scores_rate"),
+    }),
   });
   await app.ready();
 
@@ -477,6 +502,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     idempotencyWindow,
     actionLog,
     rateLimitCounter,
+    hostScores,
     terminalCleaner,
     sessionActionLimiter,
     routeStore,

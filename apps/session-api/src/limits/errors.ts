@@ -17,7 +17,9 @@ export type RateLimitDimension =
   | "submission_rate"
   | "session_action_rate"
   /** 裁决重询频率(阶段六 WP-63,D-API-84;rate:{tenant}:{user}:verdict)。 */
-  | "verdict_query_rate";
+  | "verdict_query_rate"
+  /** 宿主成绩同步频率(中期 M3 WP-78,D-API-125;rate:{tenant}:host_scores)。 */
+  | "host_scores_rate";
 
 /** 每租户 / 每用户请求频率或提交频率触顶(固定窗口计数;D-API-50)。 */
 export class RateLimitExceeded extends Error {

@@ -93,6 +93,11 @@ describe("配置加载与启动校验(fail-closed)", () => {
       workerContainerCpus: 1,
       workerContainerMemory: 268435456,
       workerContainerPidsLimit: 64,
+      // 中期 M3 WP-78 宿主成绩同步只读接口(D-API-122 ~ D-API-126)默认值:
+      // 白名单缺省空(面整体 404,fail-closed)+ 保守批量上限与频率。
+      hostTenants: [],
+      hostScoresBatch: 500,
+      hostScoresQueriesPerMinute: 120,
     });
   });
 

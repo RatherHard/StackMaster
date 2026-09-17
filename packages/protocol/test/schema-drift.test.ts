@@ -198,6 +198,58 @@ describe("JSON Schema 生成产物(落盘纪律)", () => {
     ]);
   });
 
+  it("host-scores-response 的终态耦合以 if/then 形态注入落盘产物(superRefine 等价物,中期 M3 WP-78)", () => {
+    const document = JSON.parse(
+      readFileSync(join(OUTPUT_DIR, "host-scores-response.schema.json"), "utf8"),
+    ) as {
+      allOf?: unknown[];
+      $id?: string;
+      "x-sm-class"?: string;
+      properties?: Record<string, unknown>;
+    };
+    // 独立契约族版本命名空间(HOST_SCORES_PROTOCOL_VERSION 派生)。
+    expect(document.$id).toBe(
+      "https://stackmaster.dev/schemas/host-scores/v1/host-scores-response.schema.json",
+    );
+    // 信封恰两键(items / nextCursor),整体 PUBLIC(公开面 = 成绩批量导出面)。
+    expect(Object.keys(document.properties ?? {}).sort()).toEqual([
+      "items",
+      "nextCursor",
+    ]);
+    expect(document["x-sm-class"]).toBe("public");
+    // 空批 ⇒ nextCursor 恒 null(终态确定性;空页 + 非空游标 = 无限翻页回路)。
+    expect(document.allOf).toEqual([
+      {
+        if: {
+          properties: { items: { maxItems: 0 } },
+          required: ["items"],
+        },
+        then: {
+          properties: { nextCursor: { const: null } },
+        },
+      },
+    ]);
+    // 记录面在产物内联且严格闭合(additionalProperties: false;零私有列)。
+    const items = document.properties?.["items"] as {
+      items?: { additionalProperties?: boolean; required?: string[] };
+    };
+    expect(items.items?.additionalProperties).toBe(false);
+    expect([...(items.items?.required ?? [])].sort()).toEqual([
+      "challengeId",
+      "challengeVersion",
+      "decidedAt",
+      "id",
+      "sessionId",
+      "submissionId",
+      "verdict",
+    ]);
+    // 私有面字段名在落盘产物中零出现(零 detail / 零 reference / 零 tenantId)。
+    const text = readFileSync(join(OUTPUT_DIR, "host-scores-response.schema.json"), "utf8");
+    for (const forbidden of ["detail", "reference", "tenantId", "verifierRunId", "hiddenTest"]) {
+      expect(text).not.toContain(forbidden);
+    }
+  });
+
   it("provisional 临时标记已彻底退场:任何落盘产物不得再出现 x-sm-provisional(M-3 收口)", () => {
     for (const fileName of readdirSync(OUTPUT_DIR)) {
       if (!fileName.endsWith(".json")) {

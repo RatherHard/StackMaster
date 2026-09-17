@@ -16,6 +16,9 @@ import type {
   ChallengeVersionInput,
   ChallengeVersionRow,
   CreateSessionRowInput,
+  HostScorePageQuery,
+  HostScoreRecordRow,
+  HostScoresQueryStore,
   IdempotencyVerdict,
   IdempotencyWindow,
   KeyValueStore,
@@ -534,3 +537,46 @@ export class MemoryIdempotencyWindow implements IdempotencyWindow {
 // ── 快照 origin 的统一入口(内存实现不区分来源,仅透传)─────────────────
 
 export type { SnapshotOrigin };
+
+// ── 宿主成绩同步读取(中期 M3 WP-78;D-API-126 的内存同构形态)─────────────
+
+interface MemoryHostScoreRow extends HostScoreRecordRow {
+  readonly tenantId: string;
+}
+
+/**
+ * 宿主成绩同步读取端口的**内存同构实现**(与 `PostgresHostScoresStore`
+ * 逐条对齐:租户集合强制过滤、`id` 升序 keyset、`limit + 1` 探测、跨租户
+ * 归并语义)。租户列只存在于本内存表内部,**永不进入** `HostScoreRecordRow`
+ * (端口面结构性无租户字段,与生产适配器的 SELECT 列表同形)。
+ *
+ * 内存形态的落点在测试与未接线期:记录由测试显式 seed(生产形态的记录由
+ * verifier 裁决落库提供,内存侧没有裁决域写入面)。
+ */
+export class MemoryHostScoresStore implements HostScoresQueryStore {
+  private readonly rows: MemoryHostScoreRow[] = [];
+
+  /** 测试 / 未接线期 seed(生产形态无此入口:裁决唯一出处 = verifier)。 */
+  seed(row: HostScoreRecordRow & { readonly tenantId: string }): void {
+    this.rows.push({ ...row });
+  }
+
+  async listScores(query: HostScorePageQuery): Promise<readonly HostScoreRecordRow[]> {
+    const allowed = new Set(query.tenantIds);
+    const probe = query.limit + 1;
+    return this.rows
+      .filter((row) => allowed.has(row.tenantId))
+      .filter((row) => query.afterId === null || row.id > query.afterId)
+      .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+      .slice(0, probe)
+      .map((row) => ({
+        id: row.id,
+        submissionId: row.submissionId,
+        sessionId: row.sessionId,
+        challengeId: row.challengeId,
+        challengeVersion: row.challengeVersion,
+        verdict: row.verdict,
+        decidedAtEpochSeconds: row.decidedAtEpochSeconds,
+      }));
+  }
+}

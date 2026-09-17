@@ -103,8 +103,12 @@ export interface EmbedTokenIssuanceResponse {
 /**
  * 宿主凭证常数时间比较:双侧 sha256 后 timingSafeEqual——长度差异也被
  * 折叠进摘要比较,不透出长度侧信道。
+ *
+ * 导出面(WP-78):宿主成绩同步只读接口(host-scores-routes.ts)复用**同一
+ * 实现**——宿主凭证校验只有这一处(禁写第二套实现),既有签发端点的行为
+ * 与字节面零改动。
  */
-function hostBackendTokenMatches(authorization: unknown, expected: string): boolean {
+export function hostBackendTokenMatches(authorization: unknown, expected: string): boolean {
   if (typeof authorization !== "string" || !authorization.startsWith(BEARER_PREFIX)) {
     return false;
   }

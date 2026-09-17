@@ -31,9 +31,11 @@ import { WssFrameSchema } from "../transport/wss-frame.js";
 import {
   DEBUG_SCHEMA_BASE_ID,
   EMBED_SCHEMA_BASE_ID,
+  HOST_SCORES_SCHEMA_BASE_ID,
   SESSION_ACTION_SCHEMA_BASE_ID,
   VERDICT_SCHEMA_BASE_ID,
 } from "../version.js";
+import { HostScoresResponseSchema } from "../host-scores/host-scores-response.js";
 import { VerdictQueryResponseSchema } from "../verdict/verdict-query-response.js";
 
 /** 已登记字段分类的 Schema 名(与 SCHEMA_CLASSIFICATIONS 键严格对齐)。 */
@@ -124,6 +126,15 @@ export const SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "VerdictQueryResponse",
     baseId: VERDICT_SCHEMA_BASE_ID,
     schema: VerdictQueryResponseSchema,
+  },
+  {
+    // 宿主成绩同步只读接口响应(中期 M3 WP-78,D-API-122 ~ D-API-126):
+    // 宿主后端批量拉取本租户成绩的公开上限面(11 值裁决字面 + 契约定位字段
+    // + keyset 游标),独立版本命名空间。
+    name: "host-scores-response",
+    title: "HostScoresResponse",
+    baseId: HOST_SCORES_SCHEMA_BASE_ID,
+    schema: HostScoresResponseSchema,
   },
 ];
 

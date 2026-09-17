@@ -71,6 +71,9 @@ services:
         -----END PRIVATE KEY-----
       SESSION_API_HOST_BACKEND_TOKEN: "host-backend-shared-credential-0123456789"
       SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000"
+      # ── 中期 M3 WP-78:宿主成绩同步只读接口的凭证 × 租户绑定白名单 ──
+      # (O-MP-6 / D-API-124;缺省 / 空 = 宿主成绩面整体 404 同形。)
+      SESSION_API_HOST_TENANTS: "host-scores-tenant"
       # ── 持久化面(compose 网络内服务名;与 deps.yaml 凭据一致)──
       SESSION_API_POSTGRES_URL: postgres://stackmaster:stackmaster-dev@postgres:5432/session_api
       SESSION_API_REDIS_URL: redis://redis:6379/0

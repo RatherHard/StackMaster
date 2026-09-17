@@ -26,7 +26,7 @@ import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign } from
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import type { ActionResponse, WssFrame } from "@stackmaster/protocol";
-import { canonicalize } from "@stackmaster/protocol";
+import { canonicalize, HostScoresResponseSchema } from "@stackmaster/protocol";
 
 import {
   LIFECYCLE_STACK_ADDRESS,
@@ -910,6 +910,129 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(again.status).toBe(429);
       expect(again.bodyText).toBe(firstReject!.bodyText);
     }, 60_000);
+
+    // ── 中期 M3 WP-78:宿主成绩同步只读接口(全链路实跑;D-API-122 ~ D-API-126)──
+    // 真实拓扑闭环:宿主凭证认证 → 固定白名单租户(compose 配置键
+    // SESSION_API_HOST_TENANTS=host-scores-tenant)→ 真实 submit 落库 → verifier
+    // 裁决落库 → GET /host/scores 读到该裁决(keyset 单页 + 公开上限面)。
+
+    it("宿主成绩同步只读全链路:submit → verifier 裁决落库 → GET /host/scores 读到七字段记录", async () => {
+      // 1. 固定白名单租户 + 本运行唯一题目(版本不可变约束对残留数据免疫)。
+      const hostTenantId = "host-scores-tenant";
+      const hostChallengeId = `chal-host-scores-${runSuffix}`;
+      const privateBundle = Buffer.from(JSON.stringify(lifecycleBundle(hostChallengeId)), "utf8");
+      const publicDescriptor = Buffer.from(JSON.stringify(lifecycleDescriptor(hostChallengeId)), "utf8");
+      const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+      const signature = cryptoSign(
+        null,
+        Buffer.from(
+          registrationSignatureBasis({
+            challengeId: hostChallengeId,
+            contentVersion,
+            vmProfileVersion: "1.0.0",
+            privateBundleSha256: sha256Hex(privateBundle),
+            publicDescriptorSha256: sha256Hex(publicDescriptor),
+          }),
+          "utf8",
+        ),
+        privateKey,
+      ).toString("base64");
+      await new ChallengeRegistrar({
+        bundles: registeredBundles!,
+        registry: new PostgresChallengeRegistry(pool!),
+        signingPublicKey: publicKey,
+      }).register({
+        tenantId: hostTenantId,
+        challengeId: hostChallengeId,
+        contentVersion,
+        vmProfileVersion: "1.0.0",
+        privateBundle,
+        publicDescriptor,
+        signature,
+      });
+
+      // 2. 该租户的会话 + 真实 submit(嵌 token 签发 → create_session → submit)。
+      const embedSessionIdH = embedSessionId();
+      const issuedH = await postJson(recorder, "/auth/embed-tokens", {
+        tenantId: hostTenantId, userId: "user-host-scores", challengeId: hostChallengeId,
+        challengeVersion: contentVersion, embedSessionId: embedSessionIdH,
+      }, { bearer: HOST_BACKEND_TOKEN });
+      expect(issuedH.status).toBe(201);
+      const createdH = await postJson(recorder, "/sessions", {
+        command: "create_session",
+        protocolVersion: 1,
+        payload: {
+          challengeId: hostChallengeId,
+          challengeVersion: contentVersion,
+          embedSessionId: embedSessionIdH,
+          embedToken: (issuedH.body as { embedToken: string }).embedToken,
+        },
+      });
+      expect(createdH.status).toBe(201);
+      const cookieH = credentialFromSetCookie(createdH.setCookie);
+      const sessionIdH = (createdH.body as { payload: { sessionId: string } }).payload.sessionId;
+      const submittedH = await postJson(recorder, "/sessions/submissions", {
+        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdH },
+      }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieH}` });
+      expect(submittedH.status).toBe(200);
+      const submissionIdH = (submittedH.body as { payload: { submissionId: string } }).payload.submissionId;
+
+      // 3. 等 verifier 裁决落库(轮询数据库 = 直读权威面,不经 HTTP 误差)。
+      const verdictDeadline = Date.now() + 90_000;
+      let verdictH: string | null = null;
+      while (Date.now() < verdictDeadline && verdictH === null) {
+        const row = await pool!.query<{ verdict: string }>(
+          `SELECT verdict FROM verdicts WHERE submission_id = $1`,
+          [submissionIdH],
+        );
+        verdictH = row.rows[0]?.verdict ?? null;
+        if (verdictH === null) {
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+        }
+      }
+      expect(verdictH).not.toBeNull();
+
+      // 4. 宿主凭证拉取成绩(查询参数只做集合内子选;租户由凭证绑定派生)。
+      const scores = await fetch(
+        `${BASE_URL}/host/scores?tenantId=${hostTenantId}&limit=10`,
+        { headers: { authorization: `Bearer ${HOST_BACKEND_TOKEN}` } },
+      );
+      expect(scores.status).toBe(200);
+      const bodyText = await scores.text();
+      recorder.recordHttp(JSON.parse(bodyText) as unknown);
+      const body = HostScoresResponseSchema.parse(JSON.parse(bodyText) as unknown);
+      const record = body.items.find((item) => item.submissionId === submissionIdH);
+      expect(record).toBeDefined();
+      // 公开上限面:恰七字段(零 detail / 零 reference / 零租户回显)。
+      expect(Object.keys(record!).sort()).toEqual([
+        "challengeId", "challengeVersion", "decidedAt", "id", "sessionId", "submissionId", "verdict",
+      ]);
+      expect(record!.sessionId).toBe(sessionIdH);
+      expect(record!.challengeId).toBe(hostChallengeId);
+      expect(record!.challengeVersion).toBe(contentVersion);
+      expect(record!.verdict).toBe(verdictH);
+      expect(Number.isInteger(record!.decidedAt)).toBe(true);
+      for (const forbidden of ["detail", "reference", "tenantId", "verifierRunId", "predicate"]) {
+        expect(bodyText).not.toContain(forbidden);
+      }
+      // 载荷机检:宿主成绩响应面零跨域命中(与裁决呈现面同一扫描器)。
+      const scoreHits = scanCrossDomainPayloads([JSON.parse(bodyText) as unknown]);
+      expect(scoreHits, `宿主成绩载荷机检命中:\n${formatCrossDomainHits(scoreHits).join("\n")}`).toEqual([]);
+
+      // 5. 凭证门(实跑):无宿主凭证 ⇒ 401 冻结形态;未绑定租户 ⇒ 404 同形。
+      const anonymous = await fetch(`${BASE_URL}/host/scores`);
+      expect(anonymous.status).toBe(401);
+      expect(await anonymous.text()).toBe(
+        JSON.stringify({ code: "invalid_input_format", message: "authentication failed" }),
+      );
+      const outside = await fetch(`${BASE_URL}/host/scores?tenantId=${tenantId}`, {
+        headers: { authorization: `Bearer ${HOST_BACKEND_TOKEN}` },
+      });
+      expect(outside.status).toBe(404);
+      expect(await outside.text()).toBe(
+        JSON.stringify({ code: "invalid_input_format", message: "resource not found" }),
+      );
+    }, 150_000);
 
     // ── 阶段六 WP-67:裁决边界攻击面(9.2 第四边界;verifier_runs 推进不可达)──
 

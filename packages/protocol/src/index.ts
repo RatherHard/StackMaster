@@ -31,6 +31,11 @@
  *   `…/schemas/verdict/v1`,VERDICT_CHANNEL_PROTOCOL_VERSION;分类论证
  *   WP-1 清单 §6.10,决策登记 D-API-83 / D-API-86)。既有 submit 响应面
  *   `{submissionId, revision}` 零改动。
+ * - 中期 M3 WP-78:宿主成绩同步只读接口 v1——HostScoresResponse
+ *   (`GET /host/scores` 响应体,宿主后端凭证面批量拉取本租户成绩;
+ *   载荷 = 七字段公开上限面 + keyset 游标,独立版本命名空间
+ *   `…/schemas/host-scores/v1`,HOST_SCORES_PROTOCOL_VERSION;分类论证
+ *   WP-1 清单 §6.11,决策登记 D-API-122 ~ D-API-126)。既有契约面零改动。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
  * 与 EmbedTokenClaims / SessionCredentialClaims(凭证解析器)不从本入口导出,
@@ -72,4 +77,5 @@ export * from "./session-command/session-command-response.js";
 export * from "./transport/wss-frame.js";
 export * from "./transport/debug-frame.js";
 export * from "./verdict/verdict-query-response.js";
+export * from "./host-scores/host-scores-response.js";
 export * from "./schema/registry.js";

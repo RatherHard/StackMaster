@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "id": "3f2a91c4-5b7e-4d10-8a63-0c1d2e3f4a5b",
+      "submissionId": "8c1d2e3f-4a5b-4c6d-9e7f-0a1b2c3d4e5f",
+      "sessionId": "sess-01J9KD5EXAMPLE003",
+      "challengeId": "chal-stack-escape",
+      "challengeVersion": "1.2.3",
+      "verdict": "success",
+      "decidedAt": 1789200000
+    }
+  ]
+}

@@ -114,5 +114,40 @@ export const SUPPORTED_DEBUG_CHANNEL_PROTOCOL_VERSIONS: readonly number[] = [
  */
 export const DEBUG_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/debug/v${DEBUG_CHANNEL_PROTOCOL_VERSION}`;
 
+/* ------------------------------------------------------------------ */
+/* 宿主成绩同步只读接口(中期 M3 WP-78;D-API-122 ~ D-API-126)           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 宿主成绩同步只读接口当前版本(中期 M3 WP-78 契约族的版本常量)。
+ *
+ * 宿主成绩同步是**宿主后端**(平台服务端,持 `SESSION_API_HOST_BACKEND_TOKEN`)
+ * 拉取本租户成绩的 REST 只读查询面(`GET /host/scores`,D-API-122):独立于
+ * 会话动作协议、嵌入协议、裁决呈现通道与调试通道演进(与
+ * VERDICT_CHANNEL_PROTOCOL_VERSION / DEBUG_CHANNEL_PROTOCOL_VERSION 同款
+ * 独立编号先例)——新契约面按 5.6 携带独立版本号,破坏性变更递增本常量并
+ * 保留 N-1 兼容窗口,既有契约面零触碰。
+ */
+export const HOST_SCORES_PROTOCOL_VERSION = 1;
+
+/**
+ * 当前受理的宿主成绩同步版本集合(N-1 兼容窗口的实现约定锚点)。
+ *
+ * 约定与 SUPPORTED_VERDICT_CHANNEL_PROTOCOL_VERSIONS 同款:冻结期恒为
+ * `[HOST_SCORES_PROTOCOL_VERSION]`;破坏性变更递增版本后,窗口期在此追加
+ * N-1,窗口期结束移除旧值。
+ */
+export const SUPPORTED_HOST_SCORES_PROTOCOL_VERSIONS: readonly number[] = [
+  HOST_SCORES_PROTOCOL_VERSION,
+];
+
+/**
+ * 宿主成绩同步 JSON Schema 的 $id 命名空间(仅作标识符,不承诺可解析)。
+ * 版本段从宿主成绩同步版本常量派生;响应载荷本身不携带版本字段(沿
+ * VerdictQueryResponse 先例:N-1 受理是路由级事实,回显版本判定细节即扩大
+ * 探测面;契约版本由本命名空间承载)。
+ */
+export const HOST_SCORES_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/host-scores/v${HOST_SCORES_PROTOCOL_VERSION}`;
+
 /** @stackmaster/protocol 包版本(与 package.json 同步;非协议版本)。 */
 export const PROTOCOL_PACKAGE_VERSION = "0.1.0";
