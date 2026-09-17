@@ -35,7 +35,8 @@ stackmaster/
 ├── apps/                     # TypeScript 应用(pnpm workspaces)
 │   ├── session-api/          # 会话编排器(Fastify;管理 vm-worker 进程池)——信任域 2
 │   ├── verifier/             # 独立裁决服务(复用 vm-engine 回放实现)——信任域 4
-│   ├── admin/                # 管理后台(独立凭证与部署)——信任域 4
+│   ├── admin/                # 最小管理面(只读:题目登记 / 裁决查询 / 成绩导出;独立凭证与网络域,
+│   │                         #   自有只读库角色 admin_ro;不入插件链路)——信任域 4
 │   └── plugin-dev/           # 插件 iframe 开发壳与接入 Demo
 ├── packages/                 # TypeScript 包
 │   ├── protocol/             # @stackmaster/protocol:Zod 契约 → JSON Schema(跨语言契约唯一来源)
@@ -56,7 +57,7 @@ stackmaster/
 
 依赖方向由 CI 强制(dependency-cruiser / cargo workspace 声明,5.5):
 
-- TS:`protocol` 可被所有 TS 包依赖(唯一跨域共享面);`challenge-schema` 只被 challenge-compiler、session-api、verifier 依赖;`vm-ui` / `web-component` / `embed-runtime` / `react-wrapper` 只依赖 `protocol`。
+- TS:`protocol` 可被所有 TS 包依赖(唯一跨域共享面);`challenge-schema` 只被 challenge-compiler、session-api、verifier、admin 依赖(WP-79 起,admin 按公开包 Schema 展示题目登记元数据);`vm-ui` / `web-component` / `embed-runtime` / `react-wrapper` 只依赖 `protocol`。`admin` 对工作区包的依赖面 = `protocol` + `challenge-schema`(数据面是自有只读库角色直连 PG,**禁 app→app 依赖**;dependency-cruiser `admin-workspace-deps-allowlist` 强制)。
 - Rust:`vm-core` ← vm-runtime、projection、vm-worker;`vm-runtime` 与 `projection` ← vm-worker。
 - 跨语言规则:IR 与题目包是版本化**序列化格式**,不是共享代码;VM Core 不知道自己运行在 Lit、React、iframe 还是 Node.js 里。
 
@@ -154,7 +155,7 @@ stackmaster/
 
 - **工作区模型 = 固定窗口集(D-MP-1)**:窗口集合 = 注册表登记的全部类型(10 类)**各恰一实例、常驻**;窗口**没有开 / 关状态**,只有「视口内 / 暂离(条带滚出视野)」。模型层 `WorkspaceLayoutModel.bindWindows(bindings, columns?)` 一次性绑窗(**窗口 id ≡ 类型键** ⇒ 单实例结构性保证),`focusWindow(type)` 聚焦(不创建实例),`isWindowSetComplete` 不变量机检;`openTab` / `closeTab` / `formatTabTitle` / 类型内序号 / 关闭入口 / 空态引导**全部退场**。绑定点 = 工作区接入(首帧前)+ `tabTypes` 换绑,与「接入会话」解耦 ⇒ **模式切换只换绑数据源、布局零副作用**(`layoutSnapshot` 深度相等有断言)。菜单「打开」组 → **「窗口」聚焦组**(锚点 `data-window-type` + class `.focus-window` + `aria-pressed`,无禁用态,不留 `data-tab-type` 兼容别名)。
 - **布局 = Niri 式,预设单一来源**:`src/workspace/layout-presets.ts` 三张常量表(**P0** 宽屏 5 列 / **P1** 中宽 3 列 / **P2** 窄条单列)为默认列排布**唯一来源**,经 `bindWindows(entries, columns)` **单点注入**(工作区层不得持有第二份默认布局);`selectLayoutPreset(viewportWidth)` 纯函数选档。三表「10 类型各恰一次、无重无漏」机检固定。阈值推导:字符宽 7.8px(13px × 0.6em)× 行 58ch ⇒ `MIN_COLUMN_WIDTH` **452.4px**、`NARROW_MAX_PX` **468.4px**、`WIDE_MIN_PX` **932.8px**(含真实列间空隙 = 列间距 ×2 + 分隔条宽 12;此处按实现侧推导登记,已由主控采纳为定案口径)。布局状态进快照面:`columns[].widthRatio` / `columns[].rowHeights`(和恒 1、单窗列恒 `[1]`)/ `viewportWidth`;「重置布局」= 清空尺寸调整 + 应用**当前视口宽对应预设**。分隔条(`role=separator` + `tabindex=0`,pointer + 方向键)、焦点列相机纯函数 `cameraScrollLeft`(按 `prefers-reduced-motion` 降级)、三类拖拽落点(`stack` / `cross-column` / `new-column`)、列宽五档 + 重置入口**仅在菜单「布局」组**(标题栏保持零控件)。视口外降级渲染 = `content-visibility: auto` + `contain-intrinsic-size: auto 9rem`(择一登记;零 JS)。
-- **主题 = 20 token × 3 预设**:`SM_THEME_PRESET_VALUES = ["light","dark","terminal"]`(light / dark 新增值取系统色关键字 ⇒ 零视觉变化;effect 面在 light / dark 取 `0` / `0s`)。**嵌入协议 `EMBED_THEMES` 三值零改动**(冻结面);`terminal` 由 `data-sm-theme="terminal"` 承载 + 宿主 appearance 映射为 dark(`#applyAppearanceToHost` 保留外部锚 + `#observeAnchor()` 锚变更观察)。决策登记 D-API-110。
+- **主题 = 21 token × 3 预设**:`SM_THEME_PRESET_VALUES = ["light","dark","terminal"]`(light / dark 新增值取系统色关键字 ⇒ 零视觉变化;effect 面在 light / dark 取 `0` / `0s`)。**嵌入协议 `EMBED_THEMES` 三值零改动**(冻结面);`terminal` 由 `data-sm-theme="terminal"` 承载 + 宿主 appearance 映射为 dark(`#applyAppearanceToHost` 保留外部锚 + `#observeAnchor()` 锚变更观察)。决策登记 D-API-110。**2026-09-17 M3 WP-80 增补第 21 枚**:`--sm-canvas-sprite-filter`(深底画布垃圾桶 / 缩放光栅精灵处理;light `none` / dark·terminal `brightness(1.6)`)—— 该增补**取代** D-API-110「定案 1:零新增 token 硬约束」的绝对表述(见 D-API-130;授权来源 = M1 遗留项「深色画布光栅精灵可见性」,2026-09-17 移交 M3 并由 WP-80 承接)。`theme-terminal.test.ts` 的精确键集断言已由 20 同步为 **21**。
 - **调试档投影接线(WP-70)**:工厂 `createDebugDataSource` 的 options 扩为 `DebugDataSourceAssemblyOptions`(运输面 & 数据源面,显式解构),工作区缺省装配传 `projectionProvider: () => session.store.snapshot ?? null`;未提供 provider 时 `regions()` / `registers()` 恒空的行为保留(以反例固定)。**装配路径集成测试**已补(既有测试经 `debugDataSourceFactory` 测试接缝绕开真实装配路径 = 缺陷漏网原因,已登记在测试文件头)。
 - **台账**:中期决策登记于 `docs/develop/权威API语义规约.md` §三·二十一(**D-API-110 ~ 116**);WP 勾选与证据行在 `docs/phases/中期任务分解.md` §二(含 WP-74 前置项两包的承接登记);用户面文档 `docs/user/界面帮助手册.html` 已同步固定窗口模型(§1.1 / §1.3 / §2.1;列宽窗高 / 预设 / 重置 / 响应式降级等待 WP-72 后由 WP-77 回填)。
 - **测试规模(M1 收口)**:vm-ui **62 files / 766 passed**(M1 前 54/624,零 skip / todo);E2E chromium 全量含新增 `e2e/workspace-layout.spec.ts`(8 例)与 `e2e/workspace-windows.spec.ts`(3 例);axe 真机 `e2e/axe-contrast.spec.ts` **3/3 例、6 个可达面 violations = 0**。
