@@ -217,7 +217,10 @@ services:
 
   verifier-minio-init:
     # 一次性最小授权角色(GetObject on private-bundles/*;mc 挂载策略文件)。
-    image: minio/mc:latest
+    # ⚠ 镜像源 = quay.io,**不得改回 Docker Hub 的 `minio/mc`**(与 deps.yaml 的
+    # minio 服务同因):Docker Hub 上 `minio/mc` 已不再接受匿名拉取 ⇒ CI 拉取被
+    # 拒、`up` 秒级失败。固定 tag = 本仓本地拓扑已实测通过的版本。
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     environment:
       MINIO_ENDPOINT: minio
       MINIO_ROOT_USER: stackmaster-dev

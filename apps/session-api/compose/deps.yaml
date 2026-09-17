@@ -56,7 +56,20 @@ services:
       retries: 30
 
   minio:
-    image: minio/minio:latest
+    # ⚠ 镜像源 = quay.io,**不得改回 Docker Hub 的 `minio/minio`**(2026-09-17 实测):
+    # Docker Hub 上 `minio/minio` 已**不再接受匿名拉取** ——
+    #   `docker pull minio/minio:latest` ⇒
+    #   `pull access denied for minio/minio, repository does not exist or may require
+    #    'docker login'`(exit 1;`docker manifest inspect` 亦为
+    #   `denied: requested access to the resource is denied`)。
+    # 后果:CI runner 无 Docker Hub 凭证且无本地缓存 ⇒ `compose:app:up` 在
+    # **约 2 秒**内被 registry 拒绝(无任何层下载),既打红 `compose-integration`
+    # job,也经 E2E `globalSetup` 的 `composeAppUp()` 打红 `e2e-matrix` job;
+    # 而开发者本机因**已有缓存镜像**永远看不到该错 ⇒ 属"本地绿、CI 恒红"族。
+    # 上游迁移已被多项目跟进(temps / apache-iceberg / camunda 均切 quay.io)。
+    # 同时**固定 tag**(原为 `:latest`):版本 = 本仓本地拓扑已实测通过的版本,
+    # 避免 registry 侧再次漂移。
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: stackmaster-dev
