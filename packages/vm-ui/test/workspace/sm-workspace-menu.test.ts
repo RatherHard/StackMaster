@@ -313,7 +313,7 @@ describe("<sm-workspace-menu> 积木步进(FE-WS-04b,WP-F6)", () => {
     await element.updateComplete;
     const button = menuOf(element).querySelector("button.payload-step-button") as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(button.getAttribute("title")).toContain("仅 Payload 标签页激活时可用");
+    expect(button.getAttribute("title")).toContain("仅 Payload 窗口激活时可用");
     element.remove();
   });
 

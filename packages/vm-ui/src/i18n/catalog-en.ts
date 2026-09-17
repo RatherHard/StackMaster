@@ -55,7 +55,7 @@ export const en: Record<SmMessageKey, string> = {
   "menu.payloadStep": "Payload step",
   "menu.payloadStepTitleOn":
     "Advance the Payload block program by one step (one atomic action) and pause",
-  "menu.payloadStepTitleOff": "Available only while a Payload tab is focused",
+  "menu.payloadStepTitleOff": "Available only while the Payload window is focused",
   "menu.runToBreakpoint": "Run to breakpoint",
   "menu.runToBreakpointTitleOn":
     "Debug mode: run to breakpoint (pauses when any address breakpoint is hit)",

@@ -59,7 +59,7 @@ export const zhCN = {
   "menu.step": "指令步进",
   "menu.payloadStep": "积木步进",
   "menu.payloadStepTitleOn": "Payload 积木程序推进一步(一个原子动作)并暂停",
-  "menu.payloadStepTitleOff": "仅 Payload 标签页激活时可用",
+  "menu.payloadStepTitleOff": "仅 Payload 窗口激活时可用",
   "menu.runToBreakpoint": "运行到断点",
   "menu.runToBreakpointTitleOn": "调试模式:运行到断点(命中任一地址断点后暂停)",
   "menu.runToBreakpointTitleDebugOff": "调试模式下、断点集合非空且通道可用时可用(在指令视图添加断点)",
