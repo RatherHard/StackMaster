@@ -71,6 +71,11 @@ function codeContentHex(): string {
   return "c3" + zeroHex(LIFECYCLE_CHALLENGE_REGION_BYTES - 1);
 }
 
+/** 栈区首 8 字节的返回地址(小端 `0x401000`;与生产种子同源)。 */
+function returnAddressHex(): string {
+  return "0010400000000000";
+}
+
 /**
  * 私有判题包(owner:server-only;内容全为合成占位,零真实秘密)。
  *
@@ -129,7 +134,10 @@ export function buildLifecyclePrivateBundle(challengeId: string): Record<string,
           startAddressHex: LIFECYCLE_CHALLENGE_STACK_BASE,
           byteLength: LIFECYCLE_CHALLENGE_REGION_BYTES,
           permissions: "rw",
-          contentHex: zeroHex(LIFECYCLE_CHALLENGE_REGION_BYTES),
+          // 首 8 字节 = 返回地址(小端 0x401000 = 代码区入口),与生产种子
+          // `k6/seed-challenge.mjs` 的 `stackContent` **同源镜像**;公开面
+          // `bytesHex` 亦须同步(见本文件头与生产种子注释的 XS-PROJ-VALUES 义务)。
+          contentHex: returnAddressHex() + zeroHex(LIFECYCLE_CHALLENGE_REGION_BYTES - 8),
           isHidden: false,
         },
       ],
@@ -247,7 +255,8 @@ export function buildLifecyclePublicDescriptor(challengeId: string): Record<stri
           startAddressHex: LIFECYCLE_CHALLENGE_STACK_BASE,
           byteLength: LIFECYCLE_CHALLENGE_REGION_BYTES,
           permissions: "rw",
-          bytesHex: zeroHex(256),
+          // XS-PROJ-VALUES:必须镜像私有栈区首 8 字节的返回地址(前端只读公开面)。
+          bytesHex: returnAddressHex() + zeroHex(256 - 8),
           truncated: true,
         },
       ],

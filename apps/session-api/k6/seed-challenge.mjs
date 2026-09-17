@@ -59,6 +59,41 @@ const STACK_BASE = "0x7ffff000";
 const zeroHex = (bytes) => "00".repeat(bytes);
 const codeContent = "c3" + "00".repeat(A32_REGION - 1);
 
+/**
+ * 栈区首 8 字节 = **返回地址**(小端 `0x401000` = 代码区入口),其余为 0。
+ *
+ * # 为什么预置它(中期 M2 决策;WP-76 第 7 步遗留的定案修法「②」)
+ *
+ * 调试实例 = attach 时按 `origin.revision` **重放权威动作日志**得到的克隆,而动作
+ * 日志**只在 `submit` 时落库**(`session-manager.ts#persistActionLogDelta`)⇒
+ * **未提交会话**的克隆恒等于本种子初始态。原种子栈**全 0** ⇒ 栈行 8 字节不构成
+ * 地址 ⇒ 跳转链不挂载 ⇒ 伪汇编 chip **结构性**不成立(E2E `breakpoint-linkage`
+ * 第 7 步真机恒红;真机取证:调试档读 `0x7ffff000` 全 0,而权威投影同址为
+ * `0010400000000000` —— 后者是**玩家 payload 写上去的**)。预置后克隆自带一个
+ * 「形似地址且落回可执行区域」的值,链与 chip 无需玩家先操作即成立。
+ *
+ * # XS-PROJ-VALUES 双镜像义务(勿只改一处)
+ *
+ * 私有 `initialState` 的 `contentHex` 与公开 `initialProjection` 的 `bytesHex`
+ * **必须同时**写入本值:前端只读**公开投影**,只改私有面 = 改了但看不见(与
+ * 本文件 RIP 对齐同款义务,见上文 ②)。
+ *
+ * # 落点为什么是 `STACK_BASE` 而非 `[RSP]`
+ *
+ * `RSP = RBP = 0x7ffff008`,严格 CPU 语义下 `ret` 读的是 `[RSP]` = `0x7ffff008`;
+ * 但**跳转链按字节视图行挂载**(`sm-workspace.ts#renderRowJumpChain`:
+ * `.startAddressHex = row.addressHex`),E2E 亦以 `STACK_BASE` 为关注地址
+ * (`breakpoint-linkage.spec.ts` 的 `STACK_TOP`)。故本值落在区域首址,使
+ * 「链锚点 = 关注地址 = E2E payload 写入地址」三者一致。**RSP 与返回地址槽不
+ * 重合这一既有语义张力已如实登记**,不随本变更处理(改 RSP 会触及 3 个 E2E
+ * 断言与约 10 处夹具,属独立变更)。
+ */
+const RETURN_ADDRESS_HEX = "0010400000000000";
+/** 私有栈区内容:返回地址 + 零填充至区域尾。 */
+const stackContent = RETURN_ADDRESS_HEX + zeroHex(A32_REGION - 8);
+/** 公开栈区窗口(前 256 字节):**必须与私有面同源镜像**。 */
+const stackWindowHex = RETURN_ADDRESS_HEX + zeroHex(256 - 8);
+
 function lifecycleBundle() {
   return {
     schemaVersion: 1,
@@ -75,7 +110,7 @@ function lifecycleBundle() {
         { regionId: "code", kind: "code", startAddressHex: CODE_BASE, byteLength: 4096, permissions: "rx", contentHex: codeContent, isHidden: false },
         { regionId: "buffer", kind: "heap", startAddressHex: BUFFER_BASE, byteLength: 4096, permissions: "rw", contentHex: zeroHex(4096), isHidden: false },
         { regionId: "secret", kind: "key", startAddressHex: SECRET_BASE, byteLength: 4096, permissions: "rw", contentHex: zeroHex(4096), isHidden: true },
-        { regionId: "stack", kind: "stack", startAddressHex: STACK_BASE, byteLength: 4096, permissions: "rw", contentHex: zeroHex(4096), isHidden: false },
+        { regionId: "stack", kind: "stack", startAddressHex: STACK_BASE, byteLength: 4096, permissions: "rw", contentHex: stackContent, isHidden: false },
       ],
     },
     secrets: { flag: "FLAG{lifecycle}", virtualFiles: [] },
@@ -136,7 +171,7 @@ function lifecycleDescriptor() {
       visibleRegions: [
         { regionId: "code", label: "代码区", startAddressHex: CODE_BASE, byteLength: 4096, permissions: "rx", bytesHex: codeWindow, truncated: true },
         { regionId: "buffer", label: "缓冲区", startAddressHex: BUFFER_BASE, byteLength: 4096, permissions: "rw", bytesHex: zeroHex(256), truncated: true },
-        { regionId: "stack", label: "栈", startAddressHex: STACK_BASE, byteLength: 4096, permissions: "rw", bytesHex: zeroHex(256), truncated: true },
+        { regionId: "stack", label: "栈", startAddressHex: STACK_BASE, byteLength: 4096, permissions: "rw", bytesHex: stackWindowHex, truncated: true },
       ],
       visibleRegisters: [
         { name: "RSP", valueHex: "0x7FFFF008" },
