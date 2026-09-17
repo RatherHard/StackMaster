@@ -374,4 +374,66 @@ test.describe("工作区布局交互(WP-72:Niri 式列条带 / 尺寸可调 / �
     expect(shadowNodes).toBeLessThan(2_000);
     expect(focusRttMs).toBeLessThan(2_000);
   });
+
+  /**
+   * 溢出列 regime(窗高下限 266px 之后的核心口径;与上面「:170 富余空间列」互补):
+   *
+   * P0 的三窗列(时间线 / 检查点 / 内存差异)在 1440×900 下的列高下限 = 3 × 266
+   * + 非面板占位 54 = **852px**,恰好等于条带内容高 ⇒ 该列**贴住下限、自由空间
+   * 恰好只够三个下限**。旧口径(列高钉死、拖拽只能把像素从同列另一窗挪过来)在
+   * 此列**数学上不可能**:被压窗已在下限 ⇒ 拖拽零位移(死操作)。新口径下:增大的
+   * 窗按位移长高、被压窗**贴住下限不动**、多出来的像素由**列盒长高**承载(条带 /
+   * 文档滚动到达)⇒ 拖拽有效。两条 regime 的差异被显式固定:富余空间的列「和守恒」,
+   * 溢出列的列「总高增长」。
+   */
+  test("窗高可调(溢出列):列高贴住下限时拖拽仍有效——被压窗停在下限、列总高随之增长", async ({
+    createdSession,
+  }) => {
+    const page = createdSession;
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    /** 窗高下限(px;vm-ui `MIN_ROW_HEIGHT_PX` = chrome 182.1 + 4 × 20.8 ⇒ 266)。 */
+    const MIN_ROW_HEIGHT = 266;
+    /** 三窗列的非面板占位(2 × 3 边框 + 2 分隔条 + 4 处列内间距)。 */
+    const THREE_PANE_CHROME = 3 * 2 + 2 * 8 + 4 * 8;
+
+    const timelinePanel = workspaceWindow(page, "timeline");
+    const checkpointsPanel = workspaceWindow(page, "checkpoints");
+    const memoryDiffPanel = workspaceWindow(page, "memory-diff");
+    const columnBoxBefore = (await layoutColumn(page, 4).boundingBox())?.height ?? 0;
+    const timelineBefore = (await timelinePanel.boundingBox())?.height ?? 0;
+    const checkpointsBefore = (await checkpointsPanel.boundingBox())?.height ?? 0;
+    const memoryDiffBefore = (await memoryDiffPanel.boundingBox())?.height ?? 0;
+
+    // 前提固定(不是口号):该列盒 = 下限,自由空间恰好 = 3 × 下限。
+    expect(columnBoxBefore).toBeCloseTo(3 * MIN_ROW_HEIGHT + THREE_PANE_CHROME, 0);
+    expect(checkpointsBefore).toBeCloseTo(MIN_ROW_HEIGHT + 2, 0);
+
+    await dragBy(page, rowDivider(page, 4, 0), 0, 60);
+    await expect(layoutStatus(page)).not.toHaveText("");
+
+    const columnBoxAfter = (await layoutColumn(page, 4).boundingBox())?.height ?? 0;
+    const timelineAfter = (await timelinePanel.boundingBox())?.height ?? 0;
+    const checkpointsAfter = (await checkpointsPanel.boundingBox())?.height ?? 0;
+    const memoryDiffAfter = (await memoryDiffPanel.boundingBox())?.height ?? 0;
+
+    // ① 增大的窗按位移长高(拖拽真的有效,不是死操作)。
+    expect(timelineAfter).toBeGreaterThan(timelineBefore + 40);
+    // ② 被压窗**贴住下限**(不缩到下限以下,也不被挤扁);内容盒 ≥ 下限。
+    expect(checkpointsAfter).toBeLessThanOrEqual(checkpointsBefore + 1);
+    expect(checkpointsAfter).toBeGreaterThanOrEqual(MIN_ROW_HEIGHT);
+    // ③ 非相邻窗**不受影响**(换算基准在按下瞬间冻结;否则列高增长会摊回它身上)。
+    expect(memoryDiffAfter).toBeCloseTo(memoryDiffBefore, 0);
+    // ④ 多出来的像素由**列盒长高**承载(旧口径下这里是「和守恒」,即拖不动)。
+    expect(columnBoxAfter).toBeGreaterThan(columnBoxBefore + 40);
+    expect(columnBoxAfter).toBeCloseTo(columnBoxBefore + (timelineAfter - timelineBefore), 0);
+
+    // 会话内保持:切模式后列盒不回退(尺寸调整与数据源换绑解耦)。
+    await page.locator("sm-workspace-menu button.mode-toggle-button").click();
+    await expect(page.locator("sm-workspace-menu .mode-indicator")).toHaveText("调试模式");
+    expect((await layoutColumn(page, 4).boundingBox())?.height ?? 0).toBeCloseTo(
+      columnBoxAfter,
+      0,
+    );
+  });
 });

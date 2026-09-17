@@ -19,8 +19,15 @@ import {
   LAYOUT_PRESET_P0,
   LAYOUT_PRESET_P1,
   LAYOUT_PRESET_P2,
+  COLUMN_GAP_PX,
   MIN_COLUMN_WIDTH,
 } from "../../src/workspace/layout-presets.js";
+import {
+  MIN_ROW_HEIGHT_PX,
+  ROW_DIVIDER_HEIGHT_PX,
+  columnChromePx,
+  columnMinHeightPx,
+} from "../../src/workspace/layout-divider.js";
 import { isLayoutStateValid, isWindowSetComplete } from "../../src/workspace/workspace-model.js";
 import { defaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
 import { FakeMemoryDataSource } from "../views/byte/fake-data-source.js";
@@ -202,6 +209,62 @@ describe("视口外窗口降级渲染(content-visibility)", () => {
   });
 });
 
+describe("窗高下限(布局层落地:面板下限 + 列内下限之和 ⇒ 不压扁、改为滚动)", () => {
+  it("面板下限来自推导常量(不再是裸的 9rem),降级占位同步", () => {
+    const styles =
+      (SmWorkspace as unknown as { elementStyles?: { cssText?: string }[] }).elementStyles ?? [];
+    const cssText = styles.map((style) => style.cssText ?? "").join("\n");
+    expect(cssText).toContain(`min-block-size: ${MIN_ROW_HEIGHT_PX}px`);
+    expect(cssText).toContain(`contain-intrinsic-size: auto ${MIN_ROW_HEIGHT_PX}px`);
+    // 回归护栏:旧的裸 9rem 写法一旦回来即红(144px 不足一个字节行单位 × 4 + chrome)。
+    expect(cssText).not.toContain("9rem");
+  });
+
+  it("默认布局路径:每列都带与窗高比例相符的列高下限(不是只影响拖拽)", async () => {
+    const workspace = await mountWorkspace();
+
+    const snapshot = workspace.layoutSnapshot;
+    snapshot.columns.forEach((column, index) => {
+      const element = columnElement(workspace, index);
+      expect(element.style.minBlockSize, `列 ${index} 缺列高下限`).toBe(
+        `${columnMinHeightPx(column.rowHeights)}px`,
+      );
+      // 列高下限 ≥ 单窗下限(内容盒),且随窗口数单调增长。
+      expect(columnMinHeightPx(column.rowHeights)).toBeGreaterThanOrEqual(MIN_ROW_HEIGHT_PX);
+    });
+    workspace.remove();
+  });
+
+  it("列高下限恒 ≥ 列内各面板下限之和(不至于把窗口压到下限以下)", async () => {
+    const workspace = await mountWorkspace();
+
+    for (const column of workspace.layoutSnapshot.columns) {
+      const count = column.tabIds.length;
+      expect(columnMinHeightPx(column.rowHeights)).toBeGreaterThanOrEqual(
+        count * MIN_ROW_HEIGHT_PX,
+      );
+    }
+    workspace.remove();
+  });
+
+  it("空间充足时比例分配照常:下限和 < 条带内容高 ⇒ 不触发溢出(比例才是分配依据)", () => {
+    // P0 两窗列(嵌入式条带内容高 672 − 上下内边距 16 = 656):等分下限 560 < 656。
+    expect(columnMinHeightPx([0.5, 0.5])).toBeLessThan(656);
+    // 该列两窗等分后单窗 ≈ 320px,高于下限 ⇒ 拖拽仍有可分配空间。
+    expect((656 - ROW_DIVIDER_HEIGHT_PX - 2 * COLUMN_GAP_PX) / 2).toBeGreaterThan(MIN_ROW_HEIGHT_PX);
+  });
+
+  it("空间不足时改为滚动:列高下限 > 条带内容高(P1 四窗列 / P0 三窗列)", () => {
+    const equal = (count: number): number[] => Array.from({ length: count }, () => 1 / count);
+    // P1(iframe 960 高)条带内容高 656;四窗列下限和 1144 ⇒ 溢出。
+    expect(columnMinHeightPx(equal(4))).toBeGreaterThan(656);
+    // P0 三窗列下限和 852 > 656 ⇒ 同样溢出(空间不足即滚动,而非压扁)。
+    expect(columnMinHeightPx(equal(3))).toBeGreaterThan(656);
+    // 比例偏斜后列高下限进一步长高(列盒 ≡ 内容高度,拖拽换算基准不偏)。
+    expect(columnMinHeightPx([0.8, 0.1, 0.1])).toBeGreaterThan(columnMinHeightPx(equal(3)));
+  });
+});
+
 describe("列宽可调:列间分隔条(pointer 拖拽 + 键盘)", () => {
   it("相邻列间渲染垂直分隔条(role=separator、可聚焦、带 aria 值)", async () => {
     const workspace = await mountWorkspace();
@@ -309,26 +372,84 @@ describe("窗高可调:同列窗间分隔条", () => {
 
   it("拖拽窗高分隔条:同列两窗比例反向变化,和恒为 1", async () => {
     const workspace = await mountWorkspace();
+    // 列高基准必须容得下「两个窗高下限」(2 × 266 = 532)——400px 的假几何在新
+    // 下限下已不可行(下限和 > 列高 ⇒ 拖拽退化),故取 900px 真机量级基准。
     Object.defineProperty(columnElement(workspace, 0), "clientHeight", {
       configurable: true,
-      value: 400,
+      value: 900,
     });
     const divider = shadowOf(workspace).querySelector('[data-row-divider="0:0"]') as HTMLElement;
 
     divider.dispatchEvent(pointer("pointerdown", 100, 200));
-    shadowOf(workspace).dispatchEvent(pointer("pointermove", 100, 240));
-    shadowOf(workspace).dispatchEvent(pointer("pointerup", 100, 240));
+    shadowOf(workspace).dispatchEvent(pointer("pointermove", 100, 290));
+    shadowOf(workspace).dispatchEvent(pointer("pointerup", 100, 290));
     await workspace.updateComplete;
 
     const heights = workspace.layoutSnapshot.columns[0]?.rowHeights ?? [];
-    // +40px / 列高 400 ⇒ 上窗 +0.1。
-    expect(heights[0]).toBeCloseTo(0.6, 6);
-    expect(heights[1]).toBeCloseTo(0.4, 6);
+    // 像素语义:位移 90px 全量落在上窗(自由空间 = 列高 900 − 非面板占位 28 = 872)
+    // ⇒ 上窗 436 + 90 = 526、下窗 436 − 90 = 346,两侧都高于下限(266)。
+    const free = 900 - columnChromePx(2);
+    expect(heights[0]).toBeCloseTo((0.5 * free + 90) / free, 9);
+    expect(heights[1]).toBeCloseTo((0.5 * free - 90) / free, 9);
     expect(heights.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 9);
     // 比例的唯一呈现路径:面板内联 flex-grow(高度分配依据;零 DOM 重建)。
-    expect(panelOf(workspace, "stack").style.flexGrow).toBe("0.6");
-    expect(panelOf(workspace, "registers").style.flexGrow).toBe("0.4");
+    expect(Number(panelOf(workspace, "stack").style.flexGrow)).toBeCloseTo(heights[0] as number, 9);
+    expect(Number(panelOf(workspace, "registers").style.flexGrow)).toBeCloseTo(
+      heights[1] as number,
+      9,
+    );
     expect(isLayoutStateValid(workspace.layoutSnapshot)).toBe(true);
+    workspace.remove();
+  });
+
+  it("窗高下限:拖拽压不出比下限更矮的窗口(被压侧像素高 = 下限)", async () => {
+    const workspace = await mountWorkspace();
+    const columnHeight = 900;
+    Object.defineProperty(columnElement(workspace, 0), "clientHeight", {
+      configurable: true,
+      value: columnHeight,
+    });
+    const divider = shadowOf(workspace).querySelector('[data-row-divider="0:0"]') as HTMLElement;
+
+    // 请求把上窗压到 ≈76px(436 − 360)⇒ 夹取到 MIN_ROW_HEIGHT_PX。
+    divider.dispatchEvent(pointer("pointerdown", 100, 200));
+    shadowOf(workspace).dispatchEvent(pointer("pointermove", 100, 200 - 0.4 * columnHeight));
+    shadowOf(workspace).dispatchEvent(pointer("pointerup", 100, 200 - 0.4 * columnHeight));
+    await workspace.updateComplete;
+
+    const heights = workspace.layoutSnapshot.columns[0]?.rowHeights ?? [];
+    // 列高下限随新比例长高(被压侧贴底)⇒ 自由空间 = 266 + 796。
+    const free = columnMinHeightPx(heights) - columnChromePx(2);
+    expect((heights[0] as number) * free).toBeCloseTo(MIN_ROW_HEIGHT_PX, 6);
+    expect(free).toBeGreaterThan(columnHeight - columnChromePx(2));
+    expect(heights.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 9);
+    workspace.remove();
+  });
+
+  it("溢出列拖拽:像素基准在按下瞬间冻结(拖拽期间列高长高不回灌进换算)", async () => {
+    const workspace = await mountWorkspace();
+    // 按下时列高 = 下限 560(自由空间 532 = 2 × 266:恰好只够两个下限)。
+    const column = columnElement(workspace, 0);
+    Object.defineProperty(column, "clientHeight", { configurable: true, value: 560 });
+    const divider = shadowOf(workspace).querySelector('[data-row-divider="0:0"]') as HTMLElement;
+    divider.dispatchEvent(pointer("pointerdown", 100, 200));
+
+    // 拖拽途中列盒被本列下限顶高(真机会发生)——旧实现每步重读 clientHeight,
+    // 于是同样的 startHeights 按新自由空间重新摊开:非相邻窗跟着变高、列高比位移长。
+    Object.defineProperty(column, "clientHeight", { configurable: true, value: 900 });
+    shadowOf(workspace).dispatchEvent(pointer("pointermove", 100, 260));
+    shadowOf(workspace).dispatchEvent(pointer("pointerup", 100, 260));
+    await workspace.updateComplete;
+
+    // 位移 60px 全量落在上窗、下窗贴住下限、像素和 = 560 基准的自由空间 + 60。
+    const free = 560 - columnChromePx(2);
+    const heights = workspace.layoutSnapshot.columns[0]?.rowHeights ?? [];
+    expect((heights[0] as number) * (free + 60)).toBeCloseTo(0.5 * free + 60, 6);
+    expect((heights[1] as number) * (free + 60)).toBeCloseTo(MIN_ROW_HEIGHT_PX, 6);
+    expect(heights[0]).toBeCloseTo((0.5 * free + 60) / (free + 60), 9);
+    expect(heights.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 9);
+    // 自洽:列高下限(渲染层按同一比例算出的列盒)正好等于新内容高。
+    expect(columnMinHeightPx(heights)).toBeCloseTo(560 + 60, 6);
     workspace.remove();
   });
 
@@ -350,7 +471,7 @@ describe("窗高可调:同列窗间分隔条", () => {
 
     Object.defineProperty(columnElement(workspace, 0), "clientHeight", {
       configurable: true,
-      value: 400,
+      value: 900,
     });
     const divider = shadowOf(workspace).querySelector('[data-row-divider="0:0"]') as HTMLElement;
     divider.dispatchEvent(pointer("pointerdown", 100, 200));
@@ -597,12 +718,12 @@ describe("菜单布局组:列宽预设档 + 重置布局", () => {
     widthButton.click();
     Object.defineProperty(columnElement(workspace, 0), "clientHeight", {
       configurable: true,
-      value: 400,
+      value: 900,
     });
     const divider = shadowOf(workspace).querySelector('[data-row-divider="0:0"]') as HTMLElement;
     divider.dispatchEvent(pointer("pointerdown", 100, 200));
-    shadowOf(workspace).dispatchEvent(pointer("pointermove", 100, 250));
-    shadowOf(workspace).dispatchEvent(pointer("pointerup", 100, 250));
+    shadowOf(workspace).dispatchEvent(pointer("pointermove", 100, 290));
+    shadowOf(workspace).dispatchEvent(pointer("pointerup", 100, 290));
     await workspace.updateComplete;
     expect(workspace.layoutSnapshot.columns[0]?.widthRatio).toBe(1);
     // 窗高已被拖拽调整(不再是缺省等分)。

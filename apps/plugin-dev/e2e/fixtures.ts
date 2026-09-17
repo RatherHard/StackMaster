@@ -294,11 +294,131 @@ export async function layoutColumnWidthPx(page: Page): Promise<number[]> {
 }
 
 /**
+ * 拖拽几何进视口(2026-09-17 真机取证新增;纯机械修正,不改任何产品语义)。
+ *
+ * **为什么必需**:浏览器对 pointer 事件做**视口内**命中测试 —— 坐标落在视口之外
+ * 时 `event.target` 是 `<html>`,事件**不进入** `<sm-workspace>` 的 shadow root,
+ * 组件的 pointermove / pointerup 挂点收不到任何东西。1440×900 实测(窗高下限抬到
+ * 266px 后,开发壳页面高 1322px):
+ *
+ *   row-divider[0:0] 中心 y=887 → `dragBy(..., 0, 60)` 终点 y=947
+ *   实测送达序列:`895 → sm-workspace`(进 shadow)、`902…947 → html`(不进 shadow)
+ *   ⇒ 组件只看到 7.5px 位移,拖拽读作「几乎无位移」;
+ *   registers 面板 899..1313 的 75% 点 y=1210 ⇒ 落点事件整段丢失,pointerup 也丢失
+ *   ⇒ 拖拽永不收尾,列组不变。
+ *
+ * 这不是产品缺陷可修的形态:命中测试在浏览器侧,视口外坐标不可能到达任何页面
+ * 代码;而「让 266px 下限的两窗列整体落进 900px 视口」在数学上不成立(下方
+ * 不等式)。真实用户同样是**先滚动再拖**。故修正在夹具侧:把**起点与终点一起**
+ * 挪进视口(文档纵向 + 条带横向),坐标在滚动后重新测量。
+ *
+ *   :199 落点① 需要 `条带顶 453 + 内边距 8 + 上窗 268 + 间距 16 + 分隔条 8
+ *   + 0.75 × 下窗 268 < 900` ⇒ 条带顶必须 < 399px,而菜单 + 题目简介 + 状态行
+ *   实测占 294px(条带顶 453px)⇒ 无解;任何「把列高下限压回 900px 视口」的
+ *   改法都要么废掉 266px 下限、要么废掉 `align-items: stretch`(M1 既定列的
+ *   弹性语义),两者都不是本题允许的改动。
+ */
+
+/** 拖拽起终点距视口边缘的安全边距(px)。 */
+const DRAG_VIEWPORT_MARGIN_PX = 16;
+
+/** 视口内的一点(CSS 像素;与 `page.mouse` 同坐标系)。 */
+interface DragPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** 等页面处理完滚动(两帧足够;滚动是同步生效,帧等待只为让布局稳定)。 */
+async function settleFrames(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+}
+
+/**
+ * 把拖拽起点 / 终点一起挪进视口;返回**滚动后重测**的坐标。
+ *
+ * `read` 在每次滚动后重新测量(元素随滚动整体平移,坐标必须重取);
+ * 无法同时容纳(跨度 > 视口)或滚动量不足时**抛错**(不静默拖到空气上)。
+ */
+async function dragPointsInViewport(
+  page: Page,
+  read: () => Promise<readonly [DragPoint, DragPoint]>,
+): Promise<readonly [DragPoint, DragPoint]> {
+  const viewport = page.viewportSize();
+  let points = await read();
+  if (viewport === null) {
+    return points;
+  }
+  const verticalLimit = viewport.height - DRAG_VIEWPORT_MARGIN_PX;
+  const horizontalLimit = viewport.width - DRAG_VIEWPORT_MARGIN_PX;
+
+  const outOfViewport = (candidate: readonly [DragPoint, DragPoint]): boolean =>
+    candidate.some(
+      (point) =>
+        point.y < DRAG_VIEWPORT_MARGIN_PX ||
+        point.y > verticalLimit ||
+        point.x < DRAG_VIEWPORT_MARGIN_PX ||
+        point.x > horizontalLimit,
+    );
+
+  if (outOfViewport(points)) {
+    const ys = points.map((point) => point.y);
+    const xs = points.map((point) => point.x);
+    if (Math.max(...ys) - Math.min(...ys) > viewport.height - 2 * DRAG_VIEWPORT_MARGIN_PX) {
+      throw new Error(
+        `拖拽起终点纵向跨度 ${Math.max(...ys) - Math.min(...ys)}px 超过视口可用高 ` +
+          `${viewport.height - 2 * DRAG_VIEWPORT_MARGIN_PX}px(无法同时进入视口)`,
+      );
+    }
+    if (Math.max(...xs) - Math.min(...xs) > viewport.width - 2 * DRAG_VIEWPORT_MARGIN_PX) {
+      throw new Error(
+        `拖拽起终点横向跨度 ${Math.max(...xs) - Math.min(...xs)}px 超过视口可用宽 ` +
+          `${viewport.width - 2 * DRAG_VIEWPORT_MARGIN_PX}px(无法同时进入视口)`,
+      );
+    }
+    // 纵向:文档滚动(工作区在文档流内,整体平移)。取可行区间**中点**(区间端点
+    // 恰好贴边,浮点误差会让「贴边」判成出界),浏览器再按文档可滚动范围夹取。
+    const verticalTop = Math.max(...ys) - verticalLimit;
+    const verticalBottom = Math.min(...ys) - DRAG_VIEWPORT_MARGIN_PX;
+    if (verticalTop > 0 || verticalBottom < 0) {
+      await page.evaluate(
+        (y) => window.scrollTo(0, y),
+        (verticalTop + verticalBottom) / 2,
+      );
+    }
+    // 横向:条带自身滚动(列条带 `overflow: auto`;相机只做焦点列居中,这里按需平移)。
+    if (Math.max(...xs) > horizontalLimit || Math.min(...xs) < DRAG_VIEWPORT_MARGIN_PX) {
+      const strip = layoutStrip(page);
+      const horizontalTop = Math.max(...xs) - horizontalLimit;
+      const horizontalBottom = Math.min(...xs) - DRAG_VIEWPORT_MARGIN_PX;
+      await strip.evaluate((element, left) => {
+        element.scrollLeft = left;
+      }, (horizontalTop + horizontalBottom) / 2);
+    }
+    await settleFrames(page);
+    points = await read();
+  }
+
+  if (outOfViewport(points)) {
+    throw new Error(
+      `拖拽点仍在视口外(x/y = ${points.map((point) => `${point.x},${point.y}`).join(" / ")};` +
+        `视口 ${viewport.width}×${viewport.height})——视口外坐标的 pointer 事件命中 <html>,` +
+        "组件收不到(见 dragPointsInViewport 说明)",
+    );
+  }
+  return points;
+}
+
+/**
  * 真实鼠标拖拽:在目标元素中心按下,位移 (deltaX, deltaY) 后抬起。
  * 与组件层 `DRAG_THRESHOLD_PX`(3px)阈值语义一致——位移过阈值即进入拖拽。
  *
  * **先等相机收敛**:焦点列居中是平滑滚动动画,几何读取与鼠标按下之间若条带仍在
- * 滚动,落点会错位(拖拽失效)。收敛后再取几何。
+ * 滚动,落点会错位(拖拽失效)。收敛后再取几何(并把起终点一起挪进视口)。
  */
 export async function dragBy(
   page: Page,
@@ -307,22 +427,30 @@ export async function dragBy(
   deltaY: number,
 ): Promise<void> {
   await waitForCameraSettled(page);
-  const box = await target.boundingBox();
-  if (box === null) {
-    throw new Error("拖拽目标无可测几何(元素未渲染?)");
-  }
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-  await page.mouse.move(startX, startY);
+  const points = await dragPointsInViewport(page, async () => {
+    const box = await target.boundingBox();
+    if (box === null) {
+      throw new Error("拖拽目标无可测几何(元素未渲染?)");
+    }
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+    return [
+      { x: startX, y: startY },
+      { x: startX + deltaX, y: startY + deltaY },
+    ] as const;
+  });
+  const start = points[0];
+  await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 8 });
+  await page.mouse.move(start.x + deltaX, start.y + deltaY, { steps: 8 });
   await page.mouse.up();
   await waitForCameraSettled(page);
 }
 
 /**
  * 窗口拖拽落点(WP-72 三类落点):自 `from` 的标题栏按下,移动到 `to` 的
- * 上半 / 下半区后抬起(落点语义由组件按 clientY 判定)。同样先等相机收敛。
+ * 上半 / 下半区后抬起(落点语义由组件按 clientY 判定)。同样先等相机收敛,
+ * 并把「标题栏中心 + 落点」一起挪进视口(见 `dragPointsInViewport`)。
  */
 export async function dragWindowTo(
   page: Page,
@@ -331,15 +459,24 @@ export async function dragWindowTo(
   at: "upper" | "lower",
 ): Promise<void> {
   await waitForCameraSettled(page);
-  const fromBox = await from.locator(".tab-bar").boundingBox();
-  const toBox = await to.boundingBox();
-  if (fromBox === null || toBox === null) {
-    throw new Error("窗口拖拽几何不可测(窗口未渲染?)");
-  }
-  await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+  const points = await dragPointsInViewport(page, async () => {
+    const fromBox = await from.locator(".tab-bar").boundingBox();
+    const toBox = await to.boundingBox();
+    if (fromBox === null || toBox === null) {
+      throw new Error("窗口拖拽几何不可测(窗口未渲染?)");
+    }
+    return [
+      { x: fromBox.x + fromBox.width / 2, y: fromBox.y + fromBox.height / 2 },
+      {
+        x: toBox.x + toBox.width / 2,
+        y: at === "upper" ? toBox.y + toBox.height * 0.25 : toBox.y + toBox.height * 0.75,
+      },
+    ] as const;
+  });
+  const [start, end] = points;
+  await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  const targetY = at === "upper" ? toBox.y + toBox.height * 0.25 : toBox.y + toBox.height * 0.75;
-  await page.mouse.move(toBox.x + toBox.width / 2, targetY, { steps: 10 });
+  await page.mouse.move(end.x, end.y, { steps: 10 });
   await page.mouse.up();
   await waitForCameraSettled(page);
 }

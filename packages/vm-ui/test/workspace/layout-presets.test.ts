@@ -4,7 +4,8 @@
  *  - **三表不变量机检**:P0 / P1 / P2 三张常量表各列出的类型键 = 注册表登记
  *    集合,**各恰一次、无重无漏**(登记序权威来源 = `createDefaultTabTypeRegistry()`);
  *  - **阈值推导式机检**:`MIN_COLUMN_WIDTH` / `WIDE_MIN_PX` / `NARROW_MAX_PX`
- *    三常量与推导式同批固定(漂移即红灯);
+ *    三常量与推导式同批固定(漂移即红灯);**块轴(高度)侧同法**:面板 chrome
+ *    逐项 + N(= 4)个行单位 ⇒ `MIN_ROW_HEIGHT_PX`(窗高下限);
  *  - **`selectLayoutPreset` 判定边界**:两条阈值线上下的档位归属;
  *  - **列宽预设档**:1/4、1/3、1/2、2/3、全宽五档(视口占比,单调递增且末档 = 全宽)。
  */
@@ -12,20 +13,29 @@ import { describe, expect, it } from "vitest";
 
 import { defaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
 import {
+  BYTE_HEADER_ROW_HEIGHT_PX,
+  BYTE_TOOLBAR_HEIGHT_PX,
+  BYTE_VIEW_BORDER_BLOCK_PX,
   COLUMN_DIVIDER_WIDTH_PX,
   COLUMN_GAP_PX,
   COLUMN_WIDTH_PRESETS,
   CONTAINER_PADDING_PX,
+  HEX_ROW_FONT_SIZE_PX,
+  HEX_ROW_HEIGHT_PX,
   HEX_ROW_MIN_CHARS,
   LAYOUT_PRESET_P0,
   LAYOUT_PRESET_P1,
   LAYOUT_PRESET_P2,
   MIN_COLUMN_WIDTH,
+  MIN_VISIBLE_HEX_ROWS,
   MONOSPACE_CHAR_WIDTH_PX,
   NARROW_MAX_PX,
+  PANEL_CHROME_HEIGHT_PX,
+  TAB_BAR_HEIGHT_PX,
   WIDE_MIN_PX,
   selectLayoutPreset,
 } from "../../src/workspace/layout-presets.js";
+import { MIN_ROW_HEIGHT_PX } from "../../src/workspace/layout-divider.js";
 
 /** 注册表登记类型集(权威来源;与 tab-registry.test.ts 同序固定)。 */
 const REGISTERED_TYPES: readonly string[] = defaultTabTypeRegistry
@@ -115,6 +125,44 @@ describe("列宽阈值推导式(WP-72:十六进制行不折行的最小可读宽
   it("阈值语义自洽:单列档上限 ≥ 最小列宽;宽屏门槛 ≥ 单列档上限", () => {
     expect(NARROW_MAX_PX).toBeGreaterThanOrEqual(MIN_COLUMN_WIDTH);
     expect(WIDE_MIN_PX).toBeGreaterThan(NARROW_MAX_PX);
+  });
+});
+
+describe("高度阈值推导式(块轴:面板 chrome + N 个字节行单位 ⇒ 窗高下限)", () => {
+  it("行单位 = 行字号 13px × line-height 1.6 = 20.8px", () => {
+    expect(HEX_ROW_FONT_SIZE_PX).toBe(13);
+    expect(HEX_ROW_HEIGHT_PX).toBeCloseTo(HEX_ROW_FONT_SIZE_PX * 1.6, 6);
+    expect(HEX_ROW_HEIGHT_PX).toBeCloseTo(20.8, 6);
+  });
+
+  it("列头行 = 一个行单位 + 底边框", () => {
+    expect(BYTE_HEADER_ROW_HEIGHT_PX).toBeCloseTo(HEX_ROW_HEIGHT_PX + 1, 6);
+    expect(BYTE_HEADER_ROW_HEIGHT_PX).toBeCloseTo(21.8, 6);
+  });
+
+  it("面板 chrome = 标题栏 + 字节视图边框 + 工具区 + 列头行(逐项登记,漂移即红)", () => {
+    expect(TAB_BAR_HEIGHT_PX).toBe(26);
+    expect(BYTE_VIEW_BORDER_BLOCK_PX).toBe(1);
+    expect(BYTE_TOOLBAR_HEIGHT_PX).toBeCloseTo(133.3, 6);
+    expect(PANEL_CHROME_HEIGHT_PX).toBeCloseTo(
+      TAB_BAR_HEIGHT_PX +
+        BYTE_VIEW_BORDER_BLOCK_PX +
+        BYTE_TOOLBAR_HEIGHT_PX +
+        BYTE_HEADER_ROW_HEIGHT_PX,
+      6,
+    );
+    expect(PANEL_CHROME_HEIGHT_PX).toBeCloseTo(182.1, 6);
+  });
+
+  it("可见行数 N = 4(32 字节 = 缓冲区首 16 + 保存的 rbp 8 + 返回地址 8)", () => {
+    expect(MIN_VISIBLE_HEX_ROWS).toBe(4);
+  });
+
+  it("高度下限与宽度侧同法可推导:PANEL_CHROME + N × 行单位(上取整)", () => {
+    expect(MIN_ROW_HEIGHT_PX).toBe(
+      Math.ceil(PANEL_CHROME_HEIGHT_PX + MIN_VISIBLE_HEX_ROWS * HEX_ROW_HEIGHT_PX),
+    );
+    expect(MIN_ROW_HEIGHT_PX).toBe(266);
   });
 });
 

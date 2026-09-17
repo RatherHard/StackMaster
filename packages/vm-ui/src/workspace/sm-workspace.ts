@@ -148,6 +148,8 @@ import {
   prefersReducedMotion,
 } from "./layout-camera.js";
 import {
+  columnChromePx,
+  columnMinHeightPx,
   columnWidthAfterDrag,
   rowHeightsAfterDrag,
   DIVIDER_KEY_STEP_PX,
@@ -197,6 +199,14 @@ type DividerDrag =
       readonly index: number;
       readonly startY: number;
       readonly startHeights: readonly number[];
+      /**
+       * 按下瞬间的列高(px;像素换算基准)。**整段拖拽共用同一个值**:列高在
+       * 溢出列会被本列下限(比例的函数)顶高,若每步重读 `clientHeight`,同样的
+       * `startHeights` 会按新自由空间重新摊开 ⇒ 非相邻窗跟着变高、列高比位移长
+       * 得更多(实测 +60px 的拖拽把列高顶高 137px)。固定基准后拖拽是
+       * `(startHeights, 基准, 位移)` 的纯函数 ⇒ 分隔条严格跟随指针。
+       */
+      readonly startColumnHeightPx: number;
       moved: boolean;
     };
 
@@ -427,7 +437,12 @@ export class SmWorkspace extends LitElement {
     }
 
     /* 列式滚动平铺:列间水平滚动(Niri 式),滚动可达任意列。
-       纵向设为 auto(P2 单列纵向 10 窗时列高不足,条带自身承担纵向滚动)。 */
+       纵向同样 auto:列内窗口有**可读高度下限**(MIN_ROW_HEIGHT_PX),列高下限
+       是**窗高比例的函数**(columnMinHeightPx,内联为列盒 min-block-size)⇒
+       拖高某一窗时列盒随之生长(被减小的窗贴住下限、不再让位),溢出的可见后代
+       进入条带滚动区 ⇒ **不压扁窗口,改为滚动**。宿主给工作区定高时滚动发生在
+       条带内;宿主未定高时条带被内容撑高、溢出上浮到文档层滚动(见
+       test/workspace/sm-workspace-layout.test.ts 的高度下限用例)。 */
     .columns {
       flex: 1;
       display: flex;
@@ -449,7 +464,9 @@ export class SmWorkspace extends LitElement {
     }
 
     /* 列宽由模型快照的占比即时计算为像素(内联 inline-size);缺省兜底 100%
-       (首帧 / 无测量环境时不塌陷)。 */
+       (首帧 / 无测量环境时不塌陷)。列高下限由 TS 按列内**窗高比例**内联为像素
+       (columnMinHeightPx;同一处也只此一份算式),使列盒 ≥ 内容高度:
+       窗高拖拽的像素 ↔ 比例换算基准正确、列间分隔条随内容满高。 */
     .column {
       flex: 0 0 auto;
       inline-size: 100%;
@@ -521,10 +538,13 @@ export class SmWorkspace extends LitElement {
 
     /* 列内按窗高比例分配列高(Hyprland 式):面板 flex-grow 由模型比例内联给值
        (flex: 比例 1 0 ⇒ 高度按比例分配,拖拽期间只改容器比例、列表不重排);
-       面板最小高 9rem 兜底(超限时条带纵向滚动)。 */
+       面板最小高 = 窗高下限 MIN_ROW_HEIGHT_PX(推导见 layout-presets.ts 的
+       「块轴(高度)阈值推导」:面板 chrome + 4 个字节行单位):空间充足时比例分配
+       照常(像素和守恒),空间不足时被压侧的窗停在下限、列高下限(比例的函数)
+       顶高列盒 ⇒ 不再压扁窗口,由条带 / 文档滚动承担。 */
     .tab-panel {
       flex: 1 1 0;
-      min-block-size: 9rem;
+      min-block-size: ${MIN_ROW_HEIGHT_PX}px;
       display: flex;
       flex-direction: column;
       border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
@@ -536,7 +556,7 @@ export class SmWorkspace extends LitElement {
          contain-intrinsic-size 以面板最小高为占位,auto 关键字记住上次尺寸,
          避免进入视口时的布局跳动。零新增依赖、零浮动层、零 JS 观察者。 */
       content-visibility: auto;
-      contain-intrinsic-size: auto 9rem;
+      contain-intrinsic-size: auto ${MIN_ROW_HEIGHT_PX}px;
     }
 
     .tab-panel.focused {
@@ -2084,6 +2104,8 @@ export class SmWorkspace extends LitElement {
       index,
       startY: event.clientY,
       startHeights: [...heights],
+      // 像素基准在按下瞬间冻结:拖拽期间列高会随比例长高(见 DividerDrag 注释)。
+      startColumnHeightPx: this.#columnElement(column)?.clientHeight ?? 0,
       moved: false,
     };
   }
@@ -2133,12 +2155,11 @@ export class SmWorkspace extends LitElement {
       }
       return;
     }
-    const columnHeightPx = this.#columnElement(divider.column)?.clientHeight ?? 0;
     const heights = rowHeightsAfterDrag({
       heights: divider.startHeights,
       index: divider.index,
       deltaPx,
-      columnHeightPx,
+      columnHeightPx: divider.startColumnHeightPx,
       minHeightPx: MIN_ROW_HEIGHT_PX,
     });
     if (this.#model.setRowHeights(divider.column, heights)) {
@@ -2195,14 +2216,16 @@ export class SmWorkspace extends LitElement {
       return;
     }
     // 比例步进成对调整(上窗 +step / 下窗 −step,和恒为 1);列高已知时以
-    // `MIN_ROW_HEIGHT_PX` 为窗高下限,未知(jsdom / 未布局)时退化为纯比例步进。
+    // `MIN_ROW_HEIGHT_PX` 为窗高下限,未知(jsdom / 未布局)时退化为纯比例步进
+    // ——后者把「自由空间」记作 1px(列高 = chrome + 1)且下限记 0,于是
+    // `deltaPx = step` 在像素语义下等价于占比 ±step(见 rowHeightsAfterDrag)。
     const columnHeightPx = this.#columnElement(column)?.clientHeight ?? 0;
     const known = Number.isFinite(columnHeightPx) && columnHeightPx > 0;
     const next = rowHeightsAfterDrag({
       heights,
       index,
       deltaPx: step * (known ? columnHeightPx : 1),
-      columnHeightPx: known ? columnHeightPx : 1,
+      columnHeightPx: known ? columnHeightPx : columnChromePx(heights.length) + 1,
       minHeightPx: known ? MIN_ROW_HEIGHT_PX : 0,
     });
     if (this.#model.setRowHeights(column, next)) {
@@ -2517,7 +2540,12 @@ export class SmWorkspace extends LitElement {
     `;
   }
 
-  /** 单列渲染(列宽内联为像素 + 列内窗口 / 窗高分隔条交替)。 */
+  /**
+   * 单列渲染(列宽 / 列高下限内联为像素 + 列内窗口 / 窗高分隔条交替)。
+   * 列高下限 = `columnMinHeightPx(列内窗高比例)`:列盒随比例长高,使每个面板都
+   * 不低于 `MIN_ROW_HEIGHT_PX` ⇒ 溢出列的窗高拖拽有效(增大的窗真的变大、被减小的
+   * 窗贴下限停住、列总高随之增长),条带 / 文档滚动承载溢出(见 `.columns`)。
+   */
   #renderColumn(
     column: WorkspaceLayoutSnapshot["columns"][number],
     columnIndex: number,
@@ -2532,8 +2560,13 @@ export class SmWorkspace extends LitElement {
         this.#renderPanel(tabId, columnIndex, index, column.tabIds.length, column.rowHeights[index] ?? 1),
       );
     });
+    const minBlockSizePx = columnMinHeightPx(column.rowHeights);
     return html`
-      <div class="column" data-column-index=${columnIndex} style="inline-size: ${this.#columnWidthPx(column.widthRatio)}px">
+      <div
+        class="column"
+        data-column-index=${columnIndex}
+        style="inline-size: ${this.#columnWidthPx(column.widthRatio)}px; min-block-size: ${minBlockSizePx}px"
+      >
         ${children}
       </div>
       ${columnIndex < columnCount - 1 ? this.#renderColumnDivider(columnIndex + 1, column) : nothing}

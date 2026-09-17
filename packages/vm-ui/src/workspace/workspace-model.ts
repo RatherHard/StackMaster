@@ -248,7 +248,9 @@ export class WorkspaceLayoutModel {
    *  - 长度必须等于列内窗口数(不符 → false);含非有限 / ≤0 值 → false;
    *  - 合法输入按**相对比例**归一化(和恒为 1);单窗列恒归一化为 `[1]`;
    *  - 越界列序 → false。像素下限不在此夹取:呈现层的 `min-block-size`
-   *    承担窗高下限(`MIN_ROW_HEIGHT_PX`),模型只保证比例语义。
+   *    承担窗高下限(`MIN_ROW_HEIGHT_PX`,落地点 = `sm-workspace.ts` 的
+   *    `.tab-panel { min-block-size }` 与 `.column` 的内联列高下限),
+   *    模型只保证比例语义。
    */
   setRowHeights(column: number, heights: readonly number[]): boolean {
     const target = this.#columns[Math.floor(column)];

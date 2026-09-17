@@ -63,7 +63,11 @@ export const MONOSPACE_ADVANCE_EM = 0.6;
 export const MONOSPACE_CHAR_WIDTH_PX = HEX_ROW_FONT_SIZE_PX * MONOSPACE_ADVANCE_EM;
 /** 十六进制行不折行(含行内边距)所需字符数(推导表见模块头注释)。 */
 export const HEX_ROW_MIN_CHARS = 58;
-/** 列间距(px;`.columns` 的 `gap: 0.5rem`;每侧各一)。 */
+/**
+ * 列间距(px;`.columns` 的 `gap: 0.5rem`;每侧各一)。同一数值也是**列内**子项
+ * (窗口面板 / 窗高分隔条)之间的间距(`.column { gap: 0.5rem }`)——两处共用同一
+ * 字号基准,故单常量登记;列内下限之和的算式消费它(见 `columnMinHeightPx`)。
+ */
 export const COLUMN_GAP_PX = 8;
 /** 列间分隔条宽度(px;`.column-divider` 的 `inline-size: 0.75rem`)。 */
 export const COLUMN_DIVIDER_WIDTH_PX = 12;
@@ -80,6 +84,63 @@ export const WIDE_MIN_PX =
   2 * MIN_COLUMN_WIDTH + 2 * COLUMN_GAP_PX + COLUMN_DIVIDER_WIDTH_PX;
 /** 窄条上限(px):单列可读下限(低于此值即单列纵向降级)。 */
 export const NARROW_MAX_PX = MIN_COLUMN_WIDTH + CONTAINER_PADDING_PX;
+
+/* ── 块轴(高度)阈值推导 ────────────────────────────────────────────────────────
+ *
+ * 宽度侧的口径是「十六进制行不折行」(见上);高度侧此前**没有推导式** ——
+ * 落地值是一句裸的 `.tab-panel { min-block-size: 9rem }`(144px),既未登记
+ * 依据、也不足以真正显示一行字节(实测面板内字节视图工具区即 > 144px)。
+ * 本段按与宽度侧同样的方式把高度下限**推导**出来并登记(数值由
+ * `test/workspace/layout-presets.test.ts` 机检固定)。
+ *
+ * 口径与宽度侧**同前提**:「十六进制行不折行」(即宽度侧护栏成立)。若行折行,
+ * 行高不再是一个行单位,而下限的语义是「一屏至少看见 N 行」——折行属于宽度侧
+ * 缺陷,不在此处放大成高度下限。
+ *
+ * 逐段量出「面板顶部 → 第一行数据行」之间的**面板内 chrome**(px):
+ *
+ *   | 段 | 来源(CSS / 实测) | 高度 |
+ *   |---|---|---|
+ *   | 面板标题栏 | `.tab-bar`(实测,`_probe-fix.mjs --mode=workspace`) | 26 |
+ *   | 字节视图上边框 | `sm-byte-view` 的 `:host { border: 1px solid }` | 1 |
+ *   | 字节视图工具区 | 实测 133.3(免折行宽 766px;含标题行 / 区域与偏移控件 / 锚点条 / 跳转状态行) | 133.3 |
+ *   | 字节视图列头行 | 行单位 + `border-block-end: 1px`(`.header-row`) | 21.8 |
+ *   | **合计 `PANEL_CHROME_HEIGHT_PX`** | | **182.1** |
+ *
+ * 行单位(`HEX_ROW_HEIGHT_PX`)= 行字号 × `.byte-row` 的 `line-height: 1.6`
+ * = 13 × 1.6 = **20.8px**。
+ *
+ * N 取 **4**(`MIN_VISIBLE_HEX_ROWS`):一行 8 字节 ⇒ 4 行 = 32 字节 = MVP
+ * 教学闭环「缓冲区首 16 字节 + 保存的 rbp 8 字节 + 返回地址 8 字节」的最小
+ * 可视片段;N < 4 时该闭环无法在一屏内同时看见(需要滚动才能对照,失去
+ * 「一眼看懂」的教学价值)。
+ *
+ * ⇒ **面板内容盒下限 = 182.1 + 4 × 20.8 = 265.3 → 上取整 266px**
+ * (落地点 = `layout-divider.ts` 的 `MIN_ROW_HEIGHT_PX`,同时充当窗高拖拽下限;
+ * 渲染层在 `.tab-panel` 的 `min-block-size` 与「列内下限之和」两处消费)。
+ *
+ * 已知偏离(实测,不在本推导内):`sm-byte-tab` 的 14rem VMA 侧栏 + `.byte-row`
+ * 固定的 58ch 网格使**现有三档列宽下**字节视图实际只有 ≈220px 宽 ⇒ 工具区与
+ * 数据行都会折行(实测工具区 328.3、数据行 236.8~259.6)。宽度侧缺陷会把
+ * 「一屏 N 行」的语义一并吃掉,但修它属于列宽 / 侧栏口径,不在高度下限内处理。
+ */
+/** 面板标题栏高度(px;实测 `.tab-bar`)。 */
+export const TAB_BAR_HEIGHT_PX = 26;
+/** 字节视图自身边框(块轴单侧,px;`sm-byte-view :host` 的 `border: 1px solid`)。 */
+export const BYTE_VIEW_BORDER_BLOCK_PX = 1;
+/** 字节视图工具区高度(px;免折行宽下实测:工具行 ×2 + 锚点条 + 跳转状态行 + 内边距 + 底边框)。 */
+export const BYTE_TOOLBAR_HEIGHT_PX = 133.3;
+/** 字节行行高(px)= 行字号 × `line-height: 1.6`(一行 8 字节)。 */
+export const HEX_ROW_HEIGHT_PX = HEX_ROW_FONT_SIZE_PX * 1.6;
+/** 字节视图列头行高度(px)= 一个行单位 + 底边框。 */
+export const BYTE_HEADER_ROW_HEIGHT_PX = HEX_ROW_HEIGHT_PX + 1;
+/** 面板顶部 → 第一行数据行之间的 chrome 合计(px;推导表见上)。 */
+export const PANEL_CHROME_HEIGHT_PX =
+  TAB_BAR_HEIGHT_PX + BYTE_VIEW_BORDER_BLOCK_PX + BYTE_TOOLBAR_HEIGHT_PX + BYTE_HEADER_ROW_HEIGHT_PX;
+/** 下限语义要保证的可见字节行数(4 行 = 32 字节;取 4 的理由见上)。 */
+export const MIN_VISIBLE_HEX_ROWS = 4;
+/** 面板边框块轴单侧厚度(px;`.tab-panel { border: 1px solid }`;content-box ⇒ 不计入内容盒下限)。 */
+export const PANEL_BORDER_BLOCK_PX = 1;
 
 /** 布局预设档标识(P0 宽屏 / P1 中宽 / P2 窄条)。 */
 export type LayoutPresetId = "P0" | "P1" | "P2";
