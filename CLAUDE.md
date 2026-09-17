@@ -162,6 +162,19 @@ stackmaster/
 - **主 chunk 体积**:`dist/sm-workspace-*.js` 实测 **1,353.13 kB**(gzip 328.65 kB 量级)。**该体积在 M1 之前即已越过中期计划 §一.2.3 的 1.3MB 触发线**(两次独立测量 1,327.59 / 1,328.12 kB,且中期零新增依赖、零新增入口)⇒ 判为既有体积,拆分评估为**已触发的待决项**(不属 M1 交付面;M1 净增约 25.5 kB)。
 - **全窗口常驻的渲染负担观测**(风险表「全窗口常驻」行证据,可复跑):1440×900 下窗口 **10** / `sm-workspace` shadow 节点 **251** / 降级面板 **10** / 聚焦交互 RTT **68~84 ms**。
 
+## 中期 M2「终端风格与交互补全」落地事实(2026-09-17,WP-74 ~ WP-77 收口;只登记事实,纪律仍以上文与计划书为准)
+
+- **终端主题全组件落地(WP-74)**:全部消费主题变量的组件(16 个)零硬编码色、逐处走 `var(--sm-*, <字面量回退>)`;**回退字面量 = 原字面量逐字** ⇒ light / dark **零视觉变化**(唯一例外 `--sm-divider-faint` 暗色 `8% 黑 → 10% 白`,判为**修正**并已登记;`.client-step-pause` 保留 `--sm-accent`,terminal 下呈青绿而非琥珀,语义张力已登记)。**未新增任何 token**(`theme-terminal.test.ts` 精确锁定 20 键)。等宽字体栈 **19 处逐字统一**为 `SM_MONO_FONT_STACK`;字号下限 13px(7 处 `0.75rem → 0.8125rem`,几何值零改动)。
+- **效果面三件(扫描线 / 光标闪烁 / 终端标题栏)**:全部动画声明包在 `@media (prefers-reduced-motion: no-preference)` 内、reduce 下 `display: none`;装饰一律 `aria-hidden="true"` + 零文本 + 零可聚焦后代 + 不承载信息;扫描线 `opacity ≤ 0.06` 且 `pointer-events: none` **落在基态规则**(静态属性,reduce 侧同样断言)。light / dark 下强度取 `0` ⇒ 不可见。
+- **主题护栏 = 自校验全组件机检(非手写清单)**:`THEME_COMPONENT_TAGS`(16 消费)+ `THEME_EXEMPT_TAGS`(2 豁免,各附理由)的**并集必须等于源码 `@customElement("…")` 真实清单**(递归扫描 `src/**/*.ts`)⇒ **新增 / 改名组件忘记登记直接变红**。另含字号下限机检(rem×16 折算)与**字体栈回退值漂移机检**(防 19 处副本各自漂移)。
+- **axe 真机门禁(chromium)**:三预设 × 既有扫描面,**9 个可达面 `violations = 0`**;归档 `e2e/reports/axe/<运行当日>/`(**按日期新增,无覆盖开关**;WP-55 的 `2026-09-11/` 为只增不改的历史证据)。不可达格如实登记:`shell dark`、`degraded dark`、**`degraded terminal`**(降级形态不安装文档级 token 样式表 ⇒ 锚在场但无变量可级联;**拒绝用 harness 注入产品路径不会产生的样式表制造假绿**)。
+- **真机门禁的价值 = 抓出测试接缝漏掉的缺陷**:首跑即抓出 `.pseudo-asm[data-pseudo-asm-source="solve"]` 对比度 **4.47:1**(`graytext` 落在面板色上,正文门槛 4.5:1)。该节点**此前不可达** —— 跳转链死绑定(D-API-117)修好前链恒空,故 M1 归档里此节点根本不在场(与 M1「暗色 Blockly」1.35:1 同机理)。教训:`graytext` 在**浅底与深底都不达标**,「降低前景色」表达次要性与 13px 正文门槛**结构性不相容** ⇒ 改用系统字体 + 标题文案区分。
+- **三浏览器矩阵(E2E_MATRIX=1)**:firefox / webkit 实跑 **58 passed / 28 failed / 22 skipped**。**webkit 为环境级阻断、非产品缺陷**:本机 Windows headless 建不了认证 WSS 动作通道(`[client_error] 动作通道未连接`),故全面失败 —— 这正是「WebKit linux 复跑义务」被限定的原因,清偿载体 = `e2e-matrix` 的 ubuntu job。
+- **CI/门禁形态**:新增 `e2e-matrix` job(`.github/workflows/ci.yml`,chromium + firefox + webkit);**不进 turbo 任务图**(保持 CI 承载),本地复跑命令与 env 清单在 `apps/plugin-dev/README.md`。**`e2e-matrix` 在 CI 实跑绿至少一次(E-3)未达成** —— job 已落地并通过静态校验,首跑证据待推送后由 ubuntu 产出。
+- **调试档缺陷两类(均属「测试接缝绕开生产装配」缺陷族,D-API-120)**:①生产入口 `main()` 漏传 `debugChannel` ⇒ `/sessions/debug-channel` **404**(修于 `a35bb01`;测试接缝自己传了该参数故漏网);②修好接线后 `debug_attach` 恒 `internal_error`,根因**不在通道实现而在题目形态** —— E2E / 演示拓扑**唯一驱动**的种子题是 **IR 模式**,而调试变体契约要求**字节模式**(ADR-DC1)⇒ 真机**恒**失败(修于 `c295c87`;Node 侧或走占位变体供给、或把 IR 拒绝当**期望**断言)。**纪律启示**:凡「测试接缝与生产装配路径不一致」的包,必须补一条**装配路径**集成测试。
+- **调试通道推送模型(冻结口径)**:attach 回执 `status:"running"` + `debug_function_table`,**指令流随 `debug_paused` 才下发**(`packages/protocol/docs/调试通道协议语义.md:189-193`)。E2E 断言「不步进即见指令行」与之冲突 ⇒ **以契约为准、改用例**(未改冻结面)。**遗留**:单 `ret` 种子下唯一可达断点即入口自身,形成「设断点需指令行 / 指令行需暂停」循环依赖,两条实现路径(a1 产品侧 attach 后自动暂停于当前 RIP / a2 调整种子为多指令)待定。
+- **测试规模(M2 收口)**:vm-ui **63 files / 798 passed**(M1 收口 62 / 766;零 skip);session-api **62 passed | 12 skipped(74 files)/ 607 passed | 94 skipped**,真机 IT(真实 Rust worker)`test/debug` + `test/scan` **99 passed**;`pnpm build` 12/12。**主 chunk 体积** `dist/sm-workspace-*.js` 实测 **1,373.15 kB**(M1 收口 1,353.13 kB ⇒ M2 净增约 **20.0 kB**;该体积在 M1 之前即已越过 §一.2.3 的 1.3MB 触发线,仍属已触发的待决项)。
+
 ## 计划书章节速查
 
 | 主题 | 章节 |
