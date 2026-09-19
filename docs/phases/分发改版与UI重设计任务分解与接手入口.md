@@ -202,6 +202,7 @@ $env:E2E_MATRIX='1'; ...                            # 三引擎矩阵
 | `42b83e5` | **启动票据契约设计草案**(六项裁定)+ **D-API-154** |
 | `f8f3575` / `b57f955` | 前端改版要求注入需求文档 + 传播(遗留 #38 建立) |
 | `bc3481f` / `9cf334f` / `0072f6c` / `c5ca042` / `e822ef6` | 窗高下限 266px、幻影行盒 187→20.8px、Vite watcher 加固、axe 归档、D-API-152 |
+| `e8cdc7b` | **WP-90 契约族已落地**(分发改版批次 0):启动票据两份恰两键载荷 + `LAUNCH_TICKET_PROTOCOL_VERSION` / `SUPPORTED_*` / `$id` 命名空间 + 族内形态常量(签发路由 / 换票路径模板 / 查询参数名 / 令牌长度 22)+ 地址与 TTL 数值护栏 + classification 与公开注册表登记 + golden fixture 双向 22 个 + contract-smoke `PROTOCOL_CONTRACTS` 两行 + `docs/contracts/启动票据协议.md` / 数据分类清单 §6.12 / 版本策略 §二 增行与嵌入协议退役标注。⚠ **登记口径(如实)**:WP-90 的**代码与 fixture 文件**因多 agent 共用同一工作树与同一 git index,被同批并发的 WP-91 提交(`e8cdc7b`,`feat(session-api): …`)一并入库 —— **内容完整无误**(`git show --stat e8cdc7b` 可逐文件核实),但该提交的信息只叙述 WP-91;**文档三处随紧随的 `docs(contracts)` 提交入库**。后续在同一工作树并行开工时,提交前必须核对 `git show --stat` 而非只看提交信息 |
 
 **这些已完成项不需要重做;它们对应的「实现」才是待办。**
 
