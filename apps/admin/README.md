@@ -1,14 +1,14 @@
 # @stackmaster/admin —— 管理面最小只读面(WP-79;D-MP-5 分支 A)
 
 信任域 4 的**第三个独立应用**:题目登记列表 / 裁决查询 / 成绩导出三张**只读**面。
-独立凭证、独立网络域、独立部署,**不入插件链路**(零浏览器可达面)。
+独立凭证、独立网络域、独立部署,**不入页面分发链路**(零浏览器可达面)。
 
 ## 结构底线(硬约束,勿"优化"掉)
 
 | 约束 | 兑现方式 |
 |---|---|
 | **凭证独立**(计划书 `:807`) | `ADMIN_CREDENTIAL_SHA256`(只存摘要)+ `Authorization: Bearer`;零复用会话凭证 / `SESSION_API_HOST_BACKEND_TOKEN`;控制台页凭证只在内存(零 Cookie / 零 Web Storage / 零 URL 参数) |
-| **网络与部署独立** | 自有网络域 `admin-net` + 自有发布端口(dev `13200:3200`);CSP `frame-ancestors 'none'`,零宿主来源白名单 |
+| **网络与部署独立** | 自有网络域 `admin-net` + 自有发布端口(dev `13200:3200`);CSP `frame-ancestors 'none'`(不设任何 frame 来源白名单) |
 | **凭证 × 租户绑定**(O-MP-6 同源) | `ADMIN_TENANTS` 白名单;**空 / 缺失 ⇒ 数据面整体 404 同形**(fail-closed);`?tenant=` 只能在集合内子选;跨租户与不存在**同形** |
 | **数据面只读**(D-API-135) | 自有只读 PG 角色 `admin_ro` 直连;**零 app→app 依赖**;四层只读(端口面 / 语句护栏 / 授权面 / RLS 仅 SELECT 政策) |
 | **契约复用** | 成绩导出逐字过 `HostScoresResponseSchema.parse()`(WP-78 契约);裁决逐条过 `VerdictQueryResponseSchema`;登记值过 `@stackmaster/challenge-schema` 的公开模式源 |

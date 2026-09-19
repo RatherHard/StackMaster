@@ -6,22 +6,23 @@
 > `docs/develop/decisions-分发改版与UI重设计.md`(**D-UI-1 ~ D-UI-7** / **D-LT-1 ~ D-LT-5**)、
 > 决策登记 `docs/develop/权威API语义规约.md` **D-API-161**。
 
-## 1. 它是什么(与 `plugin-dev` 的关系)
+## 1. 它是什么(与已删除的 `apps/plugin-dev` 的对照)
 
 `page-app` 是**页面分发的最终交付物**:学习者打开服务端签发的**一次性启动地址**
 (`{SESSION_API_PUBLIC_ORIGIN}/app/c/:challengeId/:version?t=<ticket>`)后,由
 session-api 换票(302 + 启动授权凭证 Cookie)回跳到的那个**干净路径页面**。
 
-| | `apps/plugin-dev`(退役中) | `apps/page-app`(本包) |
+| | `apps/plugin-dev`(**已于 2026-09-19 随 WP-96 物理删除**) | `apps/page-app`(本包) |
 |---|---|---|
 | 形态 | 插件 iframe 开发壳 + 宿主模拟页 | **独立页面**(与 API 同源) |
 | 授权 | 表单填 embed token | **服务端签发启动地址 → 换票 → 授权凭证 Cookie** |
 | 会话装配 | `create_session` 四键(含 embed token) | `create_session` **恰两键**(导航信息),授权来自 Cookie |
 | 依赖面 | 静态 import 浏览器包(经 dev-only 加载模型规避) | 运行期 URL 加载 `@stackmaster/vm-ui` 产物 |
 
-`plugin-dev` 本身属**退役面**(WP-96 物理删除),本包**不继承**它的宿主 / 表单 /
-token / `host-mock` 反代任何一面;只沿用它的**会话装配序列**
-(创建 → connect → 描述包 → 挂 workspace → 注入属性)。
+`apps/plugin-dev` 已于 **2026-09-19 随 WP-96 物理删除**(其嵌入协议面 —
+`packages/embed-runtime|web-component|react-wrapper` 与 `docs/contracts/嵌入协议.md`
+— 同批退役);本包**不继承**它的宿主页模拟 / 表单 / token / `host-mock` 反代任何
+一面;只沿用它的**会话装配序列**(创建 → connect → 描述包 → 挂 workspace → 注入属性)。
 
 ## 2. 同源拓扑(为什么这样部署)
 
@@ -62,7 +63,7 @@ pnpm --filter @stackmaster/page-app build
 
 **构建形态与 vm-ui 产物的落地方式(两件事必须一起看)**:
 
-1. **application build**:本应用是最终交付物(一个页面),不是被宿主 import 的库
+1. **application build**:本应用是最终交付物(一个页面),不是被别的页面 import 的库
    ⇒ 走 `vite build` 缺省形态(html 入口 + 代码分割 + 资源指纹);
 2. **不静态 import vm-ui**:`tooling/dependency-cruiser.cjs` 的
    `no-backend-dependency-on-browser-packages` **禁止 `apps/**` 静态依赖浏览器可达
@@ -126,7 +127,7 @@ pnpm --filter @stackmaster/page-app test:e2e    # 真机(真 chromium + 真 vm-u
 | `e2e/axe-matrix.spec.ts` | 9 | **axe 新面矩阵**(chromium 门禁口径):`page-app-<视口>-<状态>` 九面;归档 `e2e/reports/axe/<日期>/<run-N>/` |
 | `e2e/launch-chain.spec.ts` | 2 | **启动地址链**(`E2E_LAUNCH_CHAIN=1` 才跑;见 §5.2):签发 → 顶层导航 → 302 抹票 → 同源 WSS → 票据单次消费 401 |
 
-**三引擎矩阵**(WP-95 从 plugin-dev 迁入):
+**三引擎矩阵**(WP-95 自 `apps/plugin-dev` 迁入;该应用已于 2026-09-19 随 WP-96 删除):
 
 ```powershell
 $env:E2E_MATRIX='1'; pnpm --filter @stackmaster/page-app test:e2e
@@ -137,12 +138,28 @@ $env:E2E_MATRIX='1'; pnpm --filter @stackmaster/page-app test:e2e
 ⚠ **不得**据「三引擎在 stub 后端下全通」记为「遗留 #1 已修复」—— 那是**载体退役的验证**,
 结案归 **WP-97**(仍需真拓扑三引擎复跑)。
 
-**几何缺口的登记(如实)**:`e2e/geometry-guard.spec.ts` 首跑即抓出真实缺口 ——
-字节视图**完整可见数据行**在窄档为 **0**(chromium 1024×768 / 768×900;firefox 同两档;
-webkit 1024 / 768 / 375),即 **D-UI-2 的 N ≥ 1 红线在 9 / 12 个「引擎 × 视口」格上不成立**;
-成因 = 字节视图列头行在窄档折成 4 行(21.8 → **84.2px**)+ 工具区换行 ⇒ chrome 超过视图位高。
-缺口以 `<引擎>:<视口>` 登记表留档(`KNOWN_GEOMETRY_GAPS`)+「状态已变即红」机检;
-**修法落在 `packages/vm-ui`**(列头 / 工具区的窄档形态),本 WP 不改产品代码。
+**几何护栏的判据(为什么它抓得到缺口)**:`e2e/geometry-guard.spec.ts` 量的是
+**「完整可见数据行」数,不是容器高** —— 容器高看起来"够"而真实行盒不够的情形,
+只有按行盒逐条计数才暴露得出来(这正是首跑即抓到缺口的原因;与遗留 #33 同源)。
+
+**几何缺口(遗留 #39)已修复(2026-09-19 WP-95a;本段订正原先的"修法落在
+`packages/vm-ui`,本 WP 不改产品代码")**:首跑抓出的缺口 = 字节视图**完整可见数据行**
+在窄档为 **0**(chromium 1024×768 / 768×900;firefox 同两档;webkit 1024 / 768 / 375),
+即 **D-UI-2 的 N ≥ 1 红线在 9 / 12 个「引擎 × 视口」格上不成立**;根因 = ① VMA 侧栏
+折叠判定误用**视口**媒体查询(`@media (max-width:40rem)`)而字节视图位于**半页槽位**
+(媒体查询 vs 容器查询的类别错误);② `.byte-row` 第三轨 `1fr` 的最小值是 `auto`
+⇒ 轨宽溢出时无法收缩,列头行在窄档折成 4 行(21.8 → **84.2px**);③ 工具区
+`<input size=20>` 默认 ≈177px 顶到多行 ⇒ chrome 反超视图位高。
+**修法三件(已落地;不动工作区几何、不改任何常量数值)**:① 折叠判定改为**容器查询**
+`@container (max-width:40rem)`(`:host` 加 `contain` / `container-type: inline-size`);
+② 第三轨 `1fr → minmax(0,1fr)` + 列头行 `nowrap`;③ 工具区 input 收口 `14ch` /
+两行 `nowrap` / `@container` 紧凑(工具区 166.3 → **92.3px**)。
+**修复后真机逐格读数 = 12 / 12 格达 `N ≥ 1`,且 12 / 12 格达 `N = 4`**(视口序
+1440×900 / 1024×768 / 768×900 / 375×667:chromium `4→8 / 0→5 / 0→7 / 1→5`、
+firefox `7→9 / 0→5 / 0→9 / 1→5`、webkit `6→8 / 0→5 / 0→8 / 0→4`);
+`KNOWN_GEOMETRY_GAPS` **已清空**(登记机制保留在场,状态再变即红)。**规格随之改述
+(不改数值)**:`N ≥ 1` 红线全档无条件,`N = 4` 仅免折行宽度档(1440 类)要求;
+决策 = **D-API-162 ~ D-API-166**(权威文本 = `docs/develop/decisions-分发改版与UI重设计.md` §四·补)。
 
 ### 5.2 全链(需要后端;本机 Docker 不可用时**不可达**)
 
