@@ -75,6 +75,10 @@ export class SmByteTab extends LitElement {
       grid-template-columns: minmax(0, 1fr) 14rem;
       gap: 0.5rem;
       block-size: 100%;
+      /* 整页布局改版(2026-09-18 / D-API-153):视图位高度由工作区给定时,
+         本网格必须**恰占满且不撑高**(min-block-size: 0 松开内容最小高),
+         否则字节视图会被自己的固定高顶出视图位。 */
+      min-block-size: 0;
     }
 
     sm-byte-view {

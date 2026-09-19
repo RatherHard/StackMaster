@@ -41,17 +41,13 @@ export const zhCN = {
 
   // ── menu(<sm-workspace-menu> 工作区菜单 / 状态面 / 横幅)─────────────────
   "menu.aria": "工作区菜单",
-  "menu.windowGroup": "窗口",
-  "menu.focusWindowTitle": "聚焦「{title}」并滚动到该窗口",
-  "menu.layoutGroup": "布局",
-  "menu.widthQuarter": "1/4",
-  "menu.widthThird": "1/3",
-  "menu.widthHalf": "1/2",
-  "menu.widthTwoThirds": "2/3",
-  "menu.widthFull": "全宽",
-  "menu.widthPresetTitle": "把焦点列宽度设为 {ratio}(不小于十六进制行可读的最小列宽)",
-  "menu.resetLayout": "重置布局",
-  "menu.resetLayoutTitle": "清空列宽 / 窗高调整,并回到当前宽度的默认布局预设(宽屏 = P0)",
+  // 2026-09-18 UI 改版(D-UI-7 补充裁定):原「窗口」组 → 「视图」组,承载**聚焦
+  // 导航**(点击 = 聚焦并滚动到该视图)。原「布局」组整条退场(列宽五档 / 重置布局
+  // 随列条带废止);**勾选 / 排序的唯一入口 = 左半侧列表按钮**,本组不承载。
+  "menu.viewGroup": "视图",
+  "menu.focusWindowTitle": "聚焦「{title}」并滚动到该视图",
+  "menu.resetViews": "重置视图",
+  "menu.resetViewsTitle": "恢复默认顺序并全选(视图集不变,不存在开 / 关语义)",
   "menu.modeGroup": "模式",
   "menu.modeDebug": "调试模式",
   "menu.modeSolve": "解题模式",
@@ -107,19 +103,22 @@ export const zhCN = {
 
   // ── workspace(<sm-workspace> 工作区容器)─────────────────────────────────
   "workspace.teachingPanel": "教学面板(提示 / 错误解释)",
-  "workspace.columnsAria": "工作区窗口区域",
-  "workspace.columnDividerAria": "列宽分隔条:方向键左右调整,或按住拖动",
-  "workspace.rowDividerAria": "窗高分隔条:方向键上下调整,或按住拖动",
-  "workspace.layoutWidthAdjusted": "列宽已调整为 {percent}%",
-  "workspace.layoutHeightAdjusted": "窗高比例已调整为 {percent}%",
-  "workspace.layoutWidthPresetApplied": "焦点列宽度已设为 {percent}%",
-  "workspace.layoutResetDone": "已重置布局:回到预设 {preset}",
-  "workspace.layoutDegraded": "视口宽变化:布局已切换为 {preset}({count} 列)",
-  "workspace.dropBefore": "落点:插到「{title}」之前",
-  "workspace.dropAfter": "落点:插到「{title}」之后",
-  "workspace.dropNewColumn": "落点:在第 {column} 列位置新建列",
-  "workspace.dropOutside": "落点:列区之外,松开不移动窗口",
-  "workspace.windowMoved": "窗口「{title}」已移动到第 {column} 列第 {index} 位",
+  // 2026-09-18 UI 改版(D-API-153 / D-UI-1 ~ D-UI-7:整页布局 + 视图管理窗口)。
+  // 原「列宽 / 列高调整 / 分隔条 / 列区 / 落点新列」文案随列条带整条退场;
+  // 新增「视图管理窗口」面(列表按钮 / 勾选播报 / 列表内移动 / 键盘切换 / 重置视图)。
+  "workspace.viewManagerAria": "视图管理窗口",
+  "workspace.viewListToggle": "视图列表(勾选显示 / 拖拽排序)",
+  "workspace.viewListAria": "视图列表:勾选决定左半侧显示哪些视图(视图仍全部常驻;未勾选 = 暂离)",
+  "workspace.viewVisibleAria": "显示「{title}」",
+  "workspace.viewItemAria": "视图「{title}」:第 {index} 位;Alt + 上 / 下键在列表内移动",
+  "workspace.viewShown": "已显示「{title}」",
+  "workspace.viewHidden": "已隐藏「{title}」",
+  "workspace.viewMoved": "已把「{title}」移动到第 {index} 位",
+  "workspace.viewDropOutside": "落点在列表之外,松开不移动视图",
+  "workspace.viewSwitchCurrent": "当前视图位:「{title}」(Ctrl + 上 / 下键切换,边界不环绕)",
+  "workspace.viewNone": "无可见视图",
+  "workspace.viewResetDone": "已重置视图:恢复默认顺序并全选",
+  "workspace.viewListStatusLabel": "视图列表操作结果",
   "workspace.highlightNoView": "结构标注 {address}:字节视图不可用,无法定位",
   "workspace.noSessionError": "尚未连接会话:动作未提交",
   "workspace.actionSubmitFailed": "动作提交失败(客户端侧错误)",

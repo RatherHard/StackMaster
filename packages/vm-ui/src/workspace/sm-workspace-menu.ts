@@ -48,7 +48,6 @@ import type { ConnectionStatus, DisconnectReason } from "../client/session-clien
 import type { PublicError } from "@stackmaster/protocol";
 import { LocaleController, t } from "../i18n/i18n.js";
 import { ensureSmThemeStyles } from "../theme/theme-tokens.js";
-import { COLUMN_WIDTH_PRESETS } from "./layout-presets.js";
 import type { WorkspaceTabTypeDescriptor } from "./tab-registry.js";
 
 /** 菜单动作(出站事件 detail;执行归宿主)。 */
@@ -69,21 +68,16 @@ export type WorkspaceMenuAction =
   /** 解题/调试模式切换(FE-WS-06,WP-F8;可用性 = debugModeAvailable 题目声明)。 */
   | { readonly action: "toggle-debug-mode" }
   /**
-   * 窗口聚焦导航(D-MP-1,WP-71):聚焦 + 滚动到指定类型窗口——窗口集常驻,
-   * 本动作**不创建实例**(替代原 `open-tab`)。
+   * 聚焦导航(D-MP-1,WP-71;2026-09-18 UI 改版后语义不变):聚焦 + 滚动到指定
+   * 类型视图 —— 视图集常驻,本动作**不创建实例**(替代原 `open-tab`)。
+   * **不承载**勾选 / 排序(D-UI-7 补充裁定:唯一入口 = 左半侧列表按钮)。
    */
   | { readonly action: "focus-window"; readonly windowType: string }
   /**
-   * 列宽预设档(WP-72):作用于**焦点列**(1/4、1/3、1/2、2/3、全宽,视口占比);
-   * 夹取到最小可读宽护栏由宿主(模型)承担。菜单「布局」组为**唯一**列宽档入口
-   * (标题栏保持零控件)。
+   * 重置视图(D-UI-7 补充裁定):恢复默认顺序 + 全选。**取代**已废止的
+   * 「重置布局」(列宽 / 窗高调整 + 宽度档预设)。
    */
-  | { readonly action: "set-column-width"; readonly ratio: number }
-  /**
-   * 重置布局(WP-72 逃生门):清空列宽 / 窗高调整并回到**当前宽度档**预设
-   * (宽屏 = P0;窄屏 = 该宽度的降级形态)。
-   */
-  | { readonly action: "reset-layout" };
+  | { readonly action: "reset-views" };
 
 /** `workspace-menu-action` 事件 detail。 */
 export interface WorkspaceMenuActionDetail {
@@ -100,7 +94,7 @@ export class SmWorkspaceMenu extends LitElement {
   tabTypes: readonly WorkspaceTabTypeDescriptor[] = [];
 
   /**
-   * 当前焦点窗口类型(宿主按布局模型注入;`aria-pressed` 表达当前态——
+   * 当前焦点视图类型(宿主按布局模型注入;`aria-pressed` 表达当前态——
    * 恰一个入口为真;null = 尚无焦点)。
    */
   @property({ attribute: false })
@@ -159,21 +153,6 @@ export class SmWorkspaceMenu extends LitElement {
   @property({ type: Boolean, attribute: "debug-mode-active" })
   debugModeActive = false;
 
-  /**
-   * 当前布局档位(WP-72;宽屏 P0 / 中宽 P1 / 窄条 P2,宿主按视口宽判定注入)。
-   * 呈现于「布局」组状态位(档标识为登记 id,不译)。
-   */
-  @property({ type: String, attribute: "layout-preset-id" })
-  layoutPresetId = "P0";
-
-  /**
-   * 焦点列当前列宽占比(宿主注入;`null` = 无焦点列)。
-   * 用于列宽档按钮的 `aria-pressed`(按**生效**占比比对:护栏夹取后可能与
-   * 所选档不一致,此时无按钮呈按下态)。
-   */
-  @property({ type: Number, attribute: false })
-  focusedColumnWidthRatio: number | null = null;
-
   /** 最近一次被拒动作的用户可见错误(onActionRejected 呈现)。 */
   @property({ type: Object, attribute: false })
   lastError: PublicError | null = null;
@@ -188,7 +167,7 @@ export class SmWorkspaceMenu extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
       font-family: system-ui, sans-serif;
       font-size: 0.8125rem;
     }
@@ -208,27 +187,27 @@ export class SmWorkspaceMenu extends LitElement {
     }
 
     .group-label {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       font-size: 0.8125rem;
     }
 
     button {
       padding: 0.125rem 0.5rem;
-      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
+      border: 1px solid var(--sm-border-button, rgb(125 255 156 / 34%));
       border-radius: 6px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
+      background: var(--sm-bg-base, #0b0f0b);
+      color: var(--sm-fg, #b9ffc4);
       font: inherit;
       cursor: pointer;
     }
 
     button:disabled {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       cursor: not-allowed;
     }
 
     button:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
+      outline: 2px solid var(--sm-focus-ring, #a9ffb8);
       outline-offset: 1px;
     }
 
@@ -238,7 +217,7 @@ export class SmWorkspaceMenu extends LitElement {
       align-items: center;
       gap: 0.375rem;
       margin-inline-start: auto;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       font-size: 0.8125rem;
     }
 
@@ -247,7 +226,7 @@ export class SmWorkspaceMenu extends LitElement {
     }
 
     .status strong {
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg, #b9ffc4);
       font-weight: 600;
     }
 
@@ -262,8 +241,8 @@ export class SmWorkspaceMenu extends LitElement {
       gap: 0.5rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      background: color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%);
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      background: color-mix(in srgb, var(--sm-bg-inset, #070907) 92%, var(--sm-warn, #ffc857) 8%);
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
       font-size: 0.8125rem;
     }
 
@@ -275,23 +254,23 @@ export class SmWorkspaceMenu extends LitElement {
       gap: 0.25rem 0.75rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      background: color-mix(in srgb, var(--sm-bg-inset, field) 94%, var(--sm-focus-ring, accentcolor) 6%);
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      background: color-mix(in srgb, var(--sm-bg-inset, #070907) 94%, var(--sm-focus-ring, #a9ffb8) 6%);
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
       font-size: 0.8125rem;
     }
 
     .whatif-banner strong {
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg, #b9ffc4);
     }
 
     .whatif-banner span {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
     }
 
     /* 系统色 mark:无对应 token(新增会打红 test/theming 的 20 名固定清单),
        light / dark 随 color-scheme 自适应,本轮逐字保留(待真机 axe 判定)。 */
     .banner[role="alert"] {
-      background: color-mix(in srgb, mark 12%, canvas);
+      background: color-mix(in srgb, var(--sm-danger, #ff8a94) 16%, var(--sm-bg-base, #0b0f0b));
     }
 
     /* 终态引导 + 拒绝错误条。 */
@@ -307,11 +286,11 @@ export class SmWorkspaceMenu extends LitElement {
     }
 
     .guidance {
-      background: color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%);
+      background: color-mix(in srgb, var(--sm-bg-inset, #070907) 92%, var(--sm-warn, #ffc857) 8%);
     }
 
     .error {
-      background: color-mix(in srgb, mark 12%, canvas);
+      background: color-mix(in srgb, var(--sm-danger, #ff8a94) 16%, var(--sm-bg-base, #0b0f0b));
     }
 
     .error pre {
@@ -343,11 +322,21 @@ export class SmWorkspaceMenu extends LitElement {
   protected override render(): unknown {
     return html`
       <nav aria-label=${t("menu.aria")} part="nav">
-        <span class="group">
-          <span class="group-label window-group-label">${t("menu.windowGroup")}</span>
+        <!-- 「视图」组(D-UI-7 补充裁定):**聚焦导航** —— 点击 = 聚焦并滚动到该
+             视图。**不承载**勾选 / 排序(唯一入口 = 左半侧列表按钮);原「布局」
+             组随列条带整条退场。 -->
+        <span class="group view-group">
+          <span class="group-label">${t("menu.viewGroup")}</span>
           ${this.tabTypes.map((descriptor) => this.#renderFocusButton(descriptor))}
+          <button
+            type="button"
+            class="reset-views-button"
+            title=${t("menu.resetViewsTitle")}
+            @click=${() => this.#emit({ action: "reset-views" })}
+          >
+            ${t("menu.resetViews")}
+          </button>
         </span>
-        ${this.#renderLayoutGroup()}
         <span class="group">
           <span class="group-label">${t("menu.modeGroup")}</span>
           <strong class="mode-indicator"
@@ -449,9 +438,9 @@ export class SmWorkspaceMenu extends LitElement {
   }
 
   /**
-   * 窗口聚焦入口(D-MP-1 聚焦导航,WP-71):点击 = 聚焦 + 滚动到该窗口。
-   * 当前焦点窗口以 `aria-pressed` 表达(可达性:焦点态不只存在于视觉);
-   * 聚焦导航恒可用(无禁用态——窗口集常驻,聚焦不依赖会话)。
+   * 视图聚焦入口(D-MP-1 聚焦导航):点击 = 聚焦 + 滚动到该视图。
+   * 当前焦点视图以 `aria-pressed` 表达(可达性:焦点态不只存在于视觉);
+   * 聚焦导航恒可用(无禁用态——视图集常驻,聚焦不依赖会话)。
    */
   #renderFocusButton(descriptor: WorkspaceTabTypeDescriptor): unknown {
     return html`
@@ -473,45 +462,6 @@ export class SmWorkspaceMenu extends LitElement {
   /** 展示名解析:登记了 labelKey(默认注册表)的按当前 locale 取词。 */
   #tabLabel(descriptor: WorkspaceTabTypeDescriptor): string {
     return descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label;
-  }
-
-  /**
-   * 「布局」组(WP-72;紧邻「窗口」组):当前档位标识 + 五档列宽预设(作用于
-   * **焦点列**)+ 「重置布局」。列宽档为**唯一**入口(标题栏零控件口径保持);
-   * 每档以 `aria-pressed` 表达焦点列当前是否恰为该档(生效占比比对)。
-   */
-  #renderLayoutGroup(): unknown {
-    const ratio = this.focusedColumnWidthRatio;
-    return html`
-      <span class="group layout-group" data-layout-preset=${this.layoutPresetId}>
-        <span class="group-label">${t("menu.layoutGroup")}</span>
-        <strong class="layout-preset">${this.layoutPresetId}</strong>
-        ${COLUMN_WIDTH_PRESETS.map((preset) => {
-          const label = t(preset.labelKey);
-          const pressed = ratio !== null && Math.abs(ratio - preset.ratio) < 1e-3;
-          return html`
-            <button
-              type="button"
-              class="width-preset"
-              data-width-ratio=${String(preset.ratio)}
-              aria-pressed=${pressed ? "true" : "false"}
-              title=${t("menu.widthPresetTitle", { ratio: label })}
-              @click=${() => this.#emit({ action: "set-column-width", ratio: preset.ratio })}
-            >
-              ${label}
-            </button>
-          `;
-        })}
-        <button
-          type="button"
-          class="reset-layout-button"
-          title=${t("menu.resetLayoutTitle")}
-          @click=${() => this.#emit({ action: "reset-layout" })}
-        >
-          ${t("menu.resetLayout")}
-        </button>
-      </span>
-    `;
   }
 
   #renderStatus(): unknown {

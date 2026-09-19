@@ -1,72 +1,82 @@
 /**
- * <sm-workspace> —— 工作区容器(WP-F5;FE-X-02 唯一主体边界;WP-71 固定窗口集)。
+ * <sm-workspace> —— 工作区容器(WP-F5;FE-X-02 唯一主体边界;WP-71 固定窗口集;
+ * **2026-09-18 整页布局改版 = D-API-153 / D-UI-1 ~ D-UI-7**)。
  *
- * 职责 = 容纳、管理、排布工作窗口(FE-WS-01)+ 顶部菜单(FE-WS-03)+
+ * 职责 = 工作区即**页面主体**(FE-WS-01 整页布局)+ 顶部菜单(FE-WS-03)+
  * 跨视图集成接线(F3/F4 交付能力的组合根):
  *
- *  - **固定窗口集(D-MP-1,WP-71)**:窗口集合 = 注册表登记的全部类型、
- *    **各恰一个实例、常驻**;窗口没有开 / 关状态,只有「视口内 / 暂离
- *    (条带滚出视野)」;窗口集在工作区接入(首帧前)按**当前宽度档预设**
- *    一次性绑定(`#bindWindows`),`tabTypes` 换绑即重绑。**无关闭入口、
- *    无空态引导**(窗口集恒非空);窗口管理动作 = 聚焦导航(本包)+ 移动位置 /
- *    调整大小(WP-72);
- *  - **默认列排布的唯一来源 = `layout-presets.ts` 的三张预设表**(P0 宽屏 5 列 /
- *    P1 中宽 3 列 / P2 窄条单列),经 `WorkspaceLayoutModel.bindWindows(entries,
- *    columns)` 的 `columns` 参数**单点注入**——本文件不持有任何预设字面量;
- *  - **列式滚动平铺**(Q1 定案 v1 + WP-72 相机):工作区 = 列的有序序列,列间
- *    水平滚动(Niri 式);**焦点列居中**由显式相机计算承担(`layout-camera.ts`
- *    纯函数 → `scrollLeft`),相邻列两侧探出;列内按**窗高比例**分配列高
- *    (Hyprland 式);
- *  - **尺寸可调(WP-72)**:列间分隔条(pointer 拖拽 + 方向键)调列宽,同列窗间
- *    分隔条调窗高(单窗列自动占满列高);列宽夹取到 `MIN_COLUMN_WIDTH`
- *    可读性护栏;菜单「布局」组提供 1/4、1/3、1/2、2/3、全宽五档(作用于**焦点
- *    列**)与「重置布局」(清空调整 + 回**当前宽度档**预设);
- *  - **拖拽排布(Niri 三类落点显式化)**:落到同列窗口上 / 下半 = 同列堆叠;
- *    落到另一列窗口 = 跨列移动;落到列间空隙 = 在该列序位置**新建列位**
- *    (`openColumnAt`);落点以 `drop-target` 静态标记指示(零浮动层、零重叠);
- *  - **聚焦导航**:`focusWindow(type)` = 聚焦 + 相机居中到该窗口(菜单「窗口」
- *    分组逐个入口,详见 sm-workspace-menu);标题栏可聚焦,方向键提供列内 /
- *    跨列移动的键盘可达兜底(不承诺全局快捷键);
- *  - **视口外降级渲染**:窗口面板声明 `content-visibility: auto` +
- *    `contain-intrinsic-size`(语义标记 `data-render-degrade="content-visibility"`),
- *    离屏窗口子树由浏览器跳过渲染与绘制,payload / 指令视图等重窗口的挂载成本
- *    随之推迟到进入视口;行级虚拟列表 `sm-window-list` 维持不变;
- *  - **响应式降级**:视口宽变化(宿主 window resize)重测宽度 → 档位变化即按新
- *    档预设重绑列结构(宽度回到宽档即回到 P0);同档内只更新列宽基准。
+ *  - **整页布局(FE-WS-01 / D-UI-1)**:工作区自身即页面主体(`display: grid` +
+ *    `block-size: 100dvh` / `100%`),**不依赖宿主 / 壳给出高度**,溢出**不上浮到
+ *    文档层**;左右两分 = `grid-template-columns: 1fr 1fr`(固定 1:1,**不可调**、
+ *    **无分界拖拽手柄**)、**无 gap、无 border、无 divider**;窄屏时左半侧取
+ *    `min-width: SIDE_PANEL_MIN_WIDTH_PX`(452.4px,D-UI-5)⇒ 页面横向滚动。
+ *  - **右半侧 = payload 搭建窗口(固定)**:从 `#contents` 里把 payload 内容元素
+ *    **同一实例**挂到右半侧(不重建 —— payload 状态跨模式 / 跨渲染必须保留,
+ *    FE-WS-07 的 `#contents` 生命周期约定是既有不变量);右半侧不随左侧滚动移动。
+ *  - **左半侧 = 视图管理窗口**:列表按钮(可展开 / 收起:勾选 + 拖拽排序,
+ *    **唯一入口**)在上,视图位纵向堆叠在下;`.ws-stack` 是**滚动容器**
+ *    (`overflow-y: auto` + `scroll-behavior: smooth`;`prefers-reduced-motion:
+ *    reduce` 下退化为 `auto`)。**只滚动、不压缩** —— 每个视图位高度由
+ *    `viewSlotHeightPx()` 给出确定值(等于左半侧可视高等分,下限 = chrome +
+ *    `VIEW_SLOT_MIN_VISIBLE_HEX_ROWS` 个行单位),空间不足时多余部分由滚动承载。
+ *  - **视图类型名写在视图内左上角**(FE-WS-11):`.view-label` 是面板内第一个
+ *    元素、**不是独立标题栏**(原 `.tab-bar` 整条退场);面板地标名**保持原样**
+ *    `aria-label=${info.title}`(D-UI-7 ①:不因标题栏消失而改名,避免二次 axe
+ *    地标重名回归)。
+ *  - **固定窗口集(D-MP-1 不修订)**:视图集合 = 注册表登记的全部类型、**各恰一个
+ *    实例、常驻**;**没有开 / 关状态**;未勾选 = 不显示 = 「暂离」的**第二种成因**
+ *    (第一种仍是滚出可视区)。无关闭入口、无空态引导。
+ *  - **键盘(D-UI-3)**:`Ctrl + ArrowUp` / `Ctrl + ArrowDown` 在**左半侧容器**上
+ *    `keydown` 捕获并 `preventDefault()`(覆盖浏览器页面滚动默认),切换一格
+ *    **可见**视图位、**边界不环绕**;当前视图名经常驻 `role="status"` 宣读。
+ *  - **列表按钮的键盘等价路径(D-UI-4 / D-UI-7 ③)**:原生 `<input type=
+ *    "checkbox">` 承载勾选(`Space` 原生可用);列表项可聚焦,`Alt + ↑ / ↓` 在
+ *    列表内上下移动该条目(`preventDefault`);`aria-live="polite"` 播报
+ *    「已显示 / 已隐藏 / 已移动到第 N 位」。
+ *  - **拖拽排序(D-UI-4)**:只保留**列表内重排**一种落点语义(原三类 Niri 落点
+ *    同列堆叠 / 跨列移动 / 列间空隙新建列位整体废止);拖拽反馈 = 静态 class
+ *    (`drop-before` / `drop-after`) + `dragging`(opacity),零动画、零浮动层。
+ *  - **视口外降级渲染(保留)**:视图位声明 `content-visibility: auto` +
+ *    `contain-intrinsic-size: auto ${VIEW_SLOT_INTRINSIC_PX}px`(语义标记
+ *    `data-render-degrade="content-visibility"`),离屏子树由浏览器跳过渲染与绘制。
  *  - **组合根装配**(README §双档数据源纪律):`client` 换绑即
- *    `new ProjectionDataSource(client.store)` 注入各窗口内容;
- *    `client.onProjectionChanged(() => 各内容 refresh())` 驱动视图刷新;
+ *    `new ProjectionDataSource(client.store)` 注入各视图内容;
+ *    `client.onProjectionChanged(() => 各内容 refresh())` 驱动视图刷新。
  *  - **跨视图联动**:`vma-select ↔ showRegion ↔ selectedRegionId` 回路在
  *    `<sm-byte-tab>` 内闭环;寄存器交叉标注(FE-RG-04)与跳转链
- *    (FE-ST-07/09)经字节视图行装饰挂点(宿主层追加渲染)落地;
+ *    (FE-ST-07/09)经字节视图行装饰挂点(宿主层追加渲染)落地。
  *  - **菜单动作**:`step`(FE-WS-04a)/ `reset`(FE-WS-05,Q5/M11 终态禁用
  *    + 新建引导)/ 手动重连(connection-replaced);拒绝动作呈现
  *    userVisibleError(含 explanation);断线横幅呈现"最近一次公开投影 +
- *    重连中"(零本地 VM 降级);
+ *    重连中"(零本地 VM 降级)。菜单的「视图」组 = **聚焦导航**(点击 = 聚焦 +
+ *    滚动到该视图),**不承载勾选 / 排序**(D-UI-7 补充:唯一入口 = 左半侧列表按钮)。
  *  - **正式裁决呈现**(阶段六 WP-63,D-API-83 / 84):`submit` 动作受理后
  *    启动裁决重询(pending 确定性呈现 → verdicted 11 值结果类型呈现;非成绩
  *    方向显式重提入口、不自动重试;裁决不可用 ≠ 判负——unavailable 降级
- *    明示,不中断会话);重询经插件 ↔ session-api 直连 HTTP,宿主
- *    postMessage 零权威语义不破(V-9,裁决数据不经嵌入协议帧)。
+ *    明示,不中断会话)。
  *
- * 纪律(CLAUDE.md 第十章 / 中期任务分解 §1.3 硬门槛):浏览器只保存公开投影与
- * UI 状态;动画只用 transform / opacity(拖拽反馈 = opacity,落点指示 = 静态
- * outline);`prefers-reduced-motion` 由相机滚动行为尊重;语义化 DOM;拖拽落点
- * 指示不引入浮动层与重叠;分隔条是可聚焦的 `role="separator"`(方向键可调);
- * 屏幕阅读器信息不只在视觉中(布局变更经 `role="status"` 状态行宣读)。
+ * **本版废止(整条退出,不留兼容别名)**:Niri 式列条带(列间水平滚动、列内二叉
+ * 分割、视口宽预设 P0 / P1 / P2 与阈值表、列宽五档、列间与窗间分隔条
+ * (`role="separator"` + 方向键)、三类拖拽落点、「重置布局」、焦点列居中相机
+ * (`layout-camera.ts` 已删除)、窗高下限 `MIN_ROW_HEIGHT_PX` / `columnMinHeightPx`
+ * / `columnChromePx` / 拖拽像素语义(`layout-divider.ts` 已删除))。
+ * **D-API-152 条目本身是历史决策,不得删除**。
  *
- * 主题与效果面(WP-74):底色 / 前景 / 次要前景 / 面板底 / 语义色 / 焦点环 /
- * 等宽字体栈全走既有 token(`var(--sm-*, <原字面量>)` 回退值逐字等于原值 ⇒
- * light / dark 视觉零变化);字号下限 13px(`0.75rem` → `0.8125rem`)。
+ * 纪律(CLAUDE.md 第十章):浏览器只保存公开投影与 UI 状态;动画只用
+ * transform / opacity 或 `scroll-behavior`(丝滑滚动,**`prefers-reduced-motion`
+ * 下降级为 `auto`**);语义化 DOM;屏幕阅读器信息不只在视觉中(视图切换 / 列表
+ * 操作 / 落点均经 `aria-live` 或常驻 `role="status"` 宣读)。
  *
- * 效果面三件(扫描线 overlay / 光标闪烁 / 终端式标题栏角标)为**纯装饰**:
- * 装饰节点 `aria-hidden="true"`、零文本、零可聚焦后代、`pointer-events: none`,
- * 缺席不丢失任何信息;强度 / 周期一律取自既有 token(`--sm-scanline-opacity`
- * 与 `--sm-caret-blink`,light / dark = `0` / `0s` ⇒ 装饰天然不生效),**零新增
- * token**;全部动画声明包在 `@media (prefers-reduced-motion: no-preference)` 内
- * (reduce 下装饰 `display: none` 且 composed 树零 `animation-name`),动画只动
- * opacity(零大面积 glow / text-shadow);终端式标题栏只加 1px 发丝线与角标伪
- * 元素,**不加**按钮 / 交互元素 / `tabindex`(WP-71「标题栏零控件」口径保留)。
+ * 主题与效果面(WP-74;2026-09-18 单主题):底色 / 前景 / 次要前景 / 面板底 /
+ * 语义色 / 焦点环 / 等宽字体栈全走既有 token;`light` / `dark` 退役后
+ * **`var(--sm-*)` 的回退值一律不得是浅色字面量**(token 缺失时会静默回落成浅色
+ * —— 本仓反复踩过的「看起来生效」失败模式);字号下限 13px。
+ *
+ * 效果面两件(扫描线 overlay / 光标闪烁)为**纯装饰**:节点 `aria-hidden="true"`、
+ * 零文本、零可聚焦后代、`pointer-events: none`,缺席不丢失任何信息;全部动画声明
+ * 包在 `@media (prefers-reduced-motion: no-preference)` 内(reduce 下装饰
+ * `display: none` 且 composed 树零 `animation-name`),动画只动 opacity。
+ * (原「终端式标题栏角标」随 `.tab-bar` 退场 —— 类型名已移入视图内左上角。)
  */
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -142,30 +152,34 @@ import {
   type WorkspaceTabTypeRegistry,
 } from "./tab-registry.js";
 import {
-  cameraScrollLeft,
-  columnBoxFromRects,
-  defaultMatchMedia,
-  prefersReducedMotion,
-} from "./layout-camera.js";
-import {
-  columnChromePx,
-  columnMinHeightPx,
-  columnWidthAfterDrag,
-  rowHeightsAfterDrag,
-  DIVIDER_KEY_STEP_PX,
-  MIN_ROW_HEIGHT_PX,
-  ROW_DIVIDER_KEY_STEP,
-} from "./layout-divider.js";
-import { MIN_COLUMN_WIDTH, selectLayoutPreset, type LayoutPresetId } from "./layout-presets.js";
-import {
-  WorkspaceLayoutModel,
-  type DropTarget,
-  type MoveTarget,
-  type WorkspaceLayoutSnapshot,
-} from "./workspace-model.js";
+  HEX_ROW_HEIGHT_PX,
+  SIDE_PANEL_MIN_WIDTH_PX,
+  VIEW_PANEL_CHROME_HEIGHT_PX,
+  VIEW_SLOT_MIN_VISIBLE_HEX_ROWS,
+  orderByDefault,
+  viewSlotHeightPx,
+} from "./layout-presets.js";
+import { WorkspaceLayoutModel, type WorkspaceLayoutSnapshot } from "./workspace-model.js";
 
 /** 拖拽启动的位移阈值(px):超过才算拖拽(否则视为激活点击)。 */
 const DRAG_THRESHOLD_PX = 3;
+
+/**
+ * 视图管理窗口列表项的稳定选择器(`data-view-type` 承载类型键;拖拽落点解析
+ * 与列表导航共用)。列表项放在 `renderRoot`(shadow)内,指针事件经
+ * `event.composedPath()` 取真实目标(跨 shadow 边界 `event.target` 会被重定向)。
+ */
+const VIEW_ITEM_SELECTOR = "[data-view-type]";
+
+/**
+ * 单个视图位的 `contain-intrinsic-size` 占位高(px):取「chrome + 最小可见行数」
+ * 下限 —— 与 `viewSlotHeightPx()` 的下限同式同源,避免进入视口时的布局跳动。
+ * **不是布局下限**(压缩机制已整条移除),只是 `content-visibility: auto` 的
+ * 占位估算值。
+ */
+const VIEW_SLOT_INTRINSIC_PX = Math.ceil(
+  VIEW_PANEL_CHROME_HEIGHT_PX + VIEW_SLOT_MIN_VISIBLE_HEX_ROWS * HEX_ROW_HEIGHT_PX,
+);
 
 /**
  * 成绩方向裁决集(11 值结果类型的呈现分向;非成绩方向 = engine_error /
@@ -182,33 +196,25 @@ const SCORE_VERDICTS: ReadonlySet<string> = new Set([
   "timeout",
 ]);
 
-/** 分隔条拖拽态(WP-72;与窗口拖拽共用 `DRAG_THRESHOLD_PX` 阈值语义与挂点)。 */
-type DividerDrag =
-  | {
-      readonly kind: "column";
-      /** 空隙索引 = 该空隙右侧列序(新建列位的插入位置);左列 = gapIndex − 1。 */
-      readonly gapIndex: number;
-      readonly startX: number;
-      readonly startRatio: number;
-      moved: boolean;
-    }
-  | {
-      readonly kind: "row";
-      readonly column: number;
-      /** 分隔条上侧窗口序号(调整 index 与 index + 1 两窗)。 */
-      readonly index: number;
-      readonly startY: number;
-      readonly startHeights: readonly number[];
-      /**
-       * 按下瞬间的列高(px;像素换算基准)。**整段拖拽共用同一个值**:列高在
-       * 溢出列会被本列下限(比例的函数)顶高,若每步重读 `clientHeight`,同样的
-       * `startHeights` 会按新自由空间重新摊开 ⇒ 非相邻窗跟着变高、列高比位移长
-       * 得更多(实测 +60px 的拖拽把列高顶高 137px)。固定基准后拖拽是
-       * `(startHeights, 基准, 位移)` 的纯函数 ⇒ 分隔条严格跟随指针。
-       */
-      readonly startColumnHeightPx: number;
-      moved: boolean;
-    };
+/**
+ * 视图管理窗口列表项拖拽态(D-UI-4:**只保留列表内重排**一种落点语义)。
+ * 与原 Niri 三类落点无继承关系 —— 后者随列条带整体废止(它们依赖列结构)。
+ */
+interface ViewListDrag {
+  /** 被拖拽条目的类型键。 */
+  readonly type: string;
+  readonly startX: number;
+  readonly startY: number;
+  /** 位移是否已过 `DRAG_THRESHOLD_PX`(未过 = 视为点击,不进入拖拽态)。 */
+  moved: boolean;
+}
+
+/** 列表内重排落点(目标序号 + 上 / 下半语义;渲染为静态 class,零浮动层)。 */
+interface ViewListDropTarget {
+  readonly index: number;
+  /** true = 插到目标条目**之后**(下半),false = 之前(上半)。 */
+  readonly after: boolean;
+}
 
 /** 工作区模式(FE-WS-06):解题(公开投影)与调试(调试通道)双档。 */
 export type WorkspaceMode = "solve" | "debug";
@@ -331,6 +337,12 @@ export class SmWorkspace extends LitElement {
   readonly #contents = new Map<string, HTMLElement>();
   /** 已绑定窗口集的注册表实例(换绑即重绑;同实例重渲染不重绑)。 */
   #boundTabTypes: WorkspaceTabTypeRegistry | null = null;
+  /**
+   * 当前已装配的会话客户端(组合根接线判据;null = 未装配)。
+   * 用途:区分「从未有过会话」与「会话被卸下」——
+   * 前者**不得**清空外部注入的 `dataSource`(见 `#onClientChanged`)。
+   */
+  #boundClient: SessionClient | null = null;
   #listenerDisposers: readonly (() => void)[] = [];
 
   // 菜单呈现状态(由 client 事件与投影快照驱动;render 读取)。
@@ -392,28 +404,35 @@ export class SmWorkspace extends LitElement {
   /** 最近已知区域快照(store 订阅维护,产出下一动作的前快照)。 */
   #lastRegionsSnapshot: readonly VisibleMemoryRegion[] | undefined = undefined;
 
-  // 拖拽态(pointer 事件;标题栏按下 → 阈值外位移 = 拖拽,否则 = 激活)。
-  #drag: { tabId: string; startX: number; startY: number; moved: boolean } | null = null;
-  /** 当前落点候选(拖拽中实时更新;渲染为 `drop-target` 静态指示 + 状态行宣读)。 */
-  #dropTarget: { readonly tabId: string; readonly target: DropTarget } | null = null;
+  // 拖拽态(pointer 事件;仅用于**视图管理窗口列表项**的列表内重排,D-UI-4)。
+  #viewDrag: ViewListDrag | null = null;
+  /** 当前列表落点候选(拖拽中实时更新;渲染为静态 `drop-before` / `drop-after`)。 */
+  #viewDropTarget: ViewListDropTarget | null = null;
   /**
-   * 分隔条拖拽态(WP-72;与窗口拖拽共用 `DRAG_THRESHOLD_PX` 阈值语义与
-   * renderRoot 上的 pointer 监听挂点):列宽只改左侧列占比,窗高改同列相邻两窗。
+   * 焦点滚动去重锚(WP-72 语义保留):`focusWindow()` 自行触发滚动后置位,
+   * 使 `updated()` 不重复计算。
    */
-  #dividerDrag: DividerDrag | null = null;
   #lastVisibleTabId: string | null = null;
   /** 首帧前建窗 ⇒ 未渲染内容元素的 refresh 延后到首帧之后(WP-71 时序)。 */
   #contentRefreshDeferred = false;
 
-  // ── 布局档位与反馈(WP-72)──
-  /** 当前宽度档(接入与 resize 时按视口宽重算;宽屏 = P0)。 */
-  #presetId: LayoutPresetId = "P0";
   /**
-   * 布局变更反馈(分隔条调整 / 列宽档 / 重置布局 / 落点)。
+   * 视图管理 / 键盘切换 / 列表操作的**可宣读反馈**。
    * 承载于**常驻** `role="status"` 状态行:live region 必须预先存在于
-   * 无障碍树中才可靠宣读(拖拽 / 调整是瞬时事件,故不做条件渲染)。
+   * 无障碍树中才可靠宣读(切换 / 拖拽是瞬时事件,故不做条件渲染)。
    */
   #layoutFeedback: string | null = null;
+  /**
+   * 上一次视图位高度算式的输入(左半侧可视高,px)—— `updated()` 用它判「测量
+   * 补正」是否必要(值变了才补一次渲染,避免渲染循环)。
+   */
+  #lastSlotInputHeight = 0;
+  /**
+   * 视图列表的 `aria-live="polite"` 播报文本(D-UI-7 ③:「已显示 / 已隐藏 /
+   * 已移动到第 N 位」)。与上者分面:上者宣读切换 / 拖拽落点,本面宣读**勾选
+   * 与列表内移动的结果**;仿既有修法,不用 `role="log"`(M1 已登记的 axe 违规)。
+   */
+  #viewListAnnouncement = "";
 
   /** i18n:连接时消费 data-sm-language 锚;locale 变化即重渲染(WP-53)。 */
   readonly #i18n = new LocaleController(this);
@@ -421,186 +440,185 @@ export class SmWorkspace extends LitElement {
   #themeAnchorWritten = false;
 
   static override styles = css`
+    /* ── 整页布局(FE-WS-01 / D-UI-1)────────────────────────────────────────
+       工作区 = 页面主体:自身即视口高(100dvh),**不依赖宿主 / 壳给出高度**,
+       内层滚动**不上浮到文档层**。
+       ① 自身不设 min-block-size 固定高(原 24rem 随「压缩以适配」一并退场);
+       ② 无 border / 无 border-radius / 无 gap / 无 divider(「无边框、紧密贴合的
+          矩形」;outline 不用作装饰,只在 :focus-visible 出现);
+       ③ 100dvh 优先、100% 兜底(宿主给出定高链时 100% 生效;无链时 dvh 生效)。 */
     :host {
-      display: flex;
-      flex-direction: column;
-      min-block-size: 24rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
-      border-radius: 8px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      block-size: 100dvh;
+      block-size: 100%;
+      min-block-size: 0;
       /* 扫描线 overlay 的定位锚(纯装饰层 inset:0;既有绝对定位后代各有自身
          定位锚:sm-window-list 宿主 position:relative、Blockly .injectionDiv
          position:relative ⇒ 零布局影响)。 */
       position: relative;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
-      overflow: hidden;
+      background: var(--sm-bg-base, #0b0f0b);
+      color: var(--sm-fg, #b9ffc4);
+      /* ⚠ **刻意不设 overflow**:窄屏(D-UI-5:两半侧各保底 452.4px)下网格
+         宽于视口,若此处 overflow: hidden 会把右半侧裁掉且**页面不出现横向
+         滚动条**(右半侧不可达)。纵向由 block-size: 100dvh + 内层
+         minmax(0, 1fr) 约束(内层滚动承载溢出),故无需 overflow 兜底。 */
     }
 
-    /* 列式滚动平铺:列间水平滚动(Niri 式),滚动可达任意列。
-       纵向同样 auto:列内窗口有**可读高度下限**(MIN_ROW_HEIGHT_PX),列高下限
-       是**窗高比例的函数**(columnMinHeightPx,内联为列盒 min-block-size)⇒
-       拖高某一窗时列盒随之生长(被减小的窗贴住下限、不再让位),溢出的可见后代
-       进入条带滚动区 ⇒ **不压扁窗口,改为滚动**。宿主给工作区定高时滚动发生在
-       条带内;宿主未定高时条带被内容撑高、溢出上浮到文档层滚动(见
-       test/workspace/sm-workspace-layout.test.ts 的高度下限用例)。 */
-    .columns {
-      flex: 1;
-      display: flex;
-      align-items: stretch;
-      gap: 0.5rem;
-      padding: 0.5rem;
-      overflow: auto;
-      overscroll-behavior: contain;
+    /* 左右两分(固定 1:1;D-UI-1:不可调、无分界拖拽手柄)。
+       **两侧同底线**(minmax(SIDE_PANEL_MIN_WIDTH_PX, 1fr)):
+       视口足够宽时两列等分(1:1);窄屏时各列保底 452.4px(D-UI-5:左半侧宽
+       底线改挂载体)⇒ **页面横向滚动**(形态不改变;否决隐藏右半侧 / 上下堆叠)。
+       无 gap、无 border(「无边框、紧密贴合的矩形」)。
+       overflow: visible 是 D-UI-5 的承载条件(见 :host 的说明)。 */
+    .ws-body {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(${SIDE_PANEL_MIN_WIDTH_PX}px, 1fr));
       min-block-size: 0;
-      /* 动效纪律:不引入 CSS 平滑滚动——条带滚动语义由相机(JS)独占,
-         prefers-reduced-motion 在相机侧降级为即时定位。 */
-      scroll-behavior: auto;
+      overflow: visible;
+    }
+
+    /* 左半侧 = 视图管理窗口:列表按钮在上(自适应高),视图位滚动区在下。
+       min-inline-size = D-UI-5 的左半侧宽度底线(452.4px);窄屏时右半侧被
+       挤到视口之外 ⇒ **页面横向滚动**(形态不改变:否决隐藏右半侧 / 上下堆叠)。 */
+    .ws-left {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-inline-size: ${SIDE_PANEL_MIN_WIDTH_PX}px;
+      min-block-size: 0;
+      overflow: hidden;
+      background: var(--sm-bg-panel, #101610);
+    }
+
+    /* 右半侧 = payload 搭建窗口(固定;不随左侧滚动移动)。 */
+    .ws-right {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+      min-block-size: 0;
+      min-inline-size: 0;
+      overflow: hidden;
+      background: var(--sm-bg-base, #0b0f0b);
+    }
+
+    /* 视图管理窗口的列表按钮:可展开 / 收起(<details> 天然可聚焦,零 JS
+       展开状态;条目自绘 —— 勾选用原生 input,排序用 Alt+↑/↓ 与 pointer 拖拽)。 */
+    .view-list-button {
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
+      font-size: 0.8125rem;
+    }
+
+    .view-list-button > summary {
+      padding: 0.25rem 0.5rem;
+      color: var(--sm-fg-dim, #6dd47f);
+      cursor: pointer;
+      font-size: 0.8125rem;
+    }
+
+    .view-list-button > summary:focus-visible {
+      outline: 2px solid var(--sm-focus-ring, #a9ffb8);
+      outline-offset: -2px;
+    }
+
+    .view-list {
+      margin: 0;
+      padding: 0 0 0.25rem;
+      list-style: none;
+      display: grid;
+      gap: 0;
+    }
+
+    .view-list-item {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.125rem 0.5rem;
+      font-size: 0.8125rem;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .view-list-item:focus-visible {
+      outline: 2px solid var(--sm-focus-ring, #a9ffb8);
+      outline-offset: -2px;
+    }
+
+    /* 拖拽反馈:静态 class(不做动画);落点指示 = 既有边框族的静态上 / 下边线。 */
+    .view-list-item.dragging {
+      opacity: 0.5;
+    }
+
+    .view-list-item.drop-before {
+      box-shadow: inset 0 2px 0 var(--sm-warn, #ffc857);
+    }
+
+    .view-list-item.drop-after {
+      box-shadow: inset 0 -2px 0 var(--sm-warn, #ffc857);
+    }
+
+    .view-list-order {
+      color: var(--sm-fg-dim, #6dd47f);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 视图位滚动区(左半侧;纵向堆叠 —— 任一时刻可见两个视图位,超出者滚动)。 */
+    .ws-stack {
+      display: grid;
+      grid-auto-rows: auto;
+      align-content: start;
+      gap: 0.5rem;
+      margin-block: 0.5rem;
+      padding: 0;
+      min-block-size: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      /* 丝滑滚动动画(FE-WS-09):需求要求滚动带丝滑动画 ⇒ 由本容器承担;
+         reduce 动效偏好下退化为 auto(见下)。 */
+      scroll-behavior: smooth;
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .columns {
+      .ws-stack {
         scroll-behavior: auto;
       }
     }
 
-    /* 列宽由模型快照的占比即时计算为像素(内联 inline-size);缺省兜底 100%
-       (首帧 / 无测量环境时不塌陷)。列高下限由 TS 按列内**窗高比例**内联为像素
-       (columnMinHeightPx;同一处也只此一份算式),使列盒 ≥ 内容高度:
-       窗高拖拽的像素 ↔ 比例换算基准正确、列间分隔条随内容满高。 */
-    .column {
-      flex: 0 0 auto;
-      inline-size: 100%;
+    /* 单个视图位:无边框、无圆角、与相邻视图位仅由几何贴合(无间隙 / 无描边 /
+       无分隔条)。高度由 TS 按 viewSlotHeightPx() 内联为像素 ⇒ **确定高度**
+       (可读性载体)⇒ **不出现「视图被压到装不下一行字节」**;空间不足时多余的
+       部分由 .ws-stack 纵向滚动承载(**只滚动、不压缩**)。 */
+    .ws-view {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    /* 列间分隔条(相邻列间;pointer 拖拽 + 方向键调整列宽)。 */
-    .column-divider {
-      flex: 0 0 auto;
-      inline-size: 0.75rem;
-      align-self: stretch;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: col-resize;
-      touch-action: none;
-      border: 0;
-      border-radius: 6px;
-      background: transparent;
-      padding: 0;
-    }
-
-    .column-divider::before {
-      content: "";
-      inline-size: 2px;
-      block-size: 100%;
-      background: var(--sm-divider, rgb(0 0 0 / 12%));
-    }
-
-    .column-divider:hover::before,
-    .column-divider:focus-visible::before {
-      background: var(--sm-warn, highlight);
-    }
-
-    .column-divider:focus-visible,
-    .row-divider:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
-      outline-offset: 1px;
-    }
-
-    /* 同列窗间分隔条(调整窗高比例)。 */
-    .row-divider {
-      flex: 0 0 auto;
-      block-size: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: row-resize;
-      touch-action: none;
-      border: 0;
-      border-radius: 6px;
-      background: transparent;
-      padding: 0;
-    }
-
-    .row-divider::before {
-      content: "";
-      block-size: 2px;
-      inline-size: 100%;
-      background: var(--sm-divider, rgb(0 0 0 / 12%));
-    }
-
-    .row-divider:hover::before,
-    .row-divider:focus-visible::before {
-      background: var(--sm-warn, highlight);
-    }
-
-    /* 列内按窗高比例分配列高(Hyprland 式):面板 flex-grow 由模型比例内联给值
-       (flex: 比例 1 0 ⇒ 高度按比例分配,拖拽期间只改容器比例、列表不重排);
-       面板最小高 = 窗高下限 MIN_ROW_HEIGHT_PX(推导见 layout-presets.ts 的
-       「块轴(高度)阈值推导」:面板 chrome + 4 个字节行单位):空间充足时比例分配
-       照常(像素和守恒),空间不足时被压侧的窗停在下限、列高下限(比例的函数)
-       顶高列盒 ⇒ 不再压扁窗口,由条带 / 文档滚动承担。 */
-    .tab-panel {
-      flex: 1 1 0;
-      min-block-size: ${MIN_ROW_HEIGHT_PX}px;
-      display: flex;
-      flex-direction: column;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
-      border-radius: 8px;
+      min-block-size: 0;
       overflow: hidden;
-      background: var(--sm-bg-base, canvas);
-      /* 视口外窗口降级渲染(WP-72):离屏子树跳过渲染与绘制;语义标记
+      background: var(--sm-bg-base, #0b0f0b);
+      /* 视口外降级渲染(保留):离屏子树跳过渲染与绘制;语义标记
          data-render-degrade="content-visibility"(结构断言面)。
-         contain-intrinsic-size 以面板最小高为占位,auto 关键字记住上次尺寸,
+         contain-intrinsic-size 取下限占位(auto 关键字记住上次尺寸),
          避免进入视口时的布局跳动。零新增依赖、零浮动层、零 JS 观察者。 */
       content-visibility: auto;
-      contain-intrinsic-size: auto ${MIN_ROW_HEIGHT_PX}px;
+      contain-intrinsic-size: auto ${VIEW_SLOT_INTRINSIC_PX}px;
     }
 
-    .tab-panel.focused {
-      border-color: var(--sm-warn, highlight);
+    /* 焦点视图位:仅以 view-label 前景色区分(**不画边框** —— 无描边硬约束)。 */
+    .ws-view.focused .view-label {
+      color: var(--sm-warn, #ffc857);
     }
 
-    /* 拖拽反馈:opacity(compositor 友好;零 CSS 动画)。 */
-    .tab-panel.dragging {
-      opacity: 0.5;
-    }
-
-    /* 落点指示(WP-72):静态轮廓 / 背景,不引入浮动层与重叠,不做动画。 */
-    .tab-panel.drop-target {
-      outline: 2px dashed var(--sm-warn, highlight);
-      outline-offset: -2px;
-    }
-
-    .column-divider.drop-target,
-    .row-divider.drop-target {
-      background: color-mix(in srgb, var(--sm-warn, highlight) 22%, transparent);
-    }
-
-    .columns.drop-target {
-      outline: 2px dashed var(--sm-warn, highlight);
-      outline-offset: -2px;
-    }
-
-    .tab-bar {
-      display: flex;
-      align-items: center;
-      gap: 0.375rem;
-      padding: 0.25rem 0.5rem;
-      /* 终端式标题栏 1px 框线 = 既有发丝线(角标与光标装饰的定位锚)。 */
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      position: relative;
-      background: var(--sm-bg-panel, color-mix(in srgb, canvas 92%, highlight 8%));
-      cursor: grab;
-      user-select: none;
-      touch-action: none;
-    }
-
-    .tab-title {
-      font-weight: 600;
+    /* 视图类型名写在视图内左上角(FE-WS-11):**不是独立标题栏**(无边框、无背景
+       条、零控件、不承载交互);它是面板内第一个元素,故**不遮挡内容**。 */
+    .view-label {
+      display: block;
+      flex: 0 0 auto;
+      padding: 0.125rem 0.5rem;
+      color: var(--sm-fg-dim, #6dd47f);
       font-size: 0.8125rem;
+      font-weight: 600;
+    }
+
+    .ws-view-slot {
+      display: grid;
+      min-block-size: 0;
     }
 
     .tab-content {
@@ -608,7 +626,11 @@ export class SmWorkspace extends LitElement {
       min-block-size: 0;
       display: flex;
       flex-direction: column;
-      overflow: auto;
+      /* **视图位胜出**(可读性纪律的承载条件):内容超出时由**视图位裁剪**
+         (「.ws-view」 的 「overflow: hidden」),而不是在视图位内部再生一个滚动条 ——
+         内层滚动会把「字节视图内容盒下限」的语义抵消掉(真机实测:内层滚动下
+         768 宽档的字节数据行只剩 1 行)。 */
+      overflow: visible;
     }
 
     .tab-content > * {
@@ -618,47 +640,47 @@ export class SmWorkspace extends LitElement {
     .tab-placeholder {
       margin: 0;
       padding: 1rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       font-size: 0.875rem;
     }
 
     .jump-feedback {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       font-size: 0.8125rem;
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
     }
 
-    /* 布局状态行(WP-72):常驻 role=status 的 live region(布局变更宣读)。 */
+    /* 视图切换 / 列表操作状态行:常驻 role=status 的 live region。 */
     .layout-status {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       font-size: 0.8125rem;
       min-block-size: 1.1em;
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
     }
 
     /* 调试档状态行(F8):切换 / attach / 暂停反馈(降级文案明示)。 */
     .debug-feedback {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg, #b9ffc4);
       font-size: 0.8125rem;
-      background: color-mix(in srgb, var(--sm-bg-inset, field) 94%, var(--sm-focus-ring, accentcolor) 6%);
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      background: color-mix(in srgb, var(--sm-bg-inset, #070907) 94%, var(--sm-focus-ring, #a9ffb8) 6%);
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
     }
 
     /* 教学面板(F8 ED 挂接,取简 = details 折叠区):提示 ladder + 错误解释。 */
     .teaching-panel {
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
       font-size: 0.8125rem;
     }
 
     .teaching-panel > summary {
       padding: 0.25rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       cursor: pointer;
       font-size: 0.8125rem;
     }
@@ -679,13 +701,13 @@ export class SmWorkspace extends LitElement {
     /* 题目静态面(WP-54:briefing / vmProfile / encodingTable;沿 teaching-panel
        的 details 折叠取简,零视觉重设计)。 */
     .challenge-panel {
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
       font-size: 0.8125rem;
     }
 
     .challenge-panel > summary {
       padding: 0.25rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
       cursor: pointer;
       font-size: 0.8125rem;
     }
@@ -715,7 +737,7 @@ export class SmWorkspace extends LitElement {
     }
 
     .challenge-facts dt {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
     }
 
     .challenge-facts dd {
@@ -737,14 +759,14 @@ export class SmWorkspace extends LitElement {
     .encoding-table th,
     .encoding-table td {
       padding: 0.125rem 0.5rem;
-      border: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
+      border: 1px solid var(--sm-divider-faint, rgb(125 255 156 / 12%));
       text-align: left;
     }
 
     .challenge-absent {
       margin: 0;
       padding: 0.25rem 0.75rem 0.5rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim, #6dd47f);
     }
 
     /* 正式裁决横幅(阶段六 WP-63;零视觉重设计:复用横幅式样的取简变体)。 */
@@ -755,43 +777,43 @@ export class SmWorkspace extends LitElement {
       gap: 0.25rem 0.75rem;
       margin: 0;
       padding: 0.375rem 0.75rem;
-      background: color-mix(in srgb, var(--sm-bg-inset, field) 92%, var(--sm-warn, highlight) 8%);
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      background: color-mix(in srgb, var(--sm-bg-inset, #070907) 92%, var(--sm-warn, #ffc857) 8%);
+      border-block-end: 1px solid var(--sm-divider, rgb(125 255 156 / 16%));
       font-size: 0.8125rem;
     }
 
     .verdict-banner strong {
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg, #b9ffc4);
     }
 
     .verdict-banner .verdict-state {
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg, #b9ffc4);
       font-weight: 600;
     }
 
     .verdict-banner.unavailable {
-      background: color-mix(in srgb, mark 8%, var(--sm-bg-base, canvas));
+      background: color-mix(in srgb, var(--sm-warn, #ffc857) 8%, var(--sm-bg-base, #0b0f0b));
     }
 
     .verdict-banner button {
       padding: 0.125rem 0.5rem;
-      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
+      border: 1px solid var(--sm-border-button, rgb(125 255 156 / 34%));
       border-radius: 6px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
+      background: var(--sm-bg-base, #0b0f0b);
+      color: var(--sm-fg, #b9ffc4);
       font: inherit;
       cursor: pointer;
     }
 
     /* ── 效果面(WP-74;契约 C1~C9 见 e2e/helpers/decoration.ts 文件头)─────
-       三件装饰全为**纯装饰**:节点 aria-hidden="true"(伪元素天然不入无障碍
+       装饰全为**纯装饰**:节点 aria-hidden="true"(伪元素天然不入无障碍
        树)、零文本、零可聚焦后代、pointer-events: none;动画只动 opacity;
-       缺席不丢失任何信息。参数一律取自既有 effect token,零新增 token:
-       扫描线强度 = --sm-scanline-opacity(light / dark = 0,terminal = 0.06),
-       光标周期 = --sm-caret-blink(light / dark = 0s,terminal = 1.1s)——
-       light / dark 下两者天然不生效 ⇒ 视觉零变化。全部动画声明包在
+       缺席不丢失任何信息。参数一律取自 effect token,零新增 token:
+       扫描线强度 = --sm-scanline-opacity(单主题恒 0.06),
+       光标周期 = --sm-caret-blink(单主题恒 1.1s)。全部动画声明包在
        @media (prefers-reduced-motion: no-preference) 内;reduce 下装饰
-       display: none(C8)且 composed 树零 non-none 动画(C9)。 */
+       display: none(C8)且 composed 树零 non-none 动画(C9)。
+       (原「终端式标题栏角标」随 .tab-bar 退场 —— 类型名已移入视图内左上角。) */
 
     /* 扫描线 overlay(C1 锚 / C2 形态 / C3 强度 / C4 命中测试 / C7 不承载信息)。
        几何、命中测试与形态是**静态**属性(与动效偏好无关 ⇒ reduce 下同样成立),
@@ -808,8 +830,8 @@ export class SmWorkspace extends LitElement {
       /* C2:形态 = repeating-linear-gradient 覆盖层(1px 线 / 3px 周期)。 */
       background-image: repeating-linear-gradient(
         to bottom,
-        var(--sm-fg, canvastext) 0,
-        var(--sm-fg, canvastext) 1px,
+        var(--sm-fg, #b9ffc4) 0,
+        var(--sm-fg, #b9ffc4) 1px,
         transparent 1px,
         transparent 3px
       );
@@ -831,7 +853,7 @@ export class SmWorkspace extends LitElement {
       inline-size: 0.375rem;
       block-size: 0.75rem;
       margin-block-start: -0.375rem;
-      background: var(--sm-fg, canvastext);
+      background: var(--sm-fg, #b9ffc4);
       opacity: 0;
       pointer-events: none;
     }
@@ -857,43 +879,6 @@ export class SmWorkspace extends LitElement {
 
       100% {
         opacity: 1;
-      }
-    }
-
-    /* 终端式窗口标题栏:1px 框线 = .tab-bar 既有发丝线;角标 = 伪元素纯装饰
-       (零控件、零 tabindex、零文本)。基态 content: none ⇒ light / dark 与
-       reduce 下整体缺席(视觉零变化)。 */
-    .tab-bar::before,
-    .tab-bar::after {
-      content: none;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      .tab-bar::before,
-      .tab-bar::after {
-        content: "";
-        position: absolute;
-        inline-size: 0.375rem;
-        block-size: 0.375rem;
-        pointer-events: none;
-        /* 角标强度 = 效果面开关的数值代理:light / dark 的
-           --sm-scanline-opacity = 0 ⇒ 完全透明;terminal = 0.06 ⇒ 放大到
-           不透明度上限 1(既有 token 复用,不新增 token)。 */
-        opacity: calc(var(--sm-scanline-opacity, 0) * 20);
-      }
-
-      .tab-bar::before {
-        inset-block-start: 0.125rem;
-        inset-inline-start: 0.25rem;
-        border-block-start: 1px solid var(--sm-fg-dim, graytext);
-        border-inline-start: 1px solid var(--sm-fg-dim, graytext);
-      }
-
-      .tab-bar::after {
-        inset-block-end: 0.125rem;
-        inset-inline-end: 0.25rem;
-        border-block-end: 1px solid var(--sm-fg-dim, graytext);
-        border-inline-end: 1px solid var(--sm-fg-dim, graytext);
       }
     }
 
@@ -947,6 +932,15 @@ export class SmWorkspace extends LitElement {
       this.#contentRefreshDeferred = false;
       this.#refreshContents();
     }
+    // **视图位高度的测量补正**(2026-09-18 真机取证):`render()` 里读的是
+    // **上一帧**的几何,而首帧的 `.ws-left` 在渲染前不存在 ⇒ 首帧只能用
+    // `window.innerHeight` 估算。若此后测得的左半侧可视高与上一次算式输入不同,
+    // 必须补一次渲染把视图位高度改到正确值(否则视位高会永远停在首帧估算值上)。
+    const measured = this.#measureLeftRole().height;
+    if (measured > 0 && measured !== this.#lastSlotInputHeight) {
+      this.#lastSlotInputHeight = measured;
+      this.requestUpdate();
+    }
   }
 
   override connectedCallback(): void {
@@ -956,10 +950,10 @@ export class SmWorkspace extends LitElement {
     // 主题锚样式表(幂等)+ 独立使用形态的 theme 属性转写(最近锚优先)。
     ensureSmThemeStyles(this.ownerDocument ?? document);
     this.#syncThemeAnchor();
-    // 窗口集绑定(D-MP-1:登记集合各恰一实例、常驻;首帧前按当前宽度档预设建列)。
+    // 视图集绑定(D-MP-1 不修订:登记集合各恰一实例、常驻;首帧前绑定)。
     this.#bindWindows();
-    // 响应式降级驱动:宿主 window resize(嵌入形态 iframe 尺寸变化即宿主 window
-    // resize);同档内只更新列宽基准,跨档才重绑列结构。
+    // 视图位高度的测量驱动 = 自身与 window 的尺寸变化(零 ResizeObserver:
+    // 需求未要求,且本组件的容器链由宿主定高链承担)。
     (this.ownerDocument?.defaultView ?? null)?.addEventListener("resize", this.#onViewportResize);
     // pointer 拖拽监听挂在 shadow root 内:避免跨 shadow 边界的 target 重定向。
     this.renderRoot.addEventListener("pointermove", this.#onPointerMove as EventListener);
@@ -982,7 +976,11 @@ export class SmWorkspace extends LitElement {
     }
   }
 
-  /** 独立使用形态:theme 属性 → 自身 data-sm-theme(最近锚优先,确定性)。 */
+  /**
+   * 独立使用形态:theme 属性 → 自身 `data-sm-theme`(D-UI-6:值域收敛为
+   * **终端单值** ⇒ 本属性只剩 `"terminal"` 一个合法值,写锚即终端;
+   * 归位 null 时只清理自身写入的锚,不动外部直接设置的锚)。
+   */
   #syncThemeAnchor(): void {
     if (this.theme !== null) {
       this.setAttribute(SM_THEME_ATTRIBUTE, this.theme);
@@ -1013,45 +1011,44 @@ export class SmWorkspace extends LitElement {
     return this.#model.snapshot;
   }
 
-  /** 当前宽度档(WP-72:宽屏 P0 / 中宽 P1 / 窄条 P2;诊断与 E2E 断言面)。 */
-  get layoutPresetId(): LayoutPresetId {
-    return this.#presetId;
+  /**
+   * 左半侧实际宽度(px;0 = 未知)—— D-UI-5 的 `SIDE_PANEL_MIN_WIDTH_PX`
+   * 底线核对面(取代已废止的「视口宽」语义)。
+   */
+  get leftRoleWidth(): number {
+    return this.#model.leftRoleWidth;
   }
 
-  /** 焦点窗口所在列(无焦点为 null;诊断 / 断言面)。 */
-  get focusedColumnIndex(): number | null {
-    return this.#model.focusedColumnIndex;
+  /** `Ctrl + ↑/↓` 当前切换落点(可见视图类型;无落点为 null;诊断 / 断言面)。 */
+  get activeViewType(): string | null {
+    return this.#model.activeType;
   }
 
   /**
-   * 窗口集绑定(D-MP-1 固定窗口集,WP-71;WP-72 起按**当前宽度档预设**)——
+   * 视图集绑定(D-MP-1 固定窗口集,**本版按新模型**)——
    *
-   *  - 每种登记类型恰一实例(窗口 id ≡ 类型键;单实例为结构性保证);
-   *  - **列排布 = `layout-presets.ts` 的预设表**(宽屏 P0 / 中宽 P1 / 窄条 P2),
-   *    经 `WorkspaceLayoutModel.bindWindows(entries, columns)` 的 `columns`
-   *    参数**单点注入**——默认列排布不在本文件出现第二份字面量;
-   *  - 内容元素按各描述项 `createContent` 产出(字节窗口注入行装饰挂点;
+   *  - 每种登记类型恰一实例(视图 id ≡ 类型键;单实例为结构性保证);
+   *  - **顺序 = `layout-presets.ts` 的 `DEFAULT_VIEW_ORDER`**(默认顺序的唯一
+   *    来源,经 `orderByDefault` 单点注入)——本文件不持有任何默认顺序字面量;
+   *  - **可见性初始全选**(勾选态属于用户调整;`tabTypes` 换绑即重绑);
+   *  - 内容元素按各描述项 `createContent` 产出(字节视图注入行装饰挂点;
    *    声明 `actionSink` 的内容按 duck-typing 注入会话客户端);
    *  - 触发点 = 工作区接入(connectedCallback,首帧前)+ `tabTypes` 换绑;
-   *    **与「接入会话」无关**——窗口集是结构,数据面由 `dataSource` 换绑注入
+   *    **与「接入会话」无关**——视图集是结构,数据面由 `dataSource` 换绑注入
    *    (解题 ↔ 调试模式切换只换数据源,布局零副作用)。
    */
   #bindWindows(): void {
     this.#boundTabTypes = this.tabTypes;
     const descriptors = this.tabTypes.list();
     this.#contents.clear();
-    const viewportWidth = this.#measureViewportWidth();
-    const preset = selectLayoutPreset(viewportWidth);
-    this.#presetId = preset.id;
-    this.#model.setViewportWidth(viewportWidth);
     this.#model.bindWindows(
       descriptors.map((descriptor) => ({
         type: descriptor.type,
         // 展示名:i18n 键优先(WP-53),按**绑定时刻** locale 求值固化
-        // (窗口标题不随语言切换追溯——WP-F5 登记口径保留)。
+        // (视图类型名不随语言切换追溯——WP-F5 登记口径保留)。
         label: descriptor.labelKey !== undefined ? t(descriptor.labelKey) : descriptor.label,
       })),
-      preset.columns,
+      orderByDefault(descriptors.map((descriptor) => descriptor.type)),
     );
     for (const descriptor of descriptors) {
       const content = descriptor.createContent?.({ dataSource: this.dataSource }) ?? null;
@@ -1071,160 +1068,131 @@ export class SmWorkspace extends LitElement {
   }
 
   /**
-   * 聚焦指定类型窗口(D-MP-1 三类管理动作之「聚焦导航」):聚焦 + 相机居中到
-   * 该窗口;未登记类型返回 false(不改变布局与焦点)。窗口集常驻,本方法
-   * **不创建实例**——窗口实例数在绑定后恒定。
+   * 聚焦指定类型视图(D-MP-1 三类管理动作之「聚焦导航」):聚焦 + 滚动到该视图
+   * (菜单「视图」组的既有语义);未登记类型返回 false(不改变布局与焦点)。
+   * 视图集常驻,本方法**不创建实例**——实例数在绑定后恒定。
    */
   focusWindow(type: string): boolean {
     if (!this.#model.focusWindow(type)) {
       return false;
     }
-    // 焦点滚动由本方法独占触发(置 `#lastVisibleTabId` 让 `updated()` 不重复
-    // 计算相机;平滑滚动途中重复计算会与自身竞争)。
+    // 焦点滚动由本方法独占触发(置 `#lastVisibleTabId` 让 `updated()` 不重复触发)。
     this.#lastVisibleTabId = type;
     this.ensureTabVisible(type);
     this.requestUpdate();
     return true;
   }
 
-  /** 激活窗口(焦点跟随 + 相机居中;不存在的 id 为 no-op)。 */
+  /** 激活视图(焦点跟随;不存在的 id 为 no-op)。 */
   activateTab(tabId: string): void {
     this.#model.activateTab(tabId);
     this.requestUpdate();
   }
 
   /**
-   * 使标签页可达(WP-72 起 = 相机):
-   *  1. **纵向兜底** —— 焦点窗口在列内超出可视高时滚到最近边
-   *     (`scrollIntoView` 只管纵向;P2 单列 10 窗形态必需);
-   *  2. **横向权威** —— 相机计算把焦点列居中(相邻列两侧探出),相机在最后
-   *     执行以免被纵向兜底的即时滚动覆盖。
-   * jsdom 无布局环境:两路均静默(结构断言由纯函数单测承载)。
+   * 使视图位可达(**取代原「相机 + 列间水平滚动」**):滚到最近边
+   * (`scrollIntoView({block:"nearest"})`;左半侧纵向滚动作 carriers 承载溢出)。
+   * 不可见视图(未勾选)无 DOM 面板 ⇒ 静默;jsdom 无布局环境亦静默。
    */
   ensureTabVisible(tabId: string): void {
-    const column = this.#model.columnIndexOfTab(tabId);
-    if (column === null) {
-      return;
-    }
     const panel = this.#panelOf(tabId);
-    if (panel !== null && typeof panel.scrollIntoView === "function") {
-      try {
-        panel.scrollIntoView({ block: "nearest", inline: "nearest" });
-      } catch {
-        // 无布局环境(jsdom):滚动增强失败静默,不影响可达性语义。
-      }
-    }
-    this.#centerColumnOnFocus(column);
-  }
-
-  /** 列间水平滚动到目标列(Niri 式可达任意列;相机把该列居中)。 */
-  scrollToColumn(column: number): void {
-    const firstTabId = this.#model.tabIdsInColumn(column)[0];
-    if (firstTabId !== undefined) {
-      this.ensureTabVisible(firstTabId);
-    }
-  }
-
-  /**
-   * 焦点列居中(相机跟随;`layout-camera.ts` 纯函数 → `scrollLeft`)。
-   * 平滑滚动按 `prefers-reduced-motion` 降级为即时定位;无 `scrollTo` 的环境
-   * (jsdom)直接赋 `scrollLeft`(同一目标值,便于结构断言)。
-   */
-  #centerColumnOnFocus(column: number): void {
-    const container = this.renderRoot.querySelector("[data-columns]");
-    const target = this.renderRoot.querySelector(`[data-column-index="${column}"]`);
-    if (!(container instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+    if (panel === null || typeof panel.scrollIntoView !== "function") {
       return;
     }
     try {
-      const box = columnBoxFromRects(
-        container.getBoundingClientRect(),
-        target.getBoundingClientRect(),
-        container.scrollLeft,
-      );
-      const left = cameraScrollLeft(box, container.clientWidth, { scrollWidth: container.scrollWidth });
-      if (typeof container.scrollTo === "function") {
-        container.scrollTo({
-          left,
-          behavior: prefersReducedMotion(defaultMatchMedia()) ? "auto" : "smooth",
-        });
-        return;
-      }
-      container.scrollLeft = left;
+      panel.scrollIntoView({ block: "nearest", inline: "nearest" });
     } catch {
-      // 无布局环境:相机静默(不影响可达性语义)。
+      // 无布局环境(jsdom):滚动增强失败静默,不影响可达性语义。
     }
   }
 
-  // ── 布局尺寸动作(WP-72:列宽 / 窗高 / 重置)──────────────────────────────
+  // ── 视图管理动作(勾选 / 排序 / 重置视图;唯一入口 = 左半侧列表按钮)────────
 
   /**
-   * 设置**焦点列**列宽(视口占比;菜单列宽预设档入口的公共 API 同路)。
-   * 夹取护栏由模型承担;返回 false(无焦点列 / 非法占比)时零变化。
+   * 设置视图可见性(左半侧列表按钮的「勾选」;**唯一入口**,D-UI-7 补充裁定
+   * 明确菜单「视图」组**不承载勾选 / 排序**)。返回是否发生变化。
+   *
+   * 语义纪律(D-MP-1 不修订):未勾选 = **不显示** = 「暂离」的第二种成因
+   * (第一种仍是滚出可视区),**不是「关闭」** —— 视图仍全部常驻。
+   * 播报经 `aria-live="polite"`(D-UI-7 ③)。
    */
-  setFocusedColumnWidth(widthRatio: number): boolean {
-    const column = this.#model.focusedColumnIndex;
-    if (column === null) {
+  setViewVisible(type: string, visible: boolean): boolean {
+    const title = this.#model.view(type)?.title ?? type;
+    if (!this.#model.setViewVisible(type, visible)) {
       return false;
     }
-    if (!this.#model.setColumnWidth(column, widthRatio)) {
-      return false;
-    }
-    const effective = this.#model.snapshot.columns[column]?.widthRatio ?? widthRatio;
-    this.#layoutFeedback = t("workspace.layoutWidthPresetApplied", {
-      percent: Math.round(effective * 100),
-    });
+    this.#viewListAnnouncement = t(
+      visible ? "workspace.viewShown" : "workspace.viewHidden",
+      { title },
+    );
     this.requestUpdate();
     return true;
   }
 
   /**
-   * 重置布局(WP-72 逃生门):清空列宽 / 窗高调整并应用**当前视口宽对应的
-   * 预设**(宽屏下即回到 P0;窄屏下回到该宽度的降级形态)。焦点保持。
+   * 列表内重排(视图管理窗口的**拖拽排序**;D-UI-4:只保留这一种落点语义)。
+   * 播报「已移动到第 N 位」(D-UI-7 ③)。返回是否发生变化。
    */
-  resetLayout(): void {
-    this.#model.setViewportWidth(this.#measureViewportWidth());
-    this.#model.resetLayout();
-    this.#presetId = selectLayoutPreset(this.#model.viewportWidth).id;
-    this.#layoutFeedback = t("workspace.layoutResetDone", { preset: this.#presetId });
-    this.requestUpdate();
-  }
-
-  /** 视口宽测量(px):优先自身内联尺寸(嵌入形态 = iframe 宽);无布局环境回落 window 视口宽。 */
-  #measureViewportWidth(): number {
-    const own = this.clientWidth;
-    if (Number.isFinite(own) && own > 0) {
-      return own;
+  moveView(type: string, targetIndex: number): boolean {
+    if (!this.#model.moveView(type, targetIndex)) {
+      return false;
     }
-    const view = this.ownerDocument?.defaultView ?? null;
-    const inner = view?.innerWidth ?? 0;
-    return Number.isFinite(inner) && inner > 0 ? inner : 0;
+    const title = this.#model.view(type)?.title ?? type;
+    const position = (this.#model.indexOfView(type) ?? 0) + 1;
+    this.#viewListAnnouncement = t("workspace.viewMoved", { title, index: position, count: position });
+    this.requestUpdate();
+    return true;
   }
 
   /**
-   * 响应式降级(WP-72):重测视口宽 → 档位变化(跨断点)即按新档预设重绑列
-   * 结构;同档内只更新列宽基准(占比语义 ⇒ 列宽随容器按比例随动)。
+   * **重置视图**(取代已废止的「重置布局」):恢复默认顺序 + 全选(全部可见)。
+   * 焦点与 `Ctrl + ↑/↓` 落点复位;**视图集不变**(D-MP-1)。
+   */
+  resetViews(): void {
+    this.#model.resetViews();
+    this.#layoutFeedback = t("workspace.viewResetDone");
+    this.requestUpdate();
+  }
+
+  /**
+   * 左半侧尺寸测量(视图位高度的算式输入):
+   *  - `leftRoleHeight`:左半侧实际高(`.ws-left` 的 `clientHeight`);无布局环境
+   *    回落到 `window.innerHeight`(整页布局下两者语义一致 —— 工作区占满视口);
+   *  - `leftRoleWidth`:左半侧实际宽(D-UI-5 底线核对面)。
+   * 无布局环境(jsdom)`clientHeight` = 0 ⇒ 高度回落 `innerHeight`(jsdom 缺省
+   * 768),故 `viewSlotHeightPx()` 在两种环境下都给出有限确定值,不抛错。
+   */
+  #measureLeftRole(): { readonly height: number; readonly width: number } {
+    const element = this.renderRoot.querySelector(".ws-left");
+    const measuredWidth = element instanceof HTMLElement ? element.clientWidth : 0;
+    const measuredHeight = element instanceof HTMLElement ? element.clientHeight : 0;
+    const view = this.ownerDocument?.defaultView ?? null;
+    const fallbackWidth = view?.innerWidth ?? 0;
+    const fallbackHeight = view?.innerHeight ?? 0;
+    const ownWidth = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : fallbackWidth;
+    // 整页布局:左半侧高 ≈ 页面可视高 − 菜单 / 状态行等顶部面(无法在 jsdom 测量
+    // 时以 `innerHeight` 作上界估算;真机读数由 WP-95 几何断言给出)。
+    const ownHeight = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : fallbackHeight;
+    return {
+      width: Number.isFinite(ownWidth) && ownWidth > 0 ? ownWidth : 0,
+      height: Number.isFinite(ownHeight) && ownHeight > 0 ? ownHeight : 0,
+    };
+  }
+
+  /**
+   * 尺寸变化驱动:重测左半侧宽 / 高并刷新视图位高度。
+   * **本版无任何「跨档重绑」语义** —— 窄屏形态不改变(D-UI-5:左半侧
+   * `min-width` 底线 + 页面横向滚动),故 resize 只更新测量值与快照面。
    */
   #syncViewportLayout(): void {
-    const width = this.#measureViewportWidth();
-    const preset = selectLayoutPreset(width);
-    const crossedBand = preset.id !== this.#presetId;
-    this.#model.setViewportWidth(width);
-    if (crossedBand) {
-      this.#presetId = preset.id;
-      this.#model.applyPreset(preset.columns);
-      this.#layoutFeedback = t("workspace.layoutDegraded", {
-        preset: preset.id,
-        count: preset.columns.length,
-      });
-    }
+    const { width } = this.#measureLeftRole();
+    this.#model.setLeftRoleWidth(width);
     this.requestUpdate();
   }
 
   readonly #onViewportResize = (): void => {
     this.#syncViewportLayout();
   };
-
 
   // ── 组合根接线(client 事件面)──────────────────────────────────────────
 
@@ -1252,9 +1220,18 @@ export class SmWorkspace extends LitElement {
       this.#syncConnectionFrom("disconnected", null, 0, null);
       this.#projectionStatus = null;
       this.#revision = null;
-      this.dataSource = null;
+      // ⚠ 既有缺陷修复(2026-09-18 改版真机几何取证暴露):`client` 的**首次**
+      // 变更(初始 null → 仍为 null,无会话形态)也会走到这里,而此处原先无条件
+      // `this.dataSource = null` ⇒ **把外部注入的 dataSource 抹掉**。公开 API
+      // 文档明确"数据源直接注入(测试 / 无 client 装配;client 换绑时被组合根
+      // 装配覆盖)"⇒ 仅在**确实卸下过已装配的 client 接线**时才清空数据源。
+      if (this.#boundClient !== null) {
+        this.dataSource = null;
+        this.#boundClient = null;
+      }
       return;
     }
+    this.#boundClient = client;
     // 裁决重询状态机(组合根装配;工厂测试接缝):呈现变更即重渲染(D-API-83 / 84)。
     const verdictPoller = this.verdictPollerFactory !== null
       ? this.verdictPollerFactory(client)
@@ -1362,9 +1339,11 @@ export class SmWorkspace extends LitElement {
 
   #rebindContents(): void {
     const dataSource = this.dataSource;
+    // 固定窗口集(D-MP-1):内容元素**实例恒定**(payload 状态跨模式 / 跨渲染保留;
+    // FE-WS-07 的 `#contents` 生命周期约定),重绑只换数据面属性、**不重建元素**。
     for (const content of this.#contents.values()) {
       const bindable = content as { dataSource?: MemoryDataSource | null };
-      if ("dataSource" in content && bindable.dataSource !== dataSource) {
+      if ("dataSource" in content) {
         bindable.dataSource = dataSource;
       }
       this.#bindActionSink(content);
@@ -1717,18 +1696,14 @@ export class SmWorkspace extends LitElement {
         this.dispatchEvent(new CustomEvent("new-session-request", { bubbles: true, composed: true }));
         break;
       case "focus-window":
-        // D-MP-1 聚焦导航(WP-71):菜单「窗口」分组 = 聚焦 + 滚动到该窗口
-        // (替代原「打开标签」;窗口集常驻,不存在开 / 关语义)。
+        // D-MP-1 聚焦导航:菜单「视图」分组 = 聚焦 + 滚动到该视图(D-UI-7 补充
+        // 裁定:本组只承载**聚焦导航**,不承载勾选 / 排序 —— 后者唯一入口 =
+        // 左半侧列表按钮)。视图集常驻,不存在开 / 关语义。
         this.focusWindow(action.windowType);
         break;
-      case "set-column-width":
-        // WP-72 列宽预设档(1/4、1/3、1/2、2/3、全宽):作用于焦点列,
-        // 夹取到最小可读宽护栏(菜单入口为唯一入口,标题栏不再新增控件)。
-        this.setFocusedColumnWidth(action.ratio);
-        break;
-      case "reset-layout":
-        // WP-72 「重置布局」:清空列宽 / 窗高调整 + 回当前宽度档预设。
-        this.resetLayout();
+      case "reset-views":
+        // 「重置视图」= 恢复默认顺序 + 全选(**取代**已废止的「重置布局」)。
+        this.resetViews();
         break;
     }
   }
@@ -2069,54 +2044,15 @@ export class SmWorkspace extends LitElement {
     void this.#handleViewportJump(detail.addressHex, view, addressText);
   };
 
-  // ── 拖拽排布(pointer 事件;动画只用 opacity)+ 分隔条(WP-72)──────────────
+  // ── 视图管理窗口的列表(pointer 拖拽排序 + 键盘等价路径)────────────────────
 
-  #onTabBarPointerDown(event: PointerEvent, tabId: string): void {
-    // 标题栏 = 拖拽把手(无关闭钮等交互子元素;尺寸控件在菜单「布局」组,
-    // 不移入标题栏 —— 保持 WP-71「标题栏零按钮」口径)。
-    this.#drag = { tabId, startX: event.clientX, startY: event.clientY, moved: false };
-  }
-
-  /** 列间分隔条按下(WP-72;gapIndex = 空隙右侧列序 = 新建列位插入位置)。 */
-  #onColumnDividerPointerDown(event: PointerEvent, gapIndex: number): void {
-    const left = this.#model.snapshot.columns[gapIndex - 1];
-    if (left === undefined) {
-      return;
-    }
-    this.#dividerDrag = {
-      kind: "column",
-      gapIndex,
-      startX: event.clientX,
-      startRatio: left.widthRatio,
-      moved: false,
-    };
-  }
-
-  /** 同列窗间分隔条按下(index = 上侧窗口序号;调整 index 与 index+1 两窗)。 */
-  #onRowDividerPointerDown(event: PointerEvent, column: number, index: number): void {
-    const heights = this.#model.snapshot.columns[column]?.rowHeights;
-    if (heights === undefined) {
-      return;
-    }
-    this.#dividerDrag = {
-      kind: "row",
-      column,
-      index,
-      startY: event.clientY,
-      startHeights: [...heights],
-      // 像素基准在按下瞬间冻结:拖拽期间列高会随比例长高(见 DividerDrag 注释)。
-      startColumnHeightPx: this.#columnElement(column)?.clientHeight ?? 0,
-      moved: false,
-    };
+  /** 列表项按下(拖拽把手 = 条目自身;零浮动层、零额外控件)。 */
+  #onViewItemPointerDown(event: PointerEvent, type: string): void {
+    this.#viewDrag = { type, startX: event.clientX, startY: event.clientY, moved: false };
   }
 
   readonly #onPointerMove = (event: PointerEvent): void => {
-    const divider = this.#dividerDrag;
-    if (divider !== null) {
-      this.#onDividerPointerMove(event, divider);
-      return;
-    }
-    const drag = this.#drag;
+    const drag = this.#viewDrag;
     if (drag === null) {
       return;
     }
@@ -2128,355 +2064,196 @@ export class SmWorkspace extends LitElement {
         return;
       }
       drag.moved = true;
-      this.#panelOf(drag.tabId)?.classList.add("dragging");
+      this.#viewItemElement(drag.type)?.classList.add("dragging");
     }
-    // 拖拽中实时解析落点(三类 Niri 落点显式化 + 静态指示 + 状态行宣读)。
-    this.#updateDropTarget(event, drag.tabId);
+    // 拖拽中实时解析列表内落点(D-UI-4:只此一种落点语义)。
+    this.#updateViewDropTarget(event);
   };
 
-  /** 分隔条拖拽(与窗口拖拽共用阈值语义:位移未过阈值 = 不算拖拽)。 */
-  #onDividerPointerMove(event: PointerEvent, divider: DividerDrag): void {
-    const deltaPx =
-      divider.kind === "column" ? event.clientX - divider.startX : event.clientY - divider.startY;
-    if (Math.abs(deltaPx) <= DRAG_THRESHOLD_PX) {
-      return;
+  readonly #onPointerUp = (): void => {
+    const drag = this.#viewDrag;
+    const target = this.#viewDropTarget;
+    this.#cancelViewDrag();
+    if (drag === null || !drag.moved) {
+      return; // 位移未过阈值 = 点击(列表项无激活语义,零副作用)。
     }
-    divider.moved = true;
-    if (divider.kind === "column") {
-      const ratio = columnWidthAfterDrag({
-        startRatio: divider.startRatio,
-        deltaPx,
-        viewportWidth: this.#model.viewportWidth,
-        minWidthPx: MIN_COLUMN_WIDTH,
-      });
-      if (this.#model.setColumnWidth(divider.gapIndex - 1, ratio)) {
-        this.#layoutFeedback = t("workspace.layoutWidthAdjusted", { percent: this.#columnWidthPercent(divider.gapIndex - 1) });
-        this.requestUpdate();
-      }
-      return;
-    }
-    const heights = rowHeightsAfterDrag({
-      heights: divider.startHeights,
-      index: divider.index,
-      deltaPx,
-      columnHeightPx: divider.startColumnHeightPx,
-      minHeightPx: MIN_ROW_HEIGHT_PX,
-    });
-    if (this.#model.setRowHeights(divider.column, heights)) {
-      this.#layoutFeedback = t("workspace.layoutHeightAdjusted", {
-        percent: this.#columnHeightPercent(divider.column, divider.index),
-      });
-      this.requestUpdate();
-    }
-  }
-
-  /** 列宽百分比(四舍五入整数;状态行与分隔条 aria-valuenow 共用)。 */
-  #columnWidthPercent(column: number): number {
-    return Math.round((this.#model.snapshot.columns[column]?.widthRatio ?? 0) * 100);
-  }
-
-  /** 窗高百分比(四舍五入整数;上侧窗口）。 */
-  #columnHeightPercent(column: number, index: number): number {
-    return Math.round((this.#model.snapshot.columns[column]?.rowHeights[index] ?? 0) * 100);
-  }
-
-  /**
-   * 分隔条方向键(WP-72 键盘可达兜底):列宽分隔条左右键 ±`DIVIDER_KEY_STEP_PX`;
-   * 窗高分隔条上下键 ±`ROW_DIVIDER_KEY_STEP`。真实可聚焦元素 + `role="separator"`,
-   * 反馈经常驻 `role="status"` 状态行宣读(不只在视觉中)。
-   */
-  #onColumnDividerKeyDown(event: KeyboardEvent, gapIndex: number): void {
-    const step = event.key === "ArrowLeft" ? -DIVIDER_KEY_STEP_PX : event.key === "ArrowRight" ? DIVIDER_KEY_STEP_PX : 0;
-    if (step === 0) {
-      return;
-    }
-    event.preventDefault();
-    const left = gapIndex - 1;
-    const startRatio = this.#model.snapshot.columns[left]?.widthRatio ?? 0;
-    const ratio = columnWidthAfterDrag({
-      startRatio,
-      deltaPx: step,
-      viewportWidth: this.#model.viewportWidth,
-      minWidthPx: MIN_COLUMN_WIDTH,
-    });
-    if (this.#model.setColumnWidth(left, ratio)) {
-      this.#layoutFeedback = t("workspace.layoutWidthAdjusted", { percent: this.#columnWidthPercent(left) });
-      this.requestUpdate();
-    }
-  }
-
-  #onRowDividerKeyDown(event: KeyboardEvent, column: number, index: number): void {
-    const step = event.key === "ArrowUp" ? -ROW_DIVIDER_KEY_STEP : event.key === "ArrowDown" ? ROW_DIVIDER_KEY_STEP : 0;
-    if (step === 0) {
-      return;
-    }
-    event.preventDefault();
-    const heights = this.#model.snapshot.columns[column]?.rowHeights;
-    if (heights === undefined) {
-      return;
-    }
-    // 比例步进成对调整(上窗 +step / 下窗 −step,和恒为 1);列高已知时以
-    // `MIN_ROW_HEIGHT_PX` 为窗高下限,未知(jsdom / 未布局)时退化为纯比例步进
-    // ——后者把「自由空间」记作 1px(列高 = chrome + 1)且下限记 0,于是
-    // `deltaPx = step` 在像素语义下等价于占比 ±step(见 rowHeightsAfterDrag)。
-    const columnHeightPx = this.#columnElement(column)?.clientHeight ?? 0;
-    const known = Number.isFinite(columnHeightPx) && columnHeightPx > 0;
-    const next = rowHeightsAfterDrag({
-      heights,
-      index,
-      deltaPx: step * (known ? columnHeightPx : 1),
-      columnHeightPx: known ? columnHeightPx : columnChromePx(heights.length) + 1,
-      minHeightPx: known ? MIN_ROW_HEIGHT_PX : 0,
-    });
-    if (this.#model.setRowHeights(column, next)) {
-      this.#layoutFeedback = t("workspace.layoutHeightAdjusted", {
-        percent: this.#columnHeightPercent(column, index),
-      });
-      this.requestUpdate();
-    }
-  }
-
-  /**
-   * 标题栏键盘兜底(WP-72 键盘可达性):标题栏可聚焦(`tabindex=0`),
-   * 方向键 = 列内上下重排 / 跨列移动(至少保证焦点可移动与顺序可达,
-   * **不承诺**全局快捷键增量);Enter / Space = 激活该窗口(与点击同义)。
-   */
-  #onTabBarKeyDown(event: KeyboardEvent, tabId: string): void {
-    const position = this.#model.positionOfTab(tabId);
-    if (position === null) {
-      return;
-    }
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      this.activateTab(tabId);
-      return;
-    }
-    const columnLength = this.#model.tabIdsInColumn(position.column).length;
-    let target: MoveTarget | null;
-    switch (event.key) {
-      case "ArrowUp":
-        // 列内上移一位:插入位 = 自身序号 − 1(moveTab 语义)。
-        target = position.index > 0 ? { column: position.column, index: position.index - 1 } : null;
-        break;
-      case "ArrowDown":
-        // 列内下移一位:插入位 = 自身序号 + 2(先摘除后插入的位序修正)。
-        target = position.index < columnLength - 1 ? { column: position.column, index: position.index + 2 } : null;
-        break;
-      case "ArrowLeft":
-        target =
-          position.column > 0
-            ? { column: position.column - 1, index: this.#model.tabIdsInColumn(position.column - 1).length }
-            : null;
-        break;
-      case "ArrowRight":
-        target =
-          position.column < this.#model.columnCount - 1 ? { column: position.column + 1, index: 0 } : null;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
     if (target === null) {
-      return;
-    }
-    this.#model.moveTab(tabId, target);
-    this.#lastVisibleTabId = tabId;
-    const landed = this.#model.positionOfTab(tabId);
-    this.#layoutFeedback = t("workspace.windowMoved", {
-      title: this.#model.tab(tabId)?.title ?? tabId,
-      column: (landed?.column ?? 0) + 1,
-      index: (landed?.index ?? 0) + 1,
-    });
-    this.requestUpdate();
-  }
-
-  readonly #onPointerUp = (event: PointerEvent): void => {
-    // 先取态再收尾(收尾会清空拖拽态)。
-    const divider = this.#dividerDrag;
-    const drag = this.#drag;
-    this.#cancelDrag();
-    if (divider !== null) {
-      return; // 分隔条拖拽在 pointerup 只收尾(调整已在 move 中生效)。
-    }
-    if (drag === null) {
-      return;
-    }
-    if (!drag.moved) {
-      // 位移未过阈值 = 激活点击(FE-WS-01 焦点管理)。
-      this.#model.activateTab(drag.tabId);
+      // 落点在列表之外:不移动,状态行明示(与旧 Niri 落点口径同精神)。
+      this.#viewListAnnouncement = t("workspace.viewDropOutside");
       this.requestUpdate();
       return;
     }
-    const target = this.#resolveDropTarget(event);
-    if (target === null) {
-      // 列区之外松开:不移动,状态行明示(拖拽取消的可宣读反馈)。
-      this.#layoutFeedback = t("workspace.dropOutside");
-      this.requestUpdate();
+    const from = this.#model.indexOfView(drag.type);
+    if (from === null) {
       return;
     }
-    this.#applyDrop(drag.tabId, target);
-    this.requestUpdate();
+    // 落点语义:目标条目上 / 下半 ⇒ 插到其前 / 后;「先摘除再插入」的位序修正
+    // 与 `moveView` 的夹取语义一致(源条目在目标之前则目标序号减一)。
+    const raw = target.index + (target.after ? 1 : 0);
+    this.moveView(drag.type, from < raw ? raw - 1 : raw);
   };
 
   readonly #onPointerCancel = (): void => {
-    this.#cancelDrag();
+    this.#cancelViewDrag();
   };
 
-  #cancelDrag(): void {
-    const drag = this.#drag;
-    this.#drag = null;
-    this.#dropTarget = null;
-    this.#dividerDrag = null;
+  #cancelViewDrag(): void {
+    const drag = this.#viewDrag;
+    this.#viewDrag = null;
+    this.#viewDropTarget = null;
     if (drag !== null) {
-      this.#panelOf(drag.tabId)?.classList.remove("dragging");
+      this.#viewItemElement(drag.type)?.classList.remove("dragging");
     }
     this.requestUpdate();
   }
 
-  #panelOf(tabId: string): Element | null {
-    return this.renderRoot.querySelector(`[data-tab-id="${tabId}"]`);
+  #viewItemElement(type: string): Element | null {
+    return this.renderRoot.querySelector(`[data-view-type="${type}"]`);
   }
 
-  #columnElement(column: number): HTMLElement | null {
-    const element = this.renderRoot.querySelector(`[data-column-index="${column}"]`);
-    return element instanceof HTMLElement ? element : null;
-  }
-
-  /** 落点候选实时更新(指示 + 状态行宣读;拖拽未过阈值时不解析)。 */
-  #updateDropTarget(event: PointerEvent, tabId: string): void {
-    if (this.#drag?.moved !== true) {
-      return;
-    }
-    const target = this.#resolveDropTarget(event);
-    const previous = this.#dropTarget;
+  /** 列表内落点候选实时更新(静态 class 指示;拖拽未过阈值时不解析)。 */
+  #updateViewDropTarget(event: PointerEvent): void {
+    const target = this.#resolveViewDropTarget(event);
+    const previous = this.#viewDropTarget;
     if (target === null) {
-      // 落点在列区之外(条带外 / 无落点):不留残留指示,状态行明示「不移动」。
-      this.#dropTarget = null;
-      this.#layoutFeedback = t("workspace.dropOutside");
+      this.#viewDropTarget = null;
       if (previous !== null) {
         this.requestUpdate();
       }
       return;
     }
-    this.#dropTarget = { tabId, target };
-    this.#layoutFeedback = this.#dropFeedback(target);
-    const changed =
-      previous === null ||
-      previous.target.kind !== target.kind ||
-      previous.target.column !== target.column ||
-      previous.target.index !== target.index;
+    this.#viewDropTarget = target;
+    const changed = previous === null || previous.index !== target.index || previous.after !== target.after;
     if (changed) {
       this.requestUpdate();
     }
   }
 
-  /** 落点语义 → 状态行文案(屏幕阅读器信息不只在视觉中)。 */
-  #dropFeedback(target: DropTarget): string {
-    if (target.kind === "new-column") {
-      return t("workspace.dropNewColumn", { column: target.column + 1 });
-    }
-    const ids = this.#model.tabIdsInColumn(target.column);
-    const before = ids[target.index];
-    if (before !== undefined) {
-      return t("workspace.dropBefore", { title: this.#model.tab(before)?.title ?? before });
-    }
-    const last = ids.at(-1);
-    return last === undefined
-      ? t("workspace.dropNewColumn", { column: target.column + 1 })
-      : t("workspace.dropAfter", { title: this.#model.tab(last)?.title ?? last });
-  }
-
   /**
-   * 指针落点 → 三类 Niri 落点(WP-72 显式化):
-   *  - **列间空隙**(分隔条)/ 列区空白 → `new-column`(在该列序位置新建列位);
-   *  - 落到窗口上 / 下半 = 插到其前 / 后;同列 → `stack`(同列堆叠),
-   *    跨列 → `cross-column`(跨列移动);
-   *  - 落到列(非窗口)→ 该列尾插(同列 / 跨列同上);列区之外 → null(不移动)。
+   * 指针落点 → **列表内重排**目标(D-UI-4:只保留这一种落点语义)。
+   * 落点在列表项上 / 下半 = 插到其前 / 后;列表之外 → null(不移动)。
+   * 跨 shadow 边界取真实目标:`event.composedPath()`(pointer 事件的
+   * `event.target` 会被重定向到宿主)。
    */
-  #resolveDropTarget(event: PointerEvent): DropTarget | null {
-    const element = event.target;
-    if (!(element instanceof Element) || element.closest("[data-columns]") === null) {
+  #resolveViewDropTarget(event: PointerEvent): ViewListDropTarget | null {
+    const item = this.#composedViewItem(event);
+    if (item === null) {
       return null;
     }
-    const draggedId = this.#drag?.tabId ?? null;
-    const from = draggedId === null ? null : this.#model.positionOfTab(draggedId);
-    const gapElement = element.closest("[data-gap-index]");
-    if (gapElement !== null) {
-      const gap = Number(gapElement.getAttribute("data-gap-index"));
-      if (Number.isFinite(gap)) {
-        return { kind: "new-column", column: gap, index: 0 };
-      }
-    }
-    const tabElement = element.closest("[data-tab-id]");
-    if (tabElement !== null) {
-      const tabId = tabElement.getAttribute("data-tab-id");
-      const position = tabId === null ? null : this.#model.positionOfTab(tabId);
-      if (position !== null) {
-        // 落点在目标标签页的上/下半 = 插到其前/后(jsdom 固定桩矩形下按
-        // clientY 判定;真实浏览器同语义)。
-        const rect = tabElement.getBoundingClientRect();
-        const after = event.clientY >= rect.top + rect.height / 2;
-        return {
-          kind: from !== null && from.column === position.column ? "stack" : "cross-column",
-          column: position.column,
-          index: after ? position.index + 1 : position.index,
-        };
-      }
-    }
-    const columnElement = element.closest("[data-column-index]");
-    if (columnElement !== null) {
-      const column = Number(columnElement.getAttribute("data-column-index"));
-      if (Number.isFinite(column)) {
-        return {
-          kind: from !== null && from.column === column ? "stack" : "cross-column",
-          column,
-          index: this.#model.tabIdsInColumn(column).length,
-        };
-      }
-    }
-    // 列区空白(条带末尾)= 在末位新建列位(Niri 语义,与此前「开新列尾插」等价)。
-    return { kind: "new-column", column: this.#model.columnCount, index: 0 };
-  }
-
-  /** 落点应用:同列堆叠 / 跨列移动 → `moveTab`;新建列位 → `openColumnAt`。 */
-  #applyDrop(tabId: string, target: DropTarget): void {
-    if (target.kind === "new-column") {
-      this.#model.openColumnAt(tabId, target.column);
-      return;
-    }
-    this.#model.moveTab(tabId, { column: target.column, index: target.index });
-  }
-
-  /** 指定渲染位置的落点标记(仅静态 class / data 属性;零浮动层)。 */
-  #dropMarkingForPanel(column: number, index: number, columnLength: number): string | null {
-    const target = this.#dropTarget?.target;
-    if (target === undefined || target.kind === "new-column" || target.column !== column) {
+    const index = Number(item.getAttribute("data-view-index"));
+    if (!Number.isFinite(index)) {
       return null;
     }
-    if (target.index === index) {
-      return "before";
-    }
-    if (target.index >= columnLength && index === columnLength - 1) {
-      return "after";
+    const rect = item.getBoundingClientRect();
+    const after = event.clientY >= rect.top + rect.height / 2;
+    return { index, after };
+  }
+
+  /** 指针事件路径上的列表项(跨 shadow 重定向免疫)。 */
+  #composedViewItem(event: PointerEvent): Element | null {
+    for (const node of event.composedPath()) {
+      if (node instanceof Element && node.matches(VIEW_ITEM_SELECTOR)) {
+        return node;
+      }
     }
     return null;
   }
 
-  #isGapDropTarget(gapIndex: number): boolean {
-    const target = this.#dropTarget?.target;
-    return target !== undefined && target.kind === "new-column" && target.column === gapIndex;
+  // ── `Ctrl + ↑ / ↓` 视图切换(D-UI-3)与列表键盘等价路径(D-UI-4)──────────
+
+  /**
+   * 左半侧键盘面:
+   *  - **`Ctrl + ArrowUp` / `Ctrl + ArrowDown`**(D-UI-3):在**左半侧容器**上
+   *    捕获并 `preventDefault()`(覆盖浏览器页面滚动默认)⇒ 切换一个可见视图位、
+   *    **边界不环绕**;当前视图名经常驻 `role="status"` 宣读(不只是视觉);
+   *  - **`Alt + ArrowUp` / `Alt + ArrowDown`**(D-UI-4 键盘等价路径)在列表项上
+   *    处理(见 `#onViewItemKeyDown`),此处不介入。
+   */
+  #onLeftRoleKeyDown(event: KeyboardEvent): void {
+    if (!event.ctrlKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
+      return;
+    }
+    event.preventDefault();
+    const moved = this.#model.stepActiveView(event.key === "ArrowUp" ? -1 : 1, (type) =>
+      this.#isLeftRoleView(type),
+    );
+    const active = this.#model.activeType;
+    this.#layoutFeedback = t("workspace.viewSwitchCurrent", {
+      title: active === null ? t("workspace.viewNone") : (this.#model.view(active)?.title ?? active),
+    });
+    if (moved && active !== null) {
+      this.ensureTabVisible(active);
+    }
+    this.requestUpdate();
   }
 
-  #isTailDropTarget(columnCount: number): boolean {
-    const target = this.#dropTarget?.target;
-    return target !== undefined && target.kind === "new-column" && target.column >= columnCount;
+  /**
+   * 该类型是否是**左半侧的视图位**(切换域判据):payload 固定承载于右半侧
+   * (D-UI-1 / 需求原文),故不在 `Ctrl + ↑/↓` 的序列内 —— 否则切换会停在
+   * 「左半侧没有对应视图位」的视图上(看起来无反应)。
+   */
+  #isLeftRoleView(type: string): boolean {
+    return type !== this.#payloadViewType();
+  }
+
+  /** 列表项键盘等价路径:`Alt + ↑ / ↓` 在列表内上下移动该条目(D-UI-4)。 */
+  #onViewItemKeyDown(event: KeyboardEvent, type: string): void {
+    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) {
+      return;
+    }
+    const from = this.#model.indexOfView(type);
+    if (from === null) {
+      return;
+    }
+    event.preventDefault();
+    this.moveView(type, from + (event.key === "ArrowUp" ? -1 : 1));
+  }
+
+  #panelOf(tabId: string): Element | null {
+    return this.renderRoot.querySelector(`[data-view-panel="${tabId}"]`);
   }
 
   // ── 渲染 ─────────────────────────────────────────────────────────────────
 
+  /**
+   * 整页布局渲染(FE-WS-01 / D-UI-1 ~ D-UI-7):
+   *
+   * ```
+   * :host(grid: auto / 1fr, block-size: 100dvh)
+   *   ├─ sm-workspace-menu        (顶部菜单,常驻)
+   *   ├─ 横幅 / 状态行 / 教学面   (既有呈现面,零语义变化)
+   *   └─ .ws-body(grid: 1fr 1fr,无 gap / 无 border)
+   *        ├─ .ws-left(视图管理窗口)
+   *        │    ├─ <details class="view-list-button"> 勾选 + 拖拽排序(唯一入口)
+   *        │    └─ .ws-stack(overflow-y: auto + scroll-behavior: smooth)
+   *        │         └─ .ws-view[data-view-panel] × 可见视图(纵向堆叠)
+   *        └─ .ws-right(payload 搭建窗口;固定,不随左侧滚动)
+   *             └─ payload 内容元素(**同一实例**,FE-WS-07)
+   * ```
+   *
+   * **纪律**:左右两分是 `1fr 1fr` 固定比例(D-UI-1:不可调、无分界拖拽手柄);
+   * 视图位高度由 `viewSlotHeightPx()` 内联为像素 ⇒ **确定高度**、**只滚动不压缩**
+   * (D-UI-2 / FE-WS-15)。
+   */
   protected override render(): unknown {
     const snapshot = this.#model.snapshot;
     const descriptor = this.challengeDescriptor;
+    const payloadType = this.#payloadViewType();
+    /**
+     * **左半侧可见视图位**(= 可见视图 **− payload**):
+     * payload 搭建窗口是右半侧的**固定**呈现位(D-UI-1 / 需求原文「右半侧 = payload
+     * 搭建窗口(固定)」)⇒ 左半侧不再渲染第二个同名面板 —— 否则会同时产生
+     * 「同一内容元素被两处 ChildPart 争夺(后提交者赢得节点,左半侧留空面板)」与
+     * 「两处同名地标(axe `landmark-unique` 违规)」两个缺陷(D-UI-7 ①:地标名不得
+     * 重复)。**模型层仍登记 payload**(`visible` 标志保留、列表按钮仍可勾选)——
+     * D-MP-1「视图全部常驻」不受影响,改变的只是「payload 呈现在哪半侧」。
+     */
+    const visible = snapshot.views.filter(
+      (view) => view.visible && view.type !== payloadType,
+    );
+    const payloadContent = payloadType === null ? null : (this.#contents.get(payloadType) ?? null);
+    const slotHeight = viewSlotHeightPx(this.#measureLeftRole().height);
+    const activeType = snapshot.activeType;
     return html`
       <div
         class="sm-scanline"
@@ -2486,7 +2263,7 @@ export class SmWorkspace extends LitElement {
       ></div>
       <sm-workspace-menu
         .tabTypes=${this.tabTypes.list()}
-        .focusedWindowType=${snapshot.focusedTabId}
+        .focusedWindowType=${snapshot.focusedType}
         .connectionStatus=${this.#connectionStatus}
         .disconnectReason=${this.#disconnectReason}
         .reconnectAttempt=${this.#reconnectAttempt}
@@ -2498,10 +2275,6 @@ export class SmWorkspace extends LitElement {
         .runToBreakpointEnabled=${this.#runToBreakpointEnabled}
         .debugModeAvailable=${this.debugModeAvailable}
         .debugModeActive=${this.#mode === "debug"}
-        .layoutPresetId=${this.#presetId}
-        .focusedColumnWidthRatio=${this.#model.focusedColumnIndex === null
-          ? null
-          : (snapshot.columns[this.#model.focusedColumnIndex]?.widthRatio ?? null)}
         .lastError=${this.#lastError}
         @workspace-menu-action=${this.#onMenuAction}
       ></sm-workspace-menu>
@@ -2524,115 +2297,135 @@ export class SmWorkspace extends LitElement {
       ${this.#jumpFeedback === null
         ? nothing
         : html`<p class="jump-feedback" role="status">${this.#jumpFeedback}</p>`}
-      <p class="layout-status" role="status" data-layout-feedback>${this.#layoutFeedback ?? ""}</p>
-      <main
-        class="columns${this.#isTailDropTarget(snapshot.columns.length) ? " drop-target" : ""}"
-        data-columns
-        aria-label=${t("workspace.columnsAria")}
+      <p
+        class="layout-status"
+        role="status"
+        data-layout-feedback
+        data-active-view=${activeType ?? nothing}
+      >${this.#layoutFeedback ?? ""}</p>
+      <div
+        class="ws-body"
+        data-workspace-body
         @viewport-jump=${this.#onViewportJump}
         @highlight-jump=${this.#onHighlightJump}
         @breakpoints-changed=${this.#onBreakpointsChanged}
         @payload-breakpoints-changed=${this.#onPayloadBreakpointsChanged}
         @payload-client-pause=${this.#onPayloadClientPause}
       >
-        ${snapshot.columns.map((column, columnIndex) => this.#renderColumn(column, columnIndex, snapshot.columns.length))}
-      </main>
-    `;
-  }
-
-  /**
-   * 单列渲染(列宽 / 列高下限内联为像素 + 列内窗口 / 窗高分隔条交替)。
-   * 列高下限 = `columnMinHeightPx(列内窗高比例)`:列盒随比例长高,使每个面板都
-   * 不低于 `MIN_ROW_HEIGHT_PX` ⇒ 溢出列的窗高拖拽有效(增大的窗真的变大、被减小的
-   * 窗贴下限停住、列总高随之增长),条带 / 文档滚动承载溢出(见 `.columns`)。
-   */
-  #renderColumn(
-    column: WorkspaceLayoutSnapshot["columns"][number],
-    columnIndex: number,
-    columnCount: number,
-  ): unknown {
-    const children: unknown[] = [];
-    column.tabIds.forEach((tabId, index) => {
-      if (index > 0) {
-        children.push(this.#renderRowDivider(columnIndex, index - 1, column));
-      }
-      children.push(
-        this.#renderPanel(tabId, columnIndex, index, column.tabIds.length, column.rowHeights[index] ?? 1),
-      );
-    });
-    const minBlockSizePx = columnMinHeightPx(column.rowHeights);
-    return html`
-      <div
-        class="column"
-        data-column-index=${columnIndex}
-        style="inline-size: ${this.#columnWidthPx(column.widthRatio)}px; min-block-size: ${minBlockSizePx}px"
-      >
-        ${children}
+        <!-- 事件挂点纪律(2026-09-18 改版):workspace 级监听一律挂**共同祖先**
+             .ws-body,不挂 .ws-left —— payload 的内容元素固定在右半侧
+             (.ws-left 的**兄弟**),DOM 冒泡只沿祖先链 ⇒ 挂在左半侧的
+             payload 监听会变成死监听(payload-breakpoints-changed /
+             payload-client-pause 回归)。@keydown 例外:它必须落在**左半侧
+             容器**上(D-UI-3 明确「作用域 = 左半侧,避免与 payload 画布冲突」)。 -->
+        <section
+          class="ws-left"
+          data-view-role="left"
+          aria-label=${t("workspace.viewManagerAria")}
+          @keydown=${this.#onLeftRoleKeyDown}
+        >
+          ${this.#renderViewListButton(snapshot)}
+          <div class="ws-stack" data-view-stack>
+            ${visible.map((view) =>
+              this.#renderPanel(view.type, view.title, slotHeight, view.type === snapshot.focusedType),
+            )}
+          </div>
+        </section>
+        <section
+          class="ws-right"
+          data-view-role="right"
+          aria-label=${payloadType === null
+            ? t("common.noContentNote")
+            : (this.#viewTitle(payloadType) ?? t("common.noContentNote"))}
+        >
+          ${payloadContent ??
+          html`<p class="tab-placeholder" role="status">${t("common.noContentNote")}</p>`}
+        </section>
       </div>
-      ${columnIndex < columnCount - 1 ? this.#renderColumnDivider(columnIndex + 1, column) : nothing}
+      <p class="view-list-status" aria-live="polite" data-view-list-status>
+        ${this.#viewListAnnouncement}
+      </p>
     `;
   }
 
   /**
-   * 列宽像素(列宽占比 × 视口宽,**不低于最小可读宽护栏**):
-   * 护栏在此再兜一次(模型已夹取;视口宽未知时占比可能小于护栏的像素等价)。
+   * payload 视图类型(**固定承载于右半侧**的那个视图位;D-UI-1 / 需求原文
+   * 「右半侧 = payload 搭建窗口(固定)」):
+   *  - 注册表声明了 `PAYLOAD_TAB_TYPE` ⇒ 就是它;
+   *  - 否则(宿主用自定义注册表、改过类型键)⇒ 缺省注册表的类型键里挑一个
+   *    存在的;再退化为**序首**(保证右半侧恒有内容位,不出现空半侧)。
    */
-  #columnWidthPx(widthRatio: number): number {
-    const viewportWidth = this.#model.viewportWidth;
-    const raw = viewportWidth > 0 ? widthRatio * viewportWidth : MIN_COLUMN_WIDTH;
-    const bounded = Math.max(raw, MIN_COLUMN_WIDTH);
-    return Math.round(bounded * 100) / 100;
+  #payloadViewType(): string | null {
+    if (this.tabTypes.has(PAYLOAD_TAB_TYPE)) {
+      return PAYLOAD_TAB_TYPE;
+    }
+    const registered = this.#model.orderedViews().map((view) => view.type);
+    if (registered.length === 0) {
+      return null;
+    }
+    const declared = this.tabTypes.list().find((descriptor) => descriptor.type === PAYLOAD_TAB_TYPE);
+    return declared?.type ?? registered[0] ?? null;
+  }
+
+  /** 视图展示名(绑定时刻固化的 title;状态行 / 地标名共用)。 */
+  #viewTitle(type: string): string | null {
+    return this.#model.view(type)?.title ?? this.#tabTypeDescriptor(type)?.label ?? null;
   }
 
   /**
-   * 列间分隔条(相邻列之间;`data-gap-index` = 新建列位的插入列序)。
-   * 真实可聚焦元素 + `role="separator"` + aria 值;方向键调整(键盘可达)。
+   * 视图管理窗口的列表按钮(可展开 / 收起;D-UI-7 补充裁定的**唯一入口**:
+   * 勾选 + 拖拽排序)。用 `<details>` + `<summary>`:展开 / 收起天然可聚焦
+   * (`aria-expanded` 语义由 `<details>` 原生承担)、零 JS 展开状态;勾选与拖拽
+   * 必须自绘(原生 `<details>` 不提供)—— 勾选用**原生 `<input type="checkbox">`
+   * 包在 `<label>` 里(无障碍最稳,`Space` 原生可用),排序用 pointer 拖拽 +
+   * `Alt + ↑ / ↓` 键盘等价路径。
    */
-  #renderColumnDivider(gapIndex: number, leftColumn: WorkspaceLayoutSnapshot["columns"][number]): unknown {
-    const percent = Math.round(leftColumn.widthRatio * 100);
-    const minPercent = Math.round(
-      (this.#model.viewportWidth > 0 ? Math.min(1, MIN_COLUMN_WIDTH / this.#model.viewportWidth) : 0) * 100,
-    );
+  #renderViewListButton(snapshot: WorkspaceLayoutSnapshot): unknown {
     return html`
-      <div
-        class="column-divider${this.#isGapDropTarget(gapIndex) ? " drop-target" : ""}"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label=${t("workspace.columnDividerAria")}
-        aria-valuemin=${minPercent}
-        aria-valuemax="100"
-        aria-valuenow=${percent}
-        tabindex="0"
-        data-column-divider=${gapIndex}
-        data-gap-index=${gapIndex}
-        data-drop-kind=${this.#isGapDropTarget(gapIndex) ? "new-column" : nothing}
-        @pointerdown=${(event: PointerEvent) => this.#onColumnDividerPointerDown(event, gapIndex)}
-        @keydown=${(event: KeyboardEvent) => this.#onColumnDividerKeyDown(event, gapIndex)}
-      ></div>
+      <details class="view-list-button" part="view-list-button">
+        <summary>${t("workspace.viewListToggle")}</summary>
+        <ul class="view-list" aria-label=${t("workspace.viewListAria")}>
+          ${snapshot.views.map((view, index) => this.#renderViewListItem(view, index))}
+        </ul>
+      </details>
     `;
   }
 
-  /** 同列窗间分隔条(`data-row-divider` = `列序:上侧窗口序号`;调整窗高比例)。 */
-  #renderRowDivider(
-    columnIndex: number,
-    index: number,
-    column: WorkspaceLayoutSnapshot["columns"][number],
-  ): unknown {
-    const percent = Math.round((column.rowHeights[index] ?? 0) * 100);
+  /**
+   * 单个列表条目:序号 + 勾选框(原生 input)+ 视图类型名。
+   *
+   * 键盘等价路径(D-UI-4 / D-UI-7 ③):条目可聚焦(`tabindex="0"`),
+   * `Space` 切换勾选(原生 input 自带),`Alt + ↑ / ↓` 在列表内上下移动该条目;
+   * 焦点顺序 = 视觉顺序(渲染顺序即 DOM 顺序)。
+   */
+  #renderViewListItem(view: WorkspaceLayoutSnapshot["views"][number], index: number): unknown {
+    const drop = this.#viewDropTarget;
+    const dropClass =
+      drop !== null && drop.index === index ? (drop.after ? " drop-after" : " drop-before") : "";
+    const dragging = this.#viewDrag?.type === view.type && this.#viewDrag.moved ? " dragging" : "";
+    const checkboxId = `sm-view-visible-${view.type}`;
     return html`
-      <div
-        class="row-divider"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label=${t("workspace.rowDividerAria")}
-        aria-valuemin="0"
-        aria-valuemax="100"
-        aria-valuenow=${percent}
+      <li
+        class="view-list-item${dropClass}${dragging}"
+        data-view-type=${view.type}
+        data-view-index=${index}
         tabindex="0"
-        data-row-divider="${columnIndex}:${index}"
-        @pointerdown=${(event: PointerEvent) => this.#onRowDividerPointerDown(event, columnIndex, index)}
-        @keydown=${(event: KeyboardEvent) => this.#onRowDividerKeyDown(event, columnIndex, index)}
-      ></div>
+        @pointerdown=${(event: PointerEvent) => this.#onViewItemPointerDown(event, view.type)}
+        @keydown=${(event: KeyboardEvent) => this.#onViewItemKeyDown(event, view.type)}
+      >
+        <span class="view-list-order" aria-hidden="true">${index + 1}</span>
+        <input
+          id=${checkboxId}
+          type="checkbox"
+          class="view-list-checkbox"
+          .checked=${view.visible}
+          data-view-visible=${view.type}
+          @change=${(event: Event) => {
+            this.setViewVisible(view.type, (event.target as HTMLInputElement).checked);
+          }}
+        />
+        <label class="view-list-label" for=${checkboxId}>${view.title}</label>
+      </li>
     `;
   }
 
@@ -2731,59 +2524,31 @@ export class SmWorkspace extends LitElement {
   }
 
   /**
-   * 窗口面板渲染:
+   * 单个视图位渲染:
+   *  - `data-view-panel` = 面板身份锚(滚动定位 / 测试断言面);
    *  - `data-render-degrade="content-visibility"` = 视口外降级渲染语义标记
    *    (样式侧 `content-visibility: auto` + `contain-intrinsic-size`);
-   *  - `style="flex-grow: <窗高比例>; …"` = **窗高比例的唯一呈现路径**(Hyprland 式:
-   *    同列窗口按比例分配列高;单窗列比例恒 1 = 占满列高)。拖拽分隔条只改这个
-   *    内联比例,不重建面板内容(虚拟列表维持);
-   *  - 落点指示(`drop-target` + `data-drop-kind` / `data-drop-position`)只在
-   *    拖拽中出现在**命中落点的那一个**面板上(静态 class,零浮动层);
-   *  - 标题栏 = 拖拽把手 + 键盘可达入口(`tabindex=0`,方向键重排 / 移动),
-   *    **零控件**(无按钮 / 无交互元素,WP-71 口径保留);终端式装饰(角标伪
-   *    元素 + 块状光标)为纯装饰、绝对定位、`aria-hidden`、零文本、零可聚焦
-   *    后代,不承载信息(缺席不丢失任何信息,WP-74 效果面)。
+   *  - `style="block-size: …px"` = **视图位确定高度**(可读性载体:由
+   *    `viewSlotHeightPx()` 按左半侧可视高等分,下限 = chrome + N 个行单位 ⇒
+   *    **只滚动、不压缩**);
+   *  - **类型名在视图内左上角**(`.view-label`,面板内第一个元素)⇒ **无独立
+   *    标题栏**(原 `.tab-bar` 退场);
+   *  - `aria-label=${title}` **保持不变**(D-UI-7 ①:标题栏消失不改地标名,
+   *    避免二次 axe 地标重名回归);视图位是独立 `region`,**不得**用
+   *    `role="presentation"` / `aria-hidden` 简化掉(D-UI-7 ②)。
    */
-  #renderPanel(
-    tabId: string,
-    columnIndex: number,
-    index: number,
-    columnLength: number,
-    rowHeight: number,
-  ): unknown {
-    const info = this.#model.tab(tabId);
-    if (info === null) {
-      return nothing;
-    }
-    const content = this.#contents.get(info.id) ?? null;
-    const descriptor = this.#tabTypeDescriptor(info.type);
-    const focused = this.#model.focusedTabId === info.id;
-    const dropPosition = this.#dropMarkingForPanel(columnIndex, index, columnLength);
-    const dropKind = dropPosition === null ? undefined : this.#dropTarget?.target.kind;
+  #renderPanel(type: string, title: string, slotHeightPx: number, focused: boolean): unknown {
+    const content = this.#contents.get(type) ?? null;
+    const descriptor = this.#tabTypeDescriptor(type);
     return html`
       <section
-        class="tab-panel${focused ? " focused" : ""}${dropPosition === null ? "" : " drop-target"}"
-        data-tab-id=${info.id}
+        class="ws-view${focused ? " focused" : ""}"
+        data-view-panel=${type}
         data-render-degrade="content-visibility"
-        data-drop-position=${dropPosition ?? nothing}
-        data-drop-kind=${dropPosition === null ? nothing : dropKind}
-        style="flex-grow: ${rowHeight}; flex-shrink: 1; flex-basis: 0"
-        aria-label=${info.title}
+        style="block-size: ${slotHeightPx}px"
+        aria-label=${title}
       >
-        <header
-          class="tab-bar"
-          tabindex="0"
-          @pointerdown=${(event: PointerEvent) => this.#onTabBarPointerDown(event, info.id)}
-          @keydown=${(event: KeyboardEvent) => this.#onTabBarKeyDown(event, info.id)}
-        >
-          <span class="tab-title">${info.title}</span>
-          <span
-            class="sm-caret"
-            part="caret"
-            data-sm-decoration="caret"
-            aria-hidden="true"
-          ></span>
-        </header>
+        <span class="view-label">${title}</span>
         <div class="tab-content">
           ${content ??
           html`<p class="tab-placeholder" role="status">

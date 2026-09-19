@@ -34,19 +34,15 @@ export const en: Record<SmMessageKey, string> = {
 
   // ── menu ──────────────────────────────────────────────────────────────────
   "menu.aria": "Workspace menu",
-  "menu.windowGroup": "Windows",
-  "menu.focusWindowTitle": "Focus \"{title}\" and scroll to this window",
-  "menu.layoutGroup": "Layout",
-  "menu.widthQuarter": "1/4",
-  "menu.widthThird": "1/3",
-  "menu.widthHalf": "1/2",
-  "menu.widthTwoThirds": "2/3",
-  "menu.widthFull": "Full width",
-  "menu.widthPresetTitle":
-    "Set the focused column width to {ratio} (never below the minimum readable hex-row width)",
-  "menu.resetLayout": "Reset layout",
-  "menu.resetLayoutTitle":
-    "Clear column width / row height adjustments and restore the default preset for the current width (P0 on wide screens)",
+  // 2026-09-18 UI redesign (D-UI-7 supplementary ruling): the former "Windows"
+  // group became the "Views" group carrying **focus navigation**; the former
+  // "Layout" group is retired with the column strip. The only entry point for
+  // visibility checkboxes / ordering is the left-role list button.
+  "menu.viewGroup": "Views",
+  "menu.focusWindowTitle": "Focus \"{title}\" and scroll to this view",
+  "menu.resetViews": "Reset views",
+  "menu.resetViewsTitle":
+    "Restore the default order and select all (the view set is unchanged; there is no open/close state)",
   "menu.modeGroup": "Mode",
   "menu.modeDebug": "Debug mode",
   "menu.modeSolve": "Solve mode",
@@ -109,19 +105,25 @@ export const en: Record<SmMessageKey, string> = {
 
   // ── workspace ─────────────────────────────────────────────────────────────
   "workspace.teachingPanel": "Teaching panel (hints / error explanations)",
-  "workspace.columnsAria": "Workspace windows area",
-  "workspace.columnDividerAria": "Column width divider: use left/right arrow keys, or drag",
-  "workspace.rowDividerAria": "Window height divider: use up/down arrow keys, or drag",
-  "workspace.layoutWidthAdjusted": "Column width adjusted to {percent}%",
-  "workspace.layoutHeightAdjusted": "Window height ratio adjusted to {percent}%",
-  "workspace.layoutWidthPresetApplied": "Focused column width set to {percent}%",
-  "workspace.layoutResetDone": "Layout reset: back to preset {preset}",
-  "workspace.layoutDegraded": "Viewport width changed: layout switched to {preset} ({count} columns)",
-  "workspace.dropBefore": "Drop target: insert before \"{title}\"",
-  "workspace.dropAfter": "Drop target: insert after \"{title}\"",
-  "workspace.dropNewColumn": "Drop target: create a new column at position {column}",
-  "workspace.dropOutside": "Drop target: outside the column strip, releasing will not move the window",
-  "workspace.windowMoved": "Window \"{title}\" moved to column {column}, position {index}",
+  // 2026-09-18 UI redesign (D-API-153 / D-UI-1 ~ D-UI-7: full-page layout +
+  // view manager window). The former column-width / row-height / divider /
+  // drop-into-new-column strings retired with the column strip.
+  "workspace.viewManagerAria": "View manager window",
+  "workspace.viewListToggle": "View list (check to show, drag to reorder)",
+  "workspace.viewListAria":
+    "View list: checkboxes decide which views appear in the left half (all views remain resident; unchecked = away)",
+  "workspace.viewVisibleAria": "Show \"{title}\"",
+  "workspace.viewItemAria":
+    "View \"{title}\": position {index}; use Alt + Up/Down to move it in the list",
+  "workspace.viewShown": "Shown \"{title}\"",
+  "workspace.viewHidden": "Hidden \"{title}\"",
+  "workspace.viewMoved": "Moved \"{title}\" to position {index}",
+  "workspace.viewDropOutside": "Drop target is outside the list; releasing will not move the view",
+  "workspace.viewSwitchCurrent":
+    "Current view slot: \"{title}\" (Ctrl + Up/Down switches; no wrap-around at the edges)",
+  "workspace.viewNone": "No visible view",
+  "workspace.viewResetDone": "Views reset: default order restored and all selected",
+  "workspace.viewListStatusLabel": "View list operation result",
   "workspace.highlightNoView":
     "Structure annotation {address}: the byte view is unavailable, cannot locate",
   "workspace.noSessionError": "No session connected: action not submitted",

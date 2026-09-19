@@ -32,14 +32,14 @@
  * 最近一次公开投影,重连走 sync-projection,禁止任何本地 VM 执行降级。
  */
 
-// ── 工作区容器与菜单(WP-F5;WP-F8 模式切换 / ED 挂接;WP-72 布局交互)──
+// ── 工作区容器与菜单(WP-F5;WP-F8 模式切换 / ED 挂接;2026-09-18 整页布局改版)──
+// 注:原 `layout-camera` / `layout-divider` 两条导出已随列条带整条退场
+// (`layout-camera.ts` / `layout-divider.ts` 文件本身已删除 —— D-API-153)。
 export * from "./workspace/sm-workspace.js";
 export * from "./workspace/sm-workspace-menu.js";
 export * from "./workspace/tab-registry.js";
 export * from "./workspace/workspace-model.js";
 export * from "./workspace/layout-presets.js";
-export * from "./workspace/layout-camera.js";
-export * from "./workspace/layout-divider.js";
 export * from "./workspace/byte-tab.js";
 export * from "./workspace/sm-register-annotation.js";
 
