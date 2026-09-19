@@ -1,23 +1,52 @@
 /**
- * 工作区**布局状态**行为测试(WP-72:列宽 / 窗高进模型快照面,纯状态机、无 DOM)。
+ * 工作区**布局模型 × 视图位高度算式**联动测试(WP-72 布局状态面;
+ * **2026-09-18 整页布局改版 = D-API-153 / D-UI-1 ~ D-UI-7 整条重写**)。
  *
- * 固定面:
- *  - 列宽 = **视口占比**(进入 `layoutSnapshot.columns[].widthRatio`),夹取到
- *    `MIN_COLUMN_WIDTH` 护栏(基准 = `setViewportWidth` 登记的视口宽);
- *  - 同列窗高 = **比例**(`layoutSnapshot.columns[].rowHeights`,和恒为 1;单窗列恒 [1]);
- *  - `applyPreset` / `resetLayout`:列分组回当前视口宽对应的预设,尺寸调整清空;
- *  - `openColumnAt`:Niri「列间空隙新建列位」落点在模型侧的显式 API;
- *  - `isLayoutStateValid`:布局不变量机检(可断言面)。
+ * ## 本文件原测什么(已废止)
+ *
+ * 原文件测「列宽占比 / 同列窗高比例 / 预设应用」——**整条面随 Niri 式列条带废止**
+ * (**随 D-API-153 废止**):`columns[].widthRatio` / `columns[].rowHeights` /
+ * `viewportWidth` / `setColumnWidth` / `setRowHeights` / `setViewportWidth` /
+ * `applyPreset` / `resetLayout` / `openColumnAt` / `moveTab` / 三类落点。
+ * 上述断言**不得复活**(已随改版整条退出,模型不再暴露兼容别名)。
+ *
+ * ## 本文件现在测什么(不重复另外两处)
+ *
+ *  - **模型结构 / 可见性 / 焦点 / 重排**语义面 → `workspace-model.test.ts`;
+ *  - **常量推导**(字符宽 / 行单位 / chrome / N / 下限取值 / 默认顺序表)
+ *    → `layout-presets.test.ts`;
+ *  - **本文件** = 两者的**联动**:模型状态与 `viewSlotHeightPx()` 算式之间的
+ *    不等式(「两个可见视图位 + 列表按钮 + 留白 ≤ 左半侧可视高」;空间不足即
+ *    溢出由纵向滚动承托 = **只滚动、不压缩**)、视位容量常量与**渲染数**的分野
+ *    (D-UI-2:恰两个可见视位 = 可视区容量,不是渲染数)、以及 `leftRoleWidth`
+ *    与 D-UI-5 底线的分工(诊断面不夹取,底线由 CSS 承担)。
  */
 import { describe, expect, it } from "vitest";
 
 import {
-  LAYOUT_PRESET_P0,
-  LAYOUT_PRESET_P1,
-  LAYOUT_PRESET_P2,
-  MIN_COLUMN_WIDTH,
-  selectLayoutPreset,
+  DEFAULT_VIEW_ORDER,
+  HEX_ROW_HEIGHT_PX,
+  SIDE_PANEL_MIN_WIDTH_PX,
+  VIEW_LIST_BUTTON_HEIGHT_PX,
+  VIEW_PANEL_CHROME_HEIGHT_PX,
+  VIEW_SLOT_MIN_VISIBLE_HEX_ROWS,
+  VIEW_STACK_SPACING_PX,
+  VISIBLE_VIEW_SLOT_COUNT,
+  orderByDefault,
+  viewSlotHeightPx,
 } from "../../src/workspace/layout-presets.js";
+import {
+  CALL_STACK_TAB_TYPE,
+  CHECKPOINTS_TAB_TYPE,
+  DEBUG_TAB_TYPE,
+  FREE_TAB_TYPE,
+  MEMORY_DIFF_TAB_TYPE,
+  PAYLOAD_TAB_TYPE,
+  REGISTERS_TAB_TYPE,
+  STACK_TAB_TYPE,
+  STRUCTURE_TAB_TYPE,
+  TIMELINE_TAB_TYPE,
+} from "../../src/workspace/tab-registry.js";
 import {
   WorkspaceLayoutModel,
   isLayoutStateValid,
@@ -25,370 +54,279 @@ import {
   type WorkspaceWindowBinding,
 } from "../../src/workspace/workspace-model.js";
 
-/** 登记集合替身(等价默认注册表 `list()` 的收敛形态)。 */
-const BINDINGS: readonly WorkspaceWindowBinding[] = [
-  { type: "stack", label: "栈视图" },
-  { type: "free", label: "自由视图" },
-  { type: "registers", label: "寄存器视图" },
-  { type: "payload", label: "Payload 搭建" },
+/**
+ * 登记集合替身(等价 `defaultTabTypeRegistry.list()`,**登记序**)。
+ * 顺序刻意与 `DEFAULT_VIEW_ORDER` 不同 —— 两者是**不同**的面(登记序 vs
+ * 默认呈现序),本文件的多处不等式依赖这一区分。
+ */
+const REGISTRY_BINDINGS: readonly WorkspaceWindowBinding[] = [
+  { type: STACK_TAB_TYPE, label: "栈视图" },
+  { type: FREE_TAB_TYPE, label: "自由视图" },
+  { type: REGISTERS_TAB_TYPE, label: "寄存器视图" },
+  { type: PAYLOAD_TAB_TYPE, label: "Payload 搭建" },
+  { type: DEBUG_TAB_TYPE, label: "指令视图" },
+  { type: STRUCTURE_TAB_TYPE, label: "结构视图" },
+  { type: CALL_STACK_TAB_TYPE, label: "调用栈" },
+  { type: MEMORY_DIFF_TAB_TYPE, label: "内存 diff" },
+  { type: TIMELINE_TAB_TYPE, label: "时间线" },
+  { type: CHECKPOINTS_TAB_TYPE, label: "checkpoint" },
 ];
 
-/** 全量登记集合替身(预设三表按**十个登记类型**定义,故预设用例用全量集)。 */
-const FULL_BINDINGS: readonly WorkspaceWindowBinding[] = [
-  { type: "stack", label: "栈视图" },
-  { type: "free", label: "自由视图" },
-  { type: "registers", label: "寄存器视图" },
-  { type: "payload", label: "Payload 搭建" },
-  { type: "debug", label: "指令视图" },
-  { type: "structure", label: "结构视图" },
-  { type: "call-stack", label: "调用栈" },
-  { type: "memory-diff", label: "内存 diff" },
-  { type: "timeline", label: "时间线" },
-  { type: "checkpoints", label: "checkpoint" },
-];
+const REGISTRY_TYPES: readonly string[] = REGISTRY_BINDINGS.map((binding) => binding.type);
 
-const WIDE_VIEWPORT = 1200;
-/** 宽屏档下单列宽度护栏(占比形态)。 */
-const MIN_RATIO = MIN_COLUMN_WIDTH / WIDE_VIEWPORT;
+/** 视位高下限(算式在非法 / 矮输入下的确定性回落值;与 layout-presets 同式同源)。 */
+const SLOT_FLOOR_PX = viewSlotHeightPx(0);
 
-describe("布局状态:绑定时的缺省尺寸(视口占比 / 窗高比例)", () => {
-  it("缺省列宽 = 视口等分(1 / 列数);未登记视口宽时不夹取", () => {
-    const model = new WorkspaceLayoutModel();
-    model.bindWindows(BINDINGS);
+/** 左半侧「非视位」占用 = 列表按钮 + 上下留白(算式里被扣掉的那部分)。 */
+const NON_SLOT_CHROME_PX = VIEW_LIST_BUTTON_HEIGHT_PX + VIEW_STACK_SPACING_PX;
 
-    expect(model.snapshot.viewportWidth).toBe(0);
-    expect(model.snapshot.columns.map((column) => column.widthRatio)).toEqual([0.25, 0.25, 0.25, 0.25]);
-    expect(model.snapshot.columns.map((column) => [...column.rowHeights])).toEqual([[1], [1], [1], [1]]);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
-  });
+/** 一个视位减去 chrome 后可容纳的数据行数。 */
+function visibleRows(slotHeightPx: number): number {
+  return (slotHeightPx - VIEW_PANEL_CHROME_HEIGHT_PX) / HEX_ROW_HEIGHT_PX;
+}
 
-  it("登记视口宽后列宽夹取到最小可读宽(等分小于护栏时抬升,横向滚动可达)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(1000);
-    model.bindWindows(BINDINGS);
-
-    // 等分 0.25 × 1000 = 250px < 452.4px 护栏 → 抬升到 0.4524。
-    expect(model.snapshot.columns.map((column) => column.widthRatio)).toEqual([
-      MIN_COLUMN_WIDTH / 1000,
-      MIN_COLUMN_WIDTH / 1000,
-      MIN_COLUMN_WIDTH / 1000,
-      MIN_COLUMN_WIDTH / 1000,
-    ]);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
-  });
-
-  it("P0 预设注入:逐列窗高比例 = 等分(2 窗 [1/2,1/2]、3 窗 [1/3,1/3,1/3]、单窗 [1])", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(FULL_BINDINGS, LAYOUT_PRESET_P0.columns);
-
-    expect(model.snapshot.columns.map((column) => column.widthRatio)).toEqual([
-      MIN_RATIO,
-      MIN_RATIO,
-      MIN_RATIO,
-      MIN_RATIO,
-      MIN_RATIO,
-    ]);
-    expect(model.snapshot.columns.map((column) => [...column.rowHeights])).toEqual([
-      [0.5, 0.5],
-      [0.5, 0.5],
-      [1],
-      [0.5, 0.5],
-      [1 / 3, 1 / 3, 1 / 3],
-    ]);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
-  });
-
-  it("setViewportWidth:非正 / 非有限输入归 0(未知基准 = 不夹取,确定性)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.bindWindows(BINDINGS);
-    model.setViewportWidth(2000);
-    model.setViewportWidth(Number.NaN);
-    expect(model.snapshot.viewportWidth).toBe(0);
-    model.setViewportWidth(-5);
-    expect(model.snapshot.viewportWidth).toBe(0);
-  });
-});
-
-describe("布局状态:setColumnWidth(列宽,夹取护栏)", () => {
-  it("合法占比逐列生效(其他列不受影响)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack"], ["free"], ["registers"], ["payload"]]);
-
-    expect(model.setColumnWidth(1, 0.6)).toBe(true);
-    const ratios = model.snapshot.columns.map((column) => column.widthRatio);
-    expect(ratios[1]).toBeCloseTo(0.6, 9);
-    expect(ratios[0]).toBeCloseTo(MIN_RATIO, 9);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
-  });
-
-  it("低于护栏的占比被抬升到 MIN_COLUMN_WIDTH / 视口宽(列宽最小护栏)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS);
-
-    model.setColumnWidth(0, 0.05);
-    expect(model.snapshot.columns[0]?.widthRatio).toBeCloseTo(MIN_RATIO, 9);
-    expect((model.snapshot.columns[0]?.widthRatio ?? 0) * WIDE_VIEWPORT).toBeCloseTo(MIN_COLUMN_WIDTH, 6);
-  });
-
-  it("超过全宽的占比夹取到 1(全宽档为上限)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS);
-
-    expect(model.setColumnWidth(2, 3)).toBe(true);
-    expect(model.snapshot.columns[2]?.widthRatio).toBe(1);
-  });
-
-  it("非法占比(≤0 / 非有限)与越界列序 → false 且布局不变", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS);
-    const before = model.snapshot;
-
-    for (const ratio of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(model.setColumnWidth(0, ratio)).toBe(false);
+describe("模型 × 算式:左半侧可视高的分配不等式(D-UI-2 / FE-WS-15)", () => {
+  it("空间充足:两个视位 + 列表按钮 + 留白 ≤ 左半侧可视高(等分,不溢出)", () => {
+    for (const height of [900, 1024, 1200, 1440, 2160]) {
+      const slot = viewSlotHeightPx(height);
+      // 下限未生效 ⇒ 视位高严格大于下限(否则下面「等分」的断言测不到东西)。
+      expect(slot, `左半侧高 ${String(height)} 触发了下限`).toBeGreaterThan(SLOT_FLOOR_PX);
+      // **核心不等式**:两个视位 + 列表按钮 + 留白 不超出左半侧可视高。
+      expect(slot * VISIBLE_VIEW_SLOT_COUNT + NON_SLOT_CHROME_PX).toBeLessThanOrEqual(height);
+      // 且是**等分**(不是随手取小):可用高被恰 2 除、向下取整 ⇒ 差额 < 2px。
+      expect(slot).toBe(Math.floor((height - NON_SLOT_CHROME_PX) / VISIBLE_VIEW_SLOT_COUNT));
+      expect(height - (slot * VISIBLE_VIEW_SLOT_COUNT + NON_SLOT_CHROME_PX)).toBeLessThan(2);
+      // 视野内恰好两个视位(容量常量 = 2,不是「可见视图数」)。
+      expect(VISIBLE_VIEW_SLOT_COUNT).toBe(2);
     }
-    expect(model.setColumnWidth(-1, 0.5)).toBe(false);
-    expect(model.setColumnWidth(9, 0.5)).toBe(false);
-    expect(model.snapshot).toEqual(before);
-  });
-});
-
-describe("布局状态:setRowHeights(同列窗高比例)", () => {
-  it("相对比例被归一化(和恒为 1),逐列独立", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack", "free"], ["registers", "payload"]]);
-
-    expect(model.setRowHeights(0, [3, 1])).toBe(true);
-    expect(model.snapshot.columns[0]?.rowHeights).toEqual([0.75, 0.25]);
-    expect(model.snapshot.columns[1]?.rowHeights).toEqual([0.5, 0.5]);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
   });
 
-  it("单窗列恒 [1](自动占满列高),传入任何正比例都归一化为 1", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack", "free"], ["registers"]]);
+  it("空间不足:下限生效 ⇒ 两视位之和**超过**可视高,溢出由滚动承载(只滚动,不压缩)", () => {
+    const height = 320;
+    const slot = viewSlotHeightPx(height);
 
-    expect(model.setRowHeights(1, [4])).toBe(true);
-    expect(model.snapshot.columns[1]?.rowHeights).toEqual([1]);
+    // 下限生效(恰好 chrome + N 行)—— 这才是「不压缩」的判据。
+    expect(slot).toBe(SLOT_FLOOR_PX);
+    expect(slot).toBeGreaterThan(Math.floor((height - NON_SLOT_CHROME_PX) / VISIBLE_VIEW_SLOT_COUNT));
+    // 不等式在此**必须**反向:装不下是预期结果,承托者 = `.ws-stack` 的纵向滚动。
+    expect(slot * VISIBLE_VIEW_SLOT_COUNT + NON_SLOT_CHROME_PX).toBeGreaterThan(height);
+    // 回归护栏:绝不出现「按可用高压缩到一半」的旧机制(历史反例:4 窗列每窗
+    // 146px 而面板 chrome 实测 182.1px ⇒ 连一行字节都装不下)。
+    expect(slot).toBeGreaterThan(VIEW_PANEL_CHROME_HEIGHT_PX);
   });
 
-  it("长度不符 / 含非正或非有限值 / 越界列序 → false 且布局不变", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack", "free"], ["registers"]]);
-    const before = model.snapshot;
-
-    expect(model.setRowHeights(0, [1])).toBe(false);
-    expect(model.setRowHeights(0, [1, 0])).toBe(false);
-    expect(model.setRowHeights(0, [1, -1])).toBe(false);
-    expect(model.setRowHeights(0, [1, Number.NaN])).toBe(false);
-    expect(model.setRowHeights(5, [1])).toBe(false);
-    expect(model.snapshot).toEqual(before);
-  });
-});
-
-describe("布局状态:applyPreset / resetLayout(预设应用与重置语义)", () => {
-  it("applyPreset:列分组回预设,尺寸调整清空为缺省,焦点保持", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack"], ["free"], ["registers"], ["payload"]]);
-    model.focusWindow("payload");
-    model.setColumnWidth(0, 0.9);
-    model.setRowHeights(0, [1]);
-
-    model.applyPreset([["stack", "free"], ["registers"], ["payload"]]);
-    expect(model.snapshot.columns.map((column) => [...column.tabIds])).toEqual([
-      ["stack", "free"],
-      ["registers"],
-      ["payload"],
-    ]);
-    expect(model.snapshot.columns.map((column) => column.widthRatio)).toEqual([MIN_RATIO, MIN_RATIO, MIN_RATIO]);
-    expect(model.snapshot.columns.map((column) => [...column.rowHeights])).toEqual([[0.5, 0.5], [1], [1]]);
-    expect(model.focusedTabId).toBe("payload");
-    expect(isWindowSetComplete(model.snapshot)).toBe(true);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
+  it("可读性判据与左半侧高**无关**:任一高度下每视位 − chrome ≥ N 行", () => {
+    for (const height of [0, 100, 200, 320, 480, 768, 900, 1440, 2160, Number.MAX_SAFE_INTEGER]) {
+      const slot = viewSlotHeightPx(height);
+      expect(visibleRows(slot), `左半侧高 ${String(height)}`).toBeGreaterThanOrEqual(
+        VIEW_SLOT_MIN_VISIBLE_HEX_ROWS,
+      );
+    }
   });
 
-  it("applyPreset:未覆盖类型按登记序补单窗列(不变量兜底)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack"], ["free"], ["registers"]]);
+  it("算式真的扣掉了列表按钮与留白(不是裸的 H / 2)", () => {
+    const height = 900;
+    const slot = viewSlotHeightPx(height);
 
-    model.applyPreset([["stack", "registers"]]);
-    expect(model.snapshot.columns.map((column) => [...column.tabIds])).toEqual([
-      ["stack", "registers"],
-      ["free"],
-      ["payload"],
-    ]);
-    expect(isWindowSetComplete(model.snapshot)).toBe(true);
-  });
-
-  it("resetLayout:清空列宽 / 窗高调整并回到**当前视口宽**对应的预设(宽屏 = P0)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(FULL_BINDINGS, LAYOUT_PRESET_P1.columns);
-    model.setColumnWidth(0, 0.8);
-    model.setRowHeights(0, [0.8, 0.1, 0.1]);
-    expect(selectLayoutPreset(WIDE_VIEWPORT).id).toBe("P0");
-
-    model.resetLayout();
-
-    // 「重置布局 = 清空调整 + 应用 selectLayoutPreset(当前宽度)」的等价关系。
-    const preset = selectLayoutPreset(model.snapshot.viewportWidth);
-    expect(preset.id).toBe("P0");
-    expect(model.snapshot.columns.map((column) => [...column.tabIds])).toEqual(
-      LAYOUT_PRESET_P0.columns.map((column) => [...column]),
+    // 裸 H / 2 会得到 450;扣掉按钮与留白后必然更小 —— 否则「两个视位 + 列表
+    // 按钮 + 留白 ≤ 左半侧高」的不等式就是巧合而非算式保证。
+    expect(slot).toBeLessThan(Math.floor(height / VISIBLE_VIEW_SLOT_COUNT));
+    expect(NON_SLOT_CHROME_PX).toBeGreaterThan(0);
+    // 扣减量可复算:slot × 2 = 可用高的向下取整。
+    expect(slot * VISIBLE_VIEW_SLOT_COUNT).toBe(
+      Math.floor((height - NON_SLOT_CHROME_PX) / VISIBLE_VIEW_SLOT_COUNT) * VISIBLE_VIEW_SLOT_COUNT,
     );
-    expect(model.snapshot.columns.map((column) => column.widthRatio)).toEqual(
-      LAYOUT_PRESET_P0.columns.map(() => MIN_RATIO),
-    );
-    expect(model.snapshot.columns[0]?.rowHeights).toEqual([0.5, 0.5]);
+  });
+});
+
+describe("模型可见集 × 视位容量(D-UI-2:恰两个可见视位 = 容量,不是渲染数)", () => {
+  it("全选缺省 ⇒ 可见视图数 = 登记数(远超视位容量)⇒ 溢出即滚动,渲染数不裁剪", () => {
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS);
+
+    expect(model.visibleViews()).toHaveLength(REGISTRY_TYPES.length);
+    expect(REGISTRY_TYPES.length).toBeGreaterThan(VISIBLE_VIEW_SLOT_COUNT);
+    // 容量恒 2:可视区只放得下两个视位,其余由滚动承载(渲染数 = 可见视图数,
+    // 该 DOM 事实在 `sm-workspace-layout.test.ts` 断言)。
+    const height = 900;
+    const slot = viewSlotHeightPx(height);
+    expect(slot * VISIBLE_VIEW_SLOT_COUNT).toBeLessThanOrEqual(height - NON_SLOT_CHROME_PX + 1);
+    expect(slot * model.visibleViews().length).toBeGreaterThan(height);
+    expect(isWindowSetComplete(model.snapshot)).toBe(true);
+  });
+
+  it("可见性变化**不改变**视位高算式(容量是布局常量,不是可见数的函数)", () => {
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS);
+    const height = 900;
+    const slotBefore = viewSlotHeightPx(height);
+
+    // 逐个取消勾选:可见数从 10 递减到 0,算式结果恒不变。
+    for (const binding of REGISTRY_BINDINGS) {
+      expect(model.setViewVisible(binding.type, false)).toBe(true);
+      expect(viewSlotHeightPx(height)).toBe(slotBefore);
+    }
+    expect(model.visibleViews()).toHaveLength(0);
+    // 「无可见视图」也是合法状态(不是空布局;视图仍全员在场)。
+    expect(model.viewCount).toBe(REGISTRY_TYPES.length);
     expect(isLayoutStateValid(model.snapshot)).toBe(true);
   });
 
-  it("resetLayout:窄条视口回到该宽度的降级形态(P2 单列),不回 P0", () => {
+  it("可见视图数恒等于「勾选数」,与视位容量无关(未勾选者不显示,但仍在场)", () => {
     const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(400);
-    model.bindWindows(FULL_BINDINGS, LAYOUT_PRESET_P0.columns);
-    model.setColumnWidth(0, 1);
+    model.bindWindows(REGISTRY_BINDINGS);
+    model.setViewVisible(PAYLOAD_TAB_TYPE, false);
+    model.setViewVisible(TIMELINE_TAB_TYPE, false);
 
-    model.resetLayout();
-
-    expect(selectLayoutPreset(400).id).toBe("P2");
-    expect(model.snapshot.columns).toHaveLength(1);
-    expect(model.snapshot.columns[0]?.tabIds).toEqual([...LAYOUT_PRESET_P2.columns[0]!]);
+    expect(model.visibleViews()).toHaveLength(REGISTRY_TYPES.length - 2);
+    expect(model.visibleIndexOf(PAYLOAD_TAB_TYPE)).toBeNull();
+    expect(model.indexOfView(PAYLOAD_TAB_TYPE)).not.toBeNull();
     expect(isLayoutStateValid(model.snapshot)).toBe(true);
   });
 });
 
-describe("布局状态:openColumnAt(Niri「列间空隙新建列位」落点)", () => {
-  it("在指定列序位置新建列(中间插入,源列非空时列序不变)", () => {
+describe("模型 × 默认顺序(layout-presets 是默认顺序的唯一来源)", () => {
+  it("以登记序为输入 + orderByDefault 注入 ⇒ 呈现序 = DEFAULT_VIEW_ORDER ∩ 登记集(装配路径)", () => {
     const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack", "free"], ["registers"], ["payload"]]);
+    model.bindWindows(REGISTRY_BINDINGS, orderByDefault(REGISTRY_TYPES));
 
-    model.openColumnAt("stack", 1);
-
-    expect(model.snapshot.columns.map((column) => [...column.tabIds])).toEqual([
-      ["free"],
-      ["stack"],
-      ["registers"],
-      ["payload"],
-    ]);
-    expect(model.focusedTabId).toBe("stack");
-    expect(isWindowSetComplete(model.snapshot)).toBe(true);
-    expect(isLayoutStateValid(model.snapshot)).toBe(true);
-  });
-
-  it("源列被清空时插入位前移(与「源列删除」一致)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack"], ["free", "registers"], ["payload"]]);
-
-    model.openColumnAt("stack", 1);
-
-    expect(model.snapshot.columns.map((column) => [...column.tabIds])).toEqual([
-      ["stack"],
-      ["free", "registers"],
-      ["payload"],
-    ]);
-  });
-
-  it("列序超出列数 → 尾插(与 moveTab 的「≥ 列数 = 开新列」语义同形)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack"], ["free", "registers"], ["payload"]]);
-
-    model.openColumnAt("payload", 9);
-
-    expect(model.snapshot.columns.at(-1)?.tabIds).toEqual(["payload"]);
-    expect(model.snapshot.columns).toHaveLength(3);
+    const expected = DEFAULT_VIEW_ORDER.filter((type) => REGISTRY_TYPES.includes(type));
+    expect(model.orderedViews().map((view) => view.type)).toEqual([...expected]);
+    // 与登记序**不同** —— 若两者相同,本用例测不到「默认顺序经单点注入」。
+    expect([...expected]).not.toEqual([...REGISTRY_TYPES]);
     expect(isWindowSetComplete(model.snapshot)).toBe(true);
   });
 
-  it("未登记窗口 / 空布局为 no-op", () => {
-    const model = new WorkspaceLayoutModel();
-    model.bindWindows(BINDINGS, [["stack"], ["free"]]);
-    const before = model.snapshot;
+  it("「重置视图」的恢复顺序 = `bindWindows` 的**输入顺序**(模型不持有默认顺序字面量)", () => {
+    // 输入顺序 = DEFAULT_VIEW_ORDER 展平序(无第二份字面量:顺序全部来自调用方)。
+    const defaultOrdered = orderByDefault(REGISTRY_TYPES);
+    const byType = new Map(REGISTRY_BINDINGS.map((binding) => [binding.type, binding]));
+    const bindingsInDefaultOrder = defaultOrdered
+      .map((type) => byType.get(type))
+      .filter((binding): binding is WorkspaceWindowBinding => binding !== undefined);
 
-    model.openColumnAt("no-such-type", 0);
-    expect(model.snapshot).toEqual(before);
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(bindingsInDefaultOrder);
+
+    // 用户扰动:重排 + 取消勾选。
+    expect(model.moveView(FREE_TAB_TYPE, 0)).toBe(true);
+    expect(model.setViewVisible(DEBUG_TAB_TYPE, false)).toBe(true);
+    expect(model.orderedViews().map((view) => view.type)).not.toEqual(defaultOrdered);
+
+    model.resetViews();
+    expect(model.orderedViews().map((view) => view.type)).toEqual(defaultOrdered);
+    expect(model.visibleViews()).toHaveLength(defaultOrdered.length);
+    expect(isWindowSetComplete(model.snapshot)).toBe(true);
+  });
+
+  it("登记序输入下 resetViews 亦回到登记序(恢复依据 = 输入序,非 DEFAULT_VIEW_ORDER)", () => {
+    // 记录模型侧契约的边界:模型只认 `bindWindows` 的输入顺序。工作区装配时
+    // 输入序 = 注册表登记序(见 `sm-workspace.ts#bindWindows`),故组件层
+    // 「重置视图」的恢复序 = 登记序;`DEFAULT_VIEW_ORDER` 只决定**初始呈现序**。
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS, orderByDefault(REGISTRY_TYPES));
+    expect(model.orderedViews().map((view) => view.type)).not.toEqual([...REGISTRY_TYPES]);
+
+    model.moveView(CHECKPOINTS_TAB_TYPE, 0);
+    model.setViewVisible(STACK_TAB_TYPE, false);
+    model.resetViews();
+
+    expect(model.orderedViews().map((view) => view.type)).toEqual([...REGISTRY_TYPES]);
+    expect(model.visibleViews()).toHaveLength(REGISTRY_TYPES.length);
   });
 });
 
-describe("布局不变量机检(isLayoutStateValid)", () => {
-  it("绑定后的快照为真(列宽 ≥ 护栏、窗高和 = 1、列长一致)", () => {
+describe("模型 × 切换域过滤(D-UI-3 裁定:切换域 ≡ 左半侧渲染集)", () => {
+  /** 工作区传入的判据形态(模型自身零 payload 字面量,过滤由调用方给)。 */
+  const eligible = (type: string): boolean => type !== PAYLOAD_TAB_TYPE;
+
+  it("stepActiveView(delta, isEligible) 只在合格子序列内移动,边界不环绕", () => {
     const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, LAYOUT_PRESET_P0.columns);
+    model.bindWindows(REGISTRY_BINDINGS);
+
+    const domain = model
+      .visibleViews()
+      .filter((view) => eligible(view.type))
+      .map((view) => view.type);
+    expect(domain).toHaveLength(REGISTRY_TYPES.length - 1);
+    expect(domain).not.toContain(PAYLOAD_TAB_TYPE);
+
+    expect(model.stepActiveView(1, eligible)).toBe(true);
+    expect(model.activeType).toBe(domain[0]);
+    for (let index = 1; index < domain.length; index += 1) {
+      expect(model.stepActiveView(1, eligible)).toBe(true);
+      expect(model.activeType).toBe(domain[index]);
+      expect(model.activeType).not.toBe(PAYLOAD_TAB_TYPE);
+    }
+    // 末位不环绕。
+    expect(model.stepActiveView(1, eligible)).toBe(false);
+    expect(model.activeType).toBe(domain[domain.length - 1]);
+    expect(model.stepActiveView(-1, eligible)).toBe(true);
+    expect(model.activeType).toBe(domain[domain.length - 2]);
+    expect(model.stepActiveView(-1)).toBe(true); // 无过滤时切到全量可见序(通用语义保留)
+    expect(model.activeType).toBe(domain[domain.length - 3]);
+  });
+
+  it("落点落在过滤域外时按「域首 / 域尾」重置(不因序号错位跳变)", () => {
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS);
+    const domain = model
+      .visibleViews()
+      .filter((view) => eligible(view.type))
+      .map((view) => view.type);
+
+    // 先以**无过滤**语义把落点放到 payload 上,再按过滤域步进。
+    expect(model.setActiveView(PAYLOAD_TAB_TYPE)).toBe(true);
+    expect(model.activeType).toBe(PAYLOAD_TAB_TYPE);
+    expect(model.stepActiveView(1, eligible)).toBe(true);
+    expect(model.activeType).toBe(domain[0]);
+
+    expect(model.setActiveView(PAYLOAD_TAB_TYPE)).toBe(true);
+    expect(model.stepActiveView(-1, eligible)).toBe(true);
+    expect(model.activeType).toBe(domain[domain.length - 1]);
+  });
+
+  it("setActiveView(type, isEligible) 拒绝域外视图;无过滤时仍是全量可见语义", () => {
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS);
+
+    expect(model.setActiveView(PAYLOAD_TAB_TYPE, eligible)).toBe(false);
+    expect(model.activeType).toBeNull();
+    expect(model.setActiveView(STACK_TAB_TYPE, eligible)).toBe(true);
+    expect(model.activeType).toBe(STACK_TAB_TYPE);
+    // 模型自身不持有 payload 字面量 ⇒ 不传判据时 payload 仍可选(工作区层负责过滤)。
+    expect(model.setActiveView(PAYLOAD_TAB_TYPE)).toBe(true);
+    expect(model.activeType).toBe(PAYLOAD_TAB_TYPE);
+  });
+
+  it("切换域为空 ⇒ 恒 no-op(不可见视图不在域内)", () => {
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS);
+    for (const type of REGISTRY_TYPES) {
+      model.setViewVisible(type, false);
+    }
+    expect(model.stepActiveView(1, eligible)).toBe(false);
+    expect(model.stepActiveView(-1, eligible)).toBe(false);
+    expect(model.activeType).toBeNull();
+  });
+});
+
+describe("模型 × leftRoleWidth(D-UI-5 底线的核对面)", () => {
+  it("登记左半侧实际宽:**不夹取**到 SIDE_PANEL_MIN_WIDTH_PX(底线由 CSS 承担)", () => {
+    const model = new WorkspaceLayoutModel();
+    model.bindWindows(REGISTRY_BINDINGS);
+
+    const narrow = SIDE_PANEL_MIN_WIDTH_PX - 100;
+    model.setLeftRoleWidth(narrow);
+    expect(model.leftRoleWidth).toBe(narrow);
+    expect(model.snapshot.leftRoleWidth).toBe(narrow);
+    // 快照合法 —— 底线**不是**模型不变量(D-UI-5 的载体 = CSS
+    // `repeat(2, minmax(SIDE_PANEL_MIN_WIDTH_PX, 1fr))` + `.ws-left` 的
+    // `min-inline-size`;窄屏真实横向滚动读数归真机几何断言)。
     expect(isLayoutStateValid(model.snapshot)).toBe(true);
-  });
 
-  it("列宽低于护栏 → 假", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack", "free"]]);
-    const snapshot = model.snapshot;
-    expect(
-      isLayoutStateValid({
-        ...snapshot,
-        columns: snapshot.columns.map((column) => ({ ...column, widthRatio: 0.01 })),
-      }),
-    ).toBe(false);
-  });
-
-  it("窗高比例和 ≠ 1 / 长度 ≠ 列长 / 单窗列非 [1] → 假", () => {
-    const model = new WorkspaceLayoutModel();
-    model.setViewportWidth(WIDE_VIEWPORT);
-    model.bindWindows(BINDINGS, [["stack", "free"], ["registers"]]);
-    const snapshot = model.snapshot;
-
-    expect(
-      isLayoutStateValid({
-        ...snapshot,
-        columns: [
-          { tabIds: ["stack", "free"], widthRatio: 0.5, rowHeights: [0.6, 0.6] },
-          { tabIds: ["registers"], widthRatio: 0.5, rowHeights: [1] },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      isLayoutStateValid({
-        ...snapshot,
-        columns: [
-          { tabIds: ["stack", "free"], widthRatio: 0.5, rowHeights: [1] },
-          { tabIds: ["registers"], widthRatio: 0.5, rowHeights: [1] },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      isLayoutStateValid({
-        ...snapshot,
-        columns: [
-          { tabIds: ["stack", "free"], widthRatio: 0.5, rowHeights: [0.5, 0.5] },
-          { tabIds: ["registers"], widthRatio: 0.5, rowHeights: [0.5, 0.5] },
-        ],
-      }),
-    ).toBe(false);
-  });
-
-  it("视口宽未知(0)时不校验像素护栏,仅校验占比形态(> 0 且 ≤ 1)", () => {
-    const model = new WorkspaceLayoutModel();
-    model.bindWindows(BINDINGS);
-    expect(model.snapshot.viewportWidth).toBe(0);
+    model.setLeftRoleWidth(SIDE_PANEL_MIN_WIDTH_PX * 2);
+    expect(model.leftRoleWidth).toBe(SIDE_PANEL_MIN_WIDTH_PX * 2);
     expect(isLayoutStateValid(model.snapshot)).toBe(true);
-    const snapshot = model.snapshot;
-    expect(
-      isLayoutStateValid({
-        ...snapshot,
-        columns: snapshot.columns.map((column) => ({ ...column, widthRatio: 0 })),
-      }),
-    ).toBe(false);
   });
 });

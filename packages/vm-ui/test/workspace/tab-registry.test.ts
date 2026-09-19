@@ -90,6 +90,7 @@ describe("标签页类型注册表:单实例常驻语义(D-MP-1,WP-71)", () => {
   it("登记集合 → 窗口集 1:1:每种登记类型绑定后恰一实例(无重无漏)", () => {
     // 注册表不携带实例数语义字段:单实例由工作区统一解释(bindWindows 以
     // 「窗口 id ≡ 类型键」结构性保证),此处以登记集合 → 绑定结果的 1:1 固定。
+    // (缺省顺序 = 登记序 ⇒ 断言面用 `orderedViews()`;`tabs()` 已随 D-API-153 废止。)
     const registry = createDefaultTabTypeRegistry();
     const model = new WorkspaceLayoutModel();
     model.bindWindows(registry.list().map((descriptor) => ({
@@ -97,7 +98,7 @@ describe("标签页类型注册表:单实例常驻语义(D-MP-1,WP-71)", () => {
       label: descriptor.label,
     })));
 
-    expect(model.tabs().map((info) => info.type)).toEqual(
+    expect(model.orderedViews().map((info) => info.type)).toEqual(
       registry.list().map((descriptor) => descriptor.type),
     );
     expect(isWindowSetComplete(model.snapshot)).toBe(true);

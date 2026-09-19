@@ -1,11 +1,20 @@
 /**
- * <sm-workspace> 常驻窗口集的地标唯一性(WP-74 前置修复:WP-71 让 10 个窗口
- * 同时常驻 DOM,此前互不同时在场的内部视图进入同一次扫描)。
+ * `<sm-workspace>` 常驻窗口集的地标唯一性(WP-74 前置修复;WP-71 让 10 个窗口
+ * 同时常驻 DOM;**2026-09-18 整页布局改版 = D-API-153 / D-UI-1 ~ D-UI-7 按新 DOM 复核**)。
  *
  * 违规事实(WP-71 / 5b1b7f4 后 `e2e/axe-contrast.spec.ts` 真机复跑两次一致):
  *  - `landmark-unique`(moderate,4 节点):窗口面板 section[aria-label] 与其
  *    内部视图自身的 region 名重复(栈视图 / 自由视图 / 指令视图),以及两个
  *    常驻字节窗口各带一个同名 `[aria-label="VMA 列表"]`。
+ *
+ * **改版后新增的同族违规(已由主控裁定 A 消除,本文件保留为回归护栏)**:
+ * `.ws-right`(payload 搭建窗口,`aria-label` = payload 视图名)与左半侧
+ * `section[data-view-panel="payload"]`(面板 `aria-label` 同为 payload 视图名)
+ * 曾**两处同名** ⇒ jsdom axe 实测 `landmark-unique` 命中
+ * `section[data-view-panel="payload"]`。裁定 A = 左半侧视图栈**不渲染 payload**
+ * 视图位(payload 的唯一呈现位 = 固定右半侧)⇒ 面板名不动(D-UI-7 ①:
+ * 标题栏消失不改地标名)、右半侧名不动、重名消除。**本断言不得放宽**(它是
+ * 「唯一入口 / 唯一点位」纪律的机检面)。
  *
  * 本文件独立成篇(不复用 sm-workspace.test.ts 的共享文档):axe 在 jsdom 下
  * 生成深层选择器时会被同文档残留夹具影响,独立文档让本规则的判定面确定;
@@ -15,6 +24,7 @@ import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 
 import { SmWorkspace } from "../../src/workspace/sm-workspace.js";
+import { PAYLOAD_TAB_TYPE } from "../../src/workspace/tab-registry.js";
 
 async function mountWorkspace(): Promise<SmWorkspace> {
   const element = new SmWorkspace();
@@ -47,13 +57,27 @@ function namedRegions(workspace: SmWorkspace): HTMLElement[] {
   );
 }
 
-describe("<sm-workspace> 地标唯一性(常驻窗口集:面板名称 × 内部视图名称)", () => {
-  it("面板与其内部视图的地标名称互不重复(含两个常驻字节窗口的 VMA 列表)", async () => {
+describe("<sm-workspace> 地标唯一性(常驻窗口集:左右半侧 × 面板名称 × 内部视图名称)", () => {
+  it("左右半侧与面板 / 内部视图的地标名称互不重复(含两个常驻字节窗口的 VMA 列表)", async () => {
     const workspace = await mountWorkspace();
+    const shadow = workspace.shadowRoot as ShadowRoot;
+
+    // 左右半侧地标恒在场且名不同(左 = 视图管理窗口;右 = payload 搭建窗口名)。
+    const left = shadow.querySelector('[data-view-role="left"]');
+    const right = shadow.querySelector('[data-view-role="right"]');
+    expect(left?.getAttribute("aria-label")).toBe("视图管理窗口");
+    expect(right?.getAttribute("aria-label")).toBeTruthy();
+    expect(left?.getAttribute("aria-label")).not.toBe(right?.getAttribute("aria-label"));
+    // payload 的唯一呈现位 = 右半侧(左半侧零同名面板 —— 地标重名的结构前提)。
+    expect(shadow.querySelector(`[data-view-panel="${PAYLOAD_TAB_TYPE}"]`)).toBeNull();
+    expect(right?.querySelector("sm-payload-tab-host")).not.toBeNull();
 
     const labelled = namedRegions(workspace).map((node) => ({
       label: node.getAttribute("aria-label") ?? "",
-      owner: node.closest("[data-tab-id]")?.getAttribute("data-tab-id") ?? "—",
+      owner:
+        node.closest("[data-view-panel]")?.getAttribute("data-view-panel") ??
+        node.closest("[data-view-role]")?.getAttribute("data-view-role") ??
+        "—",
       target: `${node.tagName.toLowerCase()}[${node.getAttribute("class") ?? ""}]`,
     }));
     // 常驻面必须真实具备地标(空断言会掩盖「一个都没渲染」的假绿)。
@@ -87,4 +111,5 @@ describe("<sm-workspace> 地标唯一性(常驻窗口集:面板名称 × 内部�
       })),
     ).toEqual([]);
     workspace.remove();
-  });});
+  });
+});

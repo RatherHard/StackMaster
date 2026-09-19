@@ -13,6 +13,18 @@
  *
  * 数据纪律:断点地址的唯一来源 = **公开投影的当前指令指针**(`registers()` 的
  * RIP);组件不推断未下发信息,也不新增数据通道(ADR-DC1 what-if 纪律)。
+ *
+ * **2026-09-18 整页布局改版(D-API-153 / D-UI-1 ~ D-UI-7)对本文件的影响(已登记)**:
+ * payload 内容元素的**唯一归属 = 右半侧 `.ws-right`**(裁定 A:左半侧视图栈不渲染
+ * payload 视图位)⇒ 「payload 元素自身派发的两个事件」必须由**共同祖先**接收。
+ * 当前 `sm-workspace.ts:2293-2294` 仍把 `@payload-breakpoints-changed` /
+ * `@payload-client-pause` 绑在 `.ws-left`(payload 的**兄弟**节点)⇒ 两个处理器
+ * 收不到事件:本文件第 3 例(客户端步进暂停分面)因此**保持红**
+ * (`expect(view.clientPauseAddressHex).toBe("0x401004")` → `null`)。
+ * **这是源码缺陷的红,不是选择器没跟上新 DOM** ⇒ 按基线纪律**不得放宽该断言**;
+ * 修法 = 把这两个监听上移到 `.ws-body` / render 根(或绑到 `.ws-right`)。
+ * 同一根因也使「payload 元素事件 → 断点集合」那条路径失效(用例 1 走的是
+ * 菜单切换模式路径,故仍绿)。
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 

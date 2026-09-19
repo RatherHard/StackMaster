@@ -1,10 +1,19 @@
 /**
  * <sm-workspace-menu> 工作区菜单行为测试(WP-F5 / FE-WS-03/04a/05;WP-F8
- * 增补 FE-WS-04c/06 + what-if 横幅;WP-71 起「打开」分组改为「窗口」聚焦
- * 入口):窗口聚焦分组与 aria-pressed 焦点表达、step/reset 禁用矩阵、终态
- * 引导(Q5/M11)、断线横幅(reconnecting attempt/retryDelayMs、
- * connection-replaced 手动重连)、拒绝错误呈现(含 explanation,不只 code)、
- * 运行到断点与模式切换门槛、what-if 纪律横幅。
+ * 增补 FE-WS-04c/06 + what-if 横幅;**2026-09-18 整页布局改版 = D-API-153 /
+ * D-UI-1 ~ D-UI-7**):
+ * **「视图」组**(原「窗口」组改名 + 语义收敛)= **聚焦导航**(点击 = 聚焦并滚动到
+ * 该视图)+ **「重置视图」**(恢复默认顺序 + 全选);`step`/`reset` 禁用矩阵、终态
+ * 引导(Q5/M11)、断线横幅(reconnecting attempt/retryDelayMs、connection-replaced
+ * 手动重连)、拒绝错误呈现(含 explanation,不只 code)、运行到断点与模式切换门槛、
+ * what-if 纪律横幅。
+ *
+ * **本版废止(整条退出)**:原「布局」组(`.layout-group` / `button.width-preset` /
+ * `button.reset-layout-button` / `[data-layout-preset]` / `set-column-width` /
+ * `reset-layout` 动作 / `layoutPresetId` / `focusedColumnWidthRatio`)——
+ * **随 D-API-153 废止**(原「列宽五档 + 重置布局」用例已删除,其面不存在)。
+ * **D-UI-7 补充裁定**:勾选 / 排序的**唯一入口 = 左半侧列表按钮** ⇒ 菜单里
+ * **零第二个勾选 / 排序入口**(零 `input[type=checkbox]`、零拖拽把手)。
  */
 import { describe, expect, it } from "vitest";
 
@@ -34,8 +43,8 @@ function windowButtons(element: SmWorkspaceMenu): HTMLButtonElement[] {
   return [...menuOf(element).querySelectorAll("button.focus-window")] as HTMLButtonElement[];
 }
 
-describe("<sm-workspace-menu> 窗口分组(FE-WS-03 菜单项可扩展;D-MP-1 固定窗口集)", () => {
-  it("按注册表渲染窗口聚焦入口,点击发出 focus-window 动作(携带 windowType)", async () => {
+describe("<sm-workspace-menu> 「视图」组(FE-WS-03 菜单项可扩展;D-MP-1 固定窗口集;D-UI-7 补充裁定)", () => {
+  it("按注册表渲染聚焦入口,点击发出 focus-window 动作(携带 windowType)", async () => {
     const element = await mountMenu();
     const actions: unknown[] = [];
     element.addEventListener("workspace-menu-action", (event) => {
@@ -101,10 +110,13 @@ describe("<sm-workspace-menu> 窗口分组(FE-WS-03 菜单项可扩展;D-MP-1 �
     element.remove();
   });
 
-  it("窗口分组与聚焦入口无「打开 / 关闭」语义文案(文本 / title / aria-label)", async () => {
+  it("「视图」组标签 + 聚焦入口无「打开 / 关闭」语义文案(文本 / title / aria-label)", async () => {
     const element = await mountMenu();
+    const menu = menuOf(element);
 
-    expect(menuOf(element).querySelector(".window-group-label")?.textContent?.trim()).toBe("窗口");
+    const group = menu.querySelector(".group.view-group");
+    expect(group).not.toBeNull();
+    expect(group?.querySelector(".group-label")?.textContent?.trim()).toBe("视图");
     for (const button of windowButtons(element)) {
       const texts = [
         button.textContent ?? "",
@@ -115,9 +127,62 @@ describe("<sm-workspace-menu> 窗口分组(FE-WS-03 菜单项可扩展;D-MP-1 �
         expect(text).not.toMatch(/打开|关闭|(^|\W)open(\W|$)|(^|\W)close(\W|$)/i);
       }
     }
-    // 旧「打开」语义锚(class / data-tab-type)完全退场。
-    expect(menuOf(element).querySelector("button.open-tab")).toBeNull();
-    expect([...menuOf(element).querySelectorAll("[data-tab-type]")]).toHaveLength(0);
+    // 旧「打开」语义锚(class / data-tab-type)完全退场;「布局」组整条退场。
+    expect(menu.querySelector("button.open-tab")).toBeNull();
+    expect([...menu.querySelectorAll("[data-tab-type]")]).toHaveLength(0);
+    expect(menu.querySelector(".layout-group")).toBeNull();
+    expect(menu.querySelector(".window-group-label")).toBeNull();
+    // 取代「重置布局」的入口在场。
+    expect(menu.querySelector("button.reset-views-button")?.textContent?.trim()).toBe("重置视图");
+    element.remove();
+  });
+
+  it("「重置视图」按钮发出 reset-views 动作(恢复默认顺序 + 全选)", async () => {
+    const element = await mountMenu();
+    const menu = menuOf(element);
+    const reset = menu.querySelector("button.reset-views-button") as HTMLButtonElement;
+
+    expect(reset).not.toBeNull();
+    expect(reset.getAttribute("title")).toBeTruthy();
+    const actions: unknown[] = [];
+    element.addEventListener("workspace-menu-action", (event) => {
+      actions.push((event as CustomEvent).detail.action);
+    });
+    reset.click();
+    expect(actions).toEqual([{ action: "reset-views" }]);
+    element.remove();
+  });
+
+  it("已废止的「布局」组:零列宽档 / 零重置布局入口 / 零预设属性(随 D-API-153 废止)", async () => {
+    const element = await mountMenu();
+    const menu = menuOf(element);
+
+    expect(menu.querySelectorAll("button.width-preset")).toHaveLength(0);
+    expect(menu.querySelector("button.reset-layout-button")).toBeNull();
+    expect(menu.querySelector(".layout-group")).toBeNull();
+    expect(menu.querySelector("[data-layout-preset]")).toBeNull();
+    expect(menu.querySelector("[data-width-ratio]")).toBeNull();
+    const surface = element as unknown as Record<string, unknown>;
+    for (const retired of ["layoutPresetId", "focusedColumnWidthRatio", "setColumnWidth"]) {
+      expect(surface[retired], `已废止属性仍暴露:${retired}`).toBeUndefined();
+    }
+    // 动作面不含已废止的两个动作类型(文本面机检:源码 / 事件 detail 只发既有动作)。
+    element.remove();
+  });
+
+  it("**唯一入口纪律**:菜单 DOM 内零第二个勾选 / 排序入口(零 checkbox / 零拖拽把手)", async () => {
+    const element = await mountMenu();
+    const menu = menuOf(element);
+
+    expect(menu.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    expect(menu.querySelectorAll("input, select, textarea")).toHaveLength(0);
+    expect(
+      menu.querySelectorAll(".drag-handle, [data-drag-handle], [draggable], [data-view-type]"),
+    ).toHaveLength(0);
+    // 「视图」组只承载聚焦导航 + 重置视图(勾选 / 排序归左半侧列表按钮)。
+    const group = menu.querySelector(".group.view-group");
+    const buttons = [...(group?.querySelectorAll("button") ?? [])];
+    expect(buttons).toHaveLength(windowButtons(element).length + 1); // 聚焦项 + 重置视图
     element.remove();
   });
 });

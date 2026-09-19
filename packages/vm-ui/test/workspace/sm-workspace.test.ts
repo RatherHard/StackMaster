@@ -1,24 +1,43 @@
 /**
- * <sm-workspace> 工作区容器集成测试(WP-F5 平铺 × WP-71 固定窗口集 / D-MP-1 ×
- * WP-72 Niri 布局交互):
- *  - 固定窗口集:挂载即按注册表登记集合建窗(各恰一实例、常驻)、无任何关闭
- *    入口、无空态引导、聚焦导航(focusWindow 聚焦 + 相机居中,不改变实例数);
- *  - 平铺(FE-WS-02,Q1 v1;WP-72 起默认列排布 = **当前宽度档预设** P0):列间
- *    滚动可达(scrollToColumn → 相机),列宽 / 窗高与三类落点见
- *    `sm-workspace-layout.test.ts`;
+ * <sm-workspace> 工作区容器集成测试(WP-F5 × WP-71 固定窗口集 / D-MP-1 ×
+ * **2026-09-18 整页布局改版 = D-API-153 / D-UI-1 ~ D-UI-7**)。
+ *
+ *  - **固定窗口集**:挂载即按注册表登记集合建窗(各恰一实例、常驻)、无任何关闭
+ *    入口、无空态引导、聚焦导航(focusWindow 聚焦 + 滚动到该视图);payload 的
+ *    **唯一呈现位 = 右半侧**(主控 2026-09-18 裁定 A:左半侧视图栈不渲染 payload
+ *    视图位 —— 消重名地标、消空面板;模型层仍登记全部 10 类,D-MP-1 不破);
+ *  - **整页布局(D-UI-1 ~ D-UI-7)**:两分固定等分 / 恰两个可见视位(定高算式)/
+ *    `Ctrl + ↑↓` 切换(**preventDefault** + 边界不环绕)/ 列表内重排(pointer 拖拽 +
+ *    `Alt + ↑↓`)/ 窄屏左半侧宽度底线 / 面板 `aria-label` 不变 + 列表按钮键盘路径 +
+ *    `aria-live` 播报;**布局结构面与样式面**见 `sm-workspace-layout.test.ts`,
+ *    模型与算式联动见 `workspace-layout-model.test.ts`;
  *  - 菜单动作(真实 SessionClient mock 全链路):step / reset 帧形态、
  *    终态禁用 + 引导、断线横幅、connection-replaced 手动重连、
  *    rejected 错误呈现(含 explanation);
  *  - 跨视图集成:寄存器交叉标注左缘出现与点击展开(FE-RG-04)、跳转链
  *    形似地址行挂载(FE-ST-07)、viewport-jump 滚动 / 窗口外反馈(FE-ST-09);
- *  - 效果面(WP-74):装饰锚与「不承载信息」口径、标题栏零控件口径、动效纪律
- *    (no-preference / reduce)与主题消费 + 字号下限的**声明面**机检;真机计算值
- *    与 composed 树全树扫描归 E2E(`e2e/reduced-motion.spec.ts` + decoration.ts)。
+ *  - 效果面(WP-74):装饰锚与「不承载信息」口径、动效纪律(no-preference /
+ *    reduce)与主题消费 + 字号下限的**声明面**机检;真机计算值与 composed 树
+ *    全树扫描归 E2E(`e2e/reduced-motion.spec.ts` + decoration.ts)。
+ *
+ * **已废止(整条退出)**:Niri 式列条带交互(列宽像素护栏 / 列高下限 / 列间与窗间
+ * 分隔条 / 预设档位 / 焦点列相机 / 三类拖拽落点 / `scrollToColumn` / `layoutPresetId`)
+ * —— 原「列式滚动平铺(FE-WS-02)」整组用例**随 D-API-153 废止**,
+ * 由下方「整页布局」组按新语义取代。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionClient } from "../../src/client/session-client.js";
 import { SmWorkspace } from "../../src/workspace/sm-workspace.js";
+import {
+  DEFAULT_VIEW_ORDER,
+  HEX_ROW_HEIGHT_PX,
+  SIDE_PANEL_MIN_WIDTH_PX,
+  VIEW_PANEL_CHROME_HEIGHT_PX,
+  VIEW_SLOT_MIN_VISIBLE_HEX_ROWS,
+  VISIBLE_VIEW_SLOT_COUNT,
+  viewSlotHeightPx,
+} from "../../src/workspace/layout-presets.js";
 import { isWindowSetComplete } from "../../src/workspace/workspace-model.js";
 import { PAYLOAD_TAB_TYPE, defaultTabTypeRegistry } from "../../src/workspace/tab-registry.js";
 import type { SmJumpChain } from "../../src/views/chain/sm-jump-chain.js";
@@ -38,31 +57,27 @@ import {
   type MockFetch,
 } from "../helpers/fixtures.js";
 
-// ── 平铺测试夹具(无 client:直接注入 FakeMemoryDataSource)──────────────────
+// ── 测试夹具(无 client:直接注入 FakeMemoryDataSource)──────────────────────
 
 import { FakeMemoryDataSource } from "../views/byte/fake-data-source.js";
 
-/** 默认注册表登记类型集(窗口集权威来源)。 */
+/** 默认注册表登记类型集(窗口集权威来源;模型层仍登记全部 10 类)。 */
 const REGISTERED_TYPES: readonly string[] = defaultTabTypeRegistry
   .list()
   .map((descriptor) => descriptor.type);
 
 /**
- * P0 预设(宽屏 5 列)下的窗口呈现序(WP-72 起默认列排布 = 预设表):
- * DOM 序随**列分组**而非登记序。
+ * **左半侧视图栈的呈现序**(改版后 = `DEFAULT_VIEW_ORDER` 去掉固定承载于右半侧的
+ * payload)。DOM 序 = 默认顺序(经 `orderByDefault` 单点注入),不再有列分组。
  */
-const P0_PRESENTATION_ORDER: readonly string[] = [
-  "stack",
-  "registers",
-  "debug",
-  "free",
-  "payload",
-  "call-stack",
-  "structure",
-  "timeline",
-  "checkpoints",
-  "memory-diff",
-];
+const PRESENTATION_ORDER: readonly string[] = DEFAULT_VIEW_ORDER.filter(
+  (type) => type !== PAYLOAD_TAB_TYPE,
+);
+
+/** 左半侧应渲染的视图位类型集(挂载即全选 ⇒ = 登记集 − payload)。 */
+const LEFT_VIEW_TYPES: readonly string[] = REGISTERED_TYPES.filter(
+  (type) => type !== PAYLOAD_TAB_TYPE,
+);
 
 /** 等待若干渲染帧(virtualizer 可见范围计算收敛)。 */
 async function settleFrames(frames: number): Promise<void> {
@@ -74,8 +89,26 @@ async function settleFrames(frames: number): Promise<void> {
   }
 }
 
+/** 指针事件(`cancelable` 置真:拖拽路径断言 preventDefault 语义用同一构造)。 */
 function pointer(type: string, x: number, y: number): MouseEvent {
-  return new MouseEvent(type, { bubbles: true, composed: true, clientX: x, clientY: y });
+  return new MouseEvent(type, {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+  });
+}
+
+/** 键盘事件(`cancelable: true` —— 否则 `preventDefault()` 不置 `defaultPrevented`)。 */
+function key(type: string, keyName: string, modifiers: KeyboardEventInit = {}): KeyboardEvent {
+  return new KeyboardEvent(type, {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    key: keyName,
+    ...modifiers,
+  });
 }
 
 async function mountWorkspace(): Promise<SmWorkspace> {
@@ -89,20 +122,69 @@ function shadowOf(element: SmWorkspace): ShadowRoot {
   return element.shadowRoot as ShadowRoot;
 }
 
+/** 左半侧视图栈内的视图位(按 DOM 序)。 */
 function panelsOf(element: SmWorkspace): HTMLElement[] {
-  return [...shadowOf(element).querySelectorAll(".tab-panel")] as HTMLElement[];
+  return [...shadowOf(element).querySelectorAll("[data-view-stack] [data-view-panel]")] as HTMLElement[];
 }
 
-function windowTypesOf(element: SmWorkspace): string[] {
-  return panelsOf(element).map((panel) => panel.getAttribute("data-tab-id") ?? "");
+function viewTypesOf(element: SmWorkspace): string[] {
+  return panelsOf(element).map((panel) => panel.getAttribute("data-view-panel") ?? "");
 }
 
-function panelOf(element: SmWorkspace, windowType: string): HTMLElement {
-  const panel = shadowOf(element).querySelector(`[data-tab-id="${windowType}"]`);
+function panelOf(element: SmWorkspace, viewType: string): HTMLElement {
+  const panel = shadowOf(element).querySelector(`[data-view-panel="${viewType}"]`);
   if (panel === null) {
-    throw new Error(`未找到窗口面板:${windowType}`);
+    throw new Error(`未找到视图位:${viewType}`);
   }
   return panel as HTMLElement;
+}
+
+/** 可缺席的视图位查询(「不该渲染」类断言用;无面板返回 null)。 */
+function panelOrNull(element: SmWorkspace, viewType: string): HTMLElement | null {
+  return shadowOf(element).querySelector(`[data-view-panel="${viewType}"]`);
+}
+
+/**
+ * `Ctrl + ↑/↓` 的**切换域**(主控 2026-09-18 裁定:与左半侧渲染集一致 ——
+ * 可见视图 **− 固定承载于右半侧的 payload**;模型经可选 `isEligible` 过滤回调
+ * 接收该判据,自身零 payload 字面量)。
+ */
+function switchDomainOf(element: SmWorkspace): string[] {
+  return element.layoutSnapshot.views
+    .filter((view) => view.visible && view.type !== PAYLOAD_TAB_TYPE)
+    .map((view) => view.type);
+}
+
+/** 左半侧容器(视图管理窗口;`Ctrl + ↑↓` 的键盘捕获点)。 */
+function leftRoleOf(element: SmWorkspace): HTMLElement {
+  return shadowOf(element).querySelector(".ws-left") as HTMLElement;
+}
+
+/** 右半侧容器(payload 搭建窗口)。 */
+function rightRoleOf(element: SmWorkspace): HTMLElement {
+  return shadowOf(element).querySelector(".ws-right") as HTMLElement;
+}
+
+/** 视图管理窗口的列表项(按 DOM 序)。 */
+function listItemsOf(element: SmWorkspace): HTMLElement[] {
+  return [...shadowOf(element).querySelectorAll(".view-list-item")] as HTMLElement[];
+}
+
+/** 列表项类型序列(排序断言的直接读面)。 */
+function listOrderOf(element: SmWorkspace): string[] {
+  return listItemsOf(element).map((item) => item.getAttribute("data-view-type") ?? "");
+}
+
+/** `aria-live="polite"` 列表播报文本(D-UI-7 ③)。 */
+function listAnnouncementOf(element: SmWorkspace): string {
+  return (
+    shadowOf(element).querySelector("[data-view-list-status]")?.textContent?.trim() ?? ""
+  );
+}
+
+/** 常驻状态行文本(切换落点宣读面)。 */
+function layoutStatusOf(element: SmWorkspace): string {
+  return shadowOf(element).querySelector(".layout-status")?.textContent?.trim() ?? "";
 }
 
 // ── 菜单/集成测试夹具(真实 SessionClient + mock 传输)──────────────────────
@@ -263,22 +345,29 @@ beforeEach(() => {
 // ── 固定窗口集(D-MP-1 / WP-71)──────────────────────────────────────────────
 
 describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)", () => {
-  it("挂载即按注册表登记集合建窗:全部类型各恰一实例常驻呈现(验收底线)", async () => {
+  it("挂载即按注册表登记集合建窗:全部类型各恰一实例常驻(验收底线)", async () => {
     const workspace = await mountWorkspace();
     await workspace.updateComplete;
 
-    const types = windowTypesOf(workspace);
-    // 窗口集 ≡ 注册表登记集合(各恰一实例);DOM 序 = P0 预设列分组序。
-    expect([...types].sort()).toEqual([...REGISTERED_TYPES].sort());
-    expect(types).toEqual([...P0_PRESENTATION_ORDER]);
-    expect(new Set(types).size).toBe(REGISTERED_TYPES.length);
-    expect(workspace.layoutSnapshot.tabs).toHaveLength(REGISTERED_TYPES.length);
-    // 结构性不变量:窗口集 ≡ 注册表类型集,各恰一实例(无重无漏、无空列)。
+    // 模型面:登记集 10 类全在场,呈现序 = DEFAULT_VIEW_ORDER(默认顺序唯一来源)。
+    const modelTypes = workspace.layoutSnapshot.views.map((view) => view.type);
+    expect([...modelTypes].sort()).toEqual([...REGISTERED_TYPES].sort());
+    expect(modelTypes).toEqual([...DEFAULT_VIEW_ORDER]);
     expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
+
+    // DOM 面:左半侧视图栈渲染「登记集 − payload」(payload 的唯一呈现位 = 右半侧),
+    // DOM 序 = 默认顺序(不再有列分组)。
+    const types = viewTypesOf(workspace);
+    expect([...types].sort()).toEqual([...LEFT_VIEW_TYPES].sort());
+    expect(types).toEqual([...PRESENTATION_ORDER]);
+    expect(new Set(types).size).toBe(LEFT_VIEW_TYPES.length);
+    // payload 视图位的唯一呈现位 = 右半侧(同一实例)。
+    expect(shadowOf(workspace).querySelector('[data-view-panel="payload"]')).toBeNull();
+    expect(rightRoleOf(workspace).querySelector("sm-payload-tab-host")).not.toBeNull();
     workspace.remove();
   });
 
-  it("窗口标题 = 注册表展示名(无类型内序号);标题栏与 aria-label 同源", async () => {
+  it("视图标题 = 注册表展示名(无类型内序号);类型名标签与 aria-label 同源", async () => {
     const workspace = await mountWorkspace();
 
     const labels = panelsOf(workspace).map((panel) => panel.getAttribute("aria-label"));
@@ -287,25 +376,31 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
       "寄存器视图",
       "指令视图",
       "自由视图",
-      "Payload 搭建",
       "调用栈",
       "结构视图",
       "时间线",
       "checkpoint",
       "内存 diff",
     ]);
-    expect(panelOf(workspace, "stack").querySelector(".tab-title")?.textContent?.trim()).toBe("栈视图");
+    // 类型名写在视图内左上角(无独立标题栏);与面板地标名同源。
+    expect(panelOf(workspace, "stack").querySelector(".view-label")?.textContent?.trim()).toBe("栈视图");
+    expect(panelOf(workspace, "stack").firstElementChild?.classList.contains("view-label")).toBe(true);
     workspace.remove();
   });
 
-  it("无任何关闭入口:标题栏无关闭按钮、窗口内无关闭语义 aria、公共 API 无关闭方法", async () => {
+  it("无任何关闭入口:视图位内零控件、无关闭语义 aria、公共 API 无关闭方法", async () => {
     const workspace = await mountWorkspace();
 
-    // 面一:窗口标题栏无关闭按钮(标题栏只承载标题与拖拽)。
+    // 面一:视图位是纯呈现区(零按钮 / 零 tabindex 后代;`.tab-bar` / `.tab-close` 已随改版退场)。
     expect(shadowOf(workspace).querySelector(".tab-close")).toBeNull();
+    expect(shadowOf(workspace).querySelectorAll(".tab-bar")).toHaveLength(0);
     for (const panel of panelsOf(workspace)) {
-      expect(panel.querySelector(".tab-bar")?.querySelector("button")).toBeNull();
-      expect(panel.querySelector(".tab-title")?.textContent?.trim()).toBe(panel.getAttribute("aria-label"));
+      expect(panel.querySelector("button")).toBeNull();
+      expect(panel.querySelector("[tabindex]")).toBeNull();
+      expect(panel.querySelector("input, select, textarea")).toBeNull();
+      expect(panel.querySelector(".view-label")?.textContent?.trim()).toBe(
+        panel.getAttribute("aria-label"),
+      );
     }
     // 面二:工作区自身无任何关闭语义属性(aria / title / data 锚)。
     expect([...shadowOf(workspace).querySelectorAll("[data-close], [data-tab-close]")]).toHaveLength(0);
@@ -315,21 +410,31 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
         expect(label ?? "").not.toMatch(/关闭|(^|\W)close/i);
       }
     }
-    // 面三:公共 API 无开 / 关入口(生命周期退场)。
-    expect((workspace as unknown as Record<string, unknown>)["closeTab"]).toBeUndefined();
-    expect((workspace as unknown as Record<string, unknown>)["openTab"]).toBeUndefined();
+    // 面三:公共 API 无开 / 关入口(生命周期退场;列式 API 亦不留别名)。
+    const surface = workspace as unknown as Record<string, unknown>;
+    for (const retired of [
+      "closeTab",
+      "openTab",
+      "scrollToColumn",
+      "layoutPresetId",
+      "resetLayout",
+      "setFocusedColumnWidth",
+      "focusedColumnIndex",
+    ]) {
+      expect(surface[retired], `已废止 API 仍暴露:${retired}`).toBeUndefined();
+    }
     workspace.remove();
   });
 
-  it("窗口集恒非空:空态引导退场(无 .empty 呈现)", async () => {
+  it("视图集恒非空:空态引导退场(无 .empty 呈现)", async () => {
     const workspace = await mountWorkspace();
 
     expect(shadowOf(workspace).querySelector(".empty")).toBeNull();
-    expect(shadowOf(workspace).querySelector("[data-columns]")).not.toBeNull();
+    expect(shadowOf(workspace).querySelector("[data-view-stack]")).not.toBeNull();
     workspace.remove();
   });
 
-  it("focusWindow(type):聚焦 + 滚动到该窗口,窗口实例数不变(不是开窗)", async () => {
+  it("focusWindow(type):聚焦 + 滚动到该视图,视图集与顺序不变(不是开窗)", async () => {
     const workspace = await mountWorkspace();
     const before = workspace.layoutSnapshot;
     const original = Element.prototype.scrollIntoView;
@@ -347,10 +452,10 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
 
     expect(focused).toBe(true);
     expect(workspace.layoutSnapshot.focusedTabId).toBe("registers");
-    expect(scrolledTo.map((element) => element.getAttribute("data-tab-id"))).toContain("registers");
-    // 布局与窗口集不变(仅焦点移动)。
-    expect(workspace.layoutSnapshot.columns).toEqual(before.columns);
-    expect(workspace.layoutSnapshot.tabs).toEqual(before.tabs);
+    expect(scrolledTo.map((element) => element.getAttribute("data-view-panel"))).toContain("registers");
+    // 视图集 / 顺序 / 可见性 / 左半侧宽零变化(仅焦点移动)。
+    expect(workspace.layoutSnapshot.views).toEqual(before.views);
+    expect(viewTypesOf(workspace)).toEqual([...PRESENTATION_ORDER]);
     expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
     workspace.remove();
   });
@@ -366,7 +471,7 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
     workspace.remove();
   });
 
-  it("菜单「窗口」聚焦入口:点击发出 focus-window 动作 → 焦点移动到该窗口", async () => {
+  it("菜单「视图」聚焦入口:点击发出 focus-window 动作 → 焦点移动到该视图", async () => {
     const workspace = await mountWorkspace();
     expect(workspace.layoutSnapshot.focusedTabId).toBe("stack");
 
@@ -377,8 +482,10 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
     button.click();
     await workspace.updateComplete;
 
+    // payload 无左半侧视图位,但**聚焦导航照常可用**(模型面仍登记 payload)。
     expect(workspace.layoutSnapshot.focusedTabId).toBe(PAYLOAD_TAB_TYPE);
-    expect(panelsOf(workspace)).toHaveLength(REGISTERED_TYPES.length);
+    expect(viewTypesOf(workspace)).toEqual([...PRESENTATION_ORDER]);
+    expect(panelsOf(workspace)).toHaveLength(LEFT_VIEW_TYPES.length);
     workspace.remove();
   });
 
@@ -401,191 +508,301 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
     await settleFrames(3);
 
     // 窗口集常驻且内容已渲染(字节窗口刷新后仍可查字节视图)。
-    expect([...windowTypesOf(workspace)].sort()).toEqual([...REGISTERED_TYPES].sort());
+    expect([...viewTypesOf(workspace)].sort()).toEqual([...LEFT_VIEW_TYPES].sort());
+    expect(rightRoleOf(workspace).querySelector("sm-payload-tab-host")).not.toBeNull();
     expect(firstByteView(workspace)).not.toBeUndefined();
     workspace.remove();
     harness.client.dispose();
   });
 });
 
-// ── 平铺(FE-WS-02 / FE-WS-01;WP-72 起默认列排布 = 宽度档预设)─────────────
+// ── 整页布局与视图管理窗口(D-UI-1 ~ D-UI-7;取代原「列式滚动平铺」)──────────
 
-describe("<sm-workspace> 列式滚动平铺(FE-WS-02)", () => {
-  it("缺省布局 = 当前宽度档预设(jsdom 1024 → P0);列容器承载横向滚动", async () => {
+describe("<sm-workspace> 整页布局与视图管理窗口(D-UI-1 ~ D-UI-7)", () => {
+  it("D-UI-1:页主体两分(左右半侧是同一网格的直接子项;零分隔条;右半侧固定承载 payload)", async () => {
     const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
-    await workspace.updateComplete;
+    const shadow = shadowOf(workspace);
 
-    // WP-72:预设经 `bindWindows(entries, columns)` 单点注入(此处 P0 五列)。
-    expect(workspace.layoutPresetId).toBe("P0");
-    expect(workspace.layoutSnapshot.columns.map((column) => [...column.tabIds])).toEqual([
-      ["stack", "registers"],
-      ["debug", "free"],
-      ["payload"],
-      ["call-stack", "structure"],
-      ["timeline", "checkpoints", "memory-diff"],
-    ]);
-    expect(shadowOf(workspace).querySelector("[data-columns]")).not.toBeNull();
+    const body = shadow.querySelector("[data-workspace-body]") as HTMLElement;
+    const left = leftRoleOf(workspace);
+    const right = rightRoleOf(workspace);
+    expect(body).not.toBeNull();
+    expect(left.parentElement).toBe(body);
+    expect(right.parentElement).toBe(body);
+    // 两分固定:**无 gap / 无 border / 零 divider / 零分界拖拽手柄**(无边框紧密贴合)。
+    expect(shadow.querySelectorAll('[role="separator"], .column-divider, .row-divider, .ws-divider')).toHaveLength(
+      0,
+    );
+    // 两半侧各就各位(左半侧 = 视图管理窗口;右半侧 = payload 搭建窗口)。
+    expect(left.getAttribute("aria-label")).toBe("视图管理窗口");
+    expect(right.getAttribute("aria-label")).toBe("Payload 搭建");
+    expect(right.querySelector("sm-payload-tab-host")).not.toBeNull();
     workspace.remove();
   });
 
-  it("列间滚动可达任意列:scrollToColumn 经相机计算把目标列居中", async () => {
+  it("D-UI-2:恰两个可见视位语义(定高算式;渲染数不做裁剪;每视位 ≥ chrome + 4 行)", async () => {
     const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
-    await workspace.updateComplete;
+    const panels = panelsOf(workspace);
 
-    // jsdom 无布局:桩列区几何 + 目标列矩形,断言相机算出的滚动位。
-    const columns = shadowOf(workspace).querySelector("[data-columns]") as HTMLElement;
-    const rect = (left: number, width: number): DOMRect =>
-      ({ left, width, top: 0, height: 300, right: left + width, bottom: 300, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
-    Object.defineProperty(columns, "clientWidth", { configurable: true, value: 1000 });
-    Object.defineProperty(columns, "scrollWidth", { configurable: true, value: 4000 });
-    columns.getBoundingClientRect = () => rect(0, 1000);
-    const target = shadowOf(workspace).querySelector('[data-column-index="1"]') as HTMLElement;
-    target.getBoundingClientRect = () => rect(600, 500);
-
-    workspace.scrollToColumn(1);
-    // 居中:600 + 250 − 500 = 350。
-    expect(columns.scrollLeft).toBe(350);
+    // ① 渲染数 = 可见视图数 − 1(payload 固定承载于右半侧):不做「只渲染两个」的裁剪。
+    const visible = workspace.layoutSnapshot.views.filter((view) => view.visible);
+    expect(visible).toHaveLength(REGISTERED_TYPES.length);
+    expect(panels).toHaveLength(LEFT_VIEW_TYPES.length);
+    expect(VISIBLE_VIEW_SLOT_COUNT).toBe(2);
+    // ② 每个可见视图位都有**内联确定高度**,且 = viewSlotHeightPx(左半侧高)。
+    const expectedSlot = viewSlotHeightPx(window.innerHeight);
+    for (const panel of panels) {
+      expect(panel.style.blockSize).toBe(`${expectedSlot}px`);
+      // ③ 可读性判据:视位高 − chrome 后仍容纳 ≥ N 行(下限保证「装得下一行字节」)。
+      const rows = (Number.parseFloat(panel.style.blockSize) - VIEW_PANEL_CHROME_HEIGHT_PX) / HEX_ROW_HEIGHT_PX;
+      expect(rows).toBeGreaterThanOrEqual(VIEW_SLOT_MIN_VISIBLE_HEX_ROWS);
+    }
+    // ④ 可视区恰两个视位由**定高算式**承载(空间不足即 `.ws-stack` 纵向滚动,不压缩)。
+    expect(panels.length).toBeGreaterThan(VISIBLE_VIEW_SLOT_COUNT);
     workspace.remove();
   });
 
-  it("拖拽换位:pointer 事件模拟——源窗拖到另一列窗口下半 → 跨列插到其后(源列仍在)", async () => {
+  it("D-UI-3:Ctrl + ↑ / ↓ 切换可见视图位(切换 + preventDefault + 边界不环绕 + 状态行宣读)", async () => {
     const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
+    const left = leftRoleOf(workspace);
+    const status = () => shadowOf(workspace).querySelector(".layout-status") as HTMLElement;
+
+    /**
+     * 切换域 = **左半侧可见视图位序**(主控裁定:与左半侧渲染集一致,
+     * 跳过固定承载于右半侧的 payload)。断言按此口径落 —— payload 不在序列内。
+     */
+    const domain = switchDomainOf(workspace);
+    expect(domain).toEqual([...PRESENTATION_ORDER]);
+    expect(domain).toHaveLength(LEFT_VIEW_TYPES.length);
+    expect(domain).not.toContain(PAYLOAD_TAB_TYPE);
+    expect(domain.at(-1)).toBe("memory-diff");
+
+    expect(workspace.activeViewType).toBeNull();
+    expect(status().getAttribute("data-active-view")).toBeNull();
+
+    // ↓:首次落在**首个可见视图位**;必须 preventDefault(覆盖浏览器页面滚动默认)。
+    const down = key("keydown", "ArrowDown", { ctrlKey: true });
+    left.dispatchEvent(down);
+    await workspace.updateComplete;
+    expect(down.defaultPrevented).toBe(true);
+    expect(workspace.activeViewType).toBe(domain[0]);
+    expect(status().getAttribute("data-active-view")).toBe(domain[0]);
+    expect(layoutStatusOf(workspace)).toContain("栈视图");
+    expect(layoutStatusOf(workspace)).toContain("Ctrl");
+
+    // ↓ 逐步推进到**末个可见视图位**(边界不环绕:继续按不再变化);
+    // 每一步都不得停在 payload(它固定承载于右半侧,不在切换序列内)。
+    for (let step = 1; step < domain.length; step += 1) {
+      const event = key("keydown", "ArrowDown", { ctrlKey: true });
+      left.dispatchEvent(event);
+      await workspace.updateComplete;
+      expect(event.defaultPrevented).toBe(true);
+      expect(workspace.activeViewType).toBe(domain[step]);
+      expect(workspace.activeViewType).not.toBe(PAYLOAD_TAB_TYPE);
+      // 每一步的落点都有对应的左半侧视图位(切换域 ≡ 渲染集)。
+      expect(panelOrNull(workspace, workspace.activeViewType as string)).not.toBeNull();
+    }
+    expect(workspace.activeViewType).toBe(domain[domain.length - 1]);
+    expect(layoutStatusOf(workspace)).toContain("内存 diff");
+
+    const beyond = key("keydown", "ArrowDown", { ctrlKey: true });
+    left.dispatchEvent(beyond);
+    await workspace.updateComplete;
+    expect(workspace.activeViewType).toBe(domain[domain.length - 1]); // 边界不环绕。
+    expect(beyond.defaultPrevented).toBe(true);
+
+    // ↑:回退一格;首位的 ↑ 亦不环绕。
+    left.dispatchEvent(key("keydown", "ArrowUp", { ctrlKey: true }));
+    await workspace.updateComplete;
+    expect(workspace.activeViewType).toBe(domain[domain.length - 2]);
+
+    // 无 Ctrl 的方向键不介入(不 preventDefault、不切换)。
+    const plain = key("keydown", "ArrowDown");
+    left.dispatchEvent(plain);
+    await workspace.updateComplete;
+    expect(plain.defaultPrevented).toBe(false);
+    expect(workspace.activeViewType).toBe(domain[domain.length - 2]);
+
+    // 隐藏落点所在视图 ⇒ 落点复位(不可见视图不在切换序列内)。
+    expect(workspace.setViewVisible(domain[domain.length - 2] as string, false)).toBe(true);
+    await workspace.updateComplete;
+    expect(workspace.activeViewType).toBeNull();
+    workspace.remove();
+  });
+
+  it("D-UI-4:列表内重排——pointer 拖拽(落点指示 + 拖拽态 + 播报「已移动到第 N 位」)", async () => {
+    const workspace = await mountWorkspace();
+    const items = listItemsOf(workspace);
+    const source = items[0] as HTMLElement; // stack
+    const target = items[1] as HTMLElement; // registers
+
+    expect(source.getAttribute("data-view-type")).toBe("stack");
+    expect(target.getAttribute("data-view-index")).toBe("1");
+
+    source.dispatchEvent(pointer("pointerdown", 10, 10));
+    // 位移未过阈值 ⇒ 仍是点击,不进入拖拽态。
+    target.dispatchEvent(pointer("pointermove", 11, 11));
+    await workspace.updateComplete;
+    expect(source.classList.contains("dragging")).toBe(false);
+
+    // 越过阈值 + 落在目标条目**下半** ⇒ 落点指示 = drop-after。
+    target.dispatchEvent(pointer("pointermove", 10, 299));
+    await workspace.updateComplete;
+    expect(source.classList.contains("dragging")).toBe(true);
+    expect(target.classList.contains("drop-after")).toBe(true);
+    expect(target.classList.contains("drop-before")).toBe(false);
+
+    target.dispatchEvent(pointer("pointerup", 10, 299));
+    await workspace.updateComplete;
+
+    // 列表内重排恰一种落点语义:stack 落在 registers 之后(第 2 位)。
+    expect(listOrderOf(workspace).slice(0, 2)).toEqual(["registers", "stack"]);
+    expect(listOrderOf(workspace)).toHaveLength(REGISTERED_TYPES.length);
+    // DOM 序与模型序一致(左半侧视图栈随之重排;payload 不在栈内)。
+    expect(viewTypesOf(workspace)).toEqual(
+      listOrderOf(workspace).filter((type) => type !== PAYLOAD_TAB_TYPE),
     );
-    await workspace.updateComplete;
-
-    const panelA = panelOf(workspace, "stack");
-    const panelB = panelOf(workspace, "free");
-    // 按下(标题栏)→ 位移过阈值 → 在 B 下半抬起(插到 B 之后)。
-    (panelA.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
-    shadowOf(workspace).dispatchEvent(pointer("pointermove", 40, 40));
-    panelB.dispatchEvent(pointer("pointerup", 10, 999));
-    await workspace.updateComplete;
-
-    // 源列(P0 列 0 = [stack, registers])未空 → 列数不变;
-    // 目标列(列 1 = [debug, free])在 free 之后插入 stack。
-    expect(workspace.layoutSnapshot.columns[0]?.tabIds).toEqual(["registers"]);
-    expect(workspace.layoutSnapshot.columns[1]?.tabIds).toEqual(["debug", "free", "stack"]);
-    expect(workspace.layoutSnapshot.columns).toHaveLength(5);
+    // 拖拽态清除 + aria-live 播报。
+    expect(shadowOf(workspace).querySelector(".dragging")).toBeNull();
+    expect(shadowOf(workspace).querySelector(".drop-after")).toBeNull();
+    expect(listAnnouncementOf(workspace)).toBe("已把「栈视图」移动到第 2 位");
     expect(isWindowSetComplete(workspace.layoutSnapshot)).toBe(true);
     workspace.remove();
   });
 
-  it("拖到列区空白 → 在末位新建列位(尾插)", async () => {
+  it("D-UI-4:列表内重排——Alt + ↑ / ↓ 键盘等价路径(preventDefault)", async () => {
     const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
-    await workspace.updateComplete;
+    const item = shadowOf(workspace).querySelector(
+      '.view-list-item[data-view-type="stack"]',
+    ) as HTMLElement;
 
-    const columns = shadowOf(workspace).querySelector("[data-columns]") as HTMLElement;
-    const panelA = panelOf(workspace, "stack");
-    (panelA.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
-    shadowOf(workspace).dispatchEvent(pointer("pointermove", 60, 60));
-    columns.dispatchEvent(pointer("pointerup", 10, 10));
+    const down = key("keydown", "ArrowDown", { altKey: true });
+    item.dispatchEvent(down);
     await workspace.updateComplete;
+    expect(down.defaultPrevented).toBe(true);
+    expect(listOrderOf(workspace).slice(0, 2)).toEqual(["registers", "stack"]);
+    expect(listAnnouncementOf(workspace)).toBe("已把「栈视图」移动到第 2 位");
 
-    // stack 摘除后开新列:原列仍在(registers),新列追加在末尾(尾插)。
-    const snapshot = workspace.layoutSnapshot;
-    expect(snapshot.columns).toHaveLength(6);
-    expect(snapshot.columns.at(-1)?.tabIds).toEqual(["stack"]);
-    expect(snapshot.columns[0]?.tabIds).toEqual(["registers"]);
-    expect(isWindowSetComplete(snapshot)).toBe(true);
+    // ↑ 回到原位(在列表内上下移动该条目)。
+    const moved = shadowOf(workspace).querySelector(
+      '.view-list-item[data-view-type="stack"]',
+    ) as HTMLElement;
+    const up = key("keydown", "ArrowUp", { altKey: true });
+    moved.dispatchEvent(up);
+    await workspace.updateComplete;
+    expect(up.defaultPrevented).toBe(true);
+    expect(listOrderOf(workspace).slice(0, 2)).toEqual(["stack", "registers"]);
+    expect(listAnnouncementOf(workspace)).toBe("已把「栈视图」移动到第 1 位");
+
+    // 无 Alt 的方向键不介入(列表内移动只认 Alt 组合)。
+    const plain = key("keydown", "ArrowDown");
+    moved.dispatchEvent(plain);
+    await workspace.updateComplete;
+    expect(plain.defaultPrevented).toBe(false);
+    expect(listOrderOf(workspace).slice(0, 2)).toEqual(["stack", "registers"]);
     workspace.remove();
   });
 
-  it("位移未过阈值 = 激活点击(拖拽与点击的区分)", async () => {
+  it("D-UI-5:窄屏底线与页面横向滚动语义(结构断言;真实读数归真机几何)", async () => {
     const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
-    await workspace.updateComplete;
-    expect(workspace.layoutSnapshot.focusedTabId).toBe("stack");
 
-    const panelFree = panelOf(workspace, "free");
-    (panelFree.querySelector(".tab-bar") as HTMLElement).dispatchEvent(pointer("pointerdown", 10, 10));
-    shadowOf(workspace).dispatchEvent(pointer("pointermove", 11, 11));
-    shadowOf(workspace).dispatchEvent(pointer("pointerup", 11, 11));
+    // 形态不随视口宽改变:无「隐藏右半侧 / 上下堆叠 / 单列」分支 —— 窄屏由
+    // `.ws-left` 的 `min-inline-size: 452.4px` 与两轨保底把右半侧挤出视口。
+    expect(leftRoleOf(workspace).classList.contains("ws-left")).toBe(true);
+    expect(rightRoleOf(workspace)).not.toBeNull();
+    const styles = (
+      (SmWorkspace as unknown as { elementStyles?: { cssText?: string }[] }).elementStyles ?? []
+    )
+      .map((style) => style.cssText ?? "")
+      .join("\n");
+    expect(styles).toContain(`min-inline-size: ${SIDE_PANEL_MIN_WIDTH_PX}px`);
+    expect(styles).toContain(`minmax(${SIDE_PANEL_MIN_WIDTH_PX}px, 1fr)`);
+
+    // jsdom 无布局:只断言「登记面」—— 尺寸变化写入 leftRoleWidth(D-UI-5 的核对面),
+    // 且**不夹取**到底线(底线由 CSS 承担)。
+    Object.defineProperty(leftRoleOf(workspace), "clientWidth", { configurable: true, value: 320 });
+    Object.defineProperty(leftRoleOf(workspace), "clientHeight", { configurable: true, value: 640 });
+    window.dispatchEvent(new Event("resize"));
     await workspace.updateComplete;
-    expect(workspace.layoutSnapshot.focusedTabId).toBe("free");
+    expect(workspace.leftRoleWidth).toBe(320);
+    expect(SIDE_PANEL_MIN_WIDTH_PX).toBeGreaterThan(320);
     workspace.remove();
   });
 
-  it("焦点窗口带 focused 标记;activateTab 切换跟随", async () => {
+  it("D-UI-7:面板 aria-label 不变 + 列表按钮键盘路径 + aria-live 播报文本", async () => {
     const workspace = await mountWorkspace();
-    workspace.dataSource = new FakeMemoryDataSource(
-      [
-        {
-          regionId: "region-stack",
-          label: "stack",
-          startAddressHex: "0x1000",
-          byteLength: 4096,
-          permissions: "rw",
-          windowBytesHex: "000102030405060708090a0b0c0d0e0f",
-        },
-      ],
-      [{ name: "RSP", valueHex: "0x1004" }],
-    );
+    const shadow = shadowOf(workspace);
+
+    // ① 地标名不因标题栏消失而改名(避免二次 axe 地标重名回归):面板 aria-label
+    //    = 视图标题;类型名标签在面板内左上角。
+    expect(panelOf(workspace, "stack").getAttribute("aria-label")).toBe("栈视图");
+    expect(panelOf(workspace, "stack").querySelector(".view-label")?.textContent?.trim()).toBe("栈视图");
+    // 视图位是独立 region,不得被 aria-hidden / presentation 简化掉。
+    for (const panel of panelsOf(workspace)) {
+      expect(panel.getAttribute("aria-hidden")).toBeNull();
+      expect(panel.getAttribute("role")).toBeNull();
+    }
+
+    // ② 列表按钮:可展开 / 收起的 `<details>` + `<summary>`(原生 aria-expanded),
+    //    条目可聚焦、勾选用原生 checkbox、序号由 span 承载。
+    const button = shadow.querySelector(".view-list-button") as HTMLDetailsElement;
+    const summary = button.querySelector("summary") as HTMLElement;
+    expect(button.tagName).toBe("DETAILS");
+    expect(summary.textContent?.trim()).toBe("视图列表(勾选显示 / 拖拽排序)");
+    expect(button.open).toBe(false); // 缺省收起(可展开)
+    button.open = true;
+    await workspace.updateComplete;
+    expect(button.open).toBe(true);
+
+    const item = shadow.querySelector('.view-list-item[data-view-type="stack"]') as HTMLElement;
+    expect(item.getAttribute("tabindex")).toBe("0");
+    const checkbox = item.querySelector(
+      'input[type="checkbox"].view-list-checkbox[data-view-visible="stack"]',
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(checkbox.labels?.[0]?.textContent?.trim()).toBe("栈视图");
+    expect(item.querySelector(".view-list-order")?.textContent?.trim()).toBe("1");
+
+    // ③ 勾选(原生 checkbox;Space 由原生承担)⇒ aria-live="polite" 播报「已隐藏」。
+    expect(shadow.querySelector("[data-view-list-status]")?.getAttribute("aria-live")).toBe("polite");
+    checkbox.click();
+    await workspace.updateComplete;
+    expect(listAnnouncementOf(workspace)).toBe("已隐藏「栈视图」");
+    expect(panelOrNull(workspace, "stack")).toBeNull();
+    // 再次勾选 ⇒ 播报「已显示」且面板回来(可见性只改显示,不是开 / 关)。
+    (shadow.querySelector('.view-list-item[data-view-type="stack"] input[type="checkbox"]') as HTMLInputElement).click();
+    await workspace.updateComplete;
+    expect(listAnnouncementOf(workspace)).toBe("已显示「栈视图」");
+    expect(panelOrNull(workspace, "stack")).not.toBeNull();
+    expect(workspace.layoutSnapshot.views).toHaveLength(REGISTERED_TYPES.length);
+    workspace.remove();
+  });
+
+  it("D-UI-7 补充裁定:勾选 / 排序的**唯一入口** = 左半侧列表按钮(视图位内零第二入口)", async () => {
+    const workspace = await mountWorkspace();
+    const shadow = shadowOf(workspace);
+
+    // 勾选入口唯一:工作区 shadow 内恰 REGISTERED_TYPES.length 个 checkbox,且全部
+    // 落在列表项内(视图位 / 右半侧零 checkbox)。
+    const checkboxes = [...shadow.querySelectorAll('input[type="checkbox"]')];
+    expect(checkboxes).toHaveLength(REGISTERED_TYPES.length);
+    for (const checkbox of checkboxes) {
+      expect(checkbox.closest(".view-list-item")).not.toBeNull();
+    }
+    expect(shadow.querySelectorAll('[data-view-stack] input, .ws-right input')).toHaveLength(0);
+    // 排序入口唯一:零拖拽把手(条目自身即把手),视图位零 tabindex / 零 pointer 语义锚。
+    expect(shadow.querySelectorAll(".drag-handle, [data-drag-handle], [draggable]")).toHaveLength(0);
+    for (const panel of panelsOf(workspace)) {
+      expect(panel.querySelector("[tabindex]")).toBeNull();
+    }
+    workspace.remove();
+  });
+
+  it("焦点视图位带 focused 标记;activateTab 切换跟随", async () => {
+    const workspace = await mountWorkspace();
     await workspace.updateComplete;
 
-    // 缺省焦点 = 登记序首窗(stack)。
+    // 缺省焦点 = 默认顺序首项(stack)。
     expect(panelOf(workspace, "stack").classList.contains("focused")).toBe(true);
     expect(panelOf(workspace, "registers").classList.contains("focused")).toBe(false);
 
@@ -992,28 +1209,29 @@ describe("<sm-workspace> 效果面(WP-74)", () => {
     workspace.remove();
   });
 
-  it("光标闪烁:每窗口标题栏恰一处装饰,标题栏仍零控件(C5/C6/C7)", async () => {
+  it("光标装饰:随独立标题栏整条退场(零 caret 节点);视图位仍零控件(C5/C6/C7)", async () => {
     const workspace = await mountWorkspace();
+    const panels = panelsOf(workspace);
 
+    // 回归护栏(原用例在此处**假绿**:`.`tab-bar` 退场后 `carets.length = 0`
+    // 与 `panelsOf()` 取旧选择器得到的 0 相等 —— 断言两边都空,什么都没测)。
+    // 改版后「终端式标题栏角标」随 `.tab-bar` 退场 ⇒ **恰零个 caret 装饰节点**;
+    // 视图位数量非零,断言两侧都真实非空(避免再次退化为空断言)。
+    expect(panels.length).toBe(LEFT_VIEW_TYPES.length);
     const carets = [...shadowOf(workspace).querySelectorAll('[data-sm-decoration="caret"]')];
-    // 每个窗口面板的终端式标题栏恰一个块状光标(全窗口常驻 ⇒ 数 = 窗口数)。
-    expect(carets).toHaveLength(panelsOf(workspace).length);
-    for (const caret of carets) {
-      expect(caret.getAttribute("aria-hidden")).toBe("true");
-      expect(caret.getAttribute("part")).toBe("caret");
-      expect(caret.textContent?.trim()).toBe("");
-      expect(caret.querySelectorAll(FOCUSABLE)).toHaveLength(0);
-    }
-    // WP-71「标题栏零控件」口径保留:装饰之外仍是零按钮 / 零 tabindex 子元素。
-    for (const panel of panelsOf(workspace)) {
-      const bar = panel.querySelector(".tab-bar");
-      expect(bar).not.toBeNull();
-      expect(bar?.querySelector(`button, a[href], input, select, textarea, [tabindex]`)).toBeNull();
-      expect(bar?.querySelectorAll('[data-sm-decoration="caret"]')).toHaveLength(1);
+    expect(carets).toHaveLength(0);
+    // 唯一保留的装饰 = 扫描线 overlay(恰 1 个)。
+    expect(shadowOf(workspace).querySelectorAll('[data-sm-decoration="scanline"]')).toHaveLength(1);
+
+    // 视图位仍零控件 / 零可聚焦后代(D-UI-7 ②:视图位是独立 region,不用装饰简化)。
+    for (const panel of panels) {
+      expect(panel.querySelector(`button, a[href], input, select, textarea, [tabindex]`)).toBeNull();
+      expect(panel.querySelectorAll('[data-sm-decoration="caret"]')).toHaveLength(0);
+      expect(panel.getAttribute("aria-hidden")).toBeNull();
     }
 
     const cssText = stylesTextOf();
-    // C6:动画周期解析自 --sm-caret-blink,且为阶跃(steps)而非平滑淡入淡出。
+    // C6(声明面保留):动画周期解析自 --sm-caret-blink,且为阶跃(steps)而非平滑淡入淡出。
     expect(cssText).toContain("animation-duration: var(--sm-caret-blink, 0s)");
     expect(cssText).toContain("steps(1, end)");
     workspace.remove();
