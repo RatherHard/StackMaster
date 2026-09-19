@@ -17,9 +17,11 @@
  */
 import { createPrivateKey } from "node:crypto";
 import {
+  DEFAULT_LAUNCH_TICKET_TTL_SECONDS,
   IDENTIFIER_CHARSET_PATTERN,
   MAX_CHECKPOINTS_PER_SESSION,
   MAX_EMBED_TOKEN_TTL_SECONDS,
+  MAX_LAUNCH_TICKET_TTL_SECONDS,
   MAX_SESSION_CREDENTIAL_TTL_SECONDS,
   MAX_WSS_FRAME_BYTES,
   OPAQUE_ID_MAX_LENGTH,
@@ -194,6 +196,29 @@ export const DEFAULT_HOST_SCORES_QUERIES_PER_MINUTE = 120;
 export const HOST_SCORES_QUERIES_PER_MINUTE_CEILING = 100000;
 
 /**
+ * 分发改版 WP-91 启动票据签发面(D-LT-1 ~ D-LT-5):与既有面同一形态 ——
+ * 常量默认值 + 配置天花板双闸(配置超过天花板拒绝启动)。
+ *
+ * **本段的两个 TTL 常量刻意不在此声明**:票据 TTL 的权威值属于**契约面**
+ * (D-LT-2「有效期」行冻结:`DEFAULT_LAUNCH_TICKET_TTL_SECONDS` = 300、
+ * `MAX_LAUNCH_TICKET_TTL_SECONDS` = 3600,登记在
+ * `packages/protocol/src/common/limits.ts`),配置闸**直接引用**它们 ——
+ * 在实现包里再写一份字面量就是"同一数值两处各写一份"的漂移面。
+ */
+/** 启动票据签发频率默认值(次/分钟;`rate:{锚租户}:launch_tickets` 固定窗口 60 s)。 */
+export const DEFAULT_LAUNCH_TICKET_ISSUANCE_PER_MINUTE = 60;
+/** 启动票据签发频率天花板(次/分钟;与既有频率类同档)。 */
+export const LAUNCH_TICKET_ISSUANCE_PER_MINUTE_CEILING = 100000;
+/**
+ * 启动面占位主体缺省值(D-LT-5.6;`SESSION_API_LAUNCH_USER_ID`)。
+ *
+ * 本版**没有终端用户账号**(§五 定案)⇒ 启动面需要一个**服务端配置**的占位
+ * 主体(身份永不来自请求体 / URL,安全红线 6.2)。缺省值是一个合法的冻结
+ * 标识符字面(过 `isFrozenIdentifier` 校验)。
+ */
+export const DEFAULT_LAUNCH_USER_ID = "launch-anon";
+
+/**
  * 阶段六 WP-66 容器级 Worker 隔离(Q4 定案,D-API-105):缺省 = 进程池
  * (dev / CI 拓扑零回退);容器池 = 显式启用形态,启用前置 = MVP 验收通过
  * (边界裁决 1,登记不翻转)。与既有面同一形态——常量默认值 + 天花板双闸。
@@ -322,6 +347,11 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_HOST_TENANTS",
   "SESSION_API_HOST_SCORES_BATCH",
   "SESSION_API_HOST_SCORES_QUERIES_PER_MINUTE",
+  // ── 分发改版 WP-91 启动票据签发面(2026-09-18;D-LT-1 ~ D-LT-5)──
+  "SESSION_API_LAUNCH_TICKET_TTL_SECONDS",
+  "SESSION_API_LAUNCH_USER_ID",
+  "SESSION_API_PUBLIC_ORIGIN",
+  "SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE",
 ];
 
 const envSchema = z.object({
@@ -613,6 +643,51 @@ const envSchema = z.object({
     .min(1)
     .max(HOST_SCORES_QUERIES_PER_MINUTE_CEILING)
     .default(DEFAULT_HOST_SCORES_QUERIES_PER_MINUTE),
+  // ── 分发改版 WP-91 启动票据签发面(D-LT-1 ~ D-LT-5)──
+  // 票据 TTL:缺省 / 天花板**均取契约常量**(D-LT-2「有效期」行),
+  // 非正数或超限即拒绝启动(与既有 TTL 键同形)。
+  SESSION_API_LAUNCH_TICKET_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LAUNCH_TICKET_TTL_SECONDS)
+    .default(DEFAULT_LAUNCH_TICKET_TTL_SECONDS),
+  // 启动面占位主体(D-LT-5.6):身份来自**服务端配置**,永不来自请求体 / URL。
+  // 必须过冻结标识符校验 —— 它会被写进会话凭证 claims 的 userId 位,形态不符
+  // 即让契约层 `SessionCredentialClaimsSchema` 在签发期抛错(启动期闸优于运行期爆)。
+  SESSION_API_LAUNCH_USER_ID: z
+    .string()
+    .superRefine((value, ctx) => {
+      if (!isFrozenIdentifier(value)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "必须是冻结标识符字符集(A-Z a-z 0-9 下划线 连字符)且不超过长度上限",
+        });
+      }
+    })
+    .default(DEFAULT_LAUNCH_USER_ID),
+  // 公开来源(页面与 API 同源;D-LT-1 / 改版 §五):签发响应拼绝对 launchUrl 的
+  // 唯一来源。形态 = 精确 origin 且**不含通配符**(见 isLaunchPublicOrigin)。
+  // **不在 REQUIRED_ENV_KEYS**:缺失是合法形态(该部署不启用签发面),由路由面
+  // fail-closed 处置(404 同形),而不是拒绝启动 —— 与 SESSION_API_HOST_TENANTS 同款。
+  SESSION_API_PUBLIC_ORIGIN: z
+    .string()
+    .superRefine((value, ctx) => {
+      if (!isLaunchPublicOrigin(value)) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "必须是形如 https://host[:port] 的精确来源(禁通配、禁路径、禁尾斜杠)",
+        });
+      }
+    })
+    .optional(),
+  SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(LAUNCH_TICKET_ISSUANCE_PER_MINUTE_CEILING)
+    .default(DEFAULT_LAUNCH_TICKET_ISSUANCE_PER_MINUTE),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -736,6 +811,27 @@ export interface SessionApiConfig {
   readonly hostScoresBatch: number;
   /** 宿主成绩同步频率(次/分钟;rate:{tenant}:host_scores 固定窗口 60 s)。 */
   readonly hostScoresQueriesPerMinute: number;
+  // ── 分发改版 WP-91 启动票据签发面(D-LT-1 ~ D-LT-5)──
+  /**
+   * 启动票据 TTL(秒);≤ `MAX_LAUNCH_TICKET_TTL_SECONDS`(契约外圈护栏,
+   * D-LT-2「有效期」行)。Redis TTL 与签发响应 `expiresAt` **同源同值**。
+   */
+  readonly launchTicketTtlSeconds: number;
+  /**
+   * 启动面占位主体(D-LT-5.6;缺省 `"launch-anon"`)。写入会话凭证 claims 的
+   * `userId` 位。**已登记代价**:同一部署下所有学习者共用此值 ⇒ `userId` 维度
+   * 的统计与配额**不可分**(租户预算与 `sessionId` 维度不受影响);
+   * 不得在文档 / UI 里把它说成"每个学习者"。
+   */
+  readonly launchUserId: string;
+  /**
+   * 公开来源(页面与 API 同源;D-LT-1)。`null` = 该部署未配置 ⇒ 签发面
+   * fail-closed(404 同形)。签发响应 `launchUrl` 的绝对地址**只**由此派生,
+   * 永不采信请求头(尤其 `Host` / `X-Forwarded-*` —— 那是 Host 头注入面)。
+   */
+  readonly publicOrigin: string | null;
+  /** 启动票据签发频率(次/分钟;rate:{锚租户}:launch_tickets 固定窗口 60 s)。 */
+  readonly launchTicketIssuancePerMinute: number;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -892,6 +988,10 @@ export function loadSessionApiConfig(
         : splitHostTenants(raw.SESSION_API_HOST_TENANTS),
     hostScoresBatch: raw.SESSION_API_HOST_SCORES_BATCH,
     hostScoresQueriesPerMinute: raw.SESSION_API_HOST_SCORES_QUERIES_PER_MINUTE,
+    launchTicketTtlSeconds: raw.SESSION_API_LAUNCH_TICKET_TTL_SECONDS,
+    launchUserId: raw.SESSION_API_LAUNCH_USER_ID,
+    publicOrigin: raw.SESSION_API_PUBLIC_ORIGIN ?? null,
+    launchTicketIssuancePerMinute: raw.SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE,
   };
 }
 
@@ -962,4 +1062,26 @@ function isExactOrigin(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * WP-91:公开来源(`SESSION_API_PUBLIC_ORIGIN`)的形态闸。
+ *
+ * = `isExactOrigin`(**复用**,不重写 URL / 协议判据)+ **显式拒绝通配符**。
+ *
+ * **为什么要比 CORS 白名单更严(实测取证)**:`isExactOrigin` 的注释声称
+ * "禁通配",但它**并不真的拒绝**通配 —— `new URL("https://*.example.com")`
+ * 的 `origin` 与输入逐字相等且协议为 https,故该函数对它返回 **true**
+ * (实测确认)。对 CORS 白名单这无实际危害(带 `*` 的来源永远匹配不上浏览器
+ * 真实 `Origin` 头 ⇒ 只是永不生效);但 `SESSION_API_PUBLIC_ORIGIN` 会被
+ * **拼接进 `launchUrl`**(D-LT-1),含 `*` 会产出不可用的启动地址 ——
+ * 一个静默失效的签发面。
+ *
+ * **本函数只加严、不放宽**:先走共用的 `isExactOrigin`,再叠加通配检查。
+ * **不改 `isExactOrigin` 本身**:它同时服务 `SESSION_API_ALLOWED_ORIGINS`
+ * (既有配置面),收紧它会改变既有部署的受理面 —— 那超出本 WP 的授权范围,
+ * 已作为**既有缺陷**登记在实施回填里,交由主控决定是否单独收口。
+ */
+function isLaunchPublicOrigin(value: string): boolean {
+  return isExactOrigin(value) && !value.includes("*");
 }

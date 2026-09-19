@@ -19,7 +19,17 @@ export type RateLimitDimension =
   /** 裁决重询频率(阶段六 WP-63,D-API-84;rate:{tenant}:{user}:verdict)。 */
   | "verdict_query_rate"
   /** 宿主成绩同步频率(中期 M3 WP-78,D-API-125;rate:{tenant}:host_scores)。 */
-  | "host_scores_rate";
+  | "host_scores_rate"
+  /**
+   * 启动票据签发频率(WP-91;D-LT-2「签发端点」行;`rate:{锚租户}:launch_tickets`)。
+   *
+   * 键用**锚租户**(白名单字典序最小项)而不是"每个租户各一档":签发端点面向
+   * 平台后端(服务端间调用),同一宿主凭证绑定的租户集合共享一条配额;
+   * 锚取字典序最小项使其与配置书写顺序无关(与 WP-78 `host_scores_rate`
+   * 同款,见 config.ts `splitHostTenants`)。**维度名只进受控日志**,响应面
+   * 与其它维度**逐字节同形**(429 + `budget_exhausted` / "rate limit exceeded")。
+   */
+  | "launch_ticket_rate";
 
 /** 每租户 / 每用户请求频率或提交频率触顶(固定窗口计数;D-API-50)。 */
 export class RateLimitExceeded extends Error {

@@ -98,6 +98,13 @@ describe("配置加载与启动校验(fail-closed)", () => {
       hostTenants: [],
       hostScoresBatch: 500,
       hostScoresQueriesPerMinute: 120,
+      // 分发改版 WP-91 启动票据签发面(D-LT-1 ~ D-LT-5)默认值:
+      // 票据 TTL 缺省取**契约常量**(300 s)+ 启动面占位主体 + 公开来源
+      // 缺省 null(该部署未启用签发面 ⇒ 路由面 fail-closed)。
+      launchTicketTtlSeconds: 300,
+      launchUserId: "launch-anon",
+      publicOrigin: null,
+      launchTicketIssuancePerMinute: 60,
     });
   });
 
@@ -381,5 +388,109 @@ describe("worker 执行形态配置键(WP-66,Q4 定案:缺省进程池,容器池
     expect(() =>
       load({ ...REQUIRED_WP3, SESSION_API_WORKER_CONTAINER_CPUS: "0" }),
     ).toThrow(ConfigValidationError);
+  });
+
+  /**
+   * 分发改版 WP-91 启动票据签发面的四个配置键(D-LT-1 ~ D-LT-5)。
+   *
+   * **为什么每个键都要有独立的红灯用例**:配置闸的失效模式是**静默**的 ——
+   *  - 只加 `KNOWN_ENV_KEYS` 不加 `envSchema`:`z.object` 默认剥离未知键 ⇒
+   *    运维设了值却**被无声忽略**(比拒绝启动更坏,因为它看起来生效了);
+   *  - 只加 `envSchema` 不加 `KNOWN_ENV_KEYS`:运维一设就拒绝启动(更响,但仍是缺陷)。
+   * 故下面对每个键都同时断言"设了有效值 ⇒ 出现在 config 上"(抓静默忽略)
+   * 与"设了非法值 ⇒ 拒绝启动"(抓闸缺席)。
+   */
+  describe("WP-91 启动票据签发面配置键(D-LT-1 ~ D-LT-5)", () => {
+    it("四个键均已在 KNOWN_ENV_KEYS 登记(设置任一都不触发「未登记保留键」闸)", () => {
+      const config = load({
+        ...REQUIRED_WP3,
+        SESSION_API_LAUNCH_TICKET_TTL_SECONDS: "120",
+        SESSION_API_LAUNCH_USER_ID: "launch-prod",
+        SESSION_API_PUBLIC_ORIGIN: "https://lab.example.com",
+        SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE: "30",
+      });
+      // ★ 逐键断言取值**真的进了 config**(只登记 KNOWN_ENV_KEYS 而漏了
+      //   envSchema 时,这里会拿到缺省值 ⇒ 用例红,正是要抓的形态)。
+      expect(config.launchTicketTtlSeconds).toBe(120);
+      expect(config.launchUserId).toBe("launch-prod");
+      expect(config.publicOrigin).toBe("https://lab.example.com");
+      expect(config.launchTicketIssuancePerMinute).toBe(30);
+    });
+
+    it("票据 TTL:缺省 300(取契约常量);上限 3600(契约天花板)", () => {
+      expect(load(REQUIRED_WP3).launchTicketTtlSeconds).toBe(300);
+      expect(
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_TTL_SECONDS: "3600" })
+          .launchTicketTtlSeconds,
+      ).toBe(3600);
+    });
+
+    it("票据 TTL 越天花板 / 非正数即拒绝启动(默认值 + 天花板双闸)", () => {
+      expect(() =>
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_TTL_SECONDS: "3601" }),
+      ).toThrow(ConfigValidationError);
+      expect(() =>
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_TTL_SECONDS: "0" }),
+      ).toThrow(ConfigValidationError);
+      expect(() =>
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_TTL_SECONDS: "-1" }),
+      ).toThrow(ConfigValidationError);
+      expect(() =>
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_TTL_SECONDS: "1.5" }),
+      ).toThrow(ConfigValidationError);
+    });
+
+    it("启动面占位主体:缺省 launch-anon;非法冻结标识符即拒绝启动", () => {
+      expect(load(REQUIRED_WP3).launchUserId).toBe("launch-anon");
+      // 空白 / 冒号 / 斜杠 / 点 / 超长——均非冻结标识符字符集。
+      for (const bad of ["has space", "a:b", "a/b", "a.b", "a".repeat(129)]) {
+        expect(() => load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_USER_ID: bad })).toThrow(
+          ConfigValidationError,
+        );
+      }
+      // 合法形态(字符集内 + 长度内)被受理。
+      expect(load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_USER_ID: "anon-01" }).launchUserId).toBe(
+        "anon-01",
+      );
+    });
+
+    it("公开来源:缺省 null(不被必备键闸拦);非法 origin 形态即拒绝启动", () => {
+      // ★ 关键:该键**不在** REQUIRED_ENV_KEYS —— 未提供是合法形态,
+      //   由路由面 fail-closed(404 同形)处置,而不是拒绝启动。
+      expect(load(REQUIRED_WP3).publicOrigin).toBeNull();
+      expect(() => load({ ...REQUIRED_WP3, SESSION_API_PUBLIC_ORIGIN: "not-a-url" })).toThrow(
+        ConfigValidationError,
+      );
+      // 通配来源 / 带路径 / 尾斜杠 / 非 http(s) 均非法(与 CORS 白名单同形态)。
+      for (const bad of [
+        "https://*.example.com",
+        "https://lab.example.com/app",
+        "https://lab.example.com/",
+        "ftp://lab.example.com",
+        "javascript:alert(1)",
+      ]) {
+        expect(() => load({ ...REQUIRED_WP3, SESSION_API_PUBLIC_ORIGIN: bad })).toThrow(
+          ConfigValidationError,
+        );
+      }
+      // http 是**有意**允许的:开发 / 集成拓扑的公开来源是 http://127.0.0.1:13000。
+      expect(load({ ...REQUIRED_WP3, SESSION_API_PUBLIC_ORIGIN: "http://127.0.0.1:13000" }).publicOrigin).toBe(
+        "http://127.0.0.1:13000",
+      );
+    });
+
+    it("签发频率:缺省 60/min;越天花板 100000 即拒绝启动", () => {
+      expect(load(REQUIRED_WP3).launchTicketIssuancePerMinute).toBe(60);
+      expect(
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE: "100000" })
+          .launchTicketIssuancePerMinute,
+      ).toBe(100000);
+      expect(() =>
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE: "100001" }),
+      ).toThrow(ConfigValidationError);
+      expect(() =>
+        load({ ...REQUIRED_WP3, SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE: "0" }),
+      ).toThrow(ConfigValidationError);
+    });
   });
 });
