@@ -544,6 +544,9 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 
 ## 三·十一、嵌入交付通道与描述包下发(阶段五 WP-50;D-API-75 ~ D-API-77)
 
+> **⚠ 2026-09-19 退役标注(分发改版 WP-96)**:本节条目(D-API-75 ~ D-API-77)的**载体已整体退役并物理删除** —— `packages/embed-runtime`、`packages/react-wrapper`、`packages/web-component`、`apps/plugin-dev`、`docs/contracts/嵌入协议.md` 已下线;`POST /auth/embed-tokens` 端点、embed token(含 `EmbedTokenClaims`)、iframe / postMessage 握手、V-1~V-13 校验义务、`MAX_EMBED_*` / `auto_resize` / `height_changed` 同批删除。**替代形态 = 与 API 同源的独立页面 + 一次性启动地址**(`POST /auth/launch-tickets` → 换票 → 启动授权凭证 Cookie → `create_session` v2)。
+> **本节条目保留为历史决策留档(只增不改)**,不再描述现行形态;**不得**据本节推导当前实现。**仍然有效、且已升格为通用纪律**的部分已在其他条目中保留 —— 特别是本节 ③ 的「**iframe 消息序列化体不含凭证形态载荷**」,其等价口径现由**启动票据不落日志 / 不进 URL 之外的载体 / 不经指标与审计账**(D-LT-3)承担。现行契约面见 `docs/contracts/启动票据协议.md` 与 **§五**(WP-91 实施回填)。
+
 ### D-API-75 embed token 浏览器交付通道:服务端注入引导配置为默认,MessageChannel port 下发为 opaque 备用(阶段五 WP-50;嵌入协议 §4.1 / §4.2 / §6.2 / V-13)
 
 任务分解 §六 Q1 的定案。**两形态并存,默认 + 备用**:
@@ -605,6 +608,9 @@ WP-3 的 `SessionRecoveryService` 此前仅测试路径消费;为兑现"docker r
 选值理由:`T_handshake` = 10 s 量级覆盖慢速网络下的 iframe 加载 + 握手往返,同时把不可用 embed 会话的僵尸窗口限制在用户可感知的秒级(§4.3 降级显示随即接管);`height_changed` 动画帧级合流使宿主布局更新频率 ≤ 渲染帧率(协议 §三"宿主可按实现期节流策略进一步收紧"的落地),每秒硬上限封堵非 rAF 环境的绕行;控制消息每秒 10 远高于人工切换主题 / 语言的合理速率,低于任何资源压力。全部超限处置统一"丢弃 + 本地计数,不回错误、不中断会话"(V-10 / V-12);计数面对 WP-51 的"超时降级路径事件计数面"条目可见。
 
 ## 三·十二、嵌入实现面(阶段五 WP-51 ~ WP-54;D-API-78 ~ D-API-82)
+
+> **⚠ 2026-09-19 退役标注(分发改版 WP-96)**:本节条目(D-API-78 ~ D-API-82)的**实现载体已全部物理删除**(`packages/embed-runtime` / `react-wrapper` / `web-component` 三包、`apps/plugin-dev` 与 `docs/contracts/嵌入协议.md`),其测试锚(`packages/*/test/**`、`apps/plugin-dev/e2e/**`)同批下线。**本节保留为历史决策留档(只增不改)**,不再描述现行形态。
+> **仍然有效的部分(逐条点名)**:① **`data-sm-theme` 锚形态保留** —— 但 D-UI-6 已把值域收敛为**终端单套**(`SM_THEME_PRESET_VALUES = ["terminal"]`、无 `auto` / 系统跟随分支),「宿主 appearance 映射为 dark」的**双值语义随宿主形态退役**;② **i18n(zh-CN / en + BCP-47 确定性降级)保留** —— 只是锚消费不再来自跨文档消息面;③ **公开描述包的静态面 + 缺席明示纪律保留**(现由 `apps/page-app` 承担);④ **「客户端声称的成功 / 分数不得当权威」保留并已升格为通用纪律**(对应 9.2)。**其余(握手 / 能力授予 / 高度上报 / 违规计数键 / port 信封 / 构造参数面)随载体一并退场。**
 
 > 本节为 WP-51~54 实现期定案的**事后收编**(事实源 = 五决策草稿 `docs/develop/阶段五WP51~55决策草稿.md`;全部定案**零契约改动**——嵌入协议 v1(`EmbedMessage` 六字段五类型、V-1~V-13、handshake 五路径、能力枚举与主题三值)与公开描述包 Schema 16 字段均为冻结面,本节只登记实现语义)。WP-55 的 E2E 场景映射、axe 扫描口径与 13.4 矩阵口径为**测试基建口径**(随实现演进,非 API 语义),登记于其决策草稿,不入 D-API。
 
@@ -1102,6 +1108,7 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 
 ### D-API-110 `terminal` 主题承载路径:插件锚让位增量与协议零改动(中期 WP-73;决策点 D-MP-2)
 
+- **⚠ 2026-09-19 订正(分发改版 WP-96;本条其余内容作为历史决策留档保留)**:本条以「嵌入协议外观主题载荷 `EMBED_THEMES` 三值维持冻结 + 插件宿主落锚让位」为前提,**该前提已整体退役** —— `EMBED_THEMES` / 嵌入协议 V 规则 / `<pwn-memory-vm>` 插件宿主均已物理删除。**主题面现行事实(D-UI-6 / WP-94)**:21 枚 token 名保留、取值收敛为**终端单套**;`SM_THEME_PRESET_VALUES = ["terminal"]`、`SM_THEME_VALUES` **无 `auto` 分支**、系统跟随 `@media (prefers-color-scheme)` 退场;锚 = **`:root` 级缺省(未设锚即终端)+ 单一 `[data-sm-theme="terminal"]` 锚(同值)**,`data-sm-theme` **保留为 vm-ui 自身的锚属性**(`sm-workspace` 的 `theme` 属性经它转写),但「历史坏锚兜底」仅覆盖 `terminal`。⇒ 本条的「三值权威在宿主 appearance」「插件从不写 terminal」等**不对称边界随宿主形态消失**。
 - **触发 WP**:WP-73(主题机制扩展:`terminal` token 集);决策点 = 中期任务分解 §4.1 D-MP-2 行。
 - **裁决**:嵌入协议外观主题载荷维持冻结三值 `EMBED_THEMES = ["light","dark","auto"]`(V-1~V-13 不动,`packages/protocol` 零 diff);`terminal` 由插件宿主元素上的 `data-sm-theme="terminal"` 扩展锚承载(插件文档页预置 / 同文档集成方直接设置),宿主 appearance 映射为 dark(`resolvedTheme` 保持二值语义)。`EmbedAppearanceController` 与 `SM_THEME_VALUES` 的 `auto` 语义**零改动**;`SM_THEME_VALUES` 扩为 `["light","dark","terminal","auto"]`(预设集 + auto 同源展开),锚样式表仍由变量记录**同源生成**(零手写 CSS 块)。
 - **承载路径增量(为什么"无需接线"不成立)**:插件落锚面原为无条件下写 `data-sm-theme = resolvedTheme`,集成方预置的 `terminal` 锚会在 `connectedCallback` 被 `light` 覆盖;且经机检证明「最近锚优先」下**祖先元素承载不可达**(祖先 `terminal` 锚 + 自身 `dark` 锚 ⇒ 自身命中 dark 值)。故在 `<pwn-memory-vm>` 落锚面做**窄口径最小增量**:①自身锚已为 `terminal` 时保留该锚(插件自身从不写该值 ⇒ 必为外部写入)并把 `color-scheme` 落 dark,其余形态逐字落 `resolvedTheme`(light / dark / auto 既有路径零变化);②新增锚变更观察(`MutationObserver`,`attributeFilter: ["data-sm-theme"]`,`connectedCallback` 挂 / `disconnectedCallback` 断,自身写入经 `#lastAnchoredTheme` 过滤 ⇒ 零回环),外部改 / 删锚即时生效。
