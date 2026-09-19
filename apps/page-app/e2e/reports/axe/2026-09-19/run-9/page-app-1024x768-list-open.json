@@ -1,0 +1,70 @@
+{
+  "colorContrast": {
+    "incompleteNodes": 81,
+    "passedNodes": 22,
+    "status": "passed",
+    "violationsNodes": 0
+  },
+  "face": "page-app-1024x768-list-open",
+  "incomplete": [
+    {
+      "count": 81,
+      "id": "color-contrast",
+      "nodes": [
+        {
+          "html": "<span data-notice-level=\"info\">题目描述包未加载:简介与教学面暂不可用(会话不受影响)。</span>",
+          "target": [
+            "span[data-notice-level=\"info\"]"
+          ]
+        },
+        {
+          "html": "<span class=\"group-label\">运行</span>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".group:nth-child(3) > .group-label"
+            ]
+          ]
+        },
+        {
+          "html": "<span class=\"status\" role=\"status\" aria-label=\"会话状态\">",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".status"
+            ]
+          ]
+        },
+        {
+          "html": "<strong class=\"session-status\">running</strong>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".session-status"
+            ]
+          ]
+        },
+        {
+          "html": "<strong class=\"revision\">0</strong>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".revision"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "incompleteNodes": 81,
+  "passedNodes": 1264,
+  "rationale": "中档列表展开面",
+  "state": "list-open",
+  "url": "http://localhost:5190/app/c/chal-stack-escape/1.2.3",
+  "viewport": "1024x768",
+  "violations": []
+}
