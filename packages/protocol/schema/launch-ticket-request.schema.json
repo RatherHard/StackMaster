@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/launch-ticket/v1/launch-ticket-request.schema.json",
+  "title": "LaunchTicketRequest",
+  "x-sm-class": "boundary",
+  "type": "object",
+  "properties": {
+    "challengeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    }
+  },
+  "required": [
+    "challengeId",
+    "version"
+  ],
+  "additionalProperties": false
+}

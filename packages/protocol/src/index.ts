@@ -36,6 +36,21 @@
  *   载荷 = 七字段公开上限面 + keyset 游标,独立版本命名空间
  *   `…/schemas/host-scores/v1`,HOST_SCORES_PROTOCOL_VERSION;分类论证
  *   WP-1 清单 §6.11,决策登记 D-API-122 ~ D-API-126)。既有契约面零改动。
+ * - 分发改版 WP-90:启动票据契约族 v1——LaunchTicketRequest
+ *   (`POST /auth/launch-tickets` 请求体,恰两键挑战定位)与
+ *   LaunchTicketResponse(签发响应体,恰两键 `launchUrl` / `expiresAt`,
+ *   票据值只在地址内),两份载荷**均不携带版本字段**;独立版本命名空间
+ *   `…/schemas/launch-ticket/v1`,LAUNCH_TICKET_PROTOCOL_VERSION;
+ *   族内形态常量(签发路由 / 换票路径模板 / 查询参数名 / 令牌长度)同批导出,
+ *   供 WP-91 / WP-92 单源引用;分类论证 WP-1 清单 §6.12,决策登记
+ *   D-LT-1 ~ D-LT-3;语义与生命周期成文于 docs/contracts/启动票据协议.md。
+ *   两份载荷**登记公开注册表**(跨边界形态,浏览器可达侧需可校验响应)。
+ *
+ * 另:题目内容版本格式常量 `CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE` 从本
+ * 入口导出(值 = `X.Y.Z` 冻结字面)——启动票据签发请求与宿主成绩同步的
+ * `challengeVersion` 字段共用它;它是**格式常量**而非解析器,故不受下面
+ * 「凭证解析器不给浏览器」的导出面纪律约束(`EmbedTokenClaimsSchema` 本体
+ * 仍只经 server-only 子路径导出)。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
  * 与 EmbedTokenClaims / SessionCredentialClaims(凭证解析器)不从本入口导出,
@@ -78,4 +93,13 @@ export * from "./transport/wss-frame.js";
 export * from "./transport/debug-frame.js";
 export * from "./verdict/verdict-query-response.js";
 export * from "./host-scores/host-scores-response.js";
+export * from "./launch-ticket/launch-ticket-contract.js";
+export * from "./launch-ticket/launch-ticket-request.js";
+export * from "./launch-ticket/launch-ticket-response.js";
+/**
+ * 题目内容版本格式常量的**具名**再导出(刻意不用 `export * `:同模块的
+ * `EmbedTokenClaimsSchema` 是「只给后端的凭证解析器」,必须继续只经
+ * `@stackmaster/protocol/server-only` 子路径可达 —— 见上文 server-only 边界段)。
+ */
+export { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "./embed/embed-token-claims.js";
 export * from "./schema/registry.js";

@@ -444,6 +444,72 @@
     "packages/protocol/test/fixtures/host-scores-response/valid/04-non-score-direction-record.json": {
       "sha256": "cfb61e6f4a3eb2047cf604b52b55858f0bbae67865a0dfb17f8357665e9b5089"
     },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/01-extra-tenant-id-tamper.json": {
+      "sha256": "5319131caad07e974d17ddbe39c5a8b3b3dfea420fc1636a6c939032ade3bad4"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/02-missing-version.json": {
+      "sha256": "94a671e122ad3003b1fe7fddc54921b4a6cd6a5b0a7e1a3b1b69ef87b1890132"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/03-version-not-semver.json": {
+      "sha256": "214268c5f7670c0944db3e00deddc8be586ef5fbc4d1b0bc8eec6ad091170154"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/04-version-v-prefix.json": {
+      "sha256": "7b8f2e098f5e77df09440f7327c004ac6a5740e9b23d1f482cc9c777b6e23601"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/05-version-prerelease-suffix.json": {
+      "sha256": "a25388d275fd455bbabaf4621c538a49b6d776a3afe42ee2f379a5b781144f3f"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/06-challenge-id-empty.json": {
+      "sha256": "66317b68c8753ddc8c78dfd83b1f05d1ab954c99ff1ba4c1854b21df3e3d29b6"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/07-challenge-id-charset-violation.json": {
+      "sha256": "a6e59d049f190d17afe18279b1f4789d106f507c284f2b0a1b66d841ef75039b"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/08-version-not-string.json": {
+      "sha256": "d7c45c41aea6df6d7fa732b456bb03a480e93b784ebf23391ec175d02815dd2b"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/invalid/09-protocol-version-echo-tamper.json": {
+      "sha256": "ab19e57217b89973408b55eb7a144ae3ba5f62a8813cb3759833d9343998474a"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-request/valid/01-issue-request.json": {
+      "sha256": "7606a8b927b232b903fc3caea4d87ccae5e1f6f63847e0cda0e651d8394e65f7"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/01-extra-ticket-field-tamper.json": {
+      "sha256": "9f141a6c6c4dae788e4d4a2c400e233d02241deec36bc9564b2cbe4c930e7ae8"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/02-missing-launch-url.json": {
+      "sha256": "80fa3a2b15b4b4b6535df47a8284ac77899abf338ee7dc6e9f5ed6e8e895f3ca"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/03-launch-url-empty.json": {
+      "sha256": "a330f1166f2a0de9db440cb1c46264762b75980ddf1edabc8f9b9c47ca653bc0"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/04-launch-url-too-long.json": {
+      "sha256": "48df171be5db1e2b9e115f792e8b4a697de8288c057c9fb06486a802c93139bc"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/05-expires-at-float.json": {
+      "rejected": "non_integer_number"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/06-expires-at-negative.json": {
+      "sha256": "73ae2a0af9fa46f5702ac45659df143da89fefd61e29f04a467efcc17a775f84"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/07-unknown-key-tamper.json": {
+      "sha256": "e776a829b6891cfdf9aa5911b77886c3291b1e4ac215c71bf5b611da979ec738"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/08-launch-url-relative.json": {
+      "sha256": "a8ae8b6705bd84d2482ed5ec9ca117b0f5b8f66b56fd634a471454f1e3c30bf6"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/09-tenant-id-echo-tamper.json": {
+      "sha256": "179b2f7ed98205e805d206e286b54690656ef0e49012d1058e35ff617061bbfd"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/invalid/10-identity-echo-tamper.json": {
+      "sha256": "a101badbad2d9b1fdf75b137732494a9caf4a4621a86a2d6dacf937f182b6095"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/valid/01-issued.json": {
+      "sha256": "4b4fff1f101386124683e49416ed6e79ea1c2e3ea6cb73f32696e58f3f43cc39"
+    },
+    "packages/protocol/test/fixtures/launch-ticket-response/valid/02-long-url.json": {
+      "sha256": "18861fd3c4bbf8886df6297471ea9269e470e839d2778c6963e0edd5733b54b5"
+    },
     "packages/protocol/test/fixtures/projection-delta/invalid/01-unknown-field-full-projection.json": {
       "sha256": "ad774bdf4fc0e262f9ce4691b3781975b0313cc59788dddc7c94438b5c55ca20"
     },

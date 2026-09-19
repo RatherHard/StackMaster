@@ -16,11 +16,18 @@ import {
 } from "../../src/persistence/index.js";
 
 describe("REDIS_DEGRADE_POLICY(分级降级策略表)", () => {
-  it("幂等窗口可降级进程内;token / route / rate fail-closed", () => {
+  it("幂等窗口可降级进程内;token / route / rate / launch 票据 fail-closed", () => {
     expect(REDIS_DEGRADE_POLICY.idempotencyWindow.degrade).toBe("degrade-to-process");
     expect(REDIS_DEGRADE_POLICY.tokenStore.degrade).toBe("fail-closed");
     expect(REDIS_DEGRADE_POLICY.routeStore.degrade).toBe("fail-closed");
     expect(REDIS_DEGRADE_POLICY.rateLimitCounter.degrade).toBe("fail-closed");
+    // WP-91 新增键域 launch:{jti}(D-LT-2「单次消费」行):票据消费是重放
+    // 防线,Redis 不可用 ⇒ 503 fail-closed,不降级进程内。
+    expect(REDIS_DEGRADE_POLICY.launchTicketStore.degrade).toBe("fail-closed");
+    // 五条分级**都**带理由(空理由 = 没有裁决记录)。
+    for (const entry of Object.values(REDIS_DEGRADE_POLICY)) {
+      expect(entry.rationale.length).toBeGreaterThan(0);
+    }
     // 每条分级都带理由(窗口是效率设施,正确性由 baseRevision 与串行保证)。
     expect(REDIS_DEGRADE_POLICY.idempotencyWindow.rationale).toContain("效率设施");
   });

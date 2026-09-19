@@ -149,5 +149,44 @@ export const SUPPORTED_HOST_SCORES_PROTOCOL_VERSIONS: readonly number[] = [
  */
 export const HOST_SCORES_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/host-scores/v${HOST_SCORES_PROTOCOL_VERSION}`;
 
+/* ------------------------------------------------------------------ */
+/* 启动票据契约族(分发改版 WP-90;D-LT-1 ~ D-LT-3)                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 启动票据契约族当前版本(分发改版 WP-90 契约族的版本常量)。
+ *
+ * 启动票据是「平台后端换一次性启动地址 → 学习者打开地址 → 页面服务端用票据换
+ * 会话凭证」这条链的契约面(`POST /auth/launch-tickets` 的请求体 / 响应体两份
+ * 载荷,D-LT-1):独立于会话动作协议、嵌入协议、裁决呈现通道、调试通道与宿主
+ * 成绩同步演进(与 VERDICT_CHANNEL_PROTOCOL_VERSION /
+ * HOST_SCORES_PROTOCOL_VERSION 同款独立编号先例)——新契约面按 5.6 携带独立
+ * 版本号,破坏性变更递增本常量并保留 N-1 兼容窗口,既有契约面零触碰。
+ *
+ * **与嵌入协议退役的关系(D-LT-1)**:嵌入协议面(`EMBED_PROTOCOL_VERSION`)
+ * 随插件形态**整体退役、不做版本演进**;本族是它的**新契约面替代物**,
+ * 因此照常适用 N-1 演进窗口(两者是两件事,不得混为一谈)。
+ */
+export const LAUNCH_TICKET_PROTOCOL_VERSION = 1;
+
+/**
+ * 当前受理的启动票据契约族版本集合(N-1 兼容窗口的实现约定锚点)。
+ *
+ * 约定与 SUPPORTED_HOST_SCORES_PROTOCOL_VERSIONS 同款:冻结期恒为
+ * `[LAUNCH_TICKET_PROTOCOL_VERSION]`;破坏性变更递增版本后,窗口期在此追加
+ * N-1,窗口期结束移除旧值。窗口时长为实现期运维参数,不属契约面。
+ */
+export const SUPPORTED_LAUNCH_TICKET_PROTOCOL_VERSIONS: readonly number[] = [
+  LAUNCH_TICKET_PROTOCOL_VERSION,
+];
+
+/**
+ * 启动票据契约族 JSON Schema 的 $id 命名空间(仅作标识符,不承诺可解析)。
+ * 版本段从本族版本常量派生;两份载荷**均不携带版本字段**(沿
+ * HostScoresResponse / VerdictQueryResponse 先例:N-1 受理是路由级事实,
+ * 回显版本判定细节即扩大探测面;契约版本由本命名空间承载,清单 §6.12)。
+ */
+export const LAUNCH_TICKET_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/launch-ticket/v${LAUNCH_TICKET_PROTOCOL_VERSION}`;
+
 /** @stackmaster/protocol 包版本(与 package.json 同步;非协议版本)。 */
 export const PROTOCOL_PACKAGE_VERSION = "0.1.0";

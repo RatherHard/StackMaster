@@ -29,6 +29,7 @@ export {
   MemoryChallengeRegistry,
   MemoryIdempotencyWindow,
   MemoryHostScoresStore,
+  MemoryLaunchTicketStore,
 } from "./memory-stores.js";
 export type { Clock, ChallengeObjectKey } from "./memory-stores.js";
 export {
@@ -41,6 +42,7 @@ export {
   RedisKeyValueStore,
   RedisRouteStore,
   RedisRateLimitCounter,
+  RedisLaunchTicketStore,
   createRedisConnection,
 } from "./redis/redis-stores.js";
 export {

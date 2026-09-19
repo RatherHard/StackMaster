@@ -71,6 +71,30 @@ export const SCHEMA_CLASSIFICATIONS = {
       nextCursor: "public",
     },
   },
+  "launch-ticket-request": {
+    // 启动票据签发请求载荷(分发改版 WP-90,D-LT-1 ~ D-LT-3):整体 BOUNDARY
+    // —— 两份载荷是**跨边界**形态(平台后端 ↔ 服务端),且内容属「集成方自报
+    // 的导航参数」,服务端按其重新校验、绝不采信为授权。逐字段分类与硬门槛
+    // 论证:WP-1 清单 §6.12(租户**不在**请求体 —— 只由宿主凭证 ×
+    // SESSION_API_HOST_TENANTS 白名单派生,故无 tenantId 分类位)。
+    rootClass: "boundary",
+    fieldClasses: {
+      challengeId: "boundary",
+      version: "boundary",
+    },
+  },
+  "launch-ticket-response": {
+    // 启动票据签发响应载荷(分发改版 WP-90,D-LT-1 ~ D-LT-3):整体 BOUNDARY
+    // —— 跨边界(服务端 → 平台后端 → 学习者浏览器),逐字段值来源 =
+    // 服务端生成的绝对地址 + 服务端时钟,零判题秘密派生;票据值只在
+    // launchUrl 内(不另回票据字段)、不携带 protocolVersion、不回显租户
+    // (论证:WP-1 清单 §6.12)。
+    rootClass: "boundary",
+    fieldClasses: {
+      launchUrl: "boundary",
+      expiresAt: "boundary",
+    },
+  },
   "public-state-projection": {
     rootClass: "public",
     fieldClasses: {

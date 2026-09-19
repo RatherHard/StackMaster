@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmaster.dev/schemas/launch-ticket/v1/launch-ticket-response.schema.json",
+  "title": "LaunchTicketResponse",
+  "x-sm-class": "boundary",
+  "type": "object",
+  "properties": {
+    "launchUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https?:\\/\\/[^\\s]+$"
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "launchUrl",
+    "expiresAt"
+  ],
+  "additionalProperties": false
+}

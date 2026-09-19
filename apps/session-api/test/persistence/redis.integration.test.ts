@@ -10,12 +10,20 @@ import {
   MemoryIdempotencyWindow,
   RedisIdempotencyWindow,
   RedisKeyValueStore,
+  RedisLaunchTicketStore,
   RedisRateLimitCounter,
   RedisRouteStore,
   createRedisConnection,
   type RedisLike,
 } from "../../src/persistence/index.js";
+import { generateLaunchTicketToken, launchTicketKey } from "../../src/launch/ticket-token.js";
 import { IT_ENABLED, IT_CONFIG, SKIP_REASON, sleep, uniqueIds } from "./helpers/it.js";
+
+/**
+ * 固定的"应用时钟"(Unix epoch 秒)。Lua 内的过期兜底比较以 ARGV 传入该值 ⇒
+ * 过期路径**不依赖真实时间**,可被确定性驱动(与 TTL 的 1 s 真实等待分开)。
+ */
+const FIXED_NOW_SECONDS = 1_800_000_000;
 
 describe.skipIf(!IT_ENABLED)("Redis 键域(容器门控)", () => {
   let redis: RedisLike;
@@ -102,6 +110,112 @@ describe.skipIf(!IT_ENABLED)("Redis 键域(容器门控)", () => {
     expect(await redisWindow.checkAndRecord(ids.sessionId, `${key}-r`, "c1")).toBe("replay-identical");
     expect(await memory.checkAndRecord(ids.sessionId, key, "c2")).toBe("conflict");
     expect(await redisWindow.checkAndRecord(ids.sessionId, `${key}-r`, "c2")).toBe("conflict");
+  });
+
+  // ── 启动票据键域 launch:{jti}(WP-91;D-LT-2)真机语义 ──────────────────
+  // 机检 ④「单次消费原子性」的**真实 Redis** 版(内存替身版见
+  // test/launch/launch-ticket-store.test.ts)。两者都必须存在:内存替身证明
+  // 端口语义,这里证明 **Lua 脚本在真实 Redis 上的原子性** —— 后者无法用任何
+  // TS 假实现替代(假实现复刻的是 Lua 的意图,不是 Redis 的执行模型)。
+
+  /** 造一份绑定记录(tenantId 是票据内封装的字段,不在 URL 上)。 */
+  function bindingFor(challengeId: string, version: string, expiresAt: number) {
+    return { tenantId: ids.tenantId, challengeId, version, expiresAt };
+  }
+
+  it("LaunchTicketStore:签发 → 换票取回完整绑定(含 URL 上不存在的 tenantId)", async () => {
+    const store = new RedisLaunchTicketStore(redis, () => FIXED_NOW_SECONDS * 1000);
+    const token = generateLaunchTicketToken();
+    const binding = bindingFor("ch-1", "1.0.0", FIXED_NOW_SECONDS + 60);
+    await store.put(token, binding, 60);
+
+    const redeemed = await store.consume(token, { challengeId: "ch-1", version: "1.0.0" });
+    expect(redeemed).toEqual(binding);
+    // 租户**只能**从记录取回(URL / body 参数不参与派生)。
+    expect(redeemed?.tenantId).toBe(ids.tenantId);
+  });
+
+  it("LaunchTicketStore:绑定不符 ⇒ 返回 null 且**不消费**(合法持有者仍可换票)", async () => {
+    const store = new RedisLaunchTicketStore(redis, () => FIXED_NOW_SECONDS * 1000);
+    const token = generateLaunchTicketToken();
+    await store.put(token, bindingFor("ch-2", "1.0.0", FIXED_NOW_SECONDS + 60), 60);
+
+    // 三处不符:错 challengeId / 错 version / 两者都错。
+    expect(await store.consume(token, { challengeId: "ch-other", version: "1.0.0" })).toBeNull();
+    expect(await store.consume(token, { challengeId: "ch-2", version: "9.9.9" })).toBeNull();
+    expect(await store.consume(token, { challengeId: "ch-other", version: "9.9.9" })).toBeNull();
+
+    // ★ 关键断言:上面三次错配**没有**烧掉票据。
+    expect(await store.consume(token, { challengeId: "ch-2", version: "1.0.0" })).not.toBeNull();
+    // 这次正确消费之后才真的没了。
+    expect(await store.consume(token, { challengeId: "ch-2", version: "1.0.0" })).toBeNull();
+  });
+
+  it("LaunchTicketStore:并发两次换票恰一次成功(单次消费原子性)", async () => {
+    const store = new RedisLaunchTicketStore(redis, () => FIXED_NOW_SECONDS * 1000);
+    const token = generateLaunchTicketToken();
+    const binding = bindingFor("ch-3", "2.1.0", FIXED_NOW_SECONDS + 60);
+    await store.put(token, binding, 60);
+
+    const results = await Promise.all([
+      store.consume(token, { challengeId: "ch-3", version: "2.1.0" }),
+      store.consume(token, { challengeId: "ch-3", version: "2.1.0" }),
+    ]);
+    const winners = results.filter((r) => r !== null);
+    expect(winners).toHaveLength(1);
+    expect(winners[0]).toEqual(binding);
+    expect(results.filter((r) => r === null)).toHaveLength(1);
+  });
+
+  it("LaunchTicketStore:TTL 到期 ⇒ 与「不存在」同形返回 null", async () => {
+    const store = new RedisLaunchTicketStore(redis, () => Date.now());
+    const token = generateLaunchTicketToken();
+    // 键 TTL 与记录 expiresAt 同源同值(1 s)。
+    const expiresAt = Math.floor(Date.now() / 1000) + 1;
+    await store.put(token, bindingFor("ch-4", "1.0.0", expiresAt), 1);
+    await sleep(1200);
+    expect(await store.consume(token, { challengeId: "ch-4", version: "1.0.0" })).toBeNull();
+  });
+
+  it("LaunchTicketStore:记录内 expiresAt 已过期(键仍在)⇒ 拒绝并清除", async () => {
+    // TTL 与 expiresAt 不同源时的兜底路径(应用时钟比较在 Lua 内)。
+    const store = new RedisLaunchTicketStore(redis, () => FIXED_NOW_SECONDS * 1000);
+    const token = generateLaunchTicketToken();
+    await store.put(token, bindingFor("ch-5", "1.0.0", FIXED_NOW_SECONDS - 1), 300);
+    expect(await store.consume(token, { challengeId: "ch-5", version: "1.0.0" })).toBeNull();
+  });
+
+  it("LaunchTicketStore:形态损坏的记录 ⇒ 按无有效记录处理(fail-closed)", async () => {
+    const store = new RedisLaunchTicketStore(redis, () => FIXED_NOW_SECONDS * 1000);
+    const kv = new RedisKeyValueStore(redis);
+    const good = generateLaunchTicketToken();
+    await kv.set(launchTicketKey(good), "{not json", 60);
+    expect(await store.consume(good, { challengeId: "ch-6", version: "1.0.0" })).toBeNull();
+
+    const missingField = generateLaunchTicketToken();
+    await kv.set(launchTicketKey(missingField), JSON.stringify({ challengeId: "ch-6" }), 60);
+    expect(await store.consume(missingField, { challengeId: "ch-6", version: "1.0.0" })).toBeNull();
+  });
+
+  it("LaunchTicketStore:未签发的票据 ⇒ null(与已消费 / 已过期同形)", async () => {
+    const store = new RedisLaunchTicketStore(redis, () => FIXED_NOW_SECONDS * 1000);
+    expect(
+      await store.consume(generateLaunchTicketToken(), { challengeId: "ch-7", version: "1.0.0" }),
+    ).toBeNull();
+  });
+
+  it("LaunchTicketStore:存储不可用 ⇒ PersistenceError(store_unavailable),不降级", async () => {
+    const broken = new RedisLaunchTicketStore(
+      {
+        async call() {
+          throw new Error("Connection is closed.");
+        },
+      },
+      () => FIXED_NOW_SECONDS * 1000,
+    );
+    await expect(
+      broken.consume(generateLaunchTicketToken(), { challengeId: "ch-8", version: "1.0.0" }),
+    ).rejects.toMatchObject({ code: "store_unavailable" });
   });
 });
 

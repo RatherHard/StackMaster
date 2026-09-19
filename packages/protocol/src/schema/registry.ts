@@ -32,10 +32,13 @@ import {
   DEBUG_SCHEMA_BASE_ID,
   EMBED_SCHEMA_BASE_ID,
   HOST_SCORES_SCHEMA_BASE_ID,
+  LAUNCH_TICKET_SCHEMA_BASE_ID,
   SESSION_ACTION_SCHEMA_BASE_ID,
   VERDICT_SCHEMA_BASE_ID,
 } from "../version.js";
 import { HostScoresResponseSchema } from "../host-scores/host-scores-response.js";
+import { LaunchTicketRequestSchema } from "../launch-ticket/launch-ticket-request.js";
+import { LaunchTicketResponseSchema } from "../launch-ticket/launch-ticket-response.js";
 import { VerdictQueryResponseSchema } from "../verdict/verdict-query-response.js";
 
 /** 已登记字段分类的 Schema 名(与 SCHEMA_CLASSIFICATIONS 键严格对齐)。 */
@@ -135,6 +138,26 @@ export const SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "HostScoresResponse",
     baseId: HOST_SCORES_SCHEMA_BASE_ID,
     schema: HostScoresResponseSchema,
+  },
+  {
+    // 启动票据签发请求(分发改版 WP-90,D-LT-1 ~ D-LT-3):
+    // `POST /auth/launch-tickets` 的请求体,恰两键(公开导航信息 challengeId /
+    // version;租户不在请求体,只由凭证 × 白名单派生),独立版本命名空间。
+    // 分类 = BOUNDARY(跨到宿主后端的形态),故登记**公开注册表**:
+    // 两份载荷本就是跨到平台后端 / 页面的形态,不进 server-only 注册表。
+    name: "launch-ticket-request",
+    title: "LaunchTicketRequest",
+    baseId: LAUNCH_TICKET_SCHEMA_BASE_ID,
+    schema: LaunchTicketRequestSchema,
+  },
+  {
+    // 启动票据签发响应(分发改版 WP-90,D-LT-1 ~ D-LT-3):
+    // 恰两键(launchUrl / expiresAt);票据值只在 launchUrl 内,不另回字段;
+    // 不携带 protocolVersion(路由级 N-1 事实)。同属公开注册表(见上条理由)。
+    name: "launch-ticket-response",
+    title: "LaunchTicketResponse",
+    baseId: LAUNCH_TICKET_SCHEMA_BASE_ID,
+    schema: LaunchTicketResponseSchema,
   },
 ];
 

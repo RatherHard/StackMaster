@@ -25,7 +25,13 @@ export interface RedisLike {
 }
 
 /** Redis 键域依赖分级登记(D-API-24;策略表即文档,代码即裁决点)。 */
-export type RedisDependency = "idempotencyWindow" | "tokenStore" | "routeStore" | "rateLimitCounter";
+export type RedisDependency =
+  | "idempotencyWindow"
+  | "tokenStore"
+  | "routeStore"
+  | "rateLimitCounter"
+  /** 启动票据键域(launch:{jti};WP-91,D-LT-2「单次消费」行)。 */
+  | "launchTicketStore";
 export type DegradeClass = "degrade-to-process" | "fail-closed";
 
 export const REDIS_DEGRADE_POLICY: Readonly<
@@ -46,6 +52,12 @@ export const REDIS_DEGRADE_POLICY: Readonly<
   rateLimitCounter: {
     degrade: "fail-closed",
     rationale: "限流计数是资源保护控制,降级即敞开请求面(保守取 fail-closed;数值策略归 WP-6)",
+  },
+  launchTicketStore: {
+    degrade: "fail-closed",
+    rationale:
+      "票据单次消费是启动面重放防线(D-LT-2):降级到进程内会让多实例部署下同一票据被消费两次," +
+      "且进程内形态无法与 Redis 的 TTL 语义同构 ⇒ Redis 不可用即 503 store_unavailable(不降级、不静默放行)",
   },
 };
 

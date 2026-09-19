@@ -22,6 +22,9 @@ import type {
   IdempotencyVerdict,
   IdempotencyWindow,
   KeyValueStore,
+  LaunchTicketBinding,
+  LaunchTicketRedemptionKey,
+  LaunchTicketStore,
   RateLimitCounter,
   RouteStore,
   SaveSnapshotInput,
@@ -135,6 +138,64 @@ export class MemoryRateLimitCounter implements RateLimitCounter {
     }
     current.count += 1;
     return current.count;
+  }
+}
+
+// ── 启动票据键域(launch:{jti};WP-91,D-LT-2)────────────────────────────
+
+/**
+ * 启动票据存储的**内存同构实现**(与 `RedisLaunchTicketStore` 逐条对齐:
+ * 登记即覆盖、TTL 到期即不可见、**比较并交换**式原子消费、不一致**无副作用**)。
+ *
+ * 两处刻意的形态选择:
+ *
+ *  1. **单进程内原子性由 JS 事件循环的正交性保证**:`consume` 体内**没有
+ *     `await`**(全部是同步的 Map 操作),故两个并发 `consume` 调用在事件循环
+ *     上必然一个跑完再跑另一个 —— 至多一方拿到记录。这不是"碰巧成立":
+ *     一旦有人在 `consume` 里插入 `await`,原子性即静默失效,而测试仍然可能
+ *     是绿的。故本实现的原子性有**结构性测试**护航(见
+ *     `test/launch/launch-ticket-store.test.ts` 的并发用例:两次并发消费恰
+ *     一次成功)。
+ *  2. **过期记录惰性清除**:读到 `expiresAt <= now` 即删除并返回 null,与
+ *     Redis 的 TTL 自然失效同形 —— 两者都收敛到"无有效记录"这一个可观察面。
+ */
+export class MemoryLaunchTicketStore implements LaunchTicketStore {
+  private readonly entries = new Map<string, LaunchTicketBinding>();
+
+  constructor(private readonly now: Clock = Date.now) {}
+
+  async put(token: string, binding: LaunchTicketBinding, ttlSeconds: number): Promise<void> {
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+      throw new PersistenceError("invalid_identifier", "TTL 必须为正(键域全部带 TTL 纪律)");
+    }
+    // TTL 口径与 Redis 适配器同源:内存实现的 Map 不自动过期,故把绝对
+    // 过期时刻记进记录本身 —— 但**只把调用方给的 ttlSeconds 用于计算**,
+    // 不采信 binding.expiresAt(后者是各自算出来的回显值,可能不同源)。
+    this.entries.set(token, {
+      ...binding,
+      expiresAt: Math.floor(this.now() / 1000) + Math.floor(ttlSeconds),
+    });
+  }
+
+  async consume(
+    token: string,
+    expected: LaunchTicketRedemptionKey,
+  ): Promise<LaunchTicketBinding | null> {
+    // ⚠ 本方法体内不得出现 await(原子性依赖事件循环正交性,见类文档)。
+    const record = this.entries.get(token);
+    if (record === undefined) {
+      return null; // 未签发 / 已消费
+    }
+    if (record.expiresAt <= Math.floor(this.now() / 1000)) {
+      this.entries.delete(token); // TTL 到期(与 Redis 自然失效同形)
+      return null;
+    }
+    if (record.challengeId !== expected.challengeId || record.version !== expected.version) {
+      // 绑定不符:**不消费**(无副作用),合法持有者仍可正常换票。
+      return null;
+    }
+    this.entries.delete(token); // 比较通过 ⇒ 消费(至多一方能走到这里)
+    return record;
   }
 }
 

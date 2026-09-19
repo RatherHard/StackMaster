@@ -167,6 +167,26 @@
         "nextCursor": "public"
       }
     },
+    "launch-ticket-request": {
+      "file": "launch-ticket-request.schema.json",
+      "title": "LaunchTicketRequest",
+      "baseId": "https://stackmaster.dev/schemas/launch-ticket/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "challengeId": "boundary",
+        "version": "boundary"
+      }
+    },
+    "launch-ticket-response": {
+      "file": "launch-ticket-response.schema.json",
+      "title": "LaunchTicketResponse",
+      "baseId": "https://stackmaster.dev/schemas/launch-ticket/v1",
+      "rootClass": "boundary",
+      "fieldClasses": {
+        "launchUrl": "boundary",
+        "expiresAt": "boundary"
+      }
+    },
     "projection-policy": {
       "file": "projection-policy.schema.json",
       "title": "ProjectionPolicy",

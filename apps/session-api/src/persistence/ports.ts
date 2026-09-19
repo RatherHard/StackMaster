@@ -43,6 +43,93 @@ export interface RateLimitCounter {
   increment(key: string, windowSeconds: number): Promise<number>;
 }
 
+// ── 启动票据键域(launch:{jti};WP-91,D-LT-2)────────────────────────────
+
+/**
+ * 启动票据的**服务端绑定记录**(D-LT-2「绑定」行)。
+ *
+ * 这是票据的**全部语义所在**:令牌本身是不透明持有证明(不签名、不解析
+ * claims,D-LT-1)⇒ 「这张票能开哪一题、属于哪个租户、何时作废」**只**存在于
+ * 本记录里。记录随消费(TTL)消失,票据随即失去意义。
+ *
+ * 字段口径:
+ *  - `tenantId`:**不在 URL / 不在响应体**(D-LT-2「绑定」行末)。它由签发时的
+ *    「宿主凭证 × `SESSION_API_HOST_TENANTS` 白名单」派生并**封存在票据内**,
+ *    换票时从本记录取回 —— 这条路径是「URL / body 参数永不进入租户派生路径」
+ *    (安全红线 6.2)在票据面上的结构性兑现:URL 里根本**没有**租户可自报。
+ *  - `challengeId` / `version`:公开导航信息(一题一址),换票时与路径逐字比对。
+ *  - `expiresAt`:Unix epoch 秒;与 Redis TTL、签发响应回显值**同值**
+ *    (D-LT-2「有效期」行:Redis TTL 与响应回显值同值)。
+ */
+export interface LaunchTicketBinding {
+  readonly tenantId: string;
+  readonly challengeId: string;
+  /** 题目内容版本(X.Y.Z 语义化版本字面)。 */
+  readonly version: string;
+  /** 过期时刻(Unix epoch 秒,UTC)。 */
+  readonly expiresAt: number;
+}
+
+/**
+ * 换票时**由路径派生**的比对字段(换票路由的三、四步输入)。
+ *
+ * 只有这两个字段来自请求:它们是公开导航信息,且**只能用于「与记录比对」**,
+ * 永远不参与身份 / 租户派生。`tenantId` **刻意不在此接口** —— 它由记录携带,
+ * 不在 URL 上(D-LT-2),故调用方连"从请求取租户"这个动作都**无法表达**。
+ */
+export interface LaunchTicketRedemptionKey {
+  readonly challengeId: string;
+  readonly version: string;
+}
+
+/**
+ * 启动票据存储端口(`launch:{jti}` 键域)。
+ *
+ * **分级 = fail-closed**(D-LT-2「单次消费」行:Redis 不可用 ⇒ 503
+ * `store_unavailable`,不降级、不静默放行),登记在
+ * `idempotency-window.ts` 的 `REDIS_DEGRADE_POLICY`。
+ *
+ * 与 `TokenIssuanceStore`(WP-2,`token:{jti}`)的**关键差异**:后者的消费
+ * 语义是「存在即删」(GETDEL),而票据的消费语义是**比较并交换(CAS)** ——
+ * 只有绑定字段与请求逐字一致才删除(见 `consume`)。
+ */
+export interface LaunchTicketStore {
+  /**
+   * 登记票据(TTL = 票据 TTL 秒数;值 = 绑定记录的规范化 JSON)。
+   *
+   * TTL 与 `binding.expiresAt` **同源同值**(调用方用同一个 TTL 常量算
+   * `expiresAt` 并传此处,D-LT-2「有效期」行)。
+   */
+  put(token: string, binding: LaunchTicketBinding, ttlSeconds: number): Promise<void>;
+
+  /**
+   * **原子**比较并消费(D-LT-2「单次消费」行的落地原语)。
+   *
+   * 语义:绑定记录存在、未过期、且 `challengeId` / `version` 与 `expected`
+   * **逐字一致** ⇒ **删除并返回该记录**;任一不满足 ⇒ **返回 null 且不删除**。
+   *
+   * **两处语义选择及其理由**:
+   *
+   *  1. **不一致时不消费**(不是"先删再验")。若不一致也删除,那么任何人只要
+   *     拿到票据并故意用错 URL 打开一次,就能把合法持有者的票据烧掉 ——
+   *     一枚公开地址被"路过"一次即失效,这是可用性攻击面。比较失败必须
+   *     **无副作用**。并发下"至多一方拿到记录"仍由删除的原子性保证。
+   *  2. **四种"无有效记录"形态同形返回 null**:未签发 / 已消费 / 已过期
+   *     (TTL 自然失效)/ 绑定不符。端口面**不区分**它们 —— 区分即给攻击者
+   *     一个枚举信号(安全红线 9.2 侧信道约束),而响应面要求三态**逐字节
+   *     一致**(D-LT-2「换票路由」行)。具体原因是**受控日志**面的事,不是
+   *     端口返回值面的事。
+   *
+   * 存储不可用 ⇒ 抛 `PersistenceError("store_unavailable")`(适配器负责
+   * 翻译),由既有 `error-mapping` 矩阵天然映射为 503 `storage unavailable`
+   * —— **不在这里吞掉、不降级、不静默放行**。
+   */
+  consume(
+    token: string,
+    expected: LaunchTicketRedemptionKey,
+  ): Promise<LaunchTicketBinding | null>;
+}
+
 // ── PostgreSQL 权威存储 ───────────────────────────────────────────────────
 
 export type SessionPhaseRow = "active" | "crashed" | "closed";

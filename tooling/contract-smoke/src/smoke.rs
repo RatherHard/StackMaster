@@ -50,6 +50,17 @@ const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
         "host-scores-response",
         "host-scores-response.schema.json",
     ),
+    // 启动票据契约族(分发改版 WP-90):签发请求 / 响应两份载荷,jsonschema
+    // 校验器与 TS safeParse 结论一致(两份载荷均为 BOUNDARY 的跨边界形态:
+    // 请求恰两键导航信息、响应恰两键地址与过期时刻,零身份面 / 零票据回显)。
+    (
+        "launch-ticket-request",
+        "launch-ticket-request.schema.json",
+    ),
+    (
+        "launch-ticket-response",
+        "launch-ticket-response.schema.json",
+    ),
 ];
 const CHALLENGE_CONTRACTS: &[(&str, &str)] =
     &[("public-descriptor", "public-descriptor.schema.json")];
