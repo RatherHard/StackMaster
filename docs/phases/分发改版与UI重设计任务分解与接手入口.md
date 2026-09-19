@@ -1,13 +1,15 @@
 # 分发改版与 UI 重设计 —— 任务分解与接手入口
 
 > **这是给下一个 agent 的入口文档。开工前从头读完,再动手。**
-> **建立** 2026-09-18 · **状态** 待开工(全部为「已定案、未实现」) · **阶段归属** 由主控另定(本分解**不预先占用阶段号**;下述 WP 号可整体替换,编号不承载语义)
+> **建立** 2026-09-18 · **状态** **执行中:WP-90 ~ WP-95a ✅ 已落地;WP-96 起在途**(逐 WP 状态见 **§四** 的「状态」列与 **§九**) · **阶段归属** 由主控另定(本分解**不预先占用阶段号**;下述 WP 号可整体替换,编号不承载语义)
 
 ---
 
 ## 一、30 秒现状
 
-**计划与契约面已全部定案并落到文档;实现一行没写。** 磁盘上的代码**仍是旧的插件形态 + Niri 式列条带**。
+> **2026-09-19 订正(勿沿用原文)**:原文此处写「**计划与契约面已全部定案并落到文档;实现一行没写。** 磁盘上的代码**仍是旧的插件形态 + Niri 式列条带**」—— **该表述已失效**。
+> **现况**:**契约面与实现均已落地(WP-90 ~ WP-95a)**;剩余 = **WP-96 ~ WP-99**。落地事实段见 `CLAUDE.md`「**分发改版与 UI 重设计落地事实**」。
+> **仍未执行的一件事 = 退役面的物理删除**(`packages/embed-runtime|react-wrapper|web-component`、`apps/plugin-dev`、`docs/contracts/嵌入协议.md`、会话动作协议 v1 分支)⇒ 归 **WP-96**;**在此之前不得据退役决定删代码 / 删契约 / 改 E2E 断言** —— 该冻结期**已由主控于 2026-09-19 解除**(授权依据 = `docs/develop/decisions-分发改版与UI重设计.md` **§四·补.3 / 四·补.4**)。
 
 已定案的两件事:
 
@@ -70,30 +72,32 @@
 > ① **不可调,固定 1:1,无分界拖拽**(「无分隔条」硬约束);② **固定两个可见视图位**(需求给定),超出者由左半侧纵向滚动承载;③ **`Ctrl+↑/↓` 唯一**、在**左半侧**捕获并 `preventDefault`,边界不环绕,原分隔条方向键随分隔条退场;④ **拖拽只保留列表内重排**一种落点,原三类落点废止,**不实现拖拽中自动滚动**;⑤ **窄屏不改变形态**,左半侧取 `min-width = 452.4px`(既有推导值改挂载体)⇒ 页面横向滚动,**否决**隐藏右半侧 / 上下堆叠;⑥ **保留 21 枚 token 名、收敛为终端一套值**,删除 light / dark / auto 三套记录与切换面,**且 fallback 字面量必须同批改终端的**(防静默回落浅色);⑦ 视图类型名移入视图内左上角后**地标名不变**、内层 region 保留窗口维度,列表按钮补**键盘路径**(`Space` 勾选 / `Alt+↑↓` 移动),axe 基线不得回退。
 > **⑦ 的补充裁定(唯一入口)**:左半侧列表按钮 = **视图显示与否 + 排序的唯一入口**;菜单「窗口」组保留**聚焦**语义(点击 = 聚焦并滚动到该视图),**不再承载勾选 / 排序**。WP-93 按此实现。
 
+> **状态图例(§4.1 ~ §4.3 的 WP 单元格前缀)**:✅ = **已落地**(逐条证据行见 **§九**);🟡 = **在途**(本轮执行中);⬜ = **待开工**。**勾选 = 已落地事实,不是计划**。
+
 ### 4.1 批次 0 —— 阻塞一切
 
 | WP | 内容 | 为何最先 | 完成标准(全部 exit 0) |
 |---|---|---|---|
-| **WP-90 · 启动票据契约族** | `packages/protocol` 新增契约族 + `LAUNCH_TICKET_PROTOCOL_VERSION = 1`(Zod → JSON Schema);golden fixture(valid / invalid 双向);`docs/contracts/启动票据协议.md`;`docs/contracts/数据分类与秘密零驻留清单.md` 增该族字段分类;`docs/contracts/版本策略.md` 增族 + 嵌入协议退役标注 | 契约纪律 5.6;**它是 WP-91/92 的前提** | `pnpm build` / `typecheck` / `test`(protocol 单测)/ `fixtures:manifest`(重算一致)/ `smoke:contract` / `lint:deps` / `scan:public` |
+| ✅ **WP-90 · 启动票据契约族** | `packages/protocol` 新增契约族 + `LAUNCH_TICKET_PROTOCOL_VERSION = 1`(Zod → JSON Schema);golden fixture(valid / invalid 双向);`docs/contracts/启动票据协议.md`;`docs/contracts/数据分类与秘密零驻留清单.md` 增该族字段分类;`docs/contracts/版本策略.md` 增族 + 嵌入协议退役标注 | 契约纪律 5.6;**它是 WP-91/92 的前提** | `pnpm build` / `typecheck` / `test`(protocol 单测)/ `fixtures:manifest`(重算一致)/ `smoke:contract` / `lint:deps` / `scan:public` |
 
 ### 4.2 批次 1 —— 契约后可并行
 
 | WP | 内容 | 依赖 | 完成标准 |
 |---|---|---|---|
-| **WP-91 · 后端签发与换票** | `POST /auth/launch-tickets`(鉴权复用 `hostBackendTokenMatches`,**单份实现**);换票路由(服务端内,`Sec-Fetch-Mode: navigate` 校验);Redis 新键域 `launch:{jti}`(fail-closed);`RateLimitDimension += launch_ticket_rate`;配置键 `SESSION_API_LAUNCH_TICKET_TTL_SECONDS`;**日志脱敏机检**;`/auth/embed-tokens` 退役 | WP-90 | session-api 测试绿(含**单次消费原子性**、**401 三态逐字节同形**、**429 逐字节**、**404 同形**、**URL/body 参数不得进入租户派生路径**机检);`test:integration` |
-| **WP-92 · `apps/page-app`** | 与 API 同源托管的页面应用;`100dvh` 布局壳;构建形态(application build,非 library mode) | WP-90 | `pnpm build`;同源能打开并完成一次换票(本地真机) |
-| **WP-93 · UI 改版 A(布局)** | 整页布局;左右两分;无边框紧密贴合;类型名移入视图内左上角;左半侧视图管理窗口(上下两半、纵向堆叠、上下滚动、**丝滑动画** + `prefers-reduced-motion` 降级);列表按钮(勾选 / 排序);`Ctrl+↑/↓` | **P0-决 ①~④⑦** | vm-ui 单测绿;**真机几何读数**(左半侧滚动可达、无「装不下一行字节」) |
-| **WP-94 · UI 改版 B(模型与主题)** | 布局快照面按新模型**自由重构** + 改 vm-ui 测试;`WorkspaceLayoutSnapshot` 字段替换;**终端单主题**(light/dark 退役,token 收敛) | WP-93(同轨) | vm-ui 单测绿;主题 token 键集断言更新;`scan:public` |
-| **WP-95 · 门禁改造** | **几何护栏**(遗留 #33):断言每视图位高度 ≥ 可读下限 **且**字节视图可见行数;E2E 改页面分发;axe 面矩阵**重定义**(`plugin-iframe-*` 退役 ⇒ 新形态面集合) | WP-92/93/94 | 全量 E2E 绿;axe 归档 9/9 面 0 违规(**新面集合**);`E2E_MATRIX` 三引擎 |
+| ✅ **WP-91 · 后端签发与换票** | `POST /auth/launch-tickets`(鉴权复用 `hostBackendTokenMatches`,**单份实现**);换票路由(服务端内,`Sec-Fetch-Mode: navigate` 校验);Redis 新键域 `launch:{jti}`(fail-closed);`RateLimitDimension += launch_ticket_rate`;配置键 `SESSION_API_LAUNCH_TICKET_TTL_SECONDS`;**日志脱敏机检**;`/auth/embed-tokens` 退役 | WP-90 | session-api 测试绿(含**单次消费原子性**、**401 三态逐字节同形**、**429 逐字节**、**404 同形**、**URL/body 参数不得进入租户派生路径**机检);`test:integration` |
+| ✅ **WP-92 · `apps/page-app`** | 与 API 同源托管的页面应用;`100dvh` 布局壳;构建形态(application build,非 library mode) | WP-90 | `pnpm build`;同源能打开并完成一次换票(本地真机) |
+| ✅ **WP-93 · UI 改版 A(布局)** | 整页布局;左右两分;无边框紧密贴合;类型名移入视图内左上角;左半侧视图管理窗口(上下两半、纵向堆叠、上下滚动、**丝滑动画** + `prefers-reduced-motion` 降级);列表按钮(勾选 / 排序);`Ctrl+↑/↓` | **P0-决 ①~④⑦** | vm-ui 单测绿;**真机几何读数**(左半侧滚动可达、无「装不下一行字节」) |
+| ✅ **WP-94 · UI 改版 B(模型与主题)** | 布局快照面按新模型**自由重构** + 改 vm-ui 测试;`WorkspaceLayoutSnapshot` 字段替换;**终端单主题**(light/dark 退役,token 收敛) | WP-93(同轨) | vm-ui 单测绿;主题 token 键集断言更新;`scan:public` |
+| ✅ **WP-95 · 门禁改造**(+ **WP-95a** 遗留 #39 修复,同批) | **几何护栏**(遗留 #33):断言每视图位高度 ≥ 可读下限 **且**字节视图可见行数;E2E 改页面分发;axe 面矩阵**重定义**(`plugin-iframe-*` 退役 ⇒ 新形态面集合) | WP-92/93/94 | 全量 E2E 绿;axe 归档 9/9 面 0 违规(**新面集合**);`E2E_MATRIX` 三引擎 |
 
 ### 4.3 批次 2 —— 收口
 
 | WP | 内容 | 依赖 | 完成标准 |
 |---|---|---|---|
-| **WP-96 · 迁移与退役** | `docs/user/宿主平台接入指南.md` 改写(调签发端点 + 下发地址);退役面**清点后删除**(三包 + `plugin-dev` + `docs/contracts/嵌入协议.md` + 相关 E2E + `MAX_EMBED_HEIGHT_PX`/`height_changed`/`auto_resize`);Changesets 收敛为仅契约包 | WP-91~95 | `pnpm build` / `lint:deps`(模块数下降)/ `scan:public`;退役面**零残留**;宿主迁移指引成文 |
-| **WP-97 · 遗留真机复跑** | 三引擎真机复跑:**#1(webkit 跨源认证)载体退役验证**;#9 `e2e-matrix` 面集合重定义;**#34 / #35 / #37 结案判定**;#36 左半侧宽度下免折行约束重算 | WP-95/96 | `E2E_MATRIX=1` 实测读数;**#1 不得记为「已修复」**(是失去载体) |
-| **WP-98 · 用户文档回填** | `docs/user/界面帮助手册.html` / `学习者上手指南.md`(**只在实现落地后**才改;现在改 = 让文档说谎);`出题人文档` 如有受影响 | WP-95 | 用户文档与磁盘行为一致 |
-| **WP-99 · 验收评审** | 阶段收口评审;**更新遗留清单与评审 §六**(同批,维持双射);`CLAUDE.md` 事实段回填 | 全部 | 遗留 #38 结案;新增遗留同号登记 |
+| 🟡 **WP-96 · 迁移与退役** | `docs/user/宿主平台接入指南.md` 改写(调签发端点 + 下发地址);退役面**清点后删除**(三包 + `plugin-dev` + `docs/contracts/嵌入协议.md` + 相关 E2E + `MAX_EMBED_HEIGHT_PX`/`height_changed`/`auto_resize`);Changesets 收敛为仅契约包 | WP-91~95 | `pnpm build` / `lint:deps`(模块数下降)/ `scan:public`;退役面**零残留**;宿主迁移指引成文 |
+| ⬜ **WP-97 · 遗留真机复跑** | 三引擎真机复跑:**#1(webkit 跨源认证)载体退役验证**;#9 `e2e-matrix` 面集合重定义;**#34 / #35 / #37 结案判定**;#36 左半侧宽度下免折行约束重算 | WP-95/96 | `E2E_MATRIX=1` 实测读数;**#1 不得记为「已修复」**(是失去载体) |
+| ⬜ **WP-98 · 用户文档回填** | `docs/user/界面帮助手册.html` / `学习者上手指南.md`(**只在实现落地后**才改;现在改 = 让文档说谎);`出题人文档` 如有受影响 | WP-95 | 用户文档与磁盘行为一致 |
+| ⬜ **WP-99 · 验收评审** | 阶段收口评审;**更新遗留清单与评审 §六**(同批,维持双射);`CLAUDE.md` 事实段回填 | 全部 | 遗留 #38 结案;新增遗留同号登记 |
 
 ### 4.4 并行轨(与本次改版无关的既有开放遗留,可随时派单)
 
@@ -109,12 +113,14 @@
 ### 4.5 关键路径
 
 ```
-P0-决(主控 7 项) ─────────────┐
+P0-决(主控 7 项) ✅ ──────────┐
                               ▼
-WP-90(契约) ──▶ WP-91(后端) ──▶ WP-95(门禁) ──▶ WP-96(迁移退役) ──▶ WP-97(真机复跑) ──▶ WP-98 ──▶ WP-99
-        └────▶ WP-92(page-app) ─┘
-        └────▶ WP-93 ──▶ WP-94 ─┘
+WP-90(契约)✅ ─▶ WP-91(后端)✅ ─▶ WP-95(门禁)✅ ─▶ WP-96(迁移退役)🟡 ─▶ WP-97(真机复跑)⬜ ─▶ WP-98 ⬜ ─▶ WP-99 ⬜
+        └────▶ WP-92(page-app)✅ ─┘
+        └────▶ WP-93 ✅ ──▶ WP-94 ✅ ─┘
 ```
+
+**进度(2026-09-19 主控)**:`P0-决`(D-UI-1~7 / D-LT-1~5)与 **WP-90 ~ WP-95a** 已落地;**WP-96 在途**;最短关键路径的剩余段 = **WP-96 → WP-97 → WP-99**(WP-98 与 WP-97 可并行)。
 
 **最短关键路径 = WP-90 → WP-91 → WP-95 → WP-96 → WP-97 → WP-99。**
 
@@ -212,6 +218,8 @@ $env:E2E_MATRIX='1'; ...                            # 三引擎矩阵
 | `WP-92`(本轮) | **`apps/page-app` + 同源页面托管**:① 新应用包(application build;**不静态依赖 vm-ui** —— 产物经 publicDir 落 `dist/vm-ui/`,运行期按 URL 动态 import,沿用 `plugin-dev` 加载模型);② 引导序列 = 路径解析 → 载产物 → `SessionClient()`(同源相对路径)→ `createSession({challengeId, challengeVersion})` **不带 token**(授权 = 启动授权凭证 Cookie)→ `connect()` → 描述包(失败 = 缺席明示、不阻塞)→ 挂 `<sm-workspace>` + 注入组合根属性;③ 整页 `100dvh` 链 + **禁止 `overflow: hidden`**(会把 `overflow-x` 升格为裁剪 ⇒ 窄屏右半侧不可达);④ session-api 侧 `@fastify/static`(新增配置键 `SESSION_API_PAGE_APP_DIR`,过三道闸)+ **`wildcard: false` 与注册序双保证**换票路由优先;⑤ 装配四处同改 + **装配路径防漏传源码面机检**;⑥ 测试:page-app 单测 23 例 + **真机冒烟 5 例**(真 chromium + 真 vm-ui 产物)+ 托管/优先级集成 8 例。决策 **D-API-161**;**未做**:真后端全链冒烟(本机 Docker 不可达)与 k6 / compose 链路改写,承接方 = **WP-95** |
 
 | `WP-95`(本轮) | **门禁改造**:① **几何护栏升级为真浏览器 E2E**(`apps/page-app/e2e/geometry-guard.spec.ts`;承接 **遗留 #33**;逐条断言 **D-UI-2 四条**,四视口 × 三引擎 **27 例**;**不断言任何常量算式** —— 已废止的 `MIN_ROW_HEIGHT_PX` / `columnMinHeightPx` / `columnChromePx` 不在断言里,`layout-presets.ts` 的高度面常量也不被引用;含**反例自证**实测三条);**护栏首跑即抓出真实缺口**:字节视图**完整可见数据行**在窄档为 **0**(chromium 1024×768 / 768×900;firefox 同两档;webkit 1024 / 768 / 375),**N ≥ 1 红线在 9/12 个「引擎 × 视口」格上不成立**,成因 = 列头行窄档折 4 行(21.8 → **84.2px**)+ 工具区换行 ⇒ chrome(≈296~410px)超过视图位高(267~350px);缺口以 `<引擎>:<视口>` 登记表留档 + 双层层「状态已变即红」机检,**修法在 `packages/vm-ui`(本 WP 不改产品代码)**;② **E2E 改页面分发** = `apps/page-app/e2e/{helpers/launch-chain.ts,launch-chain.spec.ts}`(`POST /auth/launch-tickets` → **顶层导航** `page.goto(launchUrl)` → 断言 302 后地址栏无 `?t=` → `connection-status=connected`;含票据单次消费 = 401);plugin-dev 侧新建同链夹具 + **`e2e/RETIRED-SURFACE.md`**(逐文件:可改 / 改不动 + 理由 + 承接方;可改而未改的理由 = **本机 Docker 不可达 ⇒ 无法实测**);③ **axe 面矩阵重定义**(`apps/page-app/e2e/axe-matrix.spec.ts` **9 面** = 1440×{default,list-open,instruction,payload} / 1024×{default,list-open} / 768×default / 375×{default,payload};归档 `apps/page-app/e2e/reports/axe/<日期>/<run-N>/`,**同日不覆盖** + **确定性规范化**(剥 `esid` / Lit 标记 / 键排序 / LF)+ `summary.md` **两栏分列** + **未扫描面清单**;9 面 **violations = 0**,但 **9 面全部含 `color-contrast` 的 incomplete**(62 ~ 132 节点/面,合计 839)**如实分列** —— 单主题下 axe 无法自动判定全部对比度);④ **`E2E_MATRIX` 三引擎挂到 page-app**(plugin-dev 保留一份):**本机实测三引擎**(整套 **51 passed / 24 skipped**),但 **#1 不得记为已修复**(载体退役的验证,结案归 WP-97);⑤ 遗留 **#20** 断言收紧(`toBeInViewport({ratio:0.9})` + 锚点行行高 ≤ 28px)。决策 **D-API-162 ~ D-API-165**;**未实测**:真拓扑启动地址链(`E2E_LAUNCH_CHAIN`)/ 全量 plugin-dev E2E / k6 / `test:compose`(Docker 引擎不可达)、#20 收紧用例 |
+
+| ✅ `WP-95a`(遗留 #39 修复;2026-09-19) | **窄档字节视图完整可见数据行 = 0 的修复**(承接 WP-95 护栏首跑抓出的 P0 产品缺陷):① `byte-tab.ts` 的 VMA 侧栏折叠判定由**视口媒体查询**改为**容器查询**(`@container (max-width: 40rem)`,`:host` 加 `contain` / `container-type: inline-size`)—— 旧写法在 1024 档视口 > 640px 故不折叠,而视图位只有 512px(**媒体查询 vs 容器查询的类别错误**);② `byte-view.ts` 的 `.byte-row` 第三轨 `1fr → minmax(0,1fr)` + 表头行三段 `white-space: nowrap`(列头行 84.19 → **21.8px**);③ 工具区窄档紧凑(`input` 收口 `14ch` / 两行 `nowrap` / `@container` 收紧内边距,工具区 166.3 → **92.3px**)。**真机逐格读数(完整可见数据行,修前 → 修后)**:chromium `4→8 / 0→5 / 0→7 / 1→5`、firefox `7→9 / 0→5 / 0→9 / 1→5`、webkit `6→8 / 0→5 / 0→8 / 0→4`(视口序 1440×900 / 1024×768 / 768×900 / 375×667)⇒ **12/12 格满足红线 `N ≥ 1`,并 12/12 达 `N = 4` 目标**;`KNOWN_GEOMETRY_GAPS` **清空**(登记机制保留);`E2E_MATRIX=1` **51 passed / 24 skipped / 0 failed**;**反例自证** = 红线阈值临时改 9 ⇒ chromium 四档全红且失败文本回读**实测行数**,还原后全绿。**规格改述同批**(D-UI-2 补 / D-UI-5 补):`SIDE_PANEL_MIN_WIDTH_PX` **数值未改**、只改述含义(不含 `14rem` 侧栏;< ≈766px 必有降级 = 已接受的代价);**#36 随之结案**。决策 = **D-API-166**;**未做(不得视为通过)**:axe 面矩阵收尾复跑见 `0cd4780`(9 面 violations = 0,但 9 面**全部**含 `color-contrast` 的 `incomplete`,如实分列)、plugin-dev 全量 E2E、`test:coverage` / `test:miri` / `fuzz:smoke` / `test:compose`(Docker 引擎不可达) |
 
 **主控复核的门禁读数(2026-09-18,本机实测,非 lane 自报;用于对标后续 WP)**:`pnpm build` **13/13 ✅**;`pnpm typecheck` **18/18 ✅**;`pnpm lint` **exit 0 ✅**;`lint:deps` **1436 模块 / 4458 依赖零违规 ✅**;`lint:deps:self-test` **20 组边 ✅**;`fixtures:manifest --check` **289 一致 ✅**;`smoke:contract` **24 Schema / 70 接受 / 162 拒绝 / 289 摘要比对 / serde 15 / private-bundle 10 ✅**;`scan:public` **0 违规 / 3 条既有豁免 ✅**;`pnpm test --continue` **25/26**,唯一红 = **`@stackmaster/web-component#test` 1 例** —— 该例断言的是**本包自己发出的 v1 `create_session`(带 `embedToken` / `embedSessionId`)**,属**结构性**(非字面量),随 **WP-96 物理删除该包自然消解**;**不得**为让它变绿而把该包移植到新链(与退役方向相悖)。**未实测(明文登记,不得视为通过)**:`test:integration` / `test:compose`(本机 **Docker 引擎不可达**,`dockerDesktopLinuxEngine` 管道缺失)/ 全量 E2E / `E2E_MATRIX` / `test:coverage` 完整形态 / `test:miri` / `fuzz:smoke`。
 
