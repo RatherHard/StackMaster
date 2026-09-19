@@ -215,6 +215,14 @@ test.describe("WP-76 断点联动 + 伪汇编延伸(chromium 真机)", () => {
     await expect(rows.first()).toBeVisible();
 
     // 3) 初始视角锚定(WP-75 #7):进入视图即按 rip 锚定一次,锚点行落在真实视口。
+    //
+    // **断言收紧(WP-95 = 遗留 #20 的修法)**:原为裸 `toBeInViewport()`(无 ratio、
+    // 无行高上界)⇒ 只要锚点行有 **1px** 露在视口内即算绿(历史实测:锚点行的面板内
+    // 可见比例仅 **0.14**,而指令行行高曾达 **113.38px** —— 薄绿因此长期存活)。
+    // 收紧为两条:
+    //   ① `toBeInViewport({ ratio: 0.9 })`:锚点行至少 **90%** 落在视口内;
+    //   ② 行高上界 `≤ 28px`(真机一行为 20.8px;113px 是「模板幻影空行」缺陷形态,
+    //      任何回归都会立刻越过该上界)。
     const anchor = await instructionView.evaluate((element) => {
       const view = element as unknown as InstructionViewFace;
       return { addressHex: view.anchorAddressHex, applied: view.initialAnchorApplied };
@@ -222,11 +230,15 @@ test.describe("WP-76 断点联动 + 伪汇编延伸(chromium 真机)", () => {
     expect(anchor.applied).toBe(true);
     expect(anchor.addressHex).not.toBeNull();
     if (anchor.addressHex !== null) {
-      await expect(
-        instructionView.locator(
-          `.instruction-row[data-instruction-address="${anchor.addressHex}"]`,
-        ),
-      ).toBeInViewport();
+      const anchorRow = instructionView.locator(
+        `.instruction-row[data-instruction-address="${anchor.addressHex}"]`,
+      );
+      await expect(anchorRow).toBeInViewport({ ratio: 0.9 });
+      const anchorBox = await anchorRow.boundingBox();
+      expect(
+        anchorBox?.height ?? Number.POSITIVE_INFINITY,
+        "锚点行行高越过上界(每行应 ~20.8px;行高暴涨 = 模板幻影空行缺陷回归)",
+      ).toBeLessThanOrEqual(28);
     }
 
     // 4) 伪汇编列右侧单独对齐(真实计算样式)。
