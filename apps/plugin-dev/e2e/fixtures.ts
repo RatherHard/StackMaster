@@ -185,23 +185,33 @@ export function focusWindowButton(page: Page, windowType: string): Locator {
   return menu(page).locator(`button.focus-window[data-window-type="${windowType}"]`);
 }
 
-/** 工作区窗口面板(常驻;`data-tab-id` = 窗口 id ≡ 注册表类型键)。 */
+/** 工作区视图位面板(常驻;`data-view-panel` = 视图类型键)。 */
 export function workspaceWindows(page: Page): Locator {
-  return page.locator("sm-workspace .tab-panel[data-tab-id]");
+  return page.locator("sm-workspace .ws-view[data-view-panel]");
 }
 
-/** 指定类型的窗口面板。 */
+/** 指定类型的视图位面板。 */
 export function workspaceWindow(page: Page, windowType: string): Locator {
-  return page.locator(`sm-workspace .tab-panel[data-tab-id="${windowType}"]`);
+  return page.locator(`sm-workspace .ws-view[data-view-panel="${windowType}"]`);
 }
 
-/** 窗口集呈现序(data-tab-id 数组;不变量断言用)。 */
+/** 视图位呈现序(data-view-panel 数组;不变量断言用)。 */
 export async function workspaceWindowTypes(page: Page): Promise<string[]> {
   return page.locator("sm-workspace").evaluate((element) =>
-    [...element.shadowRoot!.querySelectorAll(".tab-panel[data-tab-id]")].map(
-      (panel) => panel.getAttribute("data-tab-id") ?? "",
+    [...element.shadowRoot!.querySelectorAll(".ws-view[data-view-panel]")].map(
+      (panel) => panel.getAttribute("data-view-panel") ?? "",
     ),
   );
+}
+
+/**
+ * 字节视图数据行(role=row + data-row-address;虚拟列表只渲染可视行)。
+ * 行在**多级 shadow 嵌套**内(`sm-workspace` → `sm-byte-tab` → `sm-byte-view`
+ * → `sm-window-list`(light DOM) → `.byte-row`),故用 Playwright 的
+ * shadow 穿透选择器(`sm-byte-view .byte-row` 会自动跨 shadow 边界匹配)。
+ */
+export function byteRows(page: Page): Locator {
+  return page.locator("sm-byte-view .byte-row[data-row-address]");
 }
 
 /** 菜单动作按钮(class 契约:step-button / reset-button)。 */
@@ -219,117 +229,132 @@ export function disconnectBanner(page: Page): Locator {
   return menu(page).locator(".banner");
 }
 
-/** 字节视图数据行(role=row + data-row-address;虚拟列表只渲染可视行)。 */
-export function byteRows(page: Page): Locator {
-  return page.locator("sm-byte-view .byte-row[data-row-address]");
-}
-
-// ── 工作区布局定位帮手(WP-72:Niri 式布局交互;选择器唯一登记点)─────────────
+// ── 工作区整页布局定位帮手(2026-09-18 改版 / D-API-153;选择器唯一登记点)──
 //
-// 锚一律取**结构属性 / 语义 role**(`data-column-index` / `data-column-divider` /
-// `data-row-divider` / `data-width-ratio` / `data-layout-preset` / `role=separator`),
-// 不依赖文案排版与像素几何。
+// 锚一律取**结构属性**(`data-view-role` / `data-view-panel` / `data-view-stack` /
+// `data-view-type` / `data-view-visible`),不依赖文案排版与像素几何。
 
-/** 列容器(横向条带 `.columns`;相机滚动的滚动容器)。 */
-export function layoutStrip(page: Page): Locator {
-  return page.locator("sm-workspace [data-columns]");
+/** 左半侧(视图管理窗口;`Ctrl + ↑↓` 的键盘挂点)。 */
+export function leftRole(page: Page): Locator {
+  return page.locator('sm-workspace [data-view-role="left"]');
 }
 
-/** 全部列(列序锚 = `data-column-index`)。 */
-export function layoutColumns(page: Page): Locator {
-  return page.locator("sm-workspace .column[data-column-index]");
+/** 右半侧(payload 搭建窗口;固定,不随左侧滚动)。 */
+export function rightRole(page: Page): Locator {
+  return page.locator('sm-workspace [data-view-role="right"]');
 }
 
-/** 指定列序的列。 */
-export function layoutColumn(page: Page, columnIndex: number): Locator {
-  return page.locator(`sm-workspace .column[data-column-index="${columnIndex}"]`);
+/** 左半侧的视图位滚动容器(纵向堆叠 + 丝滑滚动的承载面)。 */
+export function viewStack(page: Page): Locator {
+  return page.locator("sm-workspace [data-view-stack]");
 }
 
-/** 列间分隔条(`data-column-divider` = 该空隙右侧列的列序 = 新建列位插入位置)。 */
-export function columnDivider(page: Page, gapIndex: number): Locator {
-  return page.locator(`sm-workspace .column-divider[data-column-divider="${gapIndex}"]`);
+/** 视图管理窗口的列表按钮(可展开 / 收起)。 */
+export function viewListButton(page: Page): Locator {
+  return page.locator("sm-workspace details.view-list-button > summary");
 }
 
-/** 同列窗间分隔条(`data-row-divider` = `列序:上侧窗口序号`)。 */
-export function rowDivider(page: Page, columnIndex: number, index: number): Locator {
-  return page.locator(`sm-workspace .row-divider[data-row-divider="${columnIndex}:${index}"]`);
+/** 列表项(按类型键;`data-view-type` 契约)。 */
+export function viewListItem(page: Page, viewType: string): Locator {
+  return page.locator(`sm-workspace li.view-list-item[data-view-type="${viewType}"]`);
 }
 
-/** 菜单「布局」组:列宽预设档按钮(1/4、1/3、1/2、2/3、全宽)。 */
-export function widthPresetButton(page: Page, ratio: string): Locator {
-  return menu(page).locator(`button.width-preset[data-width-ratio="${ratio}"]`);
+/** 列表项的勾选框(原生 input;`Space` 切换)。 */
+export function viewListCheckbox(page: Page, viewType: string): Locator {
+  return viewListItem(page, viewType).locator(`input[type="checkbox"][data-view-visible="${viewType}"]`);
 }
 
-/** 菜单「布局」组:「重置布局」按钮。 */
-export function resetLayoutButton(page: Page): Locator {
-  return menu(page).locator("button.reset-layout-button");
-}
-
-/** 菜单「布局」组的当前档位标识(P0 / P1 / P2;布局档位唯一呈现面)。 */
-export function layoutPresetBadge(page: Page): Locator {
-  return menu(page).locator("[data-layout-preset] .layout-preset");
-}
-
-/** 布局状态行(常驻 `role=status`;布局变更宣读面)。 */
+/** 布局 / 切换状态行(常驻 `role=status`;`Ctrl + ↑↓` 宣读面)。 */
 export function layoutStatus(page: Page): Locator {
   return page.locator("sm-workspace .layout-status");
 }
 
-/** 列分组呈现(逐列窗口类型键数组;布局断言主面)。 */
-export async function layoutColumnGroups(page: Page): Promise<string[][]> {
-  return page.locator("sm-workspace").evaluate((element) =>
-    [...(element.shadowRoot?.querySelectorAll(".column[data-column-index]") ?? [])].map((column) =>
-      [...column.querySelectorAll(".tab-panel[data-tab-id]")].map(
-        (panel) => panel.getAttribute("data-tab-id") ?? "",
-      ),
-    ),
-  );
-}
-
-/** 逐列像素宽(列宽护栏与列宽档断言的几何面)。 */
-export async function layoutColumnWidthPx(page: Page): Promise<number[]> {
-  return page.locator("sm-workspace .column[data-column-index]").evaluateAll((columns) =>
-    columns.map((column) => column.getBoundingClientRect().width),
-  );
+/** 视图列表操作播报区(`aria-live="polite"`;勾选 / 移动结果宣读面)。 */
+export function viewListStatus(page: Page): Locator {
+  return page.locator("sm-workspace [data-view-list-status]");
 }
 
 /**
- * 拖拽几何进视口(2026-09-17 真机取证新增;纯机械修正,不改任何产品语义)。
- *
- * **为什么必需**:浏览器对 pointer 事件做**视口内**命中测试 —— 坐标落在视口之外
- * 时 `event.target` 是 `<html>`,事件**不进入** `<sm-workspace>` 的 shadow root,
- * 组件的 pointermove / pointerup 挂点收不到任何东西。1440×900 实测(窗高下限抬到
- * 266px 后,开发壳页面高 1322px):
- *
- *   row-divider[0:0] 中心 y=887 → `dragBy(..., 0, 60)` 终点 y=947
- *   实测送达序列:`895 → sm-workspace`(进 shadow)、`902…947 → html`(不进 shadow)
- *   ⇒ 组件只看到 7.5px 位移,拖拽读作「几乎无位移」;
- *   registers 面板 899..1313 的 75% 点 y=1210 ⇒ 落点事件整段丢失,pointerup 也丢失
- *   ⇒ 拖拽永不收尾,列组不变。
- *
- * 这不是产品缺陷可修的形态:命中测试在浏览器侧,视口外坐标不可能到达任何页面
- * 代码;而「让 266px 下限的两窗列整体落进 900px 视口」在数学上不成立(下方
- * 不等式)。真实用户同样是**先滚动再拖**。故修正在夹具侧:把**起点与终点一起**
- * 挪进视口(文档纵向 + 条带横向),坐标在滚动后重新测量。
- *
- *   :199 落点① 需要 `条带顶 453 + 内边距 8 + 上窗 268 + 间距 16 + 分隔条 8
- *   + 0.75 × 下窗 268 < 900` ⇒ 条带顶必须 < 399px,而菜单 + 题目简介 + 状态行
- *   实测占 294px(条带顶 453px)⇒ 无解;任何「把列高下限压回 900px 视口」的
- *   改法都要么废掉 266px 下限、要么废掉 `align-items: stretch`(M1 既定列的
- *   弹性语义),两者都不是本题允许的改动。
+ * 整页布局真机几何读数(逐项对齐完成标准:D-UI-1 / D-UI-2 / D-UI-5 / 整页不溢出)。
+ * 全部读 `clientWidth` / `clientHeight` / `scrollHeight`(真实布局引擎读数)。
  */
-
-/** 拖拽起终点距视口边缘的安全边距(px)。 */
-const DRAG_VIEWPORT_MARGIN_PX = 16;
-
-/** 视口内的一点(CSS 像素;与 `page.mouse` 同坐标系)。 */
-interface DragPoint {
-  readonly x: number;
-  readonly y: number;
+export async function workspaceGeometry(page: Page): Promise<{
+  readonly innerWidth: number;
+  readonly innerHeight: number;
+  readonly leftClientWidth: number;
+  readonly rightClientWidth: number;
+  readonly horizontalGapPx: number;
+  readonly leftMinInlineSize: string;
+  readonly stackClientHeight: number;
+  readonly stackScrollHeight: number;
+  readonly stackScrollBehavior: string;
+  readonly documentScrollHeight: number;
+  readonly documentOverflowPx: number;
+  readonly panelCount: number;
+  readonly panelTypes: readonly string[];
+}> {
+  return page.evaluate(() => {
+    const workspace = document.querySelector("sm-workspace") as HTMLElement;
+    const root = workspace.shadowRoot as ShadowRoot;
+    const left = root.querySelector('[data-view-role="left"]') as HTMLElement;
+    const right = root.querySelector('[data-view-role="right"]') as HTMLElement;
+    const stack = root.querySelector("[data-view-stack]") as HTMLElement;
+    const leftRect = left.getBoundingClientRect();
+    const rightRect = right.getBoundingClientRect();
+    const panels = [...root.querySelectorAll(".ws-view[data-view-panel]")];
+    return {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      leftClientWidth: left.clientWidth,
+      rightClientWidth: right.clientWidth,
+      horizontalGapPx: rightRect.left - leftRect.right,
+      leftMinInlineSize: getComputedStyle(left).minInlineSize,
+      stackClientHeight: stack.clientHeight,
+      stackScrollHeight: stack.scrollHeight,
+      stackScrollBehavior: getComputedStyle(stack).scrollBehavior,
+      documentScrollHeight: document.documentElement.scrollHeight,
+      documentOverflowPx: document.documentElement.scrollHeight - window.innerHeight,
+      panelCount: panels.length,
+      panelTypes: panels.map((panel) => panel.getAttribute("data-view-panel") ?? ""),
+    };
+  });
 }
 
-/** 等页面处理完滚动(两帧足够;滚动是同步生效,帧等待只为让布局稳定)。 */
-async function settleFrames(page: Page): Promise<void> {
+/**
+ * 指定视图位内**可见的字节数据行数**(真机读数;可读性判据的读数面)。
+ *
+ * 离屏面板被 `content-visibility: auto` 跳过渲染 ⇒ 调用方须先把该视图位滚进
+ * 左半侧视口(`viewStack.scrollTop` / `scrollIntoView`)再调用。
+ */
+export async function visibleByteRowCount(page: Page, viewType: string): Promise<number> {
+  return page.evaluate((type) => {
+    const workspace = document.querySelector("sm-workspace") as HTMLElement;
+    const panel = workspace.shadowRoot?.querySelector(`.ws-view[data-view-panel="${type}"]`);
+    const list = panel?.querySelector("sm-byte-tab")?.shadowRoot
+      ?.querySelector("sm-byte-view")
+      ?.shadowRoot?.querySelector("sm-window-list");
+    if (list === null || list === undefined) {
+      return 0;
+    }
+    const listRect = list.getBoundingClientRect();
+    return [...list.querySelectorAll(".byte-row[data-row-address]")].filter((row) => {
+      const rect = row.getBoundingClientRect();
+      return (
+        rect.height > 0 &&
+        rect.top >= listRect.top - 1 &&
+        rect.bottom <= listRect.top + list.clientHeight + 1
+      );
+    }).length;
+  }, viewType);
+}
+
+/** 把指定视图位滚进左半侧视口(离屏面板的 content-visibility 降级需要它)。 */
+export async function scrollViewIntoStack(page: Page, viewType: string): Promise<void> {
+  await page.evaluate((type) => {
+    const workspace = document.querySelector("sm-workspace") as HTMLElement;
+    const panel = workspace.shadowRoot?.querySelector(`.ws-view[data-view-panel="${type}"]`);
+    (panel as HTMLElement | null)?.scrollIntoView({ block: "nearest" });
+  }, viewType);
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
@@ -338,160 +363,39 @@ async function settleFrames(page: Page): Promise<void> {
   );
 }
 
-/**
- * 把拖拽起点 / 终点一起挪进视口;返回**滚动后重测**的坐标。
- *
- * `read` 在每次滚动后重新测量(元素随滚动整体平移,坐标必须重取);
- * 无法同时容纳(跨度 > 视口)或滚动量不足时**抛错**(不静默拖到空气上)。
- */
-async function dragPointsInViewport(
-  page: Page,
-  read: () => Promise<readonly [DragPoint, DragPoint]>,
-): Promise<readonly [DragPoint, DragPoint]> {
-  const viewport = page.viewportSize();
-  let points = await read();
-  if (viewport === null) {
-    return points;
-  }
-  const verticalLimit = viewport.height - DRAG_VIEWPORT_MARGIN_PX;
-  const horizontalLimit = viewport.width - DRAG_VIEWPORT_MARGIN_PX;
-
-  const outOfViewport = (candidate: readonly [DragPoint, DragPoint]): boolean =>
-    candidate.some(
-      (point) =>
-        point.y < DRAG_VIEWPORT_MARGIN_PX ||
-        point.y > verticalLimit ||
-        point.x < DRAG_VIEWPORT_MARGIN_PX ||
-        point.x > horizontalLimit,
-    );
-
-  if (outOfViewport(points)) {
-    const ys = points.map((point) => point.y);
-    const xs = points.map((point) => point.x);
-    if (Math.max(...ys) - Math.min(...ys) > viewport.height - 2 * DRAG_VIEWPORT_MARGIN_PX) {
-      throw new Error(
-        `拖拽起终点纵向跨度 ${Math.max(...ys) - Math.min(...ys)}px 超过视口可用高 ` +
-          `${viewport.height - 2 * DRAG_VIEWPORT_MARGIN_PX}px(无法同时进入视口)`,
-      );
-    }
-    if (Math.max(...xs) - Math.min(...xs) > viewport.width - 2 * DRAG_VIEWPORT_MARGIN_PX) {
-      throw new Error(
-        `拖拽起终点横向跨度 ${Math.max(...xs) - Math.min(...xs)}px 超过视口可用宽 ` +
-          `${viewport.width - 2 * DRAG_VIEWPORT_MARGIN_PX}px(无法同时进入视口)`,
-      );
-    }
-    // 纵向:文档滚动(工作区在文档流内,整体平移)。取可行区间**中点**(区间端点
-    // 恰好贴边,浮点误差会让「贴边」判成出界),浏览器再按文档可滚动范围夹取。
-    const verticalTop = Math.max(...ys) - verticalLimit;
-    const verticalBottom = Math.min(...ys) - DRAG_VIEWPORT_MARGIN_PX;
-    if (verticalTop > 0 || verticalBottom < 0) {
-      await page.evaluate(
-        (y) => window.scrollTo(0, y),
-        (verticalTop + verticalBottom) / 2,
-      );
-    }
-    // 横向:条带自身滚动(列条带 `overflow: auto`;相机只做焦点列居中,这里按需平移)。
-    if (Math.max(...xs) > horizontalLimit || Math.min(...xs) < DRAG_VIEWPORT_MARGIN_PX) {
-      const strip = layoutStrip(page);
-      const horizontalTop = Math.max(...xs) - horizontalLimit;
-      const horizontalBottom = Math.min(...xs) - DRAG_VIEWPORT_MARGIN_PX;
-      await strip.evaluate((element, left) => {
-        element.scrollLeft = left;
-      }, (horizontalTop + horizontalBottom) / 2);
-    }
-    await settleFrames(page);
-    points = await read();
-  }
-
-  if (outOfViewport(points)) {
-    throw new Error(
-      `拖拽点仍在视口外(x/y = ${points.map((point) => `${point.x},${point.y}`).join(" / ")};` +
-        `视口 ${viewport.width}×${viewport.height})——视口外坐标的 pointer 事件命中 <html>,` +
-        "组件收不到(见 dragPointsInViewport 说明)",
-    );
-  }
-  return points;
+/** 视图位高度(px;D-UI-2 可读性判据 / D-UI-5 底线的几何面)。 */
+export async function panelHeightPx(page: Page, viewType: string): Promise<number> {
+  return workspaceWindow(page, viewType).evaluate((element) => element.clientHeight);
 }
 
 /**
- * 真实鼠标拖拽:在目标元素中心按下,位移 (deltaX, deltaY) 后抬起。
- * 与组件层 `DRAG_THRESHOLD_PX`(3px)阈值语义一致——位移过阈值即进入拖拽。
- *
- * **先等相机收敛**:焦点列居中是平滑滚动动画,几何读取与鼠标按下之间若条带仍在
- * 滚动,落点会错位(拖拽失效)。收敛后再取几何(并把起终点一起挪进视口)。
+ * 真实鼠标拖拽列表项到目标列表项的上 / 下半(D-UI-4:列表内重排的唯一落点语义)。
+ * 与组件层 `DRAG_THRESHOLD_PX`(3px)阈值语义一致 —— 位移过阈值即进入拖拽。
  */
-export async function dragBy(
-  page: Page,
-  target: Locator,
-  deltaX: number,
-  deltaY: number,
-): Promise<void> {
-  await waitForCameraSettled(page);
-  const points = await dragPointsInViewport(page, async () => {
-    const box = await target.boundingBox();
-    if (box === null) {
-      throw new Error("拖拽目标无可测几何(元素未渲染?)");
-    }
-    const startX = box.x + box.width / 2;
-    const startY = box.y + box.height / 2;
-    return [
-      { x: startX, y: startY },
-      { x: startX + deltaX, y: startY + deltaY },
-    ] as const;
-  });
-  const start = points[0];
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(start.x + deltaX, start.y + deltaY, { steps: 8 });
-  await page.mouse.up();
-  await waitForCameraSettled(page);
-}
-
-/**
- * 窗口拖拽落点(WP-72 三类落点):自 `from` 的标题栏按下,移动到 `to` 的
- * 上半 / 下半区后抬起(落点语义由组件按 clientY 判定)。同样先等相机收敛,
- * 并把「标题栏中心 + 落点」一起挪进视口(见 `dragPointsInViewport`)。
- */
-export async function dragWindowTo(
+export async function dragViewListItem(
   page: Page,
   from: Locator,
   to: Locator,
   at: "upper" | "lower",
 ): Promise<void> {
-  await waitForCameraSettled(page);
-  const points = await dragPointsInViewport(page, async () => {
-    const fromBox = await from.locator(".tab-bar").boundingBox();
-    const toBox = await to.boundingBox();
-    if (fromBox === null || toBox === null) {
-      throw new Error("窗口拖拽几何不可测(窗口未渲染?)");
-    }
-    return [
-      { x: fromBox.x + fromBox.width / 2, y: fromBox.y + fromBox.height / 2 },
-      {
-        x: toBox.x + toBox.width / 2,
-        y: at === "upper" ? toBox.y + toBox.height * 0.25 : toBox.y + toBox.height * 0.75,
-      },
-    ] as const;
-  });
-  const [start, end] = points;
+  const fromBox = await from.boundingBox();
+  const toBox = await to.boundingBox();
+  if (fromBox === null || toBox === null) {
+    throw new Error("列表项拖拽几何不可测(列表未展开?)");
+  }
+  const start = { x: fromBox.x + fromBox.width / 2, y: fromBox.y + fromBox.height / 2 };
+  const end = {
+    x: toBox.x + toBox.width / 2,
+    y: at === "upper" ? toBox.y + toBox.height * 0.25 : toBox.y + toBox.height * 0.75,
+  };
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 10 });
   await page.mouse.up();
-  await waitForCameraSettled(page);
-}
-
-/** 相机滚动收敛等待(平滑滚动为动画;轮询 scrollLeft 稳定)。 */
-export async function waitForCameraSettled(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const before = await layoutStrip(page).evaluate((element) => element.scrollLeft);
-        await page.waitForTimeout(60);
-        const after = await layoutStrip(page).evaluate((element) => element.scrollLeft);
-        return before === after;
-      },
-      { timeout: 5_000 },
-    )
-    .toBe(true);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
 }

@@ -184,14 +184,21 @@ describe("<pwn-memory-vm>:超时降级与重试入口(§4.3 / §4.5)", () => {
         data: readyMessage(TEST_ESID),
       }),
     );
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: HOST_ORIGIN,
+        source: h.element.parentWindow as unknown as MessageEventSource,
+        data: readyMessage(TEST_ESID),
+      }),
+    );
     await h.settle();
     expect(h.element.degradedReason).toBeNull();
     expect(h.element.appearanceSnapshot.theme).toBe("light");
   });
 });
 
-describe("<pwn-memory-vm>:主题 / 语言接线位(WP-53 接口锚)", () => {
-  it("ready.config 应用主题与语言:data-sm-* attribute + colorScheme + 快照三值", async () => {
+describe("<pwn-memory-vm>:主题 / 语言接线位(WP-53 接口锚;2026-09-18 单主题 D-UI-6)", () => {
+  it("ready.config 的 theme 进状态面、但不驱动视觉:锚恒 terminal、color-scheme 恒 dark", async () => {
     const h = await mountElement({ handshakeTimeoutMs: 30000 });
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -201,13 +208,19 @@ describe("<pwn-memory-vm>:主题 / 语言接线位(WP-53 接口锚)", () => {
       }),
     );
     await h.element.updateComplete;
-    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
-    expect(h.element.getAttribute("data-sm-language")).toBe("en-US");
+    // 协议三值仍被状态面保持(宿主下发了什么 = 事实)。
+    expect(h.element.appearanceSnapshot).toEqual({
+      theme: "dark",
+      resolvedTheme: "dark",
+      language: "en-US",
+    });
+    // 视觉落地面单值化:锚恒 terminal、color-scheme 恒 dark(终端属暗族)。
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
     expect(h.element.style.colorScheme).toBe("dark");
-    expect(h.element.appearanceSnapshot).toEqual({ theme: "dark", resolvedTheme: "dark", language: "en-US" });
+    expect(h.element.getAttribute("data-sm-language")).toBe("en-US");
   });
 
-  it("运行中 theme_changed / language_changed 消费接线(auto 三值保持)", async () => {
+  it("运行中 theme_changed / language_changed 消费接线(theme 三值保持;语言照旧落地)", async () => {
     const h = await mountElement({ handshakeTimeoutMs: 30000 });
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -234,87 +247,69 @@ describe("<pwn-memory-vm>:主题 / 语言接线位(WP-53 接口锚)", () => {
     await h.element.updateComplete;
     expect(h.element.appearanceSnapshot.theme).toBe("auto");
     expect(h.element.getAttribute("data-sm-language")).toBe("en-US");
+    // 单主题:theme_changed 不改锚(恒 terminal)。
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
   });
 
-  it("内置默认:未 ready 前保持 light / zh-CN(§4.4 未授予降级的缺省形态)", async () => {
+  it("内置默认:未 ready 前 theme=light(协议默认)+ 锚已落 terminal / zh-CN", async () => {
     const h = await mountElement({});
-    expect(h.element.appearanceSnapshot).toEqual({ theme: "light", resolvedTheme: "light", language: "zh-CN" });
+    expect(h.element.appearanceSnapshot).toEqual({
+      theme: "light",
+      resolvedTheme: "dark",
+      language: "zh-CN",
+    });
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
+    expect(h.element.style.colorScheme).toBe("dark");
   });
 });
 
-describe("<pwn-memory-vm>:terminal 锚承载(WP-73 / D-MP-2;协议面零改动)", () => {
-  /** 派发一条宿主 → 插件帧(与既有用例同形态:jsdom 全局 window 为监听面)。 */
-  function dispatchHostMessage(h: Awaited<ReturnType<typeof mountElement>>, data: unknown): void {
+describe("<pwn-memory-vm>:单主题落锚(2026-09-18 D-UI-6;原 WP-73 外部锚承载面退役)", () => {
+  /**
+   * 原本段 6 例(WP-73「terminal 锚承载 / 外部锚优先」)随 D-UI-6 单主题收敛
+   * **整条废止**:三值判别对象消失后,「插件从不写 terminal 故外部锚必为外部
+   * 所写」这一前提不再成立(插件自身即写 terminal),`#observeAnchor` 观察器也
+   * 一并删除(理由见 `src/pwn-memory-vm.ts` 的对应注释块)。此处只保留单主题
+   * 形态的**当前语义**锚点,原断言面(锚恒在场 / color-scheme 恒 dark)仍在
+   * 上一段与 `integration.test.ts` 覆盖。
+   */
+  it("挂载即落 terminal 锚 + color-scheme dark(无需宿主下发、不依赖外部预置)", async () => {
+    const h = await mountElement({ handshakeTimeoutMs: 30000 });
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
+    expect(h.element.style.colorScheme).toBe("dark");
+  });
+
+  it("外部改写锚值不再被观察器回写(观察器已退役;单主题保证改由 :root 缺省承载)", async () => {
+    const h = await mountElement({ handshakeTimeoutMs: 30000 });
+    h.element.setAttribute("data-sm-theme", "light");
+    await flushMicrotasks();
+    // 无观察器 ⇒ 外部写入的锚保持原样,插件不再夺回(原「外部锚优先」路径).
+    expect(h.element.getAttribute("data-sm-theme")).toBe("light");
+    // 视觉不受影响::root 级缺省 = 终端(样式表层面,机检于 vm-ui
+    // test/theming/theme-terminal.test.ts 的「未设锚也是终端」用例)。
+    expect(h.element.style.colorScheme).toBe("dark");
+  });
+
+  it("宿主 theme_changed 不改锚:terminal 恒在场(协议值只进状态面)", async () => {
+    const h = await mountElement({ handshakeTimeoutMs: 30000 });
     window.dispatchEvent(
       new MessageEvent("message", {
         origin: HOST_ORIGIN,
         source: h.element.parentWindow as unknown as MessageEventSource,
-        data,
+        data: readyMessage(TEST_ESID),
       }),
     );
-  }
-
-  it("插件文档页预置 data-sm-theme=terminal → 挂载后锚保留,color-scheme 落 dark", async () => {
-    const h = await mountElement({ hostAttributes: { "data-sm-theme": "terminal" } });
-    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
-    // terminal 属暗族:color-scheme 与 resolvedTheme 同口径落 dark(系统色不自相矛盾)。
-    expect(h.element.style.colorScheme).toBe("dark");
-  });
-
-  it("运行中外部改写锚为 terminal → 立即生效(无需等待宿主 theme_changed)", async () => {
-    const h = await mountElement({});
-    expect(h.element.getAttribute("data-sm-theme")).toBe("light");
-    h.element.setAttribute("data-sm-theme", "terminal");
-    await flushMicrotasks();
-    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
-    expect(h.element.style.colorScheme).toBe("dark");
-  });
-
-  it("宿主 theme_changed 到达不夺回 terminal 锚(承载优先),插件状态仍三值保持", async () => {
-    const h = await mountElement({
-      handshakeTimeoutMs: 30000,
-      hostAttributes: { "data-sm-theme": "terminal" },
-    });
-    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
     await h.element.updateComplete;
-    dispatchHostMessage(h, controlMessage("theme_changed", TEST_ESID, 2, "light"));
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: HOST_ORIGIN,
+        source: h.element.parentWindow as unknown as MessageEventSource,
+        data: controlMessage("theme_changed", TEST_ESID, 2, "light"),
+      }),
+    );
     await h.element.updateComplete;
     expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
     expect(h.element.style.colorScheme).toBe("dark");
-    // terminal 不经协议:外观状态机保持协议三值语义(此处 = 宿主下发的 light)。
     expect(h.element.appearanceSnapshot.theme).toBe("light");
-    expect(h.element.appearanceSnapshot.resolvedTheme).toBe("light");
-  });
-
-  it("移除 terminal 锚 → 交还插件控制:重新落 resolvedTheme", async () => {
-    const h = await mountElement({
-      handshakeTimeoutMs: 30000,
-      hostAttributes: { "data-sm-theme": "terminal" },
-    });
-    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
-    await h.element.updateComplete;
-    h.element.removeAttribute("data-sm-theme");
-    await flushMicrotasks();
-    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
-    expect(h.element.style.colorScheme).toBe("dark");
-  });
-
-  it("零变化回归:无 terminal 锚时照旧落二值 resolvedTheme(协议三值路径不变)", async () => {
-    const h = await mountElement({ handshakeTimeoutMs: 30000 });
-    expect(h.element.getAttribute("data-sm-theme")).toBe("light");
-    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
-    await h.element.updateComplete;
-    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
-    expect(h.element.style.colorScheme).toBe("dark");
-  });
-
-  it("边界:外部写入协议三值不夺锚(light / dark / auto 的权威仍是宿主 appearance)", async () => {
-    const h = await mountElement({ handshakeTimeoutMs: 30000 });
-    h.element.setAttribute("data-sm-theme", "light");
-    await flushMicrotasks();
-    dispatchHostMessage(h, readyMessage(TEST_ESID, { theme: "dark" }));
-    await h.element.updateComplete;
-    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
   });
 });
 

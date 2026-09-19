@@ -207,11 +207,14 @@ describe("端到端:引导 → create_session → 工作区挂载 → 高度 / �
     expect(lastHeight?.targetOrigin).toBe(HOST_ORIGIN);
     expect(heightSeq()).toEqual([300, 560]);
 
-    // 运行中主题 / 语言切换:接线位生效(attribute + 快照)。
+    // 运行中主题 / 语言切换:接线位生效(语言照旧落地;主题单值化 D-UI-6 ——
+    // 协议 theme 值进状态面、视觉锚恒 terminal / color-scheme 恒 dark)。
     h.dispatchFromHost(controlMessage("theme_changed", TEST_ESID, 2, "dark"));
     h.dispatchFromHost(controlMessage("language_changed", TEST_ESID, 3, "en-US"));
     await h.element.updateComplete;
-    expect(h.element.getAttribute("data-sm-theme")).toBe("dark");
+    expect(h.element.getAttribute("data-sm-theme")).toBe("terminal");
+    expect(h.element.style.colorScheme).toBe("dark");
+    expect(h.element.appearanceSnapshot.theme).toBe("dark");
     expect(h.element.getAttribute("data-sm-language")).toBe("en-US");
     expect(h.element.appearanceSnapshot.language).toBe("en-US");
   });

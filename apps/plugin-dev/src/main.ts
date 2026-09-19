@@ -79,17 +79,43 @@ const DEMO_DEFAULTS: SessionCreateInput = {
   embedToken: "embed-token-dev-0001",
 };
 
-/** 开发壳样式(注入一次;仅开发联调形态)。 */
+/**
+ * 开发壳样式(注入一次;仅开发联调形态)。
+ *
+ * **整页定高链(2026-09-18,D-API-153 第 6 项;消解遗留 #35)**:
+ * 原 `.tab-area { min-block-size: 32rem }` 只有下限、**没有上限** ⇒ 工作区被内容
+ * 撑到真实内容高(真机实测 1163px ⇒ 页面 1346px),「整页布局 = 顶层页面 100dvh
+ * + 左半侧内部滚动」在开发壳里根本无法被驱动。
+ *
+ * 现状:壳根自身 `block-size: 100dvh` + `grid-template-rows: auto auto minmax(0,1fr)`
+ * ⇒ 页头 / 表单按内容高、**工作区格恰占剩余视口高**;`.tab-area` 用
+ * `min-block-size: 0` 把定高链透传给 `sm-workspace`(其 `:host` 为
+ * `block-size: 100dvh` 优先 / `100%` 兜底)。
+ *
+ * **`overflow` 必须留在 `visible`**(2026-09-18 真机取证):窄屏下 D-UI-5 要求
+ * 「两半侧各保底 452.4px ⇒ 页面横向滚动」。此处一旦给 `overflow: hidden`,
+ * 浏览器会把 `overflow-x` 升格为裁剪 ⇒ 内容宽**不再上浮到文档层**、
+ * `documentElement.scrollWidth` 停在视口宽 ⇒ **右半侧不可达**(实测 375px 视口下
+ * docScrollWidth 375 而工作区网格宽 905)。纵向由 `block-size: 100dvh` 约束。
+ *
+ * 不压扁任何东西:工作区拿到的是**恰好视口高**的格,左半侧两个视图位 + 内部
+ * 纵向滚动(.ws-stack)因此可被真实驱动 —— 开发壳是本地联调与 E2E 的载体。
+ * `block-size: 100dvh`(而非 `100%`)**不要求**外层 `html` / `body` / `#app`
+ * 提供定高链,故本壳的挂载点 #app 无需任何样式配合(少一处易漂移的依赖)。
+ *
+ * 主题:开发壳**没有**主题切换 UI(终端单主题,D-UI-6);原「宿主模拟页」的主题
+ * 下拉在 `host-mock/`(属嵌入协议面,退役归 WP-96),本文件零主题控件。
+ */
 const SHELL_STYLE_ID = "plugin-dev-shell-style";
 const SHELL_STYLE = `
-.plugin-dev-shell { display: flex; flex-direction: column; gap: 0.75rem; max-inline-size: 78rem; margin: 0 auto; padding: 1rem; }
+.plugin-dev-shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 0.75rem; max-inline-size: 78rem; margin: 0 auto; padding: 1rem; block-size: 100dvh; box-sizing: border-box; }
 .plugin-dev-shell header h1 { margin: 0; font-size: 1.25rem; }
-.plugin-dev-shell #dev-status { margin: 0.25rem 0 0; color: graytext; font-size: 0.8125rem; }
-.session-form { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; padding: 0.5rem 0.75rem; border: 1px solid rgb(0 0 0 / 15%); border-radius: 8px; font: system-ui 0.8125rem sans-serif; }
-.session-form label { display: flex; flex-direction: column; gap: 0.125rem; font-size: 0.75rem; color: graytext; }
+.plugin-dev-shell #dev-status { margin: 0.25rem 0 0; color: var(--sm-fg-dim, #6dd47f); font-size: 0.8125rem; }
+.session-form { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; padding: 0.5rem 0.75rem; border: 1px solid var(--sm-border, rgb(125 255 156 / 28%)); border-radius: 8px; font: system-ui 0.8125rem sans-serif; }
+.session-form label { display: flex; flex-direction: column; gap: 0.125rem; font-size: 0.75rem; color: var(--sm-fg-dim, #6dd47f); }
 .session-form input { font: inherit; padding: 0.25rem 0.375rem; min-inline-size: 12ch; }
 .session-form button { font: inherit; padding: 0.3125rem 0.75rem; cursor: pointer; }
-.plugin-dev-shell .tab-area { min-block-size: 32rem; }
+.plugin-dev-shell .tab-area { display: block; min-block-size: 0; overflow: visible; }
 `;
 
 /**

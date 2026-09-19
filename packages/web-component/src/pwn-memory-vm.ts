@@ -21,16 +21,20 @@
  * 空数组 = 完全静态形态(工作区照常渲染,无高度 / 外观消息往来)。
  *
  * 主题 / 语言接线位(WP-53 增量面):EmbedAppearanceController 为唯一接线点,
- * 解析结果落 host 元素 `data-sm-theme`(二值)/ `data-sm-language` 与
- * `color-scheme`;三值状态与语言字符串经 `appearanceSnapshot` 可读。主题双套
- * 变量与 i18n 抽取面归 WP-53,在本接口上增量。
+ * 解析结果落 host 元素 `data-sm-theme` / `data-sm-language` 与 `color-scheme`;
+ * 三值状态与语言字符串经 `appearanceSnapshot` 可读。主题双套变量与 i18n 抽取
+ * 面归 WP-53,在本接口上增量。
  *
  * M1 `terminal` 承载增量(WP-73 / D-MP-2;嵌入协议零改动):`terminal` 不经
  * 冻结协议传达,而由宿主元素上的 `data-sm-theme="terminal"` 扩展锚承载
- * (插件文档页预置 / 集成方直接设置)。插件自身只写二值 `resolvedTheme`,故
- * 该锚出现即视为**外部显式锚优先**——保留锚、`color-scheme` 落 dark、
- * 宿主 `theme_changed` 不夺锚;锚被移除或改写为协议三值即交还插件控制。
- * `EmbedAppearanceController` 与协议值域**零改动**(appearance 三值语义保持)。
+ * (插件文档页预置 / 集成方直接设置)。
+ *
+ * **2026-09-18 UI 改版(D-UI-6 单主题收敛)**:`light` / `dark` / `auto` 三预设
+ * 退役,本元素的落锚恒为 `SM_TERMINAL_THEME_VALUE`、`color-scheme` 恒 `dark`,
+ * 不再消费 `resolvedTheme` 做分支;原「外部锚优先 / 锚变更观察」(WP-73)随三值
+ * 判别对象一并退场(详见 `#applyAppearanceToHost`)。协议三值仍由状态面保持
+ * (`appearanceSnapshot.theme` = 宿主下发原值)——**退役的是视觉分支,不是协议
+ * 值域**;`EMBED_THEMES` 的物理退场属 WP-96。
  *
  * M2 描述包正式下发接入(WP-54 增量面):引导配置就绪即并行获取公开描述包
  * (`fetchChallengeDescriptor`,GET /descriptors/:challengeId/:version;哈希 +
@@ -176,7 +180,12 @@ export class PwnMemoryVm extends LitElement {
   @property({ attribute: false })
   frameScheduler: FrameSchedulerLike | null = null;
 
-  /** matchMedia 注入(auto 主题系统跟随;默认 window.matchMedia)。 */
+  /**
+   * matchMedia 注入(**单主题下不再消费**;D-UI-6 收敛:系统跟随分支随
+   * `auto` 退役)。属性面保留的理由 = 改动最小 —— 它与 `EmbedAppearanceOptions
+   * .matchMedia` 同属测试接缝面,删除会牵连 `pwn-memory-vm.ts` /
+   * `appearance.ts` 的接缝断言;保留则零行为、零风险(注入假体也不再被读)。
+   */
   @property({ attribute: false })
   matchMediaImpl: ((query: string) => MediaQueryLike | null) | null = null;
 
@@ -205,9 +214,8 @@ export class PwnMemoryVm extends LitElement {
   #resizeObserver: ResizeObserverLike | null = null;
   #localCounters: Record<string, number> = {};
   #appearanceDisposer: (() => void) | null = null;
-  // WP-73(D-MP-2 承载增量):外部锚观察 + 自身落锚回环过滤。
-  #anchorObserver: MutationObserver | null = null;
-  #lastAnchoredTheme: string | null = null;
+  // WP-73 的 `#anchorObserver` / `#lastAnchoredTheme` 随 D-UI-6 单主题收敛删除
+  // (理由见 `#applyAppearanceToHost` 之后的注释块)。
 
   // M2 描述包接入状态(WP-54;晚到注入,变更点手动 requestUpdate)。
   #descriptorView: ChallengeDescriptorView | null = null;
@@ -215,17 +223,35 @@ export class PwnMemoryVm extends LitElement {
   #descriptorStatus: WorkspaceDescriptorStatus = "loading";
 
   static override styles = css`
+    /* 整页布局定高链的**宿主段**(D-API-153 第 6 项:整页布局 = 顶层页面
+       100dvh + 左半侧内部滚动)。本元素是嵌入形态下工作区的宿主:
+       :host 给 100dvh 后,工作区 sm-workspace 的「block-size: 100%」有链可依
+       (iframe 文档视口 = iframe 框高),无需宿主上报高度 / 无需
+       height_changed / auto_resize(两者属退役面)。
+
+       **遗留 #37 的载体消解**:#37 = 「宿主未给工作区定高 ⇒ 条带自身纵向滚动
+       在两种已发布形态下都不会出现」。整页布局下「宿主给定高」这一前提不再
+       必要(工作区自身即 100dvh),但宿主仍保留一条定高链,使 iframe 形态下
+       工作区恰为视口高、内部滚动真正生效。
+
+       主题单值化(D-UI-6):退役的浅色字面量(canvas / canvastext)换成终端
+       等价;回退值均为**终端值**(token 缺失也回落成终端,不回落成浅色 ——
+       见 packages/vm-ui/src/theme/theme-tokens.ts「回退值纪律」)。
+       注意:本注释块位于 CSS 模板字面量内,一律不写反引号(TS scanner 会把
+       反引号当模板定界符 ⇒ 整文件解析崩塌)。 */
     :host {
       display: block;
-      background: canvas;
-      color: canvastext;
+      block-size: 100dvh;
+      min-block-size: 0;
+      background: var(--sm-bg-base, #0b0f0b);
+      color: var(--sm-fg, #b9ffc4);
     }
 
     .status {
       margin: 0;
       padding: 1rem;
       font: system-ui 0.875rem sans-serif;
-      color: graytext;
+      color: var(--sm-fg-dim, #6dd47f);
     }
 
     .degraded {
@@ -233,8 +259,9 @@ export class PwnMemoryVm extends LitElement {
       flex-direction: column;
       gap: 0.75rem;
       padding: 1rem;
-      border: 1px solid rgb(0 0 0 / 15%);
+      border: 1px solid var(--sm-border, rgb(125 255 156 / 28%));
       border-radius: 8px;
+      background: var(--sm-bg-panel, #101610);
       font: system-ui 0.875rem sans-serif;
     }
 
@@ -249,9 +276,15 @@ export class PwnMemoryVm extends LitElement {
       cursor: pointer;
     }
 
+    /* 定高链中段(宿主 → 工作区):原固定「min-block-size: 16rem」与「压缩以
+       适配」一并退场(D-UI-153),改为「block-size: 100%」透传 :host 的定高;
+       「min-block-size: 0」松开 grid / flex 子项的最小内容高,否则内容仍会把
+       工作区撑到内容高、内部滚动容器退化为不可滚(遗留 #37 的失败模式)。
+       (本注释在 CSS 模板字面量内,不写反引号。) */
     .workspace-slot {
       display: block;
-      min-block-size: 16rem;
+      block-size: 100%;
+      min-block-size: 0;
     }
   `;
 
@@ -310,13 +343,12 @@ export class PwnMemoryVm extends LitElement {
     this.#appearanceDisposer ??= this.#appearance.onChange((snapshot) => {
       this.#applyAppearanceToHost(snapshot);
     });
-    this.#observeAnchor();
     this.#applyAppearanceToHost(this.#appearance.snapshot);
   }
 
   public override disconnectedCallback(): void {
-    this.#anchorObserver?.disconnect();
-    this.#anchorObserver = null;
+    // 原 `#anchorObserver?.disconnect()` 随观察器一并删除(D-UI-6 单主题;
+    // 此处已无属性观察面可断开)。
     this.#teardown();
     super.disconnectedCallback();
   }
@@ -610,52 +642,47 @@ export class PwnMemoryVm extends LitElement {
     this.requestUpdate();
   };
 
-  /* ── 外观落地面(WP-53 接线位;WP-73 terminal 承载增量)────────────────── */
+  /* ── 外观落地面(WP-53 接线位;2026-09-18 单主题收敛 D-UI-6)───────────── */
 
   /**
-   * 外观落锚(元素 `data-sm-theme` / `data-sm-language` / `color-scheme` 的唯一
-   * 写面):
-   *  - 插件自身只写**二值 resolvedTheme**——协议三值(light / dark / auto)的
-   *    权威在宿主 appearance,`terminal` 不经嵌入协议(D-MP-2;冻结面
-   *    `EMBED_THEMES` 零改动);
-   *  - **外部显式 terminal 锚优先**:插件从不写 terminal,故自身锚等于
-   *    `SM_TERMINAL_THEME_VALUE` 时该值必为外部写入(插件文档页预置 /
-   *    集成方直接设置),此时保留锚并把 `color-scheme` 落 dark(terminal 属
-   *    暗族,系统色不自相矛盾),宿主 `theme_changed` 亦不夺锚;
-   *  - 集成方移除该锚或改写为协议三值后,插件在下一次外观应用(或锚变更)时
-   *    重新掌握锚 —— light / dark / auto 路径与既有行为逐字一致(零变化)。
+   * 外观落锚(元素 `data-sm-theme` / `data-sm-language` / `color-scheme` 的
+   * 唯一写面;单主题形态):
+   *  - **锚恒为终端值**:`light` / `dark` / `auto` 于 2026-09-18(D-UI-6)退役,
+   *    故本处不再按 `snapshot.resolvedTheme` 分支,只写
+   *    `SM_TERMINAL_THEME_VALUE`;
+   *  - `color-scheme` 仍读 `snapshot.resolvedTheme`(**单一来源** =
+   *    `EmbedAppearanceController#resolveTheme()`,单主题下恒 `"dark"`;
+   *    终端属暗族,系统色控件不自相矛盾)—— 不在此处另写一份字面分支,避免
+   *    「两处各自漂移」(本仓既有失败模式);
+   *  - 外部锚语义因此**不再需要区分**:单主题下插件自身与外部写入的都是
+   *    terminal,原「外部 terminal 锚优先 / 不夺锚」分支失去判别对象,整条退场;
+   *  - 协议三值仍被 **状态面**保持(`appearanceSnapshot.theme` = 宿主下发原值,
+   *    见 `EmbedAppearanceController`):退役的是**视觉分支**,不是协议值域,
+   *    嵌入协议面(含 `EMBED_THEMES`)整体退役属 WP-96;
+   *  - 语言面不受主题收敛影响(`data-sm-language` 照旧)。
    */
   #applyAppearanceToHost(snapshot: EmbedAppearanceSnapshot): void {
-    const externalTerminal = this.getAttribute(SM_THEME_ATTRIBUTE) === SM_TERMINAL_THEME_VALUE;
-    if (!externalTerminal) {
-      this.setAttribute(SM_THEME_ATTRIBUTE, snapshot.resolvedTheme);
-    }
-    this.#lastAnchoredTheme = this.getAttribute(SM_THEME_ATTRIBUTE);
+    this.setAttribute(SM_THEME_ATTRIBUTE, SM_TERMINAL_THEME_VALUE);
     this.setAttribute("data-sm-language", snapshot.language);
-    this.style.colorScheme = externalTerminal ? "dark" : snapshot.resolvedTheme;
+    this.style.colorScheme = snapshot.resolvedTheme;
   }
 
-  /**
-   * 外部锚变更观察(WP-73 增量):集成方在宿主元素上直接改 / 删
-   * `data-sm-theme`(含 terminal)即生效,无需等待宿主 `theme_changed`;
-   * 自身落锚经 `#lastAnchoredTheme` 过滤,零回环(仅观察锚属性,
-   * 语言锚的自写不触发)。
+  /*
+   * 原 `#observeAnchor()`(WP-73 外部锚观察 + 自身落锚回环过滤)整条删除
+   * (2026-09-18,D-UI-6 单主题收敛):
+   *
+   * 该观察器的唯一职责是「外部把锚改成 terminal → 立即重新应用;锚被移除 →
+   * 交还插件控制」。单主题下插件每次都写 terminal ⇒ ⓐ「外部 terminal 锚优先」
+   * 无判别对象(外部写的与插件写的同值);ⓑ「锚被移除即交还」也无判别对象
+   * (交还后插件写的仍是 terminal,幂等于不移除);ⓒ 锚值域只剩一个值 ⇒ 该
+   * 观察器只剩「外部删锚后无意义地写回同值」的冗余功能,属纯噪音。故连
+   * `#anchorObserver` / `#lastAnchoredTheme` 字段与 `disconnectedCallback` 里的
+   * 断开清理一并删除,不留死代码。
+   *
+   * 安全性:删观察器**不削弱单主题保证** —— `:root` 级缺省已使「未设锚 = 终端」
+   * (`packages/vm-ui/src/theme/theme-tokens.ts`「锚策略」段:变量落在 html 上
+   * 沿树继承穿透 shadow DOM),显式锚只作同值兜底。
    */
-  #observeAnchor(): void {
-    if (this.#anchorObserver !== null || typeof MutationObserver === "undefined") {
-      return;
-    }
-    this.#anchorObserver = new MutationObserver(() => {
-      if (this.getAttribute(SM_THEME_ATTRIBUTE) === this.#lastAnchoredTheme) {
-        return;
-      }
-      this.#applyAppearanceToHost(this.#appearance.snapshot);
-    });
-    this.#anchorObserver.observe(this, {
-      attributes: true,
-      attributeFilter: [SM_THEME_ATTRIBUTE],
-    });
-  }
 
   /* ── 释放 ───────────────────────────────────────────────────────────── */
 
