@@ -22,6 +22,7 @@ import {
 import {
   InMemoryAuditSink,
   InMemoryCredentialRevocationStore,
+  InMemoryLaunchGrantStore,
   InMemoryTokenIssuanceStore,
   buildAuthPlugin,
   createTokenSigner,
@@ -54,6 +55,7 @@ import {
   MemoryChallengeBundleStore,
   MemoryChallengeRegistry,
   MemoryHostScoresStore,
+  MemoryLaunchTicketStore,
   MemoryRateLimitCounter,
   MemoryRouteStore,
   MemorySessionRepository,
@@ -67,6 +69,7 @@ import {
 import { buildDescriptorRoutes } from "../../../src/routes/descriptor-routes.js";
 import { buildVerdictRoutes } from "../../../src/routes/verdict-routes.js";
 import { buildHostScoresRoutes } from "../../../src/routes/host-scores-routes.js";
+import { buildLaunchRoutes } from "../../../src/launch/launch-routes.js";
 import type { Logger } from "pino";
 import { createLogCapture, type LogCapture } from "../../helpers/log-capture.js";
 import { OutboundFrameRecorder } from "../../wss/helpers/outbound-frame-recorder.js";
@@ -178,6 +181,10 @@ export interface SessionTestRig {
   readonly signer: TokenSigner;
   readonly audit: InMemoryAuditSink;
   readonly issuanceStore: InMemoryTokenIssuanceStore;
+  /** 启动授权凭证签发记录(WP-91;v2 create_session 的授权来源)。 */
+  readonly grantStore: InMemoryLaunchGrantStore;
+  /** 启动票据 CAS 端口(launch:{jti};WP-91)。 */
+  readonly ticketStore: MemoryLaunchTicketStore;
   readonly revocationStore: InMemoryCredentialRevocationStore;
   readonly sessions: MemorySessionRepository;
   /** 题目注册表(内存实现;descriptor 下发红灯直接登记版本行 / 读登记摘要)。 */
@@ -268,6 +275,10 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
   // ── WP-2 内存认证端口 ──
   const audit = new InMemoryAuditSink();
   const issuanceStore = new InMemoryTokenIssuanceStore({ now });
+  // 启动授权凭证签发记录(WP-91;v2 create_session 的授权来源)。
+  const grantStore = new InMemoryLaunchGrantStore({ now });
+  // 启动票据 CAS 端口(launch:{jti};内存同构替身)。
+  const ticketStore = new MemoryLaunchTicketStore(now);
   const revocationStore = new InMemoryCredentialRevocationStore({ now });
   const signer = await createTokenSigner(config.signingKey);
 
@@ -336,6 +347,12 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
   const hostScoresRateGate = new FixedWindowRateGate({
     counter: rateLimitCounter,
     limitPerWindow: config.hostScoresQueriesPerMinute,
+  });
+  // 启动票据签发频率闸(分发改版 WP-91,D-LT-2):与 runtime.ts 同一拓扑
+  // (rate:{锚租户}:launch_tickets 固定窗口)。
+  const launchTicketRateGate = new FixedWindowRateGate({
+    counter: rateLimitCounter,
+    limitPerWindow: config.launchTicketIssuancePerMinute,
   });
   const createSessionGuard = new RateLimitedCreateSessionGuard({
     rateGate: requestRateGate,
@@ -437,6 +454,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
       },
       signer,
       issuanceStore,
+      grantStore,
       revocationStore,
       audit,
       allowedOrigins: config.allowedOrigins,
@@ -481,6 +499,29 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
       hostScoresRateGate: (anchorTenantId) =>
         hostScoresRateGate.acquireOrThrow(`rate:${anchorTenantId}:host_scores`, "host_scores_rate"),
     }),
+    // 启动票据路由(分发改版 WP-91,D-LT-1 ~ D-LT-5):与 runtime.ts 同一装配
+    // 拓扑(内存 CAS 端口 + 内存授权凭证端口 + 宿主凭证 + 白名单 +
+    // rate:{锚租户}:launch_tickets 频率闸)。**测试接缝必须与生产装配同形**
+    // —— D-API-156 缺陷 1(hostScoresRoutes 漏传)正是接缝与生产不一致造成的。
+    launchRoutes: buildLaunchRoutes({
+      hostBackendToken: config.hostBackendToken,
+      hostTenants: config.hostTenants,
+      publicOrigin: config.publicOrigin,
+      launchUserId: config.launchUserId,
+      launchTicketTtlSeconds: config.launchTicketTtlSeconds,
+      registry,
+      ticketStore,
+      grantStore,
+      signer,
+      logger,
+      nodeEnv: config.nodeEnv,
+      launchTicketRateGate: (anchorTenantId) =>
+        launchTicketRateGate.acquireOrThrow(
+          `rate:${anchorTenantId}:launch_tickets`,
+          "launch_ticket_rate",
+        ),
+      ...(now === undefined ? {} : { now }),
+    }),
   });
   await app.ready();
 
@@ -493,6 +534,8 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     signer,
     audit,
     issuanceStore,
+    grantStore,
+    ticketStore,
     revocationStore,
     sessions,
     registry,

@@ -13,6 +13,8 @@ import type {
   AuditSink,
   CredentialRevocationStore,
   IssuedEmbedTokenRecord,
+  IssuedLaunchGrantRecord,
+  LaunchGrantStore,
   TokenIssuanceStore,
 } from "./ports.js";
 
@@ -53,6 +55,44 @@ export class InMemoryTokenIssuanceStore implements TokenIssuanceStore {
 
   async revoke(jti: string): Promise<boolean> {
     return this.#records.delete(jti);
+  }
+}
+
+/**
+ * 启动授权凭证签发记录的内存实现(键域 `launchGrant:{jti}`;WP-91,D-LT-5 5a)。
+ *
+ * 消费语义与 `InMemoryTokenIssuanceStore` **逐条对齐**(取删一体 ⇒ 单线程下
+ * 原子单次消费;先删后判过期 ⇒ 过期记录不可复得)。**独立类而非泛型复用**:
+ * 两个记录类型的字段集合不同(授权凭证无 sessionId / embedSessionId),
+ * 合成一个泛型容器会让"给授权凭证写入 embedSessionId"在类型上变得可能。
+ */
+export class InMemoryLaunchGrantStore implements LaunchGrantStore {
+  readonly #records = new Map<string, { record: IssuedLaunchGrantRecord; expiresAtMs: number }>();
+  readonly #now: () => number;
+
+  constructor(options: InMemoryStoreOptions = {}) {
+    this.#now = options.now ?? Date.now;
+  }
+
+  async put(record: IssuedLaunchGrantRecord, ttlSeconds: number): Promise<void> {
+    // 存储副本:调用方持有的引用后续变更不得影响签发记录(存储是权威锚)。
+    this.#records.set(record.jti, {
+      record: { ...record },
+      expiresAtMs: this.#now() + ttlSeconds * 1000,
+    });
+  }
+
+  async consume(jti: string): Promise<IssuedLaunchGrantRecord | null> {
+    const entry = this.#records.get(jti);
+    if (entry === undefined) {
+      return null;
+    }
+    // 原子单次消费:存在则删除并返回(取删一体,无窗口)。
+    this.#records.delete(jti);
+    if (this.#now() >= entry.expiresAtMs) {
+      return null;
+    }
+    return entry.record;
   }
 }
 

@@ -80,6 +80,13 @@ export interface SessionApiServerDeps {
   readonly verdictRoutes?: FastifyPluginAsync;
   /** 宿主成绩同步只读路由(GET /host/scores;中期 M3 WP-78,D-API-122)。 */
   readonly hostScoresRoutes?: FastifyPluginAsync;
+  /**
+   * 启动票据路由(POST /auth/launch-tickets + GET /app/c/:challengeId/:version;
+   * 分发改版 WP-91,D-LT-1 ~ D-LT-5)。**必须注册**:它是页面分发的唯一授权入口,
+   * 且 `index.ts` 曾漏传 `hostScoresRoutes` 导致生产面从未挂载(D-API-156 缺陷 1)
+   * —— 该缺陷的装配路径断言现由 `test/runtime/assembly.test.ts` 承载。
+   */
+  readonly launchRoutes?: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5 装配,D-API-40)。 */
   readonly wssChannel?: FastifyPluginAsync;
   /** 调试通道插件(GET /sessions/debug-channel;阶段四 WP-41,须在 wssChannel 之后注册)。 */
@@ -169,6 +176,9 @@ export function buildServer(
   }
   if (deps.hostScoresRoutes !== undefined) {
     app.register(deps.hostScoresRoutes);
+  }
+  if (deps.launchRoutes !== undefined) {
+    app.register(deps.launchRoutes);
   }
   if (deps.wssChannel !== undefined) {
     app.register(deps.wssChannel);

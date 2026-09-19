@@ -16,7 +16,7 @@
 export type CredentialFailureKind = "expired" | "signature_invalid" | "malformed";
 
 /** 凭证种类(日志 / 审计判别用,非秘密)。 */
-export type CredentialKind = "embed_token" | "session_credential";
+export type CredentialKind = "embed_token" | "session_credential" | "launch_grant";
 
 /**
  * 凭证校验失败(signEmbedToken 的 verify 侧确定性异常)。

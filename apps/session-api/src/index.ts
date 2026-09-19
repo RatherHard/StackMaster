@@ -28,6 +28,15 @@ async function main(): Promise<void> {
     sessionRoutes: runtime.sessionRoutes,
     descriptorRoutes: runtime.descriptorRoutes,
     verdictRoutes: runtime.verdictRoutes,
+    // 宿主成绩同步(D-API-156 缺陷 1 修复,WP-91 同批):
+    // runtime 早已构好该插件,但**此前漏传**,而 `server.ts` 仅在非 undefined 时
+    // 注册 ⇒ **生产装配下 `GET /host/scores` 从未挂载**(WP-78 交付面在生产不可用),
+    // 而测试夹具 `session-rig.ts` 传了该字段 ⇒ 全绿而生产 404 ——
+    // 与 WP-76「debugChannel 漏传」同一缺陷族(测试接缝绕开真实装配路径)。
+    // 防再犯的装配路径断言见 `test/runtime/assembly.test.ts`。
+    hostScoresRoutes: runtime.hostScoresRoutes,
+    // 启动票据路由(分发改版 WP-91):页面分发的唯一授权入口。
+    launchRoutes: runtime.launchRoutes,
     wssChannel: runtime.wssChannel,
     // 调试通道插件(中期 WP-76 越界缺陷修复):runtime 构好但此前**漏传**,
     // 而 `server.ts:171` 仅在 `deps.debugChannel !== undefined` 时注册 ⇒ 生产入口

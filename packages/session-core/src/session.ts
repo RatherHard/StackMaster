@@ -16,6 +16,7 @@ import {
   ActionRequestSchema,
   ActionResponseSchema,
   PublicStateProjectionSchema,
+  SESSION_ACTION_PROTOCOL_VERSION,
   canonicalize,
   type ActionResponse,
   type PublicStateProjection,
@@ -371,7 +372,7 @@ export class SessionOrchestrator {
     const cached = this.idempotencyCache.get(key);
     if (cached !== undefined) {
       const retry = ActionRequestSchema.parse({
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         sessionId: this.sessionId,
         clientSeq: cached.originalClientSeq,
         baseRevision: cached.originalBaseRevision,
@@ -386,7 +387,7 @@ export class SessionOrchestrator {
 
     const clientSeq = this.clientSeqWatermark + 1;
     const request = ActionRequestSchema.parse({
-      protocolVersion: 1,
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       sessionId: this.sessionId,
       clientSeq,
       baseRevision: this.revisionLedger,

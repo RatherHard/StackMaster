@@ -99,13 +99,25 @@ export class MappedOrchestratorFailure extends Error {
   }
 }
 
-/** 认证派生的会话创建输入(consumeEmbedToken 三方比对通过后的身份)。 */
+/**
+ * 认证派生的会话创建输入(授权消费通过后的身份)。
+ *
+ * **锚字段的命名沿革(WP-91)**:该字段原名 `embedTokenJti`,因为窗口期之前只有
+ * 一条授权链(embed token)。D-LT-5 5c 起授权来源改为**启动授权凭证**,两条链
+ * 在 N-1 窗口期内**并存** ⇒ 字段改名为中性的 `credentialJti`,并加
+ * `credentialKind` 区分族别。**为什么不叫 `launchGrantJti`**:那样 v1 分支就得
+ * 硬塞一个语义不符的名字,而"字段名与实际内容不符"正是本仓库反复清理的缺陷族。
+ * 两个字段都进 `create_session` 审计 detail(可追溯锚,非秘密)。
+ */
 export interface VerifiedCreateIdentity {
   readonly tenantId: string;
   readonly userId: string;
   readonly challengeId: string;
   readonly challengeVersion: string;
-  readonly embedTokenJti: string;
+  /** 授权凭证的签发记录 jti(可追溯锚;v2 = 启动授权凭证,v1 = embed token)。 */
+  readonly credentialJti: string;
+  /** 授权来源族(审计 detail 用;两族共存期必须可区分)。 */
+  readonly credentialKind: "launch_grant" | "embed_token";
 }
 
 export interface CreateSessionOutcome {
@@ -450,7 +462,11 @@ export class LiveSessionManager {
       at: (this.#deps.now ?? Date.now)(),
       actor: { tenantId: identity.tenantId, userId: identity.userId },
       sessionId,
-      detail: { embedTokenJti: identity.embedTokenJti, challengeVersion: identity.challengeVersion },
+      detail: {
+        credentialJti: identity.credentialJti,
+        credentialKind: identity.credentialKind,
+        challengeVersion: identity.challengeVersion,
+      },
     });
     this.#log.info({ sessionId, tenantId: identity.tenantId, revision: orchestrator.revision }, "session created");
     return {

@@ -55,6 +55,7 @@ import {
   PostgresSubmissionStore,
   RedisIdempotencyWindow,
   RedisKeyValueStore,
+  RedisLaunchTicketStore,
   RedisRateLimitCounter,
   RedisRouteStore,
   ResilientIdempotencyWindow,
@@ -78,6 +79,7 @@ import { buildSessionRoutes } from "../routes/session-routes.js";
 import { buildDescriptorRoutes } from "../routes/descriptor-routes.js";
 import { buildVerdictRoutes } from "../routes/verdict-routes.js";
 import { buildHostScoresRoutes } from "../routes/host-scores-routes.js";
+import { buildLaunchRoutes } from "../launch/launch-routes.js";
 import { createSessionAuthContext } from "../auth/auth-context.js";
 import { LiveSessionManager } from "../sessions/session-manager.js";
 import { SessionMetrics, buildMetricsPlugin } from "../metrics/index.js";
@@ -97,6 +99,7 @@ import {
 } from "../debug/index.js";
 import {
   KeyValueCredentialRevocationStore,
+  KeyValueLaunchGrantStore,
   KeyValueTokenIssuanceStore,
 } from "./redis-token-stores.js";
 
@@ -229,6 +232,12 @@ export interface SessionApiRuntime {
   readonly verdictRoutes: FastifyPluginAsync;
   /** 宿主成绩同步只读路由(GET /host/scores;中期 M3 WP-78,D-API-122)。 */
   readonly hostScoresRoutes: FastifyPluginAsync;
+  /**
+   * 启动票据路由(POST /auth/launch-tickets + GET /app/c/:challengeId/:version;
+   * 分发改版 WP-91,D-LT-1 ~ D-LT-5)。**必须在 `index.ts` 传递** —— 漏传即
+   * 生产 404 而测试绿(D-API-156 缺陷 1 的形态)。
+   */
+  readonly launchRoutes: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5,D-API-40)。 */
   readonly wssChannel: FastifyPluginAsync;
   /**
@@ -286,7 +295,11 @@ export async function buildSessionApiRuntime(
   // ── 2. Redis(fail-closed 分级;连接不可达即拒绝启动)──
   const redis = await createRedisConnection(config.redisUrl);
   const kv = new RedisKeyValueStore(redis);
+  /** 启动票据 CAS 端口(launch:{jti};WP-91)。 */
+  const ticketStore = new RedisLaunchTicketStore(redis);
   const issuanceStore = new KeyValueTokenIssuanceStore(kv);
+  // 启动授权凭证签发记录(WP-91;独立键域 launchGrant:{jti}——见 auth/ports.ts 的理由段)。
+  const grantStore = new KeyValueLaunchGrantStore(kv);
   const revocationStore = new KeyValueCredentialRevocationStore(kv);
   const idempotencyWindow = new ResilientIdempotencyWindow(
     new RedisIdempotencyWindow(redis, config.idempotencyWindowTtlSeconds),
@@ -496,6 +509,7 @@ export async function buildSessionApiRuntime(
     },
     signer,
     issuanceStore,
+    grantStore,
     revocationStore,
     audit,
     allowedOrigins: config.allowedOrigins,
@@ -549,6 +563,33 @@ export async function buildSessionApiRuntime(
       hostScoresRateGate.acquireOrThrow(
         `rate:${anchorTenantId}:host_scores`,
         "host_scores_rate",
+      ),
+  });
+
+  // ── 8.7 启动票据路由(分发改版 WP-91,D-LT-1 ~ D-LT-5):
+  //    签发(POST /auth/launch-tickets;宿主凭证 × 白名单租户)+
+  //    换票(GET /app/c/:challengeId/:version;Lua CAS 单次消费 → 授权凭证)。
+  //    限流键 rate:{锚租户}:launch_tickets(锚 = hostTenants[0],已字典序规范化)。──
+  const launchTicketRateGate = new FixedWindowRateGate({
+    counter: rateLimitCounter,
+    limitPerWindow: config.launchTicketIssuancePerMinute,
+  });
+  const launchRoutes = buildLaunchRoutes({
+    hostBackendToken: config.hostBackendToken,
+    hostTenants: config.hostTenants,
+    publicOrigin: config.publicOrigin,
+    launchUserId: config.launchUserId,
+    launchTicketTtlSeconds: config.launchTicketTtlSeconds,
+    registry,
+    ticketStore,
+    grantStore,
+    signer,
+    logger,
+    nodeEnv: config.nodeEnv,
+    launchTicketRateGate: (anchorTenantId) =>
+      launchTicketRateGate.acquireOrThrow(
+        `rate:${anchorTenantId}:launch_tickets`,
+        "launch_ticket_rate",
       ),
   });
 
@@ -673,6 +714,7 @@ export async function buildSessionApiRuntime(
     descriptorRoutes,
     verdictRoutes,
     hostScoresRoutes,
+    launchRoutes,
     wssChannel: wssChannelAssembly.plugin,
     wssRegistry: wssChannelAssembly.registry,
     debugChannel: debugChannelPlugin,

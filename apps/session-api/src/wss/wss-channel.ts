@@ -267,6 +267,24 @@ export class ActionChannelConnection implements RegistryChannel {
     }
     const frame = parsed.frame;
 
+    /**
+     * ⚠ **已知缺口(WP-91 侦察发现,登记 D-API-158,本 WP 不修)**:
+     * D-API-2 要求「首帧(受理集合内的)版本即本连接解释版本,此后任何帧携带
+     * 其他版本一律拒绝」,但 `#anchoredVersion` **从未被赋值**(恒 `null` ⇒
+     * `frame-contract.ts:100` 的锚定分支是**死代码**)。
+     *
+     * **单版本时代不可观测**:受理集合只有一版时「在集合内」≡「等于锚定版本」,
+     * 漂移帧被 `unsupported_version` 顺手拦掉。**N-1 窗口(集合 = [2, 1])一开
+     * 即成为可观测缺口**:连接可在首帧 v1 之后改用 v2 帧继续投递。
+     *
+     * **为什么不在本 WP 顺手补**:补齐锚定会立刻让**出站面**暴露第二个缺口 ——
+     * `#emitFrame` 系列已按 `#anchoredVersion ?? 当前版本` 表达出站帧,而出站
+     * 自检用的是**仅 v2** 的 `WssFrameSchema` ⇒ 一旦锚到 v1,出站帧自检即失败
+     * (实测:4 个测试文件、11 个用例转红)。⇒ 补锚定必须与「出站自检版本化」
+     * 成对落地,属独立 WP 的范围。**在此留白并登记,好过半修**(半修会把
+     * WSS 出站面打红)。
+     */
+
     // 4. 方向检查:客户端 → 服务端只允许 action(信封三值封闭的方向集)。
     if (frame.type !== "action") {
       this.#rejectFrame({ kind: "malformed_frame" });

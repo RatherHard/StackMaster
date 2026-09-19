@@ -13,20 +13,39 @@
  *    加载失败(契约漂移/漏实现即拒绝启动,与 server.ts 自检同纪律)。
  */
 import {
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS,
   SessionCommandRequestSchema,
+  SessionCommandRequestV1Schema,
   SessionCommandResponseSchema,
   type PublicError,
   type SessionCommandRequest,
+  type SessionCommandRequestV1,
 } from "@stackmaster/protocol";
 import type { z } from "zod";
 
 import { assertRequestWithinLimits, GuardViolation, type RequestGuardLimits } from "./request-guards.js";
 
-/** 版本 → 请求 Schema 注册表(各版本独立校验的落点;扩展 N-1 时在此登记)。 */
-const REQUEST_SCHEMAS_BY_VERSION = new Map<number, z.ZodType<SessionCommandRequest>>([
+/**
+ * 任一被受理版本的会话命令请求(N-1 窗口期的形状联合)。
+ *
+ * **两版唯一差异在 `create_session` 的载荷**:v2(v2)恰两键
+ * `{challengeId, challengeVersion}`(授权来源 = 启动授权凭证 Cookie,D-LT-5 5c),
+ * v1(上一版)仍为四键含 `embedToken` / `embedSessionId`。其余四个命令**逐字同形**
+ * (只用 `sessionId` 定位会话)。窗口期结束(运维显式下线动作)时本联合与 v1
+ * 分支一并删除。
+ *
+ * ⚠ **不得**用"取 v2 类型再强转"的方式糊过去:v1 的 `create_session` 载荷
+ * 真的多两个键,把它标注成 v2 形状会让 `payload.embedToken` 在运行期是
+ * `undefined` 而类型检查通过 —— 那正是本仓库最忌的"类型撒谎"。
+ */
+export type AnySessionCommandRequest = SessionCommandRequest | SessionCommandRequestV1;
+
+/** 版本 → 请求 Schema 注册表(N-1 窗口期双版本登记)。 */
+const REQUEST_SCHEMAS_BY_VERSION = new Map<number, z.ZodType<AnySessionCommandRequest>>([
   [SESSION_ACTION_PROTOCOL_VERSION, SessionCommandRequestSchema],
+  [SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION, SessionCommandRequestV1Schema],
 ]);
 
 // 装配期自检:受理集合中的每个版本必须有已注册 Schema(缺实现即拒绝启动)。
@@ -50,7 +69,7 @@ export interface CommandValidationFailure {
 }
 
 export type CommandParseResult =
-  | { readonly ok: true; readonly request: SessionCommandRequest }
+  | { readonly ok: true; readonly request: AnySessionCommandRequest }
   | { readonly ok: false; readonly failure: CommandValidationFailure };
 
 /**

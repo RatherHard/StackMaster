@@ -12,18 +12,31 @@
  *    不入日志(Zod message 可能回显输入片段),响应面恒为冻结 PublicError。
  */
 import {
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS,
   WssFrameSchema,
+  WssFrameV1Schema,
   type WssFrame,
+  type WssFrameV1,
 } from "@stackmaster/protocol";
 import type { z } from "zod";
 
 import { assertRequestWithinLimits, GuardViolation, type RequestGuardLimits } from "../routes/request-guards.js";
 
-/** 版本 → 帧冻结 Schema 注册表(扩展 N-1 时在此登记)。 */
-const FRAME_SCHEMAS_BY_VERSION = new Map<number, z.ZodType<WssFrame>>([
+/**
+ * 任一被受理版本的帧形状(N-1 窗口期的形状联合;窗口期结束随
+ * `SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION` 一并回到单版)。
+ *
+ * `WssFrameV1` 与 `WssFrame` 的**唯一差异在 `action` 分支的动作信封**
+ * (v1 的 `action` 是 `ActionRequestV1`),其余帧族同形。
+ */
+export type AnyWssFrame = WssFrame | WssFrameV1;
+
+/** 版本 → 帧冻结 Schema 注册表(N-1 窗口期双版本登记)。 */
+const FRAME_SCHEMAS_BY_VERSION = new Map<number, z.ZodType<AnyWssFrame>>([
   [SESSION_ACTION_PROTOCOL_VERSION, WssFrameSchema],
+  [SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION, WssFrameV1Schema],
 ]);
 
 // 装配期自检:受理集合中的每个版本必须有已注册帧 Schema(缺实现即模块加载
@@ -53,7 +66,7 @@ export interface WssFrameRejection {
 }
 
 export type WssFrameParseResult =
-  | { readonly ok: true; readonly frame: WssFrame }
+  | { readonly ok: true; readonly frame: AnyWssFrame }
   | { readonly ok: false; readonly rejection: WssFrameRejection };
 
 /**

@@ -277,7 +277,8 @@ describe("每租户并发会话预算(D-API-52)", () => {
           userId: TEST_USER_ID,
           challengeId: TEST_CHALLENGE_ID,
           challengeVersion: TEST_CHALLENGE_VERSION,
-          embedTokenJti: `jti-${Math.random().toString(36).slice(2)}`,
+          credentialJti: `jti-${Math.random().toString(36).slice(2)}`,
+          credentialKind: "embed_token",
         }),
       ),
     );
@@ -306,7 +307,8 @@ describe("每租户并发会话预算(D-API-52)", () => {
         userId: TEST_USER_ID,
         challengeId: "chal-not-registered",
         challengeVersion: "9.9.9",
-        embedTokenJti: "jti-fail-1",
+        credentialJti: "jti-fail-1",
+        credentialKind: "embed_token",
       }),
     ).rejects.toThrow(/challenge load rejected/);
     // 失败后预算满额可用:两次创建都在预算内。

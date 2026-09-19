@@ -51,6 +51,50 @@ export interface CredentialRevocationStore {
 }
 
 /**
+ * 启动授权凭证的签发记录(键域 `launchGrant:{jti}`;D-LT-5 实施细化 5a / 5c)。
+ *
+ * **为什么独立于 `token:{jti}`**:两者虽同为"签发记录 × 签名 claims 双向比对"
+ * 的形态,但**语义不同源** —— `token:{jti}` 是 embed token 的消费锚(嵌入协议
+ * 面,**整体退役中**),`launchGrant:{jti}` 是启动授权凭证的消费锚(页面分发
+ * 面的**新**授权入口)。共用键域会让"退役 embed 面"这件事牵连到新链的存储
+ * 面,并使两个凭证族的吊销 / 计数口径混在一起 ⇒ **分域**。
+ *
+ * 字段 = `LaunchGrantClaims` 的六字段(tenantId / userId / challengeId /
+ * challengeVersion / jti)+ 两个时刻(`issuedAt` / `expiresAt`,毫秒),
+ * **无 `sessionId`、无 `embedSessionId`**(授权凭证在会话建立**之前**签发,
+ * 候选 C 已否决)。
+ */
+export interface IssuedLaunchGrantRecord {
+  readonly jti: string;
+  readonly tenantId: string;
+  readonly userId: string;
+  readonly challengeId: string;
+  readonly challengeVersion: string;
+  /** 签发时刻(Unix epoch 毫秒)。 */
+  readonly issuedAt: number;
+  /** 过期时刻(Unix epoch 毫秒;与签名 claims 的秒值 expiresAt × 1000 一致)。 */
+  readonly expiresAt: number;
+}
+
+/**
+ * 启动授权凭证签发记录存储(键域 `launchGrant:{jti}`;**删除即吊销**)。
+ *
+ * 消费语义与 `TokenIssuanceStore` 同款(GETDEL 原子单次消费),因为**威胁模型
+ * 同款**:重放一枚授权凭证即可反复建会话。**分级 = fail-closed**(Redis 不可用
+ * ⇒ 拒绝,不降级进程内)。
+ */
+export interface LaunchGrantStore {
+  /** 写入签发记录,ttlSeconds 内可消费(超时由 TTL 自然失效)。 */
+  put(record: IssuedLaunchGrantRecord, ttlSeconds: number): Promise<void>;
+  /**
+   * 原子单次消费:记录存在(且未过 TTL)则删除并返回该记录;否则返回 null。
+   * 返回 null 的语义:未签发 / 已消费 / 已吊销 / 已过期——调用方不再区分
+   * (失败响应面统一 401,D-API-14),细节只进受控日志。
+   */
+  consume(jti: string): Promise<IssuedLaunchGrantRecord | null>;
+}
+
+/**
  * 审计事件种类(枚举冻结;阶段三 WP-2 七值 + 阶段六 WP-64 Q5 定案裁决域
  * 三值 = **十值封闭集合**,D-API-90 一次性定案后冻结,不逐次漂移——
  * D-API-59 的阶段六开口由此收口;库层 CHECK 约束同锚,migrations/006)。

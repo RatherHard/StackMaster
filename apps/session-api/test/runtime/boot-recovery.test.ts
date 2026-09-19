@@ -140,7 +140,8 @@ describe("recoverActiveSessions:启动期两步恢复(D-API-63)", () => {
       userId: USER,
       challengeId: CHALLENGE,
       challengeVersion: "1.0.0",
-      embedTokenJti: "jti-recovery-1",
+      credentialJti: "jti-recovery-1",
+      credentialKind: "embed_token" as const,
     };
     const firstManager = await stack.buildManager();
     const outcome = await firstManager.createSession(identity);
@@ -234,7 +235,8 @@ describe("recoverActiveSessions:启动期两步恢复(D-API-63)", () => {
       userId: USER,
       challengeId: CHALLENGE,
       challengeVersion: "1.0.0",
-      embedTokenJti: "jti-recovery-2",
+      credentialJti: "jti-recovery-2",
+      credentialKind: "embed_token",
     });
     await manager.applyAction(outcome.sessionId, TENANT, { type: "create_checkpoint", args: {} }, { idempotencyKey: "c1" });
     await manager.closeSession(outcome.sessionId, TENANT);

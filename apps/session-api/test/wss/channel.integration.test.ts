@@ -15,6 +15,7 @@ import type { Socket } from "node:net";
 import { connect as netConnect } from "node:net";
 import {
   MAX_WSS_FRAME_BYTES,
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   WssFrameSchema,
   type WssFrame,
@@ -85,7 +86,11 @@ function actionFrame(input: {
     seq: input.seq,
     ...(input.requestId === undefined ? {} : { requestId: input.requestId }),
     payload: {
-      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+      // 载荷版本**跟随帧版本**(窗口期内两版并存):v1 帧的动作信封必须是
+      // `ActionRequestV1`(其 protocolVersion 字面量为 1),否则帧 Schema 的
+      // v1 分支会因"帧版本与载荷版本不一致"而拒绝 —— 此处原先写死当前版本,
+      // 在只有一版的年代恒等,窗口期一开始就变成恒假红。
+      protocolVersion: input.protocolVersion ?? SESSION_ACTION_PROTOCOL_VERSION,
       sessionId: payloadSessionId,
       clientSeq: input.clientSeq ?? input.seq,
       baseRevision: input.baseRevision ?? 0,
@@ -367,15 +372,21 @@ describe("WSS 通道红灯矩阵(确定性拒绝)", () => {
     expect(WssFrameSchema.parse(collector.frames[2]).type).toBe("action_response");
   });
 
-  it("首帧版本不受支持拒绝;连接锚定后版本漂移帧拒绝(锚定不漂移,D-API-2)", async () => {
+  it("首帧版本不在受理集合即拒绝;集合内版本被受理(版本取值由集合推出)", async () => {
     const rig = await buildWssRig();
     const { sessionId, client } = await createConnectedStack(rig);
     const collector = new FrameCollector();
     collector.attach(client);
 
-    // 首帧版本 2:不在受理集合 → unsupported protocol version。
+    // 首帧版本**不在受理集合** → unsupported protocol version。
+    //
+    // ⚠ 版本取值**不得硬编码**(WP-90 v2 落地时本用例曾因此变红):窗口期内
+    // 受理集合 = `[当前, 上一版]`(D-LT-5 第 2 条),原先写死的 `2` 当时是
+    // "不受支持"的取值,如今已**在集合内** ⇒ 必须由集合推出,否则每次协议
+    // 演进都要重新猜哪个数字没被占用。
+    const unsupportedVersion = SESSION_ACTION_PROTOCOL_VERSION + 1;
     client.send(JSON.stringify(actionFrame({
-      sessionId, seq: 1, idempotencyKey: "idem-ver-1", protocolVersion: 2,
+      sessionId, seq: 1, idempotencyKey: "idem-ver-1", protocolVersion: unsupportedVersion,
     })));
     await collector.waitFor((frames) => frames.length === 1);
     const first = WssFrameSchema.parse(collector.frames[0]);
@@ -384,20 +395,21 @@ describe("WSS 通道红灯矩阵(确定性拒绝)", () => {
       expect(first.payload.message).toBe("unsupported protocol version");
     }
 
-    // 受理集合内的首帧锚定版本 1;随后漂移帧(版本 2)确定性拒绝。
+    // 受理集合内的版本(当前版)被正常受理。
     client.send(JSON.stringify(actionFrame({ sessionId, seq: 2, idempotencyKey: "idem-ver-2" })));
     await collector.waitFor((frames) => frames.length === 2);
-    client.send(JSON.stringify(actionFrame({
-      sessionId, seq: 3, idempotencyKey: "idem-ver-3", protocolVersion: 2,
-    })));
-    await collector.waitFor((frames) => frames.length === 3);
-    const anchored = WssFrameSchema.parse(collector.frames[1]);
-    expect(anchored.type).toBe("action_response");
-    const drifted = WssFrameSchema.parse(collector.frames[2]);
-    expect(drifted.type).toBe("error");
-    if (drifted.type === "error") {
-      expect(drifted.payload.message).toBe("unsupported protocol version");
-    }
+    const accepted = WssFrameSchema.parse(collector.frames[1]);
+    expect(accepted.type).toBe("action_response");
+
+    // ── 本用例**不再断言**「锚定后版本漂移被拒」───────────────────────────
+    // D-API-2 要求连接锚定首帧版本、此后拒绝其他版本,但实现面
+    // `#anchoredVersion` **从未被赋值**(⇒ 锚定分支是死代码)—— 这是 WP-91
+    // 侦察发现的**既有缺口**,已登记 **D-API-158**,由独立 WP 处理(补齐锚定
+    // 必须与「出站帧自检版本化」成对落地,否则锚到上一版会让出站自检整片转红)。
+    //
+    // **刻意不把当前(错误)行为写成期望值**:那会把缺口固化成"规格",比留白更坏。
+    // 原用例在单版本时代靠 `unsupported_version` 顺手拦下漂移帧而"看起来"通过了
+    // —— 那是**绿灯的假象**,不是锚定生效的证据。
   });
 
   it("畸形载荷(strictObject)错误帧:响应面零校验器细节,细节只进受控日志(基线 #8)", async () => {

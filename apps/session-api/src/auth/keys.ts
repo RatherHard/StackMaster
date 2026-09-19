@@ -23,8 +23,10 @@ import {
 } from "@stackmaster/protocol";
 import {
   EmbedTokenClaimsSchema,
+  LaunchGrantClaimsSchema,
   SessionCredentialClaimsSchema,
   type EmbedTokenClaims,
+  type LaunchGrantClaims,
   type SessionCredentialClaims,
 } from "@stackmaster/protocol/server-only";
 import { SignJWT, errors as joseErrors, importPKCS8, importSPKI, jwtVerify } from "jose";
@@ -55,6 +57,18 @@ const SessionCredentialJwtPayloadSchema = z.strictObject({
 });
 
 /**
+ * 启动授权凭证的 JWT 载荷(六字段冻结 claims + exp;D-LT-5 实施细化 5a)。
+ *
+ * ⚠ **不设 `sessionId` / `embedSessionId` 位**:授权凭证在会话建立**之前**签发
+ * (5b:换票不建会话),留一个"无法解释的绑定字段"会让"这张凭证到底授权了
+ * 什么"变得含混 —— 六字段各自都有明确的派生来源与校验对手方。
+ */
+const LaunchGrantJwtPayloadSchema = z.strictObject({
+  ...LaunchGrantClaimsSchema.shape,
+  exp: z.number().int().min(0),
+});
+
+/**
  * 签发 / 校验器(域 2 密钥装配后的冻结形态)。
  * verify 失败恒抛 CredentialVerificationError——kind 是日志 / 审计的唯一
  * 判别面,响应面不消费它(D-API-14 统一形态)。
@@ -64,6 +78,9 @@ export interface TokenSigner {
   verifyEmbedToken(token: string, clock?: VerifyClockOptions): Promise<EmbedTokenClaims>;
   signSessionCredential(claims: SessionCredentialClaims): Promise<string>;
   verifySessionCredential(token: string, clock?: VerifyClockOptions): Promise<SessionCredentialClaims>;
+  /** 启动授权凭证(WP-91;D-LT-5 5a):与另两族**同密钥、同 alg、独立 claims 面**。 */
+  signLaunchGrant(claims: LaunchGrantClaims): Promise<string>;
+  verifyLaunchGrant(token: string, clock?: VerifyClockOptions): Promise<LaunchGrantClaims>;
 }
 
 /**
@@ -99,12 +116,18 @@ export async function createTokenSigner(signingKeyPem: string): Promise<TokenSig
     ): Promise<SessionCredentialClaims> {
       return verifySessionCredentialClaims(token, publicKey, clock);
     },
+    async signLaunchGrant(claims: LaunchGrantClaims): Promise<string> {
+      return signClaims(claims, privateKey, "launch grant");
+    },
+    async verifyLaunchGrant(token: string, clock?: VerifyClockOptions): Promise<LaunchGrantClaims> {
+      return verifyLaunchGrantClaims(token, publicKey, clock);
+    },
   };
 }
 
-/** 签名:七字段 claims 原样进载荷,exp = expiresAt(同一值,双重表达合一)。 */
+/** 签名:六 / 七字段 claims 原样进载荷,exp = expiresAt(同一值,双重表达合一)。 */
 function signClaims(
-  claims: EmbedTokenClaims | SessionCredentialClaims,
+  claims: EmbedTokenClaims | SessionCredentialClaims | LaunchGrantClaims,
   key: SignKey,
   label: string,
 ): Promise<string> {
@@ -164,6 +187,36 @@ async function verifySessionCredentialClaims(
   }
   return {
     sessionId: parsed.data.sessionId,
+    tenantId: parsed.data.tenantId,
+    userId: parsed.data.userId,
+    challengeId: parsed.data.challengeId,
+    challengeVersion: parsed.data.challengeVersion,
+    jti: parsed.data.jti,
+    expiresAt: parsed.data.expiresAt,
+  };
+}
+
+/**
+ * 启动授权凭证的 claims 提取(六字段白名单装配;exp 已由 jose 断言)。
+ *
+ * 与另两族**同形不同 Schema**:六字段逐一显式取值 ⇒ 载荷内任何多余保留字段
+ * (iat / iss / aud 等)都被 `strictObject` 判为 malformed,零字段残留。
+ */
+async function verifyLaunchGrantClaims(
+  token: string,
+  key: VerifyKey,
+  clock?: VerifyClockOptions,
+): Promise<LaunchGrantClaims> {
+  const payload = await verifyPayload(token, key, "launch_grant", clock);
+  const parsed = LaunchGrantJwtPayloadSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new CredentialVerificationError(
+      "launch_grant",
+      "malformed",
+      `claims 形态非法(${parsed.error.issues.length} 处)`,
+    );
+  }
+  return {
     tenantId: parsed.data.tenantId,
     userId: parsed.data.userId,
     challengeId: parsed.data.challengeId,

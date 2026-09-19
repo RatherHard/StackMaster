@@ -26,7 +26,8 @@ async function createSessionDirect(rig: SessionTestRig, tenantId = TEST_TENANT_I
     userId: "user-42",
     challengeId: "chal-stack-escape",
     challengeVersion: "1.2.3",
-    embedTokenJti: `jti-${Math.random().toString(36).slice(2)}`,
+    credentialJti: `jti-${Math.random().toString(36).slice(2)}`,
+    credentialKind: "embed_token",
   }).then((outcome) => outcome.sessionId);
 }
 

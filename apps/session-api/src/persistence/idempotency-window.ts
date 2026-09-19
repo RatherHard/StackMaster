@@ -31,7 +31,9 @@ export type RedisDependency =
   | "routeStore"
   | "rateLimitCounter"
   /** 启动票据键域(launch:{jti};WP-91,D-LT-2「单次消费」行)。 */
-  | "launchTicketStore";
+  | "launchTicketStore"
+  /** 启动授权凭证签发记录键域(launchGrant:{jti};WP-91,D-LT-5 实施细化 5a)。 */
+  | "launchGrantStore";
 export type DegradeClass = "degrade-to-process" | "fail-closed";
 
 export const REDIS_DEGRADE_POLICY: Readonly<
@@ -58,6 +60,13 @@ export const REDIS_DEGRADE_POLICY: Readonly<
     rationale:
       "票据单次消费是启动面重放防线(D-LT-2):降级到进程内会让多实例部署下同一票据被消费两次," +
       "且进程内形态无法与 Redis 的 TTL 语义同构 ⇒ Redis 不可用即 503 store_unavailable(不降级、不静默放行)",
+  },
+  launchGrantStore: {
+    degrade: "fail-closed",
+    rationale:
+      "授权凭证单次消费是 create_session 的重放防线(D-LT-5 5c):同一枚凭证只允许换一次会话。" +
+      "降级到进程内会让多实例部署下同一凭证被消费两次(重放即反复建会话)," +
+      "且进程内形态无法与 Redis 的 TTL 语义同构 ⇒ Redis 不可用即拒绝(不降级、不静默放行)",
   },
 };
 

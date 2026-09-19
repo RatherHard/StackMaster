@@ -25,7 +25,8 @@ async function setup(): Promise<{ rig: SessionTestRig; sessionId: string }> {
     userId: "user-42",
     challengeId: "chal-stack-escape",
     challengeVersion: "1.2.3",
-    embedTokenJti: "jti-action-log",
+    credentialJti: "jti-action-log",
+    credentialKind: "embed_token",
   }).then((outcome) => outcome.sessionId);
   return { rig, sessionId };
 }
