@@ -23,9 +23,17 @@ D-API-64):
 ```bash
 pnpm --filter @stackmaster/session-api compose:app:up     # up -d --build --wait(等 healthcheck)
 #   session-api → http://127.0.0.1:13000(/healthz /readyz /metrics)
+#   启动地址链:POST /auth/launch-tickets(宿主凭证)→ GET /app/c/:id/:version?t=<票>
+#   → 302 + sm_launch_grant Cookie → 页面(同源托管 apps/page-app/dist)
 #   PostgreSQL 15432 / Redis 16379 / MinIO 19000(控制台 19001)
 pnpm --filter @stackmaster/session-api compose:app:down   # down -v(含数据卷)
 ```
+
+> **页面产物由本服务同源托管**(WP-92/96):`compose/app.yaml` 把宿主
+> `apps/page-app/dist` 只读挂进容器并显式配 `SESSION_API_PAGE_APP_DIR`(镜像
+> 不构建 page-app)。宿主未构建 page-app 时 Docker 会建出空目录 ⇒ 静态面注册
+> 零路由、容器照常启动、换票不受影响(只是没有页面可看)。人工走查前先:
+> `pnpm --filter @stackmaster/vm-ui build && pnpm --filter @stackmaster/page-app build`。
 
 - 首次构建耗时主要在 Rust 阶段(容器内构建 linux vm-worker);
   `WORKER_CARGO_PROFILE` 缺省 `debug`(控制本地时长),CI 传 `release`
@@ -93,6 +101,15 @@ D-API-58 / D-API-70(必备六键:签发密钥、宿主共享凭证、PG / Redis 
 MinIO 端点与快照加密密钥;其余有缺省值)。compose 拓扑的键值集中在
 `compose/app.yaml`;宿主进程形态的键值在 `compose/integration.env`。
 
+**分发改版(WP-96)新增的三个键 —— 启动地址链的开面条件**:
+
+| 键 | 缺省 | 语义与纪律 |
+|---|---|---|
+| `SESSION_API_PUBLIC_ORIGIN` | **null(签发面未启用 ⇒ `POST /auth/launch-tickets` 一律 404 同形)** | 启动地址与**页面 origin** 的共同来源(签发端点永不采信 `Host` 头)。值必须是**浏览器实际访问的源**;`sm_launch_grant` 是 `SameSite=Strict`,`localhost` 与 `127.0.0.1` 不同源 ⇒ 该值必须与 `SESSION_API_ALLOWED_ORIGINS` 里的页面 origin **逐字同源** |
+| `SESSION_API_PAGE_APP_DIR` | 未设 ⇒ 用仓库内 `apps/page-app/dist`(存在即托管、不存在即不注册) | **显式配了却指不到目录 ⇒ 拒绝启动**(fail-closed)。人工走查页面形态时,它必须指向已构建的 page-app 产物 |
+| `SESSION_API_HOST_TENANTS` | 空 ⇒ 宿主成绩面与**签发面**整体 404 | 兼作启动地址链的**锚租户**(字典序最小项):会话租户恒等于它,而 `create_session` 的题目装载按 `(challengeId, version, tenantId)` 强制过滤 ⇒ **要被启动地址链加载的题目必须登记在该租户下**(k6 种子脚本据此派生登记租户) |
+
+
 ## 三、常用命令
 
 | 命令 | 说明 |
@@ -156,28 +173,58 @@ vm-worker 是 linux 优先交付的执行域二进制:容器镜像内为 linux �
 pnpm --filter @stackmaster/session-api k6:baseline
 ```
 
-- 场景(`k6/scenarios/`):`action-rtt-wss.js`(签发 → create_session →
-  WSS stop-and-wait 动作 RTT)、`rest-lifecycle.js`(REST 五命令全生命周期)、
+- **链路(WP-96 起)= 启动地址链**:`POST /auth/launch-tickets`(宿主凭证;体恰两键)
+  → `GET launchUrl`(**手工补 `Sec-Fetch-Mode: navigate`**、`redirects: 0` 不跟随
+  302 ⇒ 接住 `Set-Cookie: sm_launch_grant`)→ `POST /sessions`
+  `create_session`(**`protocolVersion: 2`,payload 恰两键**;授权来自 Cookie)→
+  后续命令同版。**k6 没有浏览器**:导航头靠手工补、302 靠不跟随接住、`launchUrl`
+  的 origin(服务端按 `SESSION_API_PUBLIC_ORIGIN` 派生)重新基到 `BASE_URL`;
+  **票据绝不进日志与指标标签**(换票请求以静态路由模板打 tag)。**旧链
+  `POST /auth/embed-tokens` 与四键载荷已随嵌入协议面退役**;
+- 场景(`k6/scenarios/`):`action-rtt-wss.js`(启动地址链 → WSS stop-and-wait
+  动作 RTT)、`rest-lifecycle.js`(REST 五命令全生命周期)、
   `concurrent-sessions.js`(阶梯并发维持 + /metrics 采样);
+- ⚠ **负载模型已变,读数与旧基线不可比**:新链的 `userId` 是**部署级配置**
+  (`SESSION_API_LAUNCH_USER_ID`,缺省 `launch-anon`,D-LT-5 第 6 条)⇒ 三场景
+  共享同一 `(tenant,user)` 预算,旧脚本的「每迭代唯一用户」**结构性不可用**;
+  场景因此按**共享预算均摊节奏**运行(签发 60/min、REST 120/min 两条预算取紧者;
+  runner 从 `compose/integration.env` 自动对齐,**不为压测调低护栏**)。任一硬闸
+  拒绝即让迭代失败(不静默跑在半数被拒的状态);
 - **不设通过阈值**(10.3 / 13.6:数据作为 T2 触发判据基线,避免过早优化,
   D-API-73);
-- 结果归档 `k6/results/<UTC 时间戳>/`:逐场景原始 summary JSON + stderr
-  留档 + 采集前 / 后 `/metrics` 快照 + `summary.md` 人读摘要;
-- 首采记录(2026-09-10,本机 compose 容器拓扑):见
+- 结果归档 `k6/results/<UTC 时间戳>/`:逐场景原始 summary JSON(含
+  `chain: "launch-address/v2"` 与 `minIterationMs`)+ stderr 留档 + 采集前 / 后
+  `/metrics` 快照 + `summary.md` 人读摘要;
+- 首采记录(2026-09-10,本机 compose 容器拓扑,**旧链**):见
   `k6/results/2026-09-09T223628898Z/summary.md` 与
-  `docs/phases/阶段三验收评审.md` §一.8。
+  `docs/phases/阶段三验收评审.md` §一.8 —— 该读数属**历史证据**,新链下须重采。
 
 ## 七、常见问题(FAQ)
 
 - **启动即退出 / 配置校验失败**:看 stderr 单行 JSON 的 `issues`(只含字段
   名与原因,绝不含字段值,D-API-9)。compose 形态看
   `docker compose logs session-api`;
-- **create_session 404/422(challenge invalid)**:题目未登记——参考
-  `test/compose/compose-full-chain.integration.test.ts` 的登记路径
-  (ChallengeRegistrar + Ed25519 登记签名;批量题目制作归 MVP 期);
+- **启动地址链 404 / 401(WP-96 起;旧链 `POST /auth/embed-tokens` 已退役)**:
+  - `POST /auth/launch-tickets` **404 同形** = 签发面未启用(未配
+    `SESSION_API_PUBLIC_ORIGIN`)/ 白名单外租户(未配 `SESSION_API_HOST_TENANTS`)
+    / 题目不存在或未发布 —— 三者刻意同形(防枚举);
+  - **401** = 宿主凭证不符(`Authorization: Bearer`),或换票时缺
+    `Sec-Fetch-Mode: navigate`(非顶层导航),或票据已过期 / 已消费 / 绑定不符;
+  - `launchUrl` 贴进浏览器 **404**(但换票本身已成功)= 该拓扑没有托管页面
+    (`SESSION_API_PAGE_APP_DIR` 未配且仓库内 `apps/page-app/dist` 不存在)⇒ 人工
+    走查请用 `compose:app:up`(已配该键 + bind mount)或 `dev:host`;
+- **create_session 422(challenge_invalid)**:题目未登记 **或登记租户与锚租户不符**
+  —— 新链的会话租户恒等于 `SESSION_API_HOST_TENANTS` 的字典序最小项,而题目装载按
+  `(challengeId, version, tenantId)` 过滤(签发期的「已发布」校验是跨租户公开面,
+  **不会**替你挡住这个错配)。登记路径见
+  `test/compose/compose-full-chain.integration.test.ts` 的登记段
+  (ChallengeRegistrar + Ed25519 登记签名;k6 种子脚本 `k6/seed-challenge.mjs`
+  已按该租户派生);
 - **429 / 409**:限流与预算是生产行为(每租户 / 每用户 120 req/min、并发
-  预算默认 8 / 租户,提交 30/min,D-API-50),压测脚本已按每迭代唯一用户
-  规避削顶,不要调低护栏做"压测";
+  预算默认 8 / 租户,提交 30/min,D-API-50)。⚠ 分发改版后 `userId` 是**部署级
+  配置**(`SESSION_API_LAUNCH_USER_ID`,缺省 `launch-anon`)⇒ **同一部署下所有
+  学习者共用一条每用户预算**,压测脚本按共享预算均摊节奏(不再是「每迭代唯一
+  用户」);**不要调低护栏做"压测"**;
 - **Redis / PG / MinIO 连不上(宿主进程形态)**:核对 `compose/integration.env`
   的端口映射(15432 / 16379 / 19000)与 `compose:deps:up` 状态;
 - **端口占用**:13000(app)/ 15432 / 16379 / 19000 / 19001 固定发布,

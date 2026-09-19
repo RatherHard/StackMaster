@@ -5,7 +5,10 @@
  *   SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec vitest run test/my-challenges/register-my-challenge.compose.integration.test.ts
  *
  * 登记链路:规范化 JSON 落桶 → 摘要自证 → Ed25519 签名验签 → PG 建档(版本不可变,
- * 重跑前清理旧行/旧对象)。登记租户必须与后续 embed token 的租户一致。
+ * 重跑前清理旧行/旧对象)。**登记租户必须等于启动地址链的锚租户**(WP-96:会话租户恒
+ * 等于 `SESSION_API_HOST_TENANTS` 的字典序最小项,而题目装载按
+ * `(challengeId, version, tenantId)` 强制过滤;见
+ * test/extended-challenges/register-extended.compose.integration.test.ts 的「租户纪律」段)。
  */
 import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -26,7 +29,8 @@ import { ensureMigrated, IT_CONFIG } from "../persistence/helpers/it.js";
 
 const COMPOSE_ENABLED = process.env["SESSION_API_COMPOSE"] === "1";
 const SKIP_REASON = "跳过原因:SESSION_API_COMPOSE != 1(先 compose:deps:up 起依赖服务)";
-const DEV_TENANT_ID = process.env["EXT_DEV_TENANT_ID"] ?? "tenant-dev-0001";
+/** 登记租户(缺省 = 启动地址链锚租户;理由见文件头)。 */
+const DEV_TENANT_ID = process.env["EXT_DEV_TENANT_ID"] ?? "host-scores-tenant";
 const CONTENT_VERSION = "1.0.0";
 const VM_PROFILE_VERSION = "1.0.0";
 

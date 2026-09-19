@@ -3,6 +3,9 @@
 # 阶段六 WP-66 增补:worker 执行形态开关(SESSION_API_WORKER_EXECUTION_MODE,
 # 缺省 process = 本文件形态零回退;容器池显式启用路径见
 # compose/worker-container-override.yaml 与 D-API-105,Q4 定案)。
+# 分发改版 WP-96 增补:启动地址链的签发面前置(SESSION_API_PUBLIC_ORIGIN /
+# 页面 origin 的同批 origin 登记)+ 页面产物托管(SESSION_API_PAGE_APP_DIR 与
+# 其 bind mount);缺 PUBLIC_ORIGIN ⇒ 签发面整体 404,旧链(embed token)已退役。
 #
 # 完整拓扑 = PostgreSQL + Redis + MinIO + db-roles-init(deps.yaml 四服务)
 # + session-api + vm-worker + verifier(+ 两个角色治理 init 服务)。
@@ -71,10 +74,38 @@ services:
         MC4CAQAwBQYDK2VwBCIEILQpt0igNUt0TQ/yML8i6UDbzfjgz7gcKBjCJwDVXYki
         -----END PRIVATE KEY-----
       SESSION_API_HOST_BACKEND_TOKEN: "host-backend-shared-credential-0123456789"
-      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000"
+      # ── 分发改版 WP-96:启动地址链的**签发面前置**(D-LT-1 ~ D-LT-5;WP-91 回填)──
+      # `SESSION_API_PUBLIC_ORIGIN` 缺省 null ⇒ 签发面未启用 ⇒ `POST /auth/launch-tickets`
+      # **一律 404 同形**(fail-closed)。值 = **调用方(浏览器)实际访问的那个源**
+      # = 本文件发布到宿主的端口 13000。三条相互咬合的硬约束:
+      #  ① `launchUrl` 由它拼出(签发端点**永不**采信 Host 头 ⇒ 请求头注入面为零);
+      #  ② 它同时是**页面 origin**:换票 302 后页面与 API **同源**;
+      #  ③ `sm_launch_grant` 是 `SameSite=Strict`(**只有同源才会被呈递**),而
+      #     `localhost` 与 `127.0.0.1` 在浏览器眼里是**不同源** ⇒ 页面发出的
+      #     `POST /sessions` 会带 `Origin: http://127.0.0.1:13000`,该字面 origin
+      #     必须与 ALLOWED_ORIGINS **同批**登记(下一行)—— 这不是「为页面放宽
+      #     CORS」,而是「页面的同源 origin 必须在 CSRF 白名单里」:**两处必须是
+      #     同一个字面 origin**,任一处写成 localhost 而另一处写 127.0.0.1 时,
+      #     真机页面链会被 CSRF 闸拒(测试进程手工呈递 Cookie,察觉不到)。
+      SESSION_API_PUBLIC_ORIGIN: "http://127.0.0.1:13000"
+      SESSION_API_ALLOWED_ORIGINS: "http://localhost:13000,http://127.0.0.1:13000"
       # ── 中期 M3 WP-78:宿主成绩同步只读接口的凭证 × 租户绑定白名单 ──
       # (O-MP-6 / D-API-124;缺省 / 空 = 宿主成绩面整体 404 同形。)
+      # ⚠ 分发改版后它**同时**是启动地址链的**锚租户**(= 字典序最小项,config.ts
+      # `splitHostTenants`):启动地址链派生出的**会话租户恒等于该锚租户**,而
+      # `create_session` 的题目装载按 (challengeId, version, **tenantId**) 强制过滤
+      # (`session-manager.ts#createSessionReserved`)⇒ **凡要经启动地址游玩 / 压测的
+      # 题目,登记租户必须是这个值**(签发期的已发布校验是跨租户公开面,不构成兜底;
+      # 租户不符的后果是 create_session 422 challenge_invalid,不是 404 —— 该耦合
+      # 已在 k6/seed-challenge.mjs 与 test/compose/helpers/topology.ts 单点登记)。
       SESSION_API_HOST_TENANTS: "host-scores-tenant"
+      # ── 分发改版 WP-92:页面产物托管(换票 302 的落点页)──
+      # 镜像**不构建** page-app(Dockerfile 只建 session-api / verifier)⇒ 本键必须与
+      # 同服务的 bind mount(见本服务 volumes)成对出现:显式配了却指不到目录 =
+      # **启动期拒绝启动**(runtime.ts#resolvePageAppDir,fail-closed);宿主未构建
+      # page-app 时 Docker 会建出空目录 ⇒ 静态面注册零路由(`wildcard: false`),
+      # 容器照常启动、换票路由不受影响。
+      SESSION_API_PAGE_APP_DIR: /app/apps/page-app/dist
       # ── 持久化面(compose 网络内服务名;与 deps.yaml 凭据一致)──
       SESSION_API_POSTGRES_URL: postgres://stackmaster:stackmaster-dev@postgres:5432/session_api
       SESSION_API_REDIS_URL: redis://redis:6379/0
@@ -87,6 +118,13 @@ services:
       SESSION_API_AUTO_SNAPSHOT_EVERY_REVISIONS: "5"
     ports:
       - "13000:3000"
+    volumes:
+      # 分发改版 WP-96:页面与应用**同源**是分发形态的定案(改版 §五 第 ① 项)⇒
+      # 页面产物只能由 session-api 自己托管。镜像不含 page-app 产物(Dockerfile
+      # 只 `pnpm --filter @stackmaster/session-api... build`),故把宿主已构建的
+      # `apps/page-app/dist` 只读挂到 `SESSION_API_PAGE_APP_DIR` 指的位置。
+      # 宿主未构建时 Docker 建空目录 ⇒ 仅少一条静态面(换票 302 仍成立)。
+      - ../../page-app/dist:/app/apps/page-app/dist:ro
     depends_on:
       postgres:
         condition: service_healthy

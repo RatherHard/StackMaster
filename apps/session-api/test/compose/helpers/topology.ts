@@ -10,6 +10,9 @@
  *    (STACKMASTER_WORKER_BIN 或 vm-engine/target 产物);重启 = 受控终止
  *    (SIGTERM → 优雅停机冲刷)后重新拉起。
  *
+ * **会话建立入口 = 启动地址链(WP-96)**;旧链(`POST /auth/embed-tokens` + 四键
+ * `create_session` 载荷)已随嵌入协议面退役。见文件末「启动地址链」段。
+ *
  * 机检采集面(TrafficRecorder):HTTP 响应体 + WSS 入站帧全量录制,
  * 供 scanCrossDomainPayloads 零命中断言(通道上只有公开投影)。
  */
@@ -17,11 +20,16 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { expect } from "vitest";
+
 import { HOST_BACKEND_TOKEN, REQUIRED_AUTH_ENV } from "../../helpers/required-env.js";
+import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../../src/auth/cookie.js";
 import { IT_CONFIG } from "../../persistence/helpers/it.js";
 
 const APP_DIR = fileURLToPath(new URL("../../../", import.meta.url)); // apps/session-api
@@ -387,4 +395,265 @@ export function credentialFromSetCookie(setCookie: string | null): string {
   }
   const separator = setCookie.indexOf("=");
   return setCookie.slice(separator + 1, setCookie.indexOf(";", separator));
+}
+
+// ── 启动地址链(WP-96;D-LT-1 ~ D-LT-5,契约 `docs/contracts/启动票据协议.md`)──
+//
+// | 步骤 | 旧链(已退役) | 新链(本段) |
+// |---|---|---|
+// | 授权取得 | `POST /auth/embed-tokens` → embed token | `POST /auth/launch-tickets` → **一次性启动地址** |
+// | 授权落地 | `create_session` 载荷带 token(四键) | `GET <launchUrl>` 换票 → `Set-Cookie: sm_launch_grant` |
+// | 建会话 | 四键载荷 | **恰两键**载荷(`protocolVersion: 2`),授权来自 Cookie |
+//
+// **租户从哪来**:新链的 `tenantId` 由服务端在**签发时**从「宿主凭证 ×
+// `SESSION_API_HOST_TENANTS` 白名单」派生(请求体连 `tenantId` 位都没有)⇒
+// 本套件里所有会话的租户恒等于该白名单的**锚租户**(字典序最小项),而
+// `create_session` 的题目装载按 `(challengeId, version, tenantId)` **强制过滤**
+// (`session-manager.ts#createSessionReserved`)⇒ **登记题目必须用这个租户**
+// (签发期的「已发布」校验是跨租户公开面,不构成兜底)。故此处把锚租户导成常量,
+// 供「登记租户」与「PG 侧按租户查询」共用同一个值(单点,避免两处各写一份)。
+
+/** 启动票据签发端点(契约常量同值;此处按字面量写入,不引契约包以免跨包静态依赖)。 */
+export const LAUNCH_TICKET_ISSUANCE_ROUTE = "/auth/launch-tickets";
+/** 授权凭证 Cookie 名(契约 §四;非秘密)。 */
+export const LAUNCH_GRANT_COOKIE_NAME = "sm_launch_grant";
+/** 会话动作协议版本(WP-90 起 v2;`create_session` 载荷恰两键)。 */
+export const SESSION_ACTION_PROTOCOL_VERSION = 2;
+
+/**
+ * 锚租户 = `SESSION_API_HOST_TENANTS` 的字典序最小项(与 `config.ts#splitHostTenants`
+ * 同规则:去空白 → 去重 → 排序 → 取首)。
+ *
+ * 取值序:测试进程环境(容器拓扑下由 `test/compose/run.mjs` 显式注入)> 缺省
+ * `host-scores-tenant`(compose/app.yaml 与 compose/integration.env 的同值;
+ * 两处任一改动而另一处未改时,本套件会以「签发 404 / 建会话 422」硬失败,
+ * 不会静默跑在别的租户上)。
+ */
+export const SESSION_TENANT_ID: string = anchorTenantFrom(
+  process.env["SESSION_API_HOST_TENANTS"] ?? "host-scores-tenant",
+);
+
+function anchorTenantFrom(value: string): string {
+  const tenants = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  const unique = [...new Set(tenants)].sort();
+  if (unique.length === 0) {
+    throw new Error(
+      "SESSION_API_HOST_TENANTS 为空:启动地址链的锚租户无从派生(签发面本身也会 404 fail-closed)",
+    );
+  }
+  return unique[0]!;
+}
+
+/** 换票响应(302 + 授权凭证 Cookie);`node:http` 客户端形态见 `redeemLaunchAddress`。 */
+interface RedeemOutcome {
+  readonly status: number;
+  readonly location: string | null;
+  readonly setCookie: readonly string[];
+}
+
+/**
+ * 取换票响应(**不跟随 302**)。
+ *
+ * ⚠ **为什么不用 `fetch`**:Node 的 fetch(undici)**强制改写** `Sec-Fetch-Mode`
+ * —— 实测(2026-09-19)服务端收到的是 `cors`,即使调用方显式传 `navigate`
+ * (`fetch(url, { headers: { "sec-fetch-mode": "navigate" } })` → 服务端
+ * `req.headers["sec-fetch-mode"] === "cors"`)。而换票路由的第一道闸**恰是**
+ * 「`Sec-Fetch-Mode` 必须逐字等于 `navigate`」(D-LT-2:拒绝子资源 / 嵌入式换票)
+ * ⇒ **只有非 fetch 客户端**才能发出该头,故这里落到 `node:http`/`node:https`
+ * (它们也天然不跟随重定向)。浏览器侧由顶层导航自带该头,不需要这段代码。
+ *
+ * 该行为由 `test/compose/launch-chain.dry-run.test.ts` 机检锁定(换成 fetch 即红)。
+ */
+function redeemLaunchAddress(launchUrl: string): Promise<RedeemOutcome> {
+  const url = new URL(launchUrl);
+  const send = url.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise<RedeemOutcome>((resolve, reject) => {
+    const request = send(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port === "" ? undefined : url.port,
+        path: `${url.pathname}${url.search}`,
+        method: "GET",
+        headers: {
+          // 顶层导航语义(D-LT-2 ⓪);浏览器由 `page.goto` 自带,node 侧手工补。
+          "sec-fetch-mode": "navigate",
+          accept: "text/html",
+        },
+      },
+      (response) => {
+        response.resume(); // 丢弃响应体(换票响应只是 302 / 401)
+        resolve({
+          status: response.statusCode ?? 0,
+          location: response.headers.location ?? null,
+          setCookie: response.headers["set-cookie"] ?? [],
+        });
+      },
+    );
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+/** 从多枚 Set-Cookie 头里取指定 Cookie 的值。 */
+function cookieFromSetCookieHeaders(
+  headers: readonly string[],
+  name: string,
+): string | undefined {
+  for (const header of headers) {
+    const pair = header.split(";")[0]!;
+    const separator = pair.indexOf("=");
+    if (separator <= 0) {
+      continue;
+    }
+    if (pair.slice(0, separator).trim() === name) {
+      const value = pair.slice(separator + 1).trim();
+      return value.length > 0 ? value : undefined;
+    }
+  }
+  return undefined;
+}
+
+/** 启动地址链建立起来的会话(供用例继续以会话凭证驱动 REST / WSS)。 */
+export interface LaunchedSession {
+  readonly sessionId: string;
+  /** 会话凭证值(`sm_session_credential` 的 Cookie 值)。 */
+  readonly cookie: string;
+  /** `create_session` 响应的 `payload.revision`(新会话恒 0;调用方按需断言)。 */
+  readonly revision: number;
+  /** 服务端签发的启动地址(含一次性票据;**不得**写进断言消息 / 归档)。 */
+  readonly launchUrl: string;
+}
+
+/**
+ * 走**启动地址链**建立会话(WP-96 起的**唯一**会话建立入口)。
+ *
+ * 旧链在用例里展开为三处断言(`签发 201` / `create_session 201` / `Set-Cookie`
+ * 存在),本函数把它们**原样搬进链路内部**并再加两条新链独有的断言:
+ *  1. 签发响应体**恰两键** `{expiresAt, launchUrl}`(契约 §2.2);
+ *  2. `launchUrl` 的 origin = `SESSION_API_PUBLIC_ORIGIN`(= 拓扑 BASE_URL 的源)
+ *     —— 换票闸之一是「绑定逐字一致」,而这里的地址由服务端配置派生,**永不采信
+ *     请求头**(Host 头注入面);origin 不符即配置错位,必须红而不是静默换源;
+ *  3. 换票响应 **302 + `Set-Cookie: sm_launch_grant`**(且 Location 不含 `?t=`,
+ *     即票据被 302 抹除);
+ *  4. `create_session` 201 且响应 `Set-Cookie` 含会话凭证。
+ *
+ * 零删除:旧链的三处断言全部在场,只是从「每个用例各写一遍」收敛到本函数一处。
+ */
+export async function createSessionViaLaunchAddress(
+  recorder: TrafficRecorder,
+  challengeId: string,
+  challengeVersion: string,
+): Promise<LaunchedSession> {
+  // ── ① 签发(宿主凭证;请求体恰两键,无租户位)──
+  const issuance = await postJson(
+    recorder,
+    LAUNCH_TICKET_ISSUANCE_ROUTE,
+    { challengeId, version: challengeVersion },
+    { bearer: HOST_BACKEND_TOKEN },
+  );
+  expect(
+    issuance.status,
+    `启动票据签发应回 201(实测 ${issuance.status};404 = 签发面未启用/题目未发布/白名单外租户,` +
+      "401 = 宿主凭证不符)",
+  ).toBe(201);
+  const issuedBody = issuance.body as Record<string, unknown>;
+  expect(
+    Object.keys(issuedBody).sort(),
+    "签发响应体应恰两键 {expiresAt, launchUrl}(契约 §2.2)",
+  ).toEqual(["expiresAt", "launchUrl"]);
+  const launchUrl = issuedBody["launchUrl"];
+  if (typeof launchUrl !== "string" || launchUrl === "") {
+    throw new Error("签发响应缺少 launchUrl(契约恰两键)");
+  }
+
+  // ── ② 换票(顶层导航语义 + 不跟随 302;见 redeemLaunchAddress 的「为什么不用 fetch」)──
+  const expectedOrigin = new URL(BASE_URL).origin;
+  expect(
+    new URL(launchUrl).origin,
+    `launchUrl 的 origin 应等于服务端配置的 SESSION_API_PUBLIC_ORIGIN(${expectedOrigin});` +
+      `实测 ${launchUrl}。两处不同源 = 拓扑配置错位(换票用例会打到另一个源)`,
+  ).toBe(expectedOrigin);
+  const redeemed = await redeemLaunchAddress(launchUrl);
+  expect(redeemed.status, `换票应回 302(实测 ${redeemed.status};401 = 非导航语义/票据无效)`).toBe(302);
+  expect(
+    redeemed.location ?? "",
+    "换票 302 的 Location 必须是**不含票据**的干净路径(方案 A:票据即刻脱离地址栏)",
+  ).not.toContain("?t=");
+  const grant = cookieFromSetCookieHeaders(redeemed.setCookie, LAUNCH_GRANT_COOKIE_NAME);
+  if (grant === undefined) {
+    throw new Error(
+      `换票响应缺少 ${LAUNCH_GRANT_COOKIE_NAME} Cookie(Set-Cookie 交付面缺失):` +
+        `${JSON.stringify(redeemed.setCookie)}`,
+    );
+  }
+
+  // ── ③ 建会话(v2 恰两键 payload;授权只来自上一步的 Cookie)──
+  const created = await postJson(
+    recorder,
+    "/sessions",
+    {
+      command: "create_session",
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+      payload: { challengeId, challengeVersion },
+    },
+    { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${grant}` },
+  );
+  expect(
+    created.status,
+    `create_session 应回 201(实测 ${created.status};422 = 该租户下题目未登记,` +
+      `会话租户恒为锚租户 ${SESSION_TENANT_ID})`,
+  ).toBe(201);
+  const createdBody = created.body as { payload: { sessionId: string; revision: number } };
+  const sessionId = createdBody.payload.sessionId;
+  if (typeof sessionId !== "string" || sessionId === "") {
+    throw new Error("create_session 响应缺少 payload.sessionId");
+  }
+  return {
+    sessionId,
+    cookie: credentialFromSetCookie(created.setCookie),
+    revision: createdBody.payload.revision,
+    launchUrl,
+  };
+}
+
+/**
+ * 显式收尾一批会话(`close_session`;套件 `afterAll` 调用)。
+ *
+ * **为什么新链下必须做**(WP-96:这是锚租户带来的**跨套件**新约束):
+ *  - 会话租户 = 锚租户(见上)= **同一拓扑下的两个 compose 套件共用同一个会话
+ *    租户**,而 `SESSION_API_MAX_CONCURRENT_SESSIONS_PER_TENANT`(缺省 **8**)是
+ *    租户级硬护栏,超限即 **429 `budget_exhausted`**;
+ *  - 会话只在**通道关闭后**进入断线保持窗口(`SESSION_API_DISCONNECT_KEEPALIVE_SECONDS`
+ *    缺省 **300 s**),窗口到期才回收 ⇒ 套件 A 结束后其会话最长还占 5 分钟预算,
+ *    紧随其后的套件 B 起会话就可能撞顶(旧链每套件一个随机租户,**不存在**跨套件
+ *    争用;这正是「新链把租户收窄成一个」的直接后果,如实登记);
+ *  - **best-effort**:收尾失败只吞掉(不改变测试结论)——会话仍会被断线保持到期
+ *    回收兜住,故失败不会造成泄漏性后果,但会拖慢下一个套件。
+ */
+export async function releaseSessions(
+  recorder: TrafficRecorder,
+  sessions: readonly { readonly sessionId: string; readonly cookie: string }[],
+): Promise<void> {
+  for (const session of sessions) {
+    try {
+      const response = await postJson(recorder, "/sessions/close", {
+        command: "close_session",
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+        payload: { sessionId: session.sessionId },
+      }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${session.cookie}` });
+      if (response.status !== 200) {
+        process.stderr.write(
+          `[compose] 会话收尾返回 ${response.status}(sessionId=${session.sessionId};best-effort,继续)\n`,
+        );
+      }
+    } catch (error) {
+      process.stderr.write(
+        `[compose] 会话收尾失败(best-effort,继续):${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
+  }
 }

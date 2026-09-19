@@ -31,7 +31,9 @@
  *
  * 环境变量:SESSION_API_POSTGRES_URL / SESSION_API_MINIO_ENDPOINT /
  * SESSION_API_MINIO_PORT / SESSION_API_MINIO_ACCESS_KEY / SESSION_API_MINIO_SECRET_KEY、
- * 可选 K6_CHALLENGE_ID(缺省 chal-k6-baseline)、K6_TENANT_ID(缺省 k6-tenant)。
+ * SESSION_API_HOST_TENANTS(**登记租户的派生来源**;见下方「登记租户」段)、
+ * 可选 K6_CHALLENGE_ID(缺省 chal-k6-baseline)、K6_CHALLENGE_VERSION(缺省 1.0.0)、
+ * K6_TENANT_ID(显式覆盖登记租户;必须等于锚租户)。
  */
 import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 
@@ -46,8 +48,53 @@ import {
 } from "../dist/persistence/index.js";
 
 const CHALLENGE_ID = process.env.K6_CHALLENGE_ID || "chal-k6-baseline";
-const TENANT_ID = process.env.K6_TENANT_ID || "k6-tenant";
-const CONTENT_VERSION = "1.0.0";
+const CONTENT_VERSION = process.env.K6_CHALLENGE_VERSION || "1.0.0";
+
+/**
+ * 登记租户 = **启动地址链的锚租户**(宿主凭证 × `SESSION_API_HOST_TENANTS` 的
+ * 字典序最小项;规则与 `config.ts#splitHostTenants` 逐字一致)。
+ *
+ * **为什么必须是它(WP-96 起;登记租户错配是一个会"看起来登记成功"的坑)**:
+ *  - 启动地址链派生出的会话,其 `tenantId` **恒等于**该锚租户(票据的租户绑定在
+ *    签发时由宿主凭证 × 白名单派生,契约 §二.1 / D-LT-2;请求体连 tenantId 位都没有);
+ *  - 而 `create_session` 的题目装载按 `(challengeId, contentVersion, tenantId)`
+ *    **强制过滤**(`session-manager.ts#createSessionReserved` → `findChallengeVersion`);
+ *  - 签发端点的「题目已发布」校验却是**跨租户公开面**(`findPublishedChallengeVersion`)
+ *    ⇒ 登记在别的租户下时**签发照样 201**,直到建会话才 **422 challenge_invalid**。
+ * 故本脚本按拓扑配置派生缺省租户,而不是写死 `k6-tenant`(旧链的 token claims 自带
+ * 租户,登记租户错配会在签发期就失败;新链把该失败推迟到建会话,必须在此挡住)。
+ * `K6_TENANT_ID` 仍可显式覆盖(必须等于锚租户,否则 k6 三场景必然建不出会话)。
+ */
+const TENANT_ID =
+  process.env.K6_TENANT_ID ||
+  anchorTenant(process.env.SESSION_API_HOST_TENANTS) ||
+  "";
+
+/**
+ * 锚租户派生(`SESSION_API_HOST_TENANTS` 的字典序最小项;与
+ * `config.ts#splitHostTenants` 逐字同规则:去空白 → 去重 → 排序 → 取首)。
+ * 缺省 / 空 ⇒ 返回空串(调用方以显式报错挡住,不静默回落到某个猜测值)。
+ */
+function anchorTenant(value) {
+  if (value === undefined) {
+    return "";
+  }
+  const tenants = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  const unique = [...new Set(tenants)].sort();
+  return unique.length > 0 ? unique[0] : "";
+}
+
+if (TENANT_ID === "") {
+  console.error(
+    "缺少登记租户:SESSION_API_HOST_TENANTS 未提供(或为空)且 K6_TENANT_ID 未显式给出。" +
+      "启动地址链派生出的会话租户 = 该白名单的字典序最小项,题目必须登记在同一租户下" +
+      "(--env-file=compose/integration.env 已含该键;见本文件头「登记租户」段)。",
+  );
+  process.exit(1);
+}
 
 // ── 生命周期教学题(与 test/compose/helpers/lifecycle-challenge.ts 同源)──
 const A32_REGION = 4096;

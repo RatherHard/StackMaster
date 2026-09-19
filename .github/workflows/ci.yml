@@ -106,16 +106,27 @@ jobs:
           WORKER_CARGO_PROFILE: release
 
   e2e-matrix:
-    name: E2E 三浏览器矩阵 + axe 三预设真机门禁(WP-74;E-3)
+    name: E2E 三引擎 × 九面单主题矩阵(页面分发;WP-95 / WP-96)
     runs-on: ubuntu-latest
-    # ── timeout-minutes 登记(WP-74 要求明确登记)───────────────────────────────
-    # 本 job 含**两次** Playwright 调用(矩阵 spec 一次;axe 真机 + reduced-motion
-    # 一次),每次各自享有 `playwright.config.ts:33` 的 globalTimeout —— 矩阵形态
-    # (E2E_MATRIX=1)为 75 分钟/次,故 Playwright 侧理论最坏 75 + 75 = 150 分钟;
-    # 叠加 frozen-lockfile 安装、三浏览器 + 系统依赖下载、compose 冷构建
-    # (helpers/compose.ts 的 up -d --build --wait 自身上限 10 分钟)与收尾,
-    # 取 180 分钟。普通增量形态远低于此(实测面见 README「门禁形态自查」)。
-    timeout-minutes: 180
+    # ── timeout-minutes 登记(要求明确登记)───────────────────────────────────
+    # 本 job 是**一次** Playwright 调用(`playwright test` 全量:page-app /
+    # geometry-guard / axe-matrix / launch-chain),无 compose 冷构建。上界估算:
+    # 用例槽位 = chromium 25 + firefox 16 + webkit 16 = 57,每个的 `timeout` 为
+    # `playwright.config.ts` 的 60 s(CI `retries: 1` ⇒ 失败槽位最坏 ×2)⇒
+    # Playwright 侧理论最坏 ≈ 114 分钟;叠加 frozen-lockfile 安装、三浏览器 +
+    # 系统依赖下载与两次产物构建,取 150 分钟。实测形态远低于此。
+    timeout-minutes: 150
+    # ── 形态(WP-96:门禁对象从退役的插件开发壳切到 page-app)─────────────────
+    # 门禁对象 = **新形态**(与 API 同源的独立页面 `@stackmaster/page-app`):
+    #  - **不需要 Docker / 不拉拓扑**:page-app 的 E2E 基座是 `vite preview`(托管
+    #    已构建 dist)+ Playwright 注入契约合法的 `POST /sessions` 应答 ⇒ 无需
+    #    真后端(真要拓扑的 `launch-chain.spec.ts` 由 `E2E_LAUNCH_CHAIN` 显式开关,
+    #    本 job **不开启**,该文件整体 skip —— 不伪装成通过);本机实测形态见
+    #    `apps/page-app/README.md` §5.1;
+    #  - 因此 `E2E_KEEP_COMPOSE` / `SESSION_API_HOST_BACKEND_TOKEN` / compose
+    #    冷构建等待**都不再需要**(旧 job 的 `up -d --build --wait` 随之退场);
+    #    末尾仍保留 `compose:app:down` 作为拓扑收尾保险(`if: always()`;
+    #    本 job 未起拓扑时它是幂等空操作,避免残留工程占住发布端口)。
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -125,32 +136,29 @@ jobs:
           cache: pnpm
       - name: 安装依赖(frozen lockfile)
         run: pnpm install --frozen-lockfile
-      # 被测产物:vm-ui dist(vite dev 的 publicDir,壳 / 嵌入面都加载它)、
-      # web-component 自包含产物(plugin-site-server 承载的插件文档页 +
-      # /pwn-memory-vm.js)、session-api dist(global-setup 的题目登记走真实
-      # registrar,依赖该产物)。`--filter X...` 含依赖 ⇒ protocol / vm-ui 一并构建。
-      - name: 构建被测产物(vm-ui / web-component 自包含产物 + session-api dist)
+      # 被测产物:`packages/vm-ui/dist`(page-app 的 prebuild 会把它同步到
+      # `public/vm-ui/`,运行期按 URL 加载;两者必须同批构建,否则页面加载不到
+      # 真产物)+ `apps/page-app/dist`(vite preview 托管的对象)。
+      # `--filter @stackmaster/vm-ui...` 含依赖 ⇒ protocol 一并构建。
+      - name: 构建被测产物(vm-ui dist + page-app dist)
         run: |
-          pnpm --filter @stackmaster/web-component... run build
-          pnpm --filter @stackmaster/session-api... run build
+          pnpm --filter @stackmaster/vm-ui... run build
+          pnpm --filter @stackmaster/page-app run build
       # linux runner 上补齐三引擎与其系统依赖(本地已装;CI 每次全新)。
       - name: Playwright 三浏览器 chromium + firefox + webkit(含系统依赖)
-        run: pnpm --filter @stackmaster/plugin-dev exec playwright install --with-deps chromium firefox webkit
-      # ── 步骤 1:矩阵 spec(三引擎)────────────────────────────────────────────
-      # 并行 / 串行边界登记(拓扑单例 ⇒ 矩阵 spec 内串行):
-      #  - compose 全拓扑为**单例**(固定端口 5173/5174/5175/13000,docker compose
-      #    工程名固定)⇒ 同一时刻只允许一个 Playwright 进程持有拓扑;
-      #  - `playwright.config.ts` 的 workers: 1 / fullyParallel: false(真实后端
-      #    共享单拓扑,会话并发预算 D-API-50)⇒ **spec 内用例串行**;矩阵 12 格
-      #    (六宽度 × 两面)在 chromium / firefox / webkit 三项目间亦串行,另 5 个
-      #    chromium 口径附加格(主题 / 键盘 / reduced-motion / 高对比度 / 非根路径);
-      #  - **job 之间**:本 job 占满拓扑,不得与任何其它 E2E job 并行(现无第二个;
-      #    若将来新增,须串行化或改用独立端口与独立 compose 工程名);
-      #  - **O-MP-2(中期任务分解 §七)口径**:chromium + firefox + webkit 三引擎
-      #    常态跑,webkit 允许 retry 一次 —— 由 `playwright.config.ts:30` 的
-      #    CI 形态 `retries: 1` 承载(GitHub 自动注入 CI=true),本 job 不再叠加;
-      #  - 本步 E2E_KEEP_COMPOSE=1:保留拓扑给下一步(避免第二次冷构建),
-      #    收尾由本 job 末尾的 `if: always()` 步骤显式执行。
+        run: pnpm --filter @stackmaster/page-app exec playwright install --with-deps chromium firefox webkit
+      # ── 全量门禁(chromium + firefox + webkit)──────────────────────────────
+      # 并行 / 串行边界登记:
+      #  - `playwright.config.ts` 的 workers: 1 / fullyParallel: false ⇒ spec 内
+      #    用例串行;三项目(chromium 恒在,E2E_MATRIX=1 追加 firefox / webkit)间
+      #    亦串行。覆盖面(本机实测口径,**同一配置**):
+      #      page-app 5 例 + geometry-guard 9 例(×3 引擎)+ axe-matrix 9 例
+      #      (chromium 门禁口径,spec 内对非 chromium 自 skip)
+      #      + launch-chain 2 例(未开 E2E_LAUNCH_CHAIN ⇒ skip)
+      #    ⇒ **51 passed / 24 skipped / 0 failed**(apps/page-app/README.md §5.1);
+      #  - **O-MP-2 口径**:三引擎常态跑,webkit 允许 retry 一次 —— 由
+      #    `playwright.config.ts:51` 的 `retries: ci ? 1 : 0` 承载(GitHub 自动
+      #    注入 CI=true),本 job 不叠加;
       #  - `--reporter=…,github`(2026-09-17 补)是**可诊断性**要求,不是装饰:
       #    `list` 只写控制台、`json` 只落文件 —— 两者都**不产生 check-run
       #    annotations**,而 GitHub 的 job 日志下载与 artifacts 下载**都要认证**
@@ -161,41 +169,32 @@ jobs:
       #    而 **annotations 是公开可读的**(`GET /check-runs/<job_id>/annotations`)
       #    ⇒ 无凭证也能逐条定位。**请勿移除本 reporter**;若注解数量被 GitHub
       #    截断,仍足以看到首批失败用例。
-      - name: 矩阵 spec(chromium + firefox + webkit;E2E_MATRIX=1)
-        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/browser-matrix.spec.ts --reporter=list,json,github
+      - name: 页面分发矩阵(page-app 全量;chromium + firefox + webkit;E2E_MATRIX=1)
+        run: pnpm --filter @stackmaster/page-app exec playwright test --reporter=list,json,github
         env:
           E2E_MATRIX: "1"
-          # 拓扑保留给下一步(步骤 2 在其上复跑;末尾统一下线)。
-          E2E_KEEP_COMPOSE: "1"
-          # 凭证只经环境变量(compose dev 拓扑的合成开发值,仓库内公开常量:
-          # apps/session-api/compose/app.yaml:72;生产形态由部署注入真实值)。
-          SESSION_API_HOST_BACKEND_TOKEN: host-backend-shared-credential-0123456789
-          WORKER_CARGO_PROFILE: release
+          # 真拓扑链路的开关**保持关闭**:`launch-chain.spec.ts` 需要 compose +
+          # 已登记题目,开启前须先补「构建 page-app 产物 → compose:app:up →
+          # 种子登记」三步(见 apps/page-app/README.md §5.2 与本 job 的形态注)。
+          # 未开启时该文件整体 skip(不算通过)。
+          E2E_LAUNCH_CHAIN: "0"
           # 矩阵报告落 .tmp/(仓库 .gitignore 覆盖),供 artifacts 归档。
           PLAYWRIGHT_JSON_OUTPUT_NAME: .tmp/e2e-matrix-report.json
-      # ── 步骤 2:axe 三预设真机门禁 + reduced-motion(chromium 门禁口径)─────
-      # axe / reduced-motion 两个 spec 自身 skip 非 chromium 项目(browserName 断言),
-      # 此处再显式 --project=chromium:门禁口径不变,且不随 E2E_MATRIX 膨胀。
-      # 拓扑已在跑 ⇒ global-setup 的 readyz 探测直接复用(不再 compose:app:up)。
-      - name: axe 三预设真机门禁 + reduced-motion(chromium)
-        run: pnpm --filter @stackmaster/plugin-dev exec playwright test e2e/axe-contrast.spec.ts e2e/reduced-motion.spec.ts --project=chromium --reporter=list,github
-        env:
-          E2E_KEEP_COMPOSE: "1"
-          SESSION_API_HOST_BACKEND_TOKEN: host-backend-shared-credential-0123456789
-          WORKER_CARGO_PROFILE: release
-      # ── 归档 artifacts(axe JSON 归档 + 矩阵报告 + 失败 trace;失败也执行)──
+      # ── 归档 artifacts(axe 归档 + 矩阵报告 + 失败 trace;失败也执行)──
+      # 路径已按新形态落到 page-app(WP-95 起 axe 归档目录 = `e2e/reports/axe/
+      # <日期>/<run-N>/`;两条路径均在磁盘上存在,见 apps/page-app/README.md §5.1)。
       - name: 归档 artifacts(axe 归档 + 矩阵报告 + 失败 trace)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-matrix-artifacts
           if-no-files-found: warn
-          # axe 归档目录按**运行当日**生成(见 e2e/axe-contrast.spec.ts);CI 只归档
-          # 不提交 —— 落仓归档由本地 / 主控波次执行(归档即历史证据)。
+          # axe 归档目录按**运行当日 / run-N** 生成(见 e2e/axe-matrix.spec.ts);
+          # CI 只归档不提交 —— 落仓归档由本地 / 主控波次执行(归档即历史证据)。
           path: |
-            apps/plugin-dev/e2e/reports/axe/**
-            apps/plugin-dev/.tmp/e2e-matrix-report.json
-            apps/plugin-dev/.tmp/playwright-artifacts/**
+            apps/page-app/e2e/reports/axe/**
+            apps/page-app/.tmp/e2e-matrix-report.json
+            apps/page-app/.tmp/playwright-artifacts/**
       - name: 拓扑收尾(compose:app:down;失败也执行,不掩盖测试结果)
         if: always()
         run: pnpm --filter @stackmaster/session-api compose:app:down

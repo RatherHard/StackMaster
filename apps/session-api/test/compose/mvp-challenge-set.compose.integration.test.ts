@@ -14,9 +14,15 @@
  *      链路的裁决只产出过 wrong_answer)与 CH-04 crash 语料(program_crash)
  *      经 GET /verdicts 呈现契约逐字段核验。
  *
+ * **WP-96**:会话建立走**启动地址链**(签发 → 换票 302 + 授权凭证 Cookie →
+ * `create_session` v2 恰两键;旧链 `/auth/embed-tokens` 与四键载荷已退役)。
+ * ⚠ 该链派生出的**会话租户 = 宿主凭证白名单的锚租户**(`SESSION_TENANT_ID`)⇒
+ * 题目登记租户必须用它(`create_session` 的装载按 `(challengeId, version,
+ * tenantId)` 强制过滤;签发期的已发布校验是跨租户公开面,不构成兜底)。
+ *
  * 机检:全部 HTTP 响应体 + WSS 入站帧经 scanCrossDomainPayloads 零命中。
  */
-import { generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
+import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import type { WssFrame } from "@stackmaster/protocol";
@@ -43,15 +49,17 @@ import {
   BASE_PORT,
   BASE_URL,
   COMPOSE_ENABLED,
-  HOST_BACKEND_TOKEN,
   IT_CONFIG,
+  SESSION_ACTION_PROTOCOL_VERSION,
+  SESSION_TENANT_ID,
   SKIP_REASON,
   TOPOLOGY,
   TrafficRecorder,
   HostProcess,
   VerifierProcess,
-  credentialFromSetCookie,
+  createSessionViaLaunchAddress,
   postJson,
+  releaseSessions,
 } from "./helpers/topology.js";
 
 /** 题目集内按 challengeId 取语料条目。 */
@@ -71,9 +79,17 @@ describe.skipIf(!COMPOSE_ENABLED)(
   `MVP 题目集 compose 全拓扑(${TOPOLOGY} 形态;${SKIP_REASON})`,
   () => {
     const runSuffix = Math.random().toString(16).slice(2, 10);
-    const tenantId = `mvp-set-${runSuffix}`;
-    const userId = "user-mvp-set";
-    const embedSessionId = () => randomBytes(16).toString("base64url");
+    /**
+     * 登记租户 = **启动地址链的锚租户**(见文件头 WP-96 段)。
+     *
+     * 旧链下这里是 `mvp-set-${runSuffix}`(每运行一个独立租户);新链的租户由
+     * 服务端从宿主凭证派生 ⇒ 只能登记在锚租户下,否则 `create_session` 422。
+     * 版本不可变约束对残留数据的免疫由 **runSuffix 进 challengeId** 承担(不依赖租户)。
+     */
+    const tenantId = SESSION_TENANT_ID;
+    // 旧链在此还有 `userId`(embedToken 签发请求体的一键)。新链**没有它**:
+    // `userId` 只由服务端配置派生(`SESSION_API_LAUNCH_USER_ID`,缺省 `launch-anon`,
+    // D-LT-5 第 6 条)⇒ 同一部署下所有会话共用同一个 userId(显式接受的代价)。
 
     const recorder = new TrafficRecorder();
     const host = new HostProcess();
@@ -81,6 +97,12 @@ describe.skipIf(!COMPOSE_ENABLED)(
     const clients: WssChannelClient[] = [];
     let pool: Pool | null = null;
     let bundles: MinioChallengeBundleStore | null = null;
+    /**
+     * 本套件建过的会话(**afterAll 显式收尾**;理由见
+     * `helpers/topology.ts#releaseSessions`:新链下两个 compose 套件共用锚租户,
+     * 而每租户并发预算缺省 8、断线保持窗口缺省 300 s)。
+     */
+    const launchedSessions: { sessionId: string; cookie: string }[] = [];
 
     async function connectChannel(cookie: string): Promise<WssChannelClient> {
       const client = await WssChannelClient.connect({
@@ -95,26 +117,11 @@ describe.skipIf(!COMPOSE_ENABLED)(
       sessionId: string;
       cookie: string;
     }> {
-      const embedSessionIdValue = embedSessionId();
-      const embed = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId,
-        userId,
-        challengeId,
-        challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdValue,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      expect(embed.status).toBe(201);
-      const embedToken = (embed.body as { embedToken: string }).embedToken;
-      const created = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdValue, embedToken },
-      });
-      expect(created.status).toBe(201);
-      return {
-        sessionId: (created.body as { payload: { sessionId: string } }).payload.sessionId,
-        cookie: credentialFromSetCookie(created.setCookie),
-      };
+      // 启动地址链(WP-96):签发 → 换票 302 + 授权凭证 Cookie → create_session v2。
+      // 旧链的两条断言(签发 201 / create 201)随链一并搬进该函数(零删除)。
+      const launched = await createSessionViaLaunchAddress(recorder, challengeId, contentVersion);
+      launchedSessions.push({ sessionId: launched.sessionId, cookie: launched.cookie });
+      return { sessionId: launched.sessionId, cookie: launched.cookie };
     }
 
     async function runScript(
@@ -127,12 +134,12 @@ describe.skipIf(!COMPOSE_ENABLED)(
       for (const action of actions) {
         seq += 1;
         client.sendText(JSON.stringify({
-          protocolVersion: 1,
+          protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
           type: "action",
           sessionId,
           seq,
           payload: {
-            protocolVersion: 1,
+            protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
             sessionId,
             clientSeq: seq,
             baseRevision: seq - 1,
@@ -150,7 +157,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
     async function submitFor(sessionId: string, cookie: string): Promise<string> {
       const submitted = await postJson(recorder, "/sessions/submissions", {
         command: "submit",
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         payload: { sessionId },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}` });
       expect(submitted.status).toBe(200);
@@ -269,6 +276,8 @@ describe.skipIf(!COMPOSE_ENABLED)(
       for (const client of clients.splice(0)) {
         client.close();
       }
+      // 会话显式收尾(跨套件预算;best-effort,失败不改测试结论)。
+      await releaseSessions(recorder, launchedSessions.splice(0));
       await host.stop();
       if (pool !== null) {
         await pool.end().catch(() => undefined);

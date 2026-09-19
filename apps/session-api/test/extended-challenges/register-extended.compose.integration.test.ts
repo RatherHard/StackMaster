@@ -3,19 +3,25 @@
  *
  * 用途:把 EXT_CHALLENGES 三道题经真实 ChallengeRegistrar 链路(双包规范化
  * JSON 落桶 + Ed25519 验签 + PG 登记)登记进**运行中的联调拓扑**,使
- * plugin-dev 开发壳可以创建会话游玩。与 MVP 题目集的 compose 全拓扑测试
- * (test/compose/mvp-challenge-set.compose.integration.test.ts §一)同一
- * 登记形态;差异:本文件不拉起进程拓扑(依赖服务与 session-api/verifier 由
- * `pnpm --filter @stackmaster/session-api dev:host` 之外的方式自备),只做
- * 直连 PG / MinIO 的登记与登记行核验。
+ * **页面分发形态**(`apps/page-app`,经启动地址进入)可以创建会话游玩。与 MVP
+ * 题目集的 compose 全拓扑测试(test/compose/mvp-challenge-set.compose.integration.test.ts
+ * §一)同一登记形态;差异:本文件不拉起进程拓扑(依赖服务与 session-api/verifier
+ * 由 `pnpm --filter @stackmaster/session-api dev:host` 自备),只做直连 PG / MinIO
+ * 的登记与登记行核验。
  *
  * 运行(cwd 任意;依赖服务须已 compose:deps:up):
  *   SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec \
  *     vitest run test/extended-challenges/register-extended.compose.integration.test.ts
  *
- * 租户纪律:登记租户(EXT_DEV_TENANT_ID,缺省 tenant-dev-0001)必须与后续
- * 签发 embed token 的 E2E_TENANT_ID 一致——题目版本按 (租户, 题目, 版本)
- * 三键定位,token 租户不一致即会话创建失败。
+ * 租户纪律(WP-96 起 = **启动地址链的锚租户**):启动地址链派生出的会话其
+ * `tenantId` 恒等于「宿主凭证 × `SESSION_API_HOST_TENANTS`」的**字典序最小项**
+ * (票据的租户绑定在签发时由服务端派生,请求体连 tenantId 位都没有,D-LT-2),
+ * 而 `create_session` 的题目装载按 `(challengeId, contentVersion, tenantId)`
+ * **强制过滤** ⇒ **登记租户必须等于该锚租户**,否则签发照样 201(签发期的
+ * 「已发布」校验是跨租户公开面),直到建会话才 422 challenge_invalid。
+ * 缺省 = `host-scores-tenant`(compose/app.yaml 与 compose/integration.env 的
+ * `SESSION_API_HOST_TENANTS` 同值,dev:host 直接继承)⇒ 文档化的联调路径**无需
+ * 额外导出**;`EXT_DEV_TENANT_ID` 仍可显式覆盖(必须等于锚租户)。
  *
  * 复跑卫生:版本不可变(D-API-23 重复登记确定性拒绝),重跑前清残留登记行
  * 与旧桶对象;题目内容确定性使清后重登记字节与历史登记逐字节相同。
@@ -40,7 +46,8 @@ import { ensureMigrated, IT_CONFIG } from "../persistence/helpers/it.js";
 const COMPOSE_ENABLED = process.env["SESSION_API_COMPOSE"] === "1";
 const SKIP_REASON = "跳过原因:SESSION_API_COMPOSE != 1(先 compose:deps:up 起依赖服务)";
 
-const DEV_TENANT_ID = process.env["EXT_DEV_TENANT_ID"] ?? "tenant-dev-0001";
+/** 登记租户(缺省 = 启动地址链锚租户;理由见文件头「租户纪律」段)。 */
+const DEV_TENANT_ID = process.env["EXT_DEV_TENANT_ID"] ?? "host-scores-tenant";
 const CONTENT_VERSION = "1.0.0";
 const VM_PROFILE_VERSION = "1.0.0";
 

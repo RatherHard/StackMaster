@@ -48,6 +48,12 @@ async function runVitest(topology) {
           ...process.env,
           SESSION_API_COMPOSE: "1",
           SESSION_API_TOPOLOGY: topology,
+          // 分发改版 WP-96:启动地址链的**锚租户**来源。container 拓扑下
+          // integration.env 不进测试进程环境(只有 host 拓扑的宿主进程会读它)
+          // ⇒ 这里显式注入与 compose/app.yaml 同值的白名单,使
+          // helpers/topology.ts 的 SESSION_TENANT_ID 两种拓扑同源(题目登记
+          // 租户 = 会话租户 = 该值;见该文件「启动地址链」段)。
+          SESSION_API_HOST_TENANTS: process.env.SESSION_API_HOST_TENANTS ?? "host-scores-tenant",
         },
       },
     );

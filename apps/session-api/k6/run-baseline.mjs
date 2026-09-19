@@ -12,6 +12,17 @@
  *   4. 归档:results/<UTC 时间戳>/<scenario>.json(k6 原始 summary)+ 前后
  *      各一次 /metrics 快照 + summary.md(人读摘要)。
  *
+ * ── WP-96:链路与负载模型都变了(读数**与旧基线不可比**)────────────────
+ *
+ * 链路 = **启动地址链**(`POST /auth/launch-tickets` → 换票 302 + 授权凭证
+ * Cookie → `create_session` v2,全部 `protocolVersion: 2`);旧链
+ * `POST /auth/embed-tokens` 与四键载荷随嵌入协议面退役。由此两处结构性变化:
+ *  - 场景必须**手工补 `Sec-Fetch-Mode: navigate` 且不跟随 302**(k6 不是浏览器);
+ *  - 新链的 `userId` 由服务端配置派生(`SESSION_API_LAUNCH_USER_ID`,缺省
+ *    `launch-anon`)⇒ 三场景共享同一 `(tenant,user)` 预算,旧脚本的「每迭代
+ *    唯一用户」不可用 ⇒ 场景按**共享预算均摊节奏**(见各场景文件头)。本运行器
+ *    把拓扑的两条预算值透传给 k6(缺省取服务端缺省),**不为压测调低护栏**。
+ *
  * 用法:
  *   pnpm --filter @stackmaster/session-api k6:baseline
  *   BASE_URL=http://host.docker.internal:13000 node k6/run-baseline.mjs
@@ -90,7 +101,35 @@ async function fetchMetricsSnapshot() {
   return response.body ? await response.text() : "";
 }
 
-function runK6Scenario(scenario, dir) {
+/**
+ * k6 场景环境参数(WP-96):把拓扑的**两条共享预算**值透传给场景(场景据此均摊
+ * 迭代节奏,避免贴着窗口边界被 429 削顶),外加 origin / 题目版本等可选覆盖。
+ *
+ * 取值序:运行器进程环境(显式覆盖)> compose/integration.env(拓扑配置)> **不传**
+ * (场景内缺省 = 服务端缺省 60 / 120)。**绝不**在此调低护栏值。
+ */
+function k6BudgetEnvArgs(composeEnv) {
+  const mappings = [
+    ["LAUNCH_ISSUANCE_PER_MINUTE", "SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE"],
+    ["REST_REQUESTS_PER_MINUTE", "SESSION_API_RATE_LIMIT_REQUESTS_PER_MINUTE"],
+  ];
+  const args = [];
+  for (const [k6Key, configKey] of mappings) {
+    const value = process.env[k6Key] ?? composeEnv[configKey];
+    if (value !== undefined && value !== "") {
+      args.push("-e", `${k6Key}=${value}`);
+    }
+  }
+  for (const key of ["K6_ORIGIN", "K6_CHALLENGE_VERSION"]) {
+    const value = process.env[key];
+    if (value !== undefined && value !== "") {
+      args.push("-e", `${key}=${value}`);
+    }
+  }
+  return args;
+}
+
+function runK6Scenario(scenario, dir, budgetArgs) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "docker",
@@ -99,6 +138,7 @@ function runK6Scenario(scenario, dir) {
         "-e", `BASE_URL=${BASE_URL}`,
         ...(process.env.HOST_BEARER ? ["-e", `HOST_BEARER=${process.env.HOST_BEARER}`] : []),
         ...(process.env.K6_CHALLENGE_ID ? ["-e", `K6_CHALLENGE_ID=${process.env.K6_CHALLENGE_ID}`] : []),
+        ...budgetArgs,
         "grafana/k6:latest", "run", "--quiet", "-",
       ],
       { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
@@ -143,6 +183,14 @@ function buildSummaryMd(results, metricsBefore, metricsAfter, baseUrl) {
     "",
     `- 被测地址:${baseUrl}(形态与时间戳见同目录 JSON;D-API-73)`,
     `- 采集时间:${new Date().toISOString()}`,
+    "- **链路**:启动地址链(`POST /auth/launch-tickets` → 换票 302 + 授权凭证 Cookie" +
+      " → `create_session` v2;后续命令 `protocolVersion: 2`)。**旧链 " +
+      "`POST /auth/embed-tokens` 与四键载荷随嵌入协议面退役**(WP-96)。",
+    "- ⚠ **与旧基线不可比**:新链的 `userId` 是部署级配置" +
+      "(`SESSION_API_LAUNCH_USER_ID`,缺省 `launch-anon`)⇒ 三场景共享同一 " +
+      "`(tenant,user)` 预算,旧脚本的「每迭代唯一用户」结构性不可用 ⇒ 场景按" +
+      "共享预算**均摊节奏**运行(各场景 summary JSON 的 `minIterationMs` 即该节奏)。" +
+      "`k6/results/2026-09-09*` / `2026-09-12*` 的读数属**旧链历史证据**,不得与本轮并列解读。",
     "- 阈值:**不设通过阈值**(10.3 / 13.6——数据作为 T2 触发判据基线,避免过早优化)",
     "- 环境:本机 Docker + compose 拓扑(容器形态;见 apps/session-api/README.md 的拓扑说明)",
     "",
@@ -195,12 +243,16 @@ await waitForHealth();
 console.log(`[k6:baseline] 被测拓扑就绪:${HOST_BASE_URL}(k6 容器视角:${BASE_URL})`);
 
 // 题目登记(integration.env 注入依赖服务连接;重复登记 = 复用既有版本)。
-const seedEnv = { ...process.env, ...(await integrationEnv()) };
+const composeEnv = await integrationEnv();
+const seedEnv = { ...process.env, ...composeEnv };
 await runChild(process.execPath, [join(APP_DIR, "k6", "seed-challenge.mjs")], {
   cwd: APP_DIR,
   env: seedEnv,
 });
 console.log("[k6:baseline] 基线题目就绪");
+
+/** 拓扑预算透传(WP-96;见文件头「链路与负载模型都变了」段)。 */
+const budgetArgs = k6BudgetEnvArgs(composeEnv);
 
 const runId = new Date().toISOString().replace(/[:.]/g, "");
 const runDir = join(RESULTS_ROOT, runId);
@@ -212,7 +264,7 @@ await writeFile(join(runDir, "metrics-before.txt"), metricsBefore, "utf8");
 const results = [];
 for (const scenario of SCENARIOS) {
   console.log(`[k6:baseline] 运行场景 ${scenario.name} ……`);
-  const stdout = await runK6Scenario(scenario, runDir);
+  const stdout = await runK6Scenario(scenario, runDir, budgetArgs);
   await writeFile(join(runDir, `${scenario.name}.json`), stdout, "utf8");
   let json;
   try {

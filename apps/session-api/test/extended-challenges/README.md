@@ -15,7 +15,7 @@ pnpm --filter @stackmaster/session-api exec vitest run test/extended-challenges
 # 门禁 21 + 裁决闭环(真实 vm-worker)14 = 35 用例
 ```
 
-## 浏览器联调(亲手玩)
+## 浏览器联调(亲手玩;WP-96 起 = **启动地址链 / 页面分发**)
 
 ### 一次性准备
 
@@ -23,53 +23,55 @@ pnpm --filter @stackmaster/session-api exec vitest run test/extended-challenges
 # ① 依赖容器(PostgreSQL 15432 / Redis 16379 / MinIO 19000;需 Docker Desktop 在运行)
 pnpm --filter @stackmaster/session-api compose:deps:up
 
-# ② 联调拓扑(session-api http://127.0.0.1:13000 + verifier :13100;
-#    已把开发壳 origin http://localhost:5173 加入来源白名单;Ctrl+C 整体停止)
+# ② 页面产物(页面由 session-api 同源托管;vm-ui 必须先构建)
+pnpm --filter @stackmaster/vm-ui build
+pnpm --filter @stackmaster/page-app build
+
+# ③ 联调拓扑(dev:host:session-api http://localhost:13000 + verifier :13100;
+#    它自带 SESSION_API_PUBLIC_ORIGIN 与页面目录装配 = 同源托管 page-app 产物;
+#    Ctrl+C 整体停止)
 pnpm --filter @stackmaster/session-api dev:host
 
-# ③ 登记三道题(每拓扑生命周期一次即可;运行中实例直读同一 PG/MinIO)
+# ④ 登记三道题(每拓扑生命周期一次即可;运行中实例直读同一 PG/MinIO)
+#    登记租户缺省 = 启动地址链锚租户(host-scores-tenant,dev:host 继承
+#    compose/integration.env),**与会话租户一致**才建得出会话。
 SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec \
   vitest run test/extended-challenges/register-extended.compose.integration.test.ts
-
-# ④ 开发壳(vite 代理 /sessions、/auth、/descriptors → 13000)
-pnpm --filter @stackmaster/plugin-dev dev     # http://localhost:5173
 ```
 
-### 每一局开始前:签发 embed token
+### 每一局开始前:领一张一次性启动地址
 
-embed token 是**短时(1 小时)且单次消费**的凭证(jti 一次性):每次创建会话都要新签一个。
+启动票据是**短时(缺省 5 分钟)且单次消费**的持有证明:每次创建会话都要新领一张。
+**地址只发给对应学习者**(交付纪律,契约 §六「会话固定」行的基线缓解)。
 
 ```bash
-# cwd 任意;三道题改 E2E_CHALLENGE_ID 即可
-SESSION_API_ORIGIN=http://127.0.0.1:13000 \
-SESSION_API_HOST_BACKEND_TOKEN=host-backend-shared-credential-0123456789 \
-E2E_TENANT_ID=tenant-dev-0001 \
-E2E_USER_ID=user-dev-0001 \
-E2E_CHALLENGE_ID=sm-x01-ret2win-ir \
-E2E_CHALLENGE_VERSION=1.0.0 \
-E2E_EMBED_SESSION_ID=esid-dev-local-browser-000000001 \
-node apps/plugin-dev/scripts/issue-embed-token.mjs
-# stdout 输出 {"embedToken":"...","expiresAt":...}
+# cwd 任意;三道题改 challengeId 即可。SESSION_API_PUBLIC_ORIGIN 必须与
+# dev:host 的 PUBLIC_ORIGIN 同源(localhost:13000;localhost 与 127.0.0.1 不同源,
+# 而 sm_launch_grant 是 SameSite=Strict ⇒ 页面与 API 必须同源)
+curl.exe -sS -X POST http://localhost:13000/auth/launch-tickets \
+  -H "authorization: Bearer host-backend-shared-credential-0123456789" \
+  -H 'content-type: application/json' \
+  -d '{"challengeId":"sm-x01-ret2win-ir","version":"1.0.0"}'
+# ⇒ {"launchUrl":"http://localhost:13000/app/c/sm-x01-ret2win-ir/1.0.0?t=<一次性票据>",
+#    "expiresAt":...}
 ```
 
-### 创建会话并游玩
+### 打开地址即开局(无需表单、无需 token)
 
-浏览器打开 **http://localhost:5173**(必须用 `localhost`,来源白名单按精确 origin 匹配),
-表单填入与签发时**完全相同**的四元组:
+把 `launchUrl` **整体贴进浏览器**:
 
-| 表单字段 | 值 |
-|---|---|
-| challengeId | `sm-x01-ret2win-ir`(或另两题) |
-| challengeVersion | `1.0.0` |
-| embedSessionId | `esid-dev-local-browser-000000001`(= 签发时的 E2E_EMBED_SESSION_ID) |
-| embedToken | 签发输出的 token |
-
-点「创建并连接」→ 工作区挂载。想要真实题面/提示(而非本地夹具),改用 URL:
-`http://localhost:5173/?descriptor=formal&challengeId=sm-x01-ret2win-ir&challengeVersion=1.0.0`。
+1. 服务端换票(`Sec-Fetch-Mode: navigate` 由顶层导航自带)→ `Set-Cookie:
+   sm_launch_grant`(Path=`/sessions`,HttpOnly,SameSite=Strict)→ **302 到不含
+   票据的干净路径**(地址栏里不再有 `?t=`;票据即刻脱离历史与 Referer);
+2. 页面(与 API 同源)自动 `POST /sessions`(`create_session`,payload 恰两键
+   `{challengeId, challengeVersion}`,`protocolVersion: 2`;授权来自 Cookie)
+   → 工作区挂载;
+3. 想换一道题:把**同一张票**再打开一次是不行的(单次消费,401 统一形态)
+   —— 回上一步重新领一张,改 `challengeId` / `version`。
 
 游玩节奏:「Payload 搭建」页用积木写字节(或读栈视图观察)→ 顶部菜单「指令步进」推进 →
 状态变 `won` → 菜单「提交」→ 顶部裁决横幅等待 `verdicted`(独立 verifier 重放,约几秒)。
-终态会话不可继续操作:再开一局 = 重新签 token → 重新创建会话。
+终态会话不可继续操作:再开一局 = 重新领一张启动地址。
 
 ### 速通攻略(剧透)
 
@@ -88,8 +90,10 @@ node apps/plugin-dev/scripts/issue-embed-token.mjs
 
 | 症状 | 原因与处置 |
 |---|---|
-| create_session 401 | token 已被消费(jti 单次)或过期(1 h)→ 重新签发 |
-| 请求 403 / 无 Cookie | 打开的不是 `http://localhost:5173`,或 dev:host 未把 5173 加入白名单 |
+| 签发 `POST /auth/launch-tickets` 404 | 签发面未启用(`SESSION_API_PUBLIC_ORIGIN` 未配)/ 白名单外租户 / 题目未发布 —— 三者同形(防枚举);dev:host 已配该键,**题目未登记**最常见(跑步骤④) |
+| 签发 401 | 宿主凭证不符(dev 合成值 = `host-backend-shared-credential-0123456789`) |
+| 打开地址 401 | 票据已被消费(单次)或过期(缺省 5 分钟)→ 重新领一张;或用非顶层导航打开(手工 curl 不带 `Sec-Fetch-Mode: navigate`) |
+| 页面打开 404(换票其实成功) | 该拓扑没托管页面:先按步骤② 构建 page-app,并用 `dev:host`(它自带页面目录装配) |
+| 页面里 `create_session` 422(challenge_invalid) | 登记租户 ≠ **锚租户**:新链的会话租户恒等于 `SESSION_API_HOST_TENANTS` 的字典序最小项(dev:host = `host-scores-tenant`,见 `compose/integration.env`),而题目装载按 `(challengeId, version, tenantId)` 过滤 —— 登记脚本的缺省已是该租户,只有显式覆盖了 `EXT_DEV_TENANT_ID` 时才需核对 |
 | 提交后一直 pending | verifier 未运行(检查 `http://127.0.0.1:13100/healthz`) |
-| 描述包 404 | 没登记(跑步骤③),或 token 租户 ≠ 登记租户(两者都要 `tenant-dev-0001`) |
 | 13000 连接拒绝 | dev:host 未运行;deps 未起时它也起不来 |

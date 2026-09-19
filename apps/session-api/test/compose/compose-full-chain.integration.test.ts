@@ -12,9 +12,20 @@
  * WP-61 / WP-62:verifier 裁决闭环与汇总落库;阶段六 WP-63:裁决呈现路由
  * `GET /verdicts/:submissionId` 全链路演示 + 404 / 429 红灯矩阵 + ZR-T4
  * verifier 级复锚,D-API-83 / 84 / 97 ~ 100):
- *   POST /auth/embed-tokens(完整 token 链路)→ create_session → WSS 动作 →
+ *   **启动地址链**(`POST /auth/launch-tickets` → 换票 302 + 授权凭证 Cookie →
+ *   `create_session` v2 恰两键;WP-96) → WSS 动作(`protocolVersion: 2`)→
  *   增量下发 → 断线重连 → sync-projection → checkpoint / undo / checkout →
  *   submit → GET /verdicts/:submissionId(pending → verdicted 呈现)。
+ *   ⚠ 旧链(`POST /auth/embed-tokens` + 四键载荷)已随嵌入协议面退役。
+ *
+ * **WP-96:会话租户 = 锚租户**。启动地址链的 `tenantId` 由服务端在签发时从
+ * 「宿主凭证 × `SESSION_API_HOST_TENANTS` 白名单」派生(请求体无租户位)⇒
+ * 本套件的全部会话都落在 `SESSION_TENANT_ID`(白名单字典序最小项),而
+ * `create_session` 的题目装载按 `(challengeId, version, tenantId)` **强制过滤**
+ * ⇒ **题目登记必须用同一个租户**(签发期的「已发布」校验是跨租户公开面,
+ * 不构成兜底)。另:userId 由 `SESSION_API_LAUNCH_USER_ID` 派生(缺省
+ * `launch-anon`)⇒ 裁决重询 / 建会话的**每用户预算在本套件内共享**
+ * (旧链靠唯一 userId 隔离;既有断言不变,但隔离前提已变,见各用例注记)。
  *
  * 机检:全部 HTTP 响应体 + WSS 入站帧经 scanCrossDomainPayloads 零命中
  * (ZR-B9 / B10 / B5 / B4 / B1 / B6 的通道录制面,与 rig 级审计同源)。
@@ -22,7 +33,7 @@
  * revision 自快照续算 + 同输入恒同响应(I-4,与未重启孪生会话对齐)。
  */
 
-import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import type { ActionResponse, WssFrame } from "@stackmaster/protocol";
@@ -62,13 +73,16 @@ import {
   COMPOSE_ENABLED,
   HOST_BACKEND_TOKEN,
   IT_CONFIG,
+  SESSION_ACTION_PROTOCOL_VERSION,
+  SESSION_TENANT_ID,
   SKIP_REASON,
   TOPOLOGY,
   TrafficRecorder,
   HostProcess,
   VerifierProcess,
-  credentialFromSetCookie,
+  createSessionViaLaunchAddress,
   postJson,
+  releaseSessions,
   waitForHealth,
 } from "./helpers/topology.js";
 
@@ -77,10 +91,17 @@ describe.skipIf(!COMPOSE_ENABLED)(
   () => {
     // ── 每次运行唯一的注册身份(版本不可变约束对残留数据免疫)──
     const runSuffix = Math.random().toString(16).slice(2, 10);
-    // 嵌入会话标识(128-bit CSPRNG base64url;冻结 Schema 最短 22 字符)。
-    const embedSessionId = () => randomBytes(16).toString("base64url");
-    const tenantId = `compose-${runSuffix}`;
-    const userId = "user-compose";
+    /**
+     * 登记 / 会话租户 = **启动地址链的锚租户**(WP-96;见文件头)。
+     *
+     * 旧链这里是 `compose-${runSuffix}`(token claims 自带租户):新链的租户由
+     * 服务端从宿主凭证 × 白名单派生 ⇒ 只能登记在锚租户下;运行间免疫改由
+     * **runSuffix 进 challengeId** 承担。
+     */
+    const tenantId = SESSION_TENANT_ID;
+    // 旧链在此还有 `userId`(embedToken 签发请求体的一键)。新链**没有它**:
+    // `userId` 只由服务端配置派生(`SESSION_API_LAUNCH_USER_ID`,缺省 `launch-anon`,
+    // D-LT-5 第 6 条)⇒ 本套件所有会话共用同一个 userId(预算维度随之共享)。
     const challengeId = `chal-compose-${runSuffix}`;
     const contentVersion = "1.0.0";
     const stackAddressHex = LIFECYCLE_STACK_ADDRESS; // 题目栈区起点(rw;32 位档)
@@ -94,6 +115,22 @@ describe.skipIf(!COMPOSE_ENABLED)(
 
     let firstSession: { sessionId: string; cookie: string } | null = null;
     let firstSubmissionId: string | null = null;
+    /**
+     * 本套件建过的会话(**afterAll 显式收尾**;理由见
+     * `helpers/topology.ts#releaseSessions`:新链下两个 compose 套件共用锚租户,
+     * 而每租户并发预算缺省 8、断线保持窗口缺省 300 s ⇒ 不收尾会挤占下一个套件)。
+     */
+    const launchedSessions: { sessionId: string; cookie: string }[] = [];
+
+    /** 建会话 + 登记待收尾(WP-96 的唯一建会话入口;供全部用例共用)。 */
+    async function launchSession(
+      forChallengeId: string,
+      forVersion: string,
+    ): Promise<Awaited<ReturnType<typeof createSessionViaLaunchAddress>>> {
+      const launched = await createSessionViaLaunchAddress(recorder, forChallengeId, forVersion);
+      launchedSessions.push({ sessionId: launched.sessionId, cookie: launched.cookie });
+      return launched;
+    }
 
     async function connectChannel(cookie: string): Promise<WssChannelClient> {
       const client = await WssChannelClient.connect({
@@ -111,12 +148,12 @@ describe.skipIf(!COMPOSE_ENABLED)(
       action: Record<string, unknown>;
     }): string {
       return JSON.stringify({
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         type: "action",
         sessionId: input.sessionId,
         seq: input.seq,
         payload: {
-          protocolVersion: 1,
+          protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
           sessionId: input.sessionId,
           clientSeq: input.seq,
           baseRevision: input.seq - 1,
@@ -180,6 +217,9 @@ describe.skipIf(!COMPOSE_ENABLED)(
       for (const client of clients.splice(0)) {
         client.close();
       }
+      // 会话显式收尾(**跨套件预算**:锚租户 + 每租户并发预算 8 + 断线保持 300 s,
+      // 见 helpers/topology.ts#releaseSessions)。best-effort,失败不改测试结论。
+      await releaseSessions(recorder, launchedSessions.splice(0));
       await host.stop();
       if (pool !== null) {
         await pool.end().catch(() => undefined);
@@ -193,30 +233,15 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(ready.status).toBe(200);
     });
 
-    it("完整 token 链路:签发 → create_session(201 + Cookie)→ WSS 动作 → 增量下发", async () => {
-      // 1. embed token 签发(宿主凭证认证;嵌入协议 §六)。
-      const firstEmbedSessionId = embedSessionId();
-      const issuance = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId,
-        userId,
-        challengeId,
-        challengeVersion: contentVersion,
-        embedSessionId: firstEmbedSessionId,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      expect(issuance.status).toBe(201);
-      const embedToken = (issuance.body as { embedToken: string }).embedToken;
-
-      // 2. create_session(消费 embed token;201 + Set-Cookie 会话凭证)。
-      const created = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: firstEmbedSessionId, embedToken },
-      });
-      expect(created.status).toBe(201);
-      const createdBody = created.body as { payload: { sessionId: string; revision: number } };
-      expect(createdBody.payload.revision).toBe(0);
-      const sessionId = createdBody.payload.sessionId;
-      const cookie = credentialFromSetCookie(created.setCookie);
+    it("完整启动地址链:签发 → 换票(302 + 授权凭证 Cookie)→ create_session(201 + 会话凭证)→ WSS 动作 → 增量下发", async () => {
+      // 1~2. 启动地址链:签发(宿主凭证;体恰两键)→ 换票 302 + `sm_launch_grant`
+      //      → create_session v2(恰两键 payload;授权来自 Cookie)。
+      //      链内断言:签发 201 / 响应恰两键 / launchUrl origin = 服务端配置 /
+      //      换票 302 且 Location 无票据 / create 201 + 会话凭证 Cookie(旧链
+      //      在此处的三处断言随链搬进 helper,零删除)。
+      const launched = await launchSession(challengeId, contentVersion);
+      expect(launched.revision).toBe(0);
+      const { sessionId, cookie } = launched;
       firstSession = { sessionId, cookie };
 
       // 3. WSS 动作:write_bytes(栈区)→ 增量下发(ProjectionDelta 耦合)。
@@ -250,7 +275,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
       const reconnected = await connectChannel(cookie);
       const sync = await postJson(recorder, "/sessions/projection-sync", {
         command: "sync_projection",
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         payload: { sessionId },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}` });
       expect(sync.status).toBe(200);
@@ -285,7 +310,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
       // checkpointId 经 list_checkpoints 取回(服务端签发标识)。
       const list = await postJson(recorder, "/sessions/checkpoints", {
         command: "list_checkpoints",
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         payload: { sessionId },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}` });
       expect(list.status).toBe(200);
@@ -317,7 +342,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
       const { sessionId, cookie } = firstSession!;
       const submitted = await postJson(recorder, "/sessions/submissions", {
         command: "submit",
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         payload: { sessionId },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}` });
       expect(submitted.status).toBe(200);
@@ -355,20 +380,10 @@ describe.skipIf(!COMPOSE_ENABLED)(
 
     it("编排器重启恢复:active 会话自快照续算 revision;同输入恒同响应(I-4)", async () => {
       // 会话 B:write → checkpoint(rev2)→ 尾动作(rev3;超快照尾部,丢尾语义)。
-      const embedSessionIdB = embedSessionId();
-      const embedB = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdB,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenB = (embedB.body as { embedToken: string }).embedToken;
-      const createdB = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdB, embedToken: tokenB },
-      });
-      expect(createdB.status).toBe(201);
-      const sessionIdB = (createdB.body as { payload: { sessionId: string } }).payload.sessionId;
-      const cookieB = credentialFromSetCookie(createdB.setCookie);
+      const launchedB = await launchSession(challengeId, contentVersion);
+      const sessionIdB = launchedB.sessionId;
+      const cookieB = launchedB.cookie;
+      expect(launchedB.revision).toBe(0);
       const clientB = await connectChannel(cookieB);
 
       clientB.sendText(actionFrame({
@@ -396,7 +411,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
       await waitForHealth();
       const syncB = await postJson(recorder, "/sessions/projection-sync", {
         command: "sync_projection",
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         payload: { sessionId: sessionIdB },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieB}` });
       expect(syncB.status).toBe(200);
@@ -413,19 +428,9 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect((bTail.payload as ActionResponse).revision).toBe(3);
 
       // I-4:未重启孪生会话 C 对同序列的同位动作产生同形响应(剥离瞬态标识)。
-      const embedSessionIdC = embedSessionId();
-      const embedC = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdC,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenC = (embedC.body as { embedToken: string }).embedToken;
-      const createdC = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdC, embedToken: tokenC },
-      });
-      const sessionIdC = (createdC.body as { payload: { sessionId: string } }).payload.sessionId;
-      const cookieC = credentialFromSetCookie(createdC.setCookie);
+      const launchedC = await launchSession(challengeId, contentVersion);
+      const sessionIdC = launchedC.sessionId;
+      const cookieC = launchedC.cookie;
       const clientC = await connectChannel(cookieC);
       const script = [
         { key: `compose-c-1-${runSuffix}`, action: { type: "write_bytes", args: { addressHex: stackAddressHex, bytesHex: "41" } } },
@@ -554,21 +559,11 @@ describe.skipIf(!COMPOSE_ENABLED)(
     it("裁决队列跨 verifier 重启持久:停机提交 → 重启后裁决落库(裁决可复现前提)", async () => {
       // 停机(verifier 不在服务态)时提交:pending run 行已随 submit 落库。
       await verifier.stop();
-      const embedSessionIdD = embedSessionId();
-      const embedD = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdD,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenD = (embedD.body as { embedToken: string }).embedToken;
-      const createdD = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdD, embedToken: tokenD },
-      });
-      const sessionIdD = (createdD.body as { payload: { sessionId: string } }).payload.sessionId;
-      const cookieD = credentialFromSetCookie(createdD.setCookie);
+      const launchedD = await launchSession(challengeId, contentVersion);
+      const sessionIdD = launchedD.sessionId;
+      const cookieD = launchedD.cookie;
       const submittedD = await postJson(recorder, "/sessions/submissions", {
-        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdD },
+        command: "submit", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: sessionIdD },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieD}` });
       expect(submittedD.status).toBe(200);
       const submissionIdD = (submittedD.body as { payload: { submissionId: string } }).payload.submissionId;
@@ -760,25 +755,14 @@ describe.skipIf(!COMPOSE_ENABLED)(
     let verdictSession: { sessionId: string; cookie: string } | null = null;
 
     it("裁决呈现全链路演示:submit → GET pending(恒定三字段)→ GET verdicted(五字段契约)", async () => {
-      // 1. 新会话 + REST submit(浏览器面同形:Cookie 呈递,Path=/ 覆盖两族)。
-      const embedSessionIdW = embedSessionId();
-      const embedW = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdW,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenW = (embedW.body as { embedToken: string }).embedToken;
-      const createdW = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdW, embedToken: tokenW },
-      });
-      expect(createdW.status).toBe(201);
-      const cookieW = credentialFromSetCookie(createdW.setCookie);
-      const sessionIdW = (createdW.body as { payload: { sessionId: string } }).payload.sessionId;
+      // 1. 新会话 + REST submit(浏览器面同形:会话凭证 Cookie 呈递,Path=/ 覆盖两族)。
+      const launchedW = await launchSession(challengeId, contentVersion);
+      const cookieW = launchedW.cookie;
+      const sessionIdW = launchedW.sessionId;
       verdictSession = { sessionId: sessionIdW, cookie: cookieW };
 
       const submitted = await postJson(recorder, "/sessions/submissions", {
-        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdW },
+        command: "submit", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: sessionIdW },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieW}` });
       expect(submitted.status).toBe(200);
       const { submissionId, revision } = (submitted.body as { payload: { submissionId: string; revision: number } }).payload;
@@ -841,21 +825,11 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(malformed.bodyText).toBe(missing.bodyText);
 
       // 跨会话:同租户另一会话的提交行,用本会话凭证查询 → 404 同形。
-      const embedSessionIdX = embedSessionId();
-      const embedX = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdX,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenX = (embedX.body as { embedToken: string }).embedToken;
-      const createdX = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdX, embedToken: tokenX },
-      });
-      const sessionIdX = (createdX.body as { payload: { sessionId: string } }).payload.sessionId;
-      const cookieX = credentialFromSetCookie(createdX.setCookie);
+      const launchedX = await launchSession(challengeId, contentVersion);
+      const sessionIdX = launchedX.sessionId;
+      const cookieX = launchedX.cookie;
       const submittedX = await postJson(recorder, "/sessions/submissions", {
-        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdX },
+        command: "submit", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: sessionIdX },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieX}` });
       const submissionIdX = (submittedX.body as { payload: { submissionId: string } }).payload.submissionId;
 
@@ -869,20 +843,14 @@ describe.skipIf(!COMPOSE_ENABLED)(
     }, 60_000);
 
     it("重询限流:窗口内触顶 → 429 冻结形态逐字节(D-API-84;独立用户计量域)", async () => {
-      // 独立 user 维度(rate:{tenant}:{user}:verdict),不挤占其他用例预算。
-      const rlUser = "user-compose-rl";
-      const embedSessionIdRl = embedSessionId();
-      const embedRl = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId: rlUser, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdRl,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenRl = (embedRl.body as { embedToken: string }).embedToken;
-      const createdRl = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdRl, embedToken: tokenRl },
-      });
-      const cookieRl = credentialFromSetCookie(createdRl.setCookie);
+      // ⚠ WP-96 前提变化(如实登记,断言零改动):旧链这里用独立 userId(`rlUser`)
+      // 拿到一条**只属于本用例**的 `rate:{tenant}:{user}:verdict` 预算;新链的
+      // userId 由服务端配置派生(`SESSION_API_LAUNCH_USER_ID`,缺省 `launch-anon`)
+      // ⇒ 该预算在**整个套件内共享**(前面的呈现轮询也会消耗它)。因此本用例的
+      // 语义从「从零开始数到第 31 次触顶」变为「窗口内必然触顶」:下面的循环与
+      // 三条断言(触顶 429 / 冻结逐字节 / 计数不回退)逐字不变。
+      const launchedRl = await launchSession(challengeId, contentVersion);
+      const cookieRl = launchedRl.cookie;
 
       // 触顶前 30 次放行(查询不存在的 id = 404,同样计量);第 31 次 429。
       let firstReject: { status: number; bodyText: string } | null = null;
@@ -951,28 +919,12 @@ describe.skipIf(!COMPOSE_ENABLED)(
         signature,
       });
 
-      // 2. 该租户的会话 + 真实 submit(嵌 token 签发 → create_session → submit)。
-      const embedSessionIdH = embedSessionId();
-      const issuedH = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId: hostTenantId, userId: "user-host-scores", challengeId: hostChallengeId,
-        challengeVersion: contentVersion, embedSessionId: embedSessionIdH,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      expect(issuedH.status).toBe(201);
-      const createdH = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: {
-          challengeId: hostChallengeId,
-          challengeVersion: contentVersion,
-          embedSessionId: embedSessionIdH,
-          embedToken: (issuedH.body as { embedToken: string }).embedToken,
-        },
-      });
-      expect(createdH.status).toBe(201);
-      const cookieH = credentialFromSetCookie(createdH.setCookie);
-      const sessionIdH = (createdH.body as { payload: { sessionId: string } }).payload.sessionId;
+      // 2. 该租户的会话 + 真实 submit(启动地址链签发 → 换票 → create_session → submit)。
+      const launchedH = await launchSession(hostChallengeId, contentVersion);
+      const cookieH = launchedH.cookie;
+      const sessionIdH = launchedH.sessionId;
       const submittedH = await postJson(recorder, "/sessions/submissions", {
-        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdH },
+        command: "submit", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: sessionIdH },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieH}` });
       expect(submittedH.status).toBe(200);
       const submissionIdH = (submittedH.body as { payload: { submissionId: string } }).payload.submissionId;
@@ -1025,7 +977,15 @@ describe.skipIf(!COMPOSE_ENABLED)(
       expect(await anonymous.text()).toBe(
         JSON.stringify({ code: "invalid_input_format", message: "authentication failed" }),
       );
-      const outside = await fetch(`${BASE_URL}/host/scores?tenantId=${tenantId}`, {
+      /**
+       * ⚠ WP-96 改述(被测对象不变,探测值必须换一个):上一版这里用套件的
+       * `tenantId` 充当「白名单外租户」——那时它是 `compose-${runSuffix}`(随机)。
+       * 新链把会话租户钉死为**锚租户**(= 白名单成员)⇒ 再用 `tenantId` 探测会拿到
+       * **200**(白名单内),断言失真。故显式取一个每运行唯一的**白名单外**租户,
+       * 语义与 404 同形断言逐字不变。
+       */
+      const unboundTenantId = `unbound-${runSuffix}`;
+      const outside = await fetch(`${BASE_URL}/host/scores?tenantId=${unboundTenantId}`, {
         headers: { authorization: `Bearer ${HOST_BACKEND_TOKEN}` },
       });
       expect(outside.status).toBe(404);
@@ -1043,23 +1003,14 @@ describe.skipIf(!COMPOSE_ENABLED)(
       // 在 verifier 停机窗口(认领面物理缺席)做客户端风暴,直接断言 PG
       // 侧 run 行零迁移、verdicts 零写入;随后重启证明队列未被风暴腐化。
       await verifier.stop();
-      const wp67User = "user-compose-wp67";
-      const embedSessionIdS = embedSessionId();
-      const embedS = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId: wp67User, challengeId, challengeVersion: contentVersion,
-        embedSessionId: embedSessionIdS,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      const tokenS = (embedS.body as { embedToken: string }).embedToken;
-      const createdS = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: embedSessionIdS, embedToken: tokenS },
-      });
-      expect(createdS.status).toBe(201);
-      const cookieS = credentialFromSetCookie(createdS.setCookie);
-      const sessionIdS = (createdS.body as { payload: { sessionId: string } }).payload.sessionId;
+      // ⚠ WP-96:旧链在此用独立 userId(`wp67User`)隔离重询预算;新链的 userId
+      // 由服务端配置派生 ⇒ 预算在套件内共享。**既有断言逐字不变**(混合 40 次
+      // 查询仍允许 200 / 429 两态,且 PG 侧红线与本用例的攻击面无关)。
+      const launchedS = await launchSession(challengeId, contentVersion);
+      const cookieS = launchedS.cookie;
+      const sessionIdS = launchedS.sessionId;
       const submittedS = await postJson(recorder, "/sessions/submissions", {
-        command: "submit", protocolVersion: 1, payload: { sessionId: sessionIdS },
+        command: "submit", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: sessionIdS },
       }, { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookieS}` });
       expect(submittedS.status).toBe(200);
       const submissionIdS = (submittedS.body as { payload: { submissionId: string } }).payload.submissionId;
@@ -1121,7 +1072,7 @@ describe.skipIf(!COMPOSE_ENABLED)(
       // 收尾:显式 close_session 释放并发会话预算槽位(租户预算 8;不释放
       // 会让本套件后段的审计落库用例撞 concurrent budget 提前闸)。
       const closed = await postJson(recorder, "/sessions/close", {
-        command: "close_session", protocolVersion: 1, payload: { sessionId: sessionIdS },
+        command: "close_session", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: sessionIdS },
       }, { cookie: cookieHeader });
       expect(closed.status).toBe(200);
     }, 180_000);
@@ -1213,31 +1164,22 @@ describe.skipIf(!COMPOSE_ENABLED)(
       }
     }
 
-    it("审计 PG 落库(真实进程):create_session 链路的审计事件经 PgAuditSink 入 audit_log", async () => {
-      const auditEmbedSessionId = embedSessionId();
-      const auditIssuance = await postJson(recorder, "/auth/embed-tokens", {
-        tenantId, userId, challengeId, challengeVersion: contentVersion,
-        embedSessionId: auditEmbedSessionId,
-      }, { bearer: HOST_BACKEND_TOKEN });
-      expect(auditIssuance.status).toBe(201);
-      const auditToken = (auditIssuance.body as { embedToken: string }).embedToken;
-      const auditCreated = await postJson(recorder, "/sessions", {
-        command: "create_session",
-        protocolVersion: 1,
-        payload: { challengeId, challengeVersion: contentVersion, embedSessionId: auditEmbedSessionId, embedToken: auditToken },
-      });
-      expect(auditCreated.status).toBe(201);
-      const auditSessionId = (auditCreated.body as { payload: { sessionId: string } }).payload.sessionId;
+    it("审计 PG 落库(真实进程):启动地址链的审计事件经 PgAuditSink 入 audit_log", async () => {
+      const launchedAudit = await launchSession(challengeId, contentVersion);
+      const auditSessionId = launchedAudit.sessionId;
 
       // 审计行在 PG(生产装配 = PgAuditSink,D-API-91;kind ⊆ 十值封闭集合)。
-      // embed_token_consumed 在会话存在之前发生(嵌入协议 §六消费序),事件本就
-      // 无 sessionId——以 tenant + detail.embedSessionId(每运行唯一)定位。
-      const consumed = await pool!.query<{ kind: string }>(
-        `SELECT kind FROM audit_log
-         WHERE tenant_id = $1 AND kind = 'embed_token_consumed' AND detail->>'embedSessionId' = $2`,
-        [tenantId, auditEmbedSessionId],
-      );
-      expect(consumed.rows.map((row) => row.kind)).toEqual(["embed_token_consumed"]);
+      //
+      // ⚠ WP-96 改述(被测对象随旧链退役,**用例不删、断言不放松**):
+      //  旧链此处断言 `embed_token_consumed` 行(嵌入协议 §六消费序:该事件发生在
+      //  会话存在之前,故按 tenant + detail.embedSessionId 定位)。embed token 消费
+      //  随嵌入协议面**整体退役**(D-LT-1),新链的授权事实(v2)是:
+      //    ① `create_session`(会话建立,session-manager);
+      //    ② `session_credential_issued`(会话凭证签发,issueSessionCredential);
+      //    ③ **换票 / 授权凭证消费不写审计**(D-LT-5 第 7 条:审计 kind 十值封闭集
+      //       不动,票据与凭证的签发 / 消费由受控日志承载)。
+      //  故此处把「旧账目一行」替换为「新账目恰两行 + **旧 kind 结构性缺席**」——
+      //  后者是比原断言更强的机检(它同时证明退役面没有留下半截写入路径)。
       const rows = await pool!.query<{ kind: string }>(
         `SELECT kind FROM audit_log WHERE session_id = $1 ORDER BY id`,
         [auditSessionId],
@@ -1245,7 +1187,11 @@ describe.skipIf(!COMPOSE_ENABLED)(
       const kinds = rows.rows.map((row) => row.kind);
       expect(kinds).toContain("session_credential_issued");
       expect(kinds).toContain("create_session");
-      for (const kind of [...kinds, "embed_token_consumed"]) {
+      expect(
+        kinds,
+        "旧链的 embed_token_consumed 不得再出现(嵌入协议面整体退役;审计十值封闭集不动)",
+      ).not.toContain("embed_token_consumed");
+      for (const kind of kinds) {
         expect(AUDIT_EVENT_KINDS).toContain(kind);
       }
     }, 60_000);
