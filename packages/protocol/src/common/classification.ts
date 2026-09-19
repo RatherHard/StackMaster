@@ -128,29 +128,13 @@ export const SCHEMA_CLASSIFICATIONS = {
       explanation: "public",
     },
   },
-  "embed-message": {
-    rootClass: "boundary",
-    fieldClasses: {
-      protocolVersion: "boundary",
-      type: "boundary",
-      sessionId: "boundary",
-      seq: "boundary",
-      requestId: "boundary",
-      payload: "boundary",
-    },
-  },
-  "embed-token-claims": {
-    rootClass: "boundary",
-    fieldClasses: {
-      tenantId: "boundary",
-      userId: "boundary",
-      challengeId: "boundary",
-      challengeVersion: "boundary",
-      embedSessionId: "boundary",
-      jti: "boundary",
-      expiresAt: "boundary",
-    },
-  },
+  /*
+   * 「embed-message」/「embed-token-claims」分类条目已随嵌入协议面 **2026-09-19
+   * 物理删除**(WP-96;D-API-153 第 5 项 / D-LT-1)。退役登记见
+   * docs/contracts/数据分类与秘密零驻留清单.md §6.4 与 §6.5(v1 段)——该清单
+   * **只增不改**,故退役标注留在文档侧;本清单与落盘注册表是机器消费面,
+   * 不保留已无 Schema 的条目(保留会让生成管线断言「有分类无注册」失败)。
+   */
   "session-command-request": {
     rootClass: "boundary",
     fieldClasses: {

@@ -33,8 +33,6 @@ import {
   TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
   fakeDebugWorkerCommand,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type RigWssClient,
   type SessionTestRig,
 } from "../routes/helpers/session-rig.js";
@@ -76,20 +74,8 @@ interface DebugStack {
 
 /** 建会话 + 调试通道连接(不 attach;attach 由用例按需发起)。 */
 async function openDebugStack(rig: SessionTestRig): Promise<DebugStack> {
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response, sessionId, cookie } = await rig.createSession();
   expect(response.statusCode).toBe(201);
-  const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
-  const cookie = sessionCredentialFromSetCookie(response);
   const client = await rig.connectDebugChannel(cookie);
   const collector = new DebugFrameCollector();
   collector.attach(client);

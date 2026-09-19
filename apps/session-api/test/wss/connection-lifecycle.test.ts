@@ -11,7 +11,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionCredentialClaims } from "@stackmaster/protocol/server-only";
 import type { ActionResponse } from "@stackmaster/protocol";
-import { WssFrameSchema } from "@stackmaster/protocol";
+import { SESSION_ACTION_PROTOCOL_VERSION, WssFrameSchema } from "@stackmaster/protocol";
 
 import { ActionChannelConnection } from "../../src/wss/wss-channel.js";
 import { SessionConnectionRegistry } from "../../src/wss/connection-registry.js";
@@ -153,12 +153,12 @@ describe("多连接踢旧(D-API-40)", () => {
     // 注册表单属主:新连接可用,串行不变性底线(每会话至多一条活跃通道)。
     expect(harness.registry.hasActive(CLAIMS.sessionId)).toBe(true);
     second.socket.emitMessage(Buffer.from(JSON.stringify({
-      protocolVersion: 1,
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       type: "action",
       sessionId: CLAIMS.sessionId,
       seq: 1,
       payload: {
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         sessionId: CLAIMS.sessionId,
         clientSeq: 1,
         baseRevision: 0,

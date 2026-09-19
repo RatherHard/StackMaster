@@ -3,8 +3,12 @@
  *
  * SESSION_ACTION_PROTOCOL_VERSION 是会话动作协议(ActionRequest / ActionResponse、
  * 12 种动作 args、结果类型)的版本;破坏性变更递增版本并保留 N-1 兼容窗口(5.6)。
- * EMBED_PROTOCOL_VERSION 是嵌入协议(postMessage 信封与 handshake,WP-5)的版本,
- * 与会话动作协议互不重叠(**该面已随插件形态整体退役,不做版本演进**);
+ * 该协议的 **N-1 窗口已于 2026-09-19 随 WP-96 关闭**(受理集合回落单元素,v1 冻结面
+ * 物理删除)—— 保留此句作为决策留档,窗口期形态见下方
+ * SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS 的历史说明。
+ * 嵌入协议(postMessage 信封与 handshake,WP-5)的版本常量 `EMBED_PROTOCOL_VERSION`
+ * 与 `$id` 命名空间 `EMBED_SCHEMA_BASE_ID` **已于 2026-09-19 随 WP-96 物理删除**
+ * (该面随插件形态整体退役、不做版本演进;D-API-153 第 5 项 / D-LT-1)。
  * 题目包 Schema(WP-4)与引擎进程协议各自独立版本。
  */
 
@@ -22,35 +26,25 @@
 export const SESSION_ACTION_PROTOCOL_VERSION = 2;
 
 /**
- * 会话动作协议的**上一版本号**(N-1 兼容窗口期的被受理版本;D-LT-5 第 2 条)。
+ * 当前受理的会话动作协议版本集合(5.6 / 语义文档 §5.2)。
  *
- * 该常量存在的唯一理由是让窗口期的 v1 冻结面有一处单源命名
- * (`ActionRequestV1Schema` / `WssFrameV1Schema` / `SessionCommandRequestV1Schema`
- * 三处版本字面量,以及 `SUPPORTED_*` 集合)。**窗口期结束(运维显式下线动作)
- * 时,本常量与依附于它的三处 v1 冻结面一并删除** —— 它不是长期契约面。
- * 窗口时长为实现期运维参数(权威 API 语义规约 D-API-4),不属契约面。
- */
-export const SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION = 1;
-
-/**
- * 当前受理的会话动作协议版本集合(N-1 兼容窗口的实现约定锚点,5.6 / 语义文档 §5.2)。
- *
- * **窗口期形态 = `[2, 1]`**(D-LT-5 第 2 条):服务端按路由对各版本以其**独立
- * Schema** 双版本受理 —— REST 命令体用 `SessionCommandRequestSchema`(v2)与
- * `SessionCommandRequestV1Schema`,WSS 帧用 `WssFrameSchema`(v2)与
- * `WssFrameV1Schema`,动作载荷用 `ActionRequestSchema`(v2)与
- * `ActionRequestV1Schema`;两个服务端注册表(session-contract.ts /
- * frame-contract.ts)在装配期断言「受理集合中每个版本都有已注册 Schema」,
- * 故本集合一旦含某版本,契约包就必须提供该版本的冻结 Schema(缺一即拒绝启动)。
- * 窗口期结束移除旧值 ⇒ 集合回到 `[SESSION_ACTION_PROTOCOL_VERSION]`,v1 冻结面
- * 随之删除。
+ * **本项目的历史事实(决策留档,2026-09-19 更新)**:协议递增为 v2 时
+ * (D-LT-5 第 2 条)曾开启 N-1 兼容窗口,窗口期形态 = `[2, 1]` —— 服务端按路由
+ * 对各版本以其**独立 Schema** 双版本受理(REST 命令体用
+ * `SessionCommandRequestSchema`(v2)与 `SessionCommandRequestV1Schema`,WSS 帧用
+ * `WssFrameSchema`(v2)与 `WssFrameV1Schema`,动作载荷用 `ActionRequestSchema`(v2)
+ * 与 `ActionRequestV1Schema`);两个服务端注册表(session-contract.ts /
+ * frame-contract.ts)在装配期断言「受理集合中每个版本都有已注册 Schema」,故本集合
+ * 一旦含某版本,契约包就必须提供该版本的冻结 Schema(缺一即拒绝启动)。
+ * **2026-09-19 窗口关闭(随 WP-96)**:受理集合回落为单元素,三处 v1 冻结面与
+ * `SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION` 同批**物理删除**;装配期断言保留在场
+ * (现为对单元素集合的恒真断言,仍锁住「注册表与受理集合同步」这一不变量)。
  *
  * WSS 传输帧与 REST 命令体共用本集合(传输帧随会话动作协议同一版本编号演进,
  * D-API-2)。
  */
 export const SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS: readonly number[] = [
   SESSION_ACTION_PROTOCOL_VERSION,
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
 ];
 
 /**
@@ -64,9 +58,6 @@ export const SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS: readonly number[] = [
  * contract-smoke 机检。
  */
 export const ENGINE_PROCESS_PROTOCOL_VERSION = 1;
-
-/** 嵌入协议当前版本(EmbedMessage.protocolVersion 的唯一合法值;WP-5)。 */
-export const EMBED_PROTOCOL_VERSION = 1;
 
 /**
  * 会话动作协议 JSON Schema 的 $id 命名空间(仅作标识符,不承诺可解析)。
@@ -107,8 +98,13 @@ export const SUPPORTED_VERDICT_CHANNEL_PROTOCOL_VERSIONS: readonly number[] = [
  */
 export const VERDICT_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/verdict/v${VERDICT_CHANNEL_PROTOCOL_VERSION}`;
 
-/** 嵌入协议 JSON Schema 的 $id 命名空间(独立于会话动作协议,5.6)。 */
-export const EMBED_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/embed/v${EMBED_PROTOCOL_VERSION}`;
+/*
+ * 嵌入协议 JSON Schema 的 `$id` 命名空间常量 `EMBED_SCHEMA_BASE_ID`
+ * (`https://stackmaster.dev/schemas/embed/v1`)**已于 2026-09-19 随 WP-96 物理删除**
+ * ——嵌入协议面不适用 N-1 演进窗口,与退役面同批硬切(D-API-153 第 5 项 / D-LT-1)。
+ * 该命名空间下的落盘产物(`schema/embed-message.schema.json` /
+ * `schema/embed-token-claims.schema.json`)同批移除。
+ */
 
 /* ------------------------------------------------------------------ */
 /* 调试通道协议(阶段四 WP-40;ADR-DC1 条款 1 / 决议 3 / §六 R3)          */
@@ -193,9 +189,10 @@ export const HOST_SCORES_SCHEMA_BASE_ID = `https://stackmaster.dev/schemas/host-
  * HOST_SCORES_PROTOCOL_VERSION 同款独立编号先例)——新契约面按 5.6 携带独立
  * 版本号,破坏性变更递增本常量并保留 N-1 兼容窗口,既有契约面零触碰。
  *
- * **与嵌入协议退役的关系(D-LT-1)**:嵌入协议面(`EMBED_PROTOCOL_VERSION`)
- * 随插件形态**整体退役、不做版本演进**;本族是它的**新契约面替代物**,
- * 因此照常适用 N-1 演进窗口(两者是两件事,不得混为一谈)。
+ * **与嵌入协议退役的关系(D-LT-1)**:嵌入协议面(`EMBED_PROTOCOL_VERSION`,
+ * 已于 2026-09-19 随 WP-96 物理删除)随插件形态**整体退役、不做版本演进**;
+ * 本族是它的**新契约面替代物**,因此照常适用 N-1 演进窗口(两者是两件事,
+ * 不得混为一谈)。
  */
 export const LAUNCH_TICKET_PROTOCOL_VERSION = 1;
 

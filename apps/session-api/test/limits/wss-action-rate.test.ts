@@ -10,14 +10,10 @@
  *  - 时间推进补充令牌(纯函数补充语义,注入时钟零抖动)。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WssFrameSchema, type WssFrame } from "@stackmaster/protocol";
+import { SESSION_ACTION_PROTOCOL_VERSION, WssFrameSchema, type WssFrame } from "@stackmaster/protocol";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type SessionTestRig,
   type RigWssClient,
 } from "../routes/helpers/session-rig.js";
@@ -51,13 +47,13 @@ function actionFrame(input: {
   requestId: string;
 }): Record<string, unknown> {
   return {
-    protocolVersion: 1,
+    protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
     type: "action",
     sessionId: input.sessionId,
     seq: input.seq,
     requestId: input.requestId,
     payload: {
-      protocolVersion: 1,
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       sessionId: input.sessionId,
       clientSeq: input.clientSeq,
       baseRevision: input.baseRevision,
@@ -90,22 +86,8 @@ describe("每会话动作频率闸(与每连接令牌桶叠加,D-API-53)", () =>
       await rig.app.close();
     });
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response, sessionId, cookie } = await rig.createSession();
     expect(response.statusCode).toBe(201);
-    const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie({
-      headers: response.headers as Record<string, unknown>,
-    });
     return { rig, sessionId, cookie };
   }
 

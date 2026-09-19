@@ -15,7 +15,7 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
-import { canonicalize } from "@stackmaster/protocol";
+import { SESSION_ACTION_PROTOCOL_VERSION, canonicalize } from "@stackmaster/protocol";
 
 import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../src/auth/cookie.js";
 import {
@@ -208,7 +208,10 @@ describe("ZR-T1 / T2:伪造成功标志 / 自制快照 / 状态哈希(strictObje
 function sessionCommandWithForgedField(sessionId: string): Record<string, unknown> {
   return {
     command: "sync_projection",
-    protocolVersion: 1,
+    // 2026-09-19(WP-96):受理集合收敛为单元素 ⇒ 必须用当前版本字面量。
+    // 原写死 1(窗口期形态):红灯会从"伪造字段被拒"漂移成"版本不受支持"，
+    // 断言虽仍 400 但**被测对象被换掉** —— 这正是本批要避免的假绿。
+    protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
     payload: { sessionId, status: "success", stateHash: "deadbeef" },
   };
 }
@@ -241,7 +244,7 @@ describe("ZR-T3:伪造投影不影响权威状态", () => {
       url: "/sessions/projection-sync",
       cookies: { [SESSION_CREDENTIAL_COOKIE_NAME]: stack.cookie },
       headers: { origin: "https://plugin.example" },
-      payload: { command: "sync_projection", protocolVersion: 1, payload: { sessionId: stack.sessionId } },
+      payload: { command: "sync_projection", protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload: { sessionId: stack.sessionId } },
     });
     expect(sync.statusCode).toBe(200);
     const synced = sync.json() as { payload: { revision: number } };

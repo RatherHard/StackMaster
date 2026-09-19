@@ -44,7 +44,7 @@
  */
 import { z } from "zod";
 import { OpaqueIdSchema } from "../common/identifiers.js";
-import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../embed/embed-token-claims.js";
+import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../common/challenge-content-version.js";
 import { VerdictResultSchema } from "../session-action/verdict-result.js";
 
 /**

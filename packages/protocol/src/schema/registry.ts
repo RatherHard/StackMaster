@@ -11,13 +11,14 @@
  * 边界纪律(WP-1 §五):本模块(经包入口导出,浏览器可达)登记的 Schema
  * 对浏览器可达代码**可见可用**;两类例外登记在 server-only/schema-registry.ts:
  * server-only 分类根 Schema(ProjectionPolicy,"Schema 存在不等于可下发"),
- * 以及"载荷可穿越浏览器、但解析器不给浏览器"的凭证类 Schema(EmbedTokenClaims
- * ——浏览器对 token 不解析,claims 解析器仅供后端签发 / 校验消费)。
- * 两者都仅由生成管线(node:fs,不进浏览器构建图)与后端包消费。
+ * 以及"载荷可穿越浏览器、但解析器不给浏览器"的凭证类 Schema
+ * (SessionCredentialClaims / LaunchGrantClaims —— 浏览器对凭证不解析,claims
+ * 解析器仅供后端签发 / 校验消费;~~EmbedTokenClaims~~ 已随嵌入协议面
+ * 2026-09-19 物理删除)。两者都仅由生成管线(node:fs,不进浏览器构建图)与
+ * 后端包消费。
  */
 import type { ZodType } from "zod";
 import { SCHEMA_CLASSIFICATIONS, type SchemaClassification } from "../common/classification.js";
-import { EmbedMessageSchema } from "../embed/embed-message.js";
 import { PublicErrorSchema } from "../error/public-error.js";
 import { ProjectionDeltaSchema } from "../projection/projection-delta.js";
 import { PublicStateProjectionSchema } from "../projection/public-state-projection.js";
@@ -30,7 +31,6 @@ import { DebugFrameSchema } from "../transport/debug-frame.js";
 import { WssFrameSchema } from "../transport/wss-frame.js";
 import {
   DEBUG_SCHEMA_BASE_ID,
-  EMBED_SCHEMA_BASE_ID,
   HOST_SCORES_SCHEMA_BASE_ID,
   LAUNCH_TICKET_SCHEMA_BASE_ID,
   SESSION_ACTION_SCHEMA_BASE_ID,
@@ -93,12 +93,10 @@ export const SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     schema: PublicErrorSchema,
   },
   {
-    name: "embed-message",
-    title: "EmbedMessage",
-    baseId: EMBED_SCHEMA_BASE_ID,
-    schema: EmbedMessageSchema,
-  },
-  {
+    // 「embed-message」条目已随嵌入协议面 2026-09-19 物理删除(WP-96):
+    // 该 Schema、其 `$id` 命名空间 `…/schemas/embed/v1` 与落盘产物
+    // `schema/embed-message.schema.json` 同批移除(退役登记见
+    // docs/contracts/数据分类与秘密零驻留清单.md §6.4)。
     name: "session-command-request",
     title: "SessionCommandRequest",
     baseId: SESSION_ACTION_SCHEMA_BASE_ID,

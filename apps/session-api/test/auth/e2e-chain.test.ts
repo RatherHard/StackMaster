@@ -1,26 +1,26 @@
 /**
  * 合法链路端到端 + 传输卫生 + 审计面(WP-2 完成标准的收口测试):
- * 铸 embed token(直接经 signer + store)→ create-session 消费
+ * 铸启动授权凭证(直接经 signer + grantStore)→ create-session 消费
  * (三方比对 + jti 单次消费)→ 会话凭证签发(Set-Cookie 交付)→
  * 凭证中间件保护的路由可访问;凭证不入 URL / 日志 / 错误响应;
- * 审计六(七)类事件可观察。
+ * 审计事件可观察。
  *
- * ⚠ **`/auth/embed-tokens` 端点已退役**(WP-91;D-LT-1 第 5 项「与嵌入协议同批
- * 硬切」)。本文件测的是**消费链**(三方比对 / 单次消费 / 会话凭证交付 /
- * 受保护路由 / 审计 / 传输卫生),**不是签发端点本身** ⇒ 签发段改为
- * `rig.issueEmbedToken()`(直接经**同一** signer + issuanceStore 铸造,与生产
- * 签发面同源),消费链的载荷与断言**逐字不变**。
+ * **2026-09-19(WP-96)**:原"铸 embed token → 消费 embed token"的链路已随
+ * 嵌入协议面与 create_session 的 v1 分支**物理删除**。本文件改为**同一份
+ * 消费链**的现行载体 = **启动授权凭证**(换票产物,D-LT-5 5a / 5c):
+ * 三方比对(签名 claims × 签发记录 × payload 导航信息)、jti 单次消费、
+ * 会话凭证交付、受保护路由、审计面与传输卫生**逐条断言原样保留**。
+ * 断言面唯一的变化是 kind 列表:三个 embed 域 kind(`embed_token_issued` /
+ * `embed_token_consumed` / `embed_token_revoked`)仍留在冻结十值集合内,但
+ * **现无写入方** ⇒ 本文件新增一条**反向断言**(现行链路上它们恒不出现)。
  * **新签发面**(`POST /auth/launch-tickets`)的用例归
- * `test/launch/launch-routes.test.ts`(19 例,机检 ①~⑧)。
- *
- * **为什么消费链在 v2 时代仍以 v1 形态测**:v2 的授权来源是启动授权凭证,
- * 而 embed token 消费链是 **N-1 窗口期内仍受支持的 v1 分支** —— 它的行为
- * 必须被继续钉住,直到 WP-96 物理删除 v1 冻结面。
+ * `test/launch/launch-routes.test.ts`(机检 ①~⑧)。
  */
 
 import { PublicErrorSchema } from "@stackmaster/protocol";
 import { describe, expect, it } from "vitest";
 
+import { LAUNCH_GRANT_COOKIE_NAME } from "../../src/auth/index.js";
 import {
   TEST_CHALLENGE_ID,
   TEST_CHALLENGE_VERSION,
@@ -33,19 +33,18 @@ import {
 async function fullChain(rig: Awaited<ReturnType<typeof buildAuthTestRig>>): Promise<{
   sessionId: string;
   credential: string;
-  embedToken: string;
+  grantToken: string;
 }> {
-  // 签发段:直接铸 token(端点已退役;见文件头说明)。
-  const issued = await rig.issueEmbedToken();
+  // 签发段:直接铸启动授权凭证(与换票端点同签名 / 同记录面)。
+  const issued = await rig.issueLaunchGrant();
 
   const created = await rig.app.inject({
     method: "POST",
     url: "/test/sessions",
+    headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${issued.token}` },
     payload: {
-      embedToken: issued.token,
       challengeId: TEST_CHALLENGE_ID,
       challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
     },
   });
   expect(created.statusCode).toBe(201);
@@ -53,7 +52,7 @@ async function fullChain(rig: Awaited<ReturnType<typeof buildAuthTestRig>>): Pro
   return {
     sessionId,
     credential: sessionCredentialFromSetCookie(created),
-    embedToken: issued.token,
+    grantToken: issued.token,
   };
 }
 
@@ -61,17 +60,16 @@ describe("插件装配面(WP-4 取用点)", () => {
   it("authRuntimeDeps 装饰与注入端口同源,凭证 preHandler 由此组装", async () => {
     const rig = await buildAuthTestRig();
     expect(rig.app.authRuntimeDeps.signer).toBe(rig.signer);
-    expect(rig.app.authRuntimeDeps.issuanceStore).toBe(rig.issuanceStore);
     expect(rig.app.authRuntimeDeps.revocationStore).toBe(rig.revocationStore);
     expect(rig.app.authRuntimeDeps.audit).toBe(rig.audit);
-    expect(rig.app.authRuntimeDeps.config.embedTokenTtlSeconds).toBe(
-      rig.config.embedTokenTtlSeconds,
+    expect(rig.app.authRuntimeDeps.config.sessionCredentialTtlSeconds).toBe(
+      rig.config.sessionCredentialTtlSeconds,
     );
   });
 });
 
-describe("合法链路端到端(签发 → 消费 → 凭证 → 受保护路由)", () => {
-  it("全链路绿:cookie 呈递的受保护路由返回与 token 一致的 principal;Set-Cookie 属性齐全", async () => {
+describe("合法链路端到端(铸授权凭证 → 消费 → 凭证 → 受保护路由)", () => {
+  it("全链路绿:cookie 呈递的受保护路由返回与凭证一致的 principal;Set-Cookie 属性齐全", async () => {
     const rig = await buildAuthTestRig();
     const { sessionId, credential } = await fullChain(rig);
 
@@ -99,15 +97,14 @@ describe("合法链路端到端(签发 → 消费 → 凭证 → 受保护路由
     });
     expect(created.statusCode).toBe(400); // 替身路由先做形态闸
     const setCookie = await (async () => {
-      const issued = await rig.issueEmbedToken();
+      const issued = await rig.issueLaunchGrant();
       const response = await rig.app.inject({
         method: "POST",
         url: "/test/sessions",
+        headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${issued.token}` },
         payload: {
-          embedToken: issued.token,
           challengeId: TEST_CHALLENGE_ID,
           challengeVersion: TEST_CHALLENGE_VERSION,
-          embedSessionId: issued.claims.embedSessionId,
         },
       });
       return response.headers["set-cookie"];
@@ -118,28 +115,32 @@ describe("合法链路端到端(签发 → 消费 → 凭证 → 受保护路由
     expect(raw).toContain("Path=/sessions");
     expect(raw).not.toContain("Secure"); // test 环境豁免(D-API-13)
 
-    // 审计链:issued → consumed → credential_issued → create_session → submit。
+    // 审计链:credential_issued → create_session → submit。
     const kinds = rig.audit.snapshot().map((event) => event.kind);
     for (const expected of [
-      "embed_token_issued",
-      "embed_token_consumed",
       "session_credential_issued",
       "create_session",
       "submit",
     ]) {
       expect(kinds).toContain(expected);
     }
+    // ★ 反向断言(2026-09-19,WP-96):三个 embed 域 kind 仍留在冻结十值集合内,
+    //   但**现无写入方** ⇒ 现行链路上它们恒不出现(结构证据:删除是彻底的)。
+    for (const retired of ["embed_token_issued", "embed_token_consumed", "embed_token_revoked"]) {
+      expect(kinds).not.toContain(retired);
+    }
   });
 });
 
 describe("传输卫生(凭证不入 URL / 日志 / 错误响应)", () => {
-  it("日志捕获全量零凭证材料:embed token 与会话凭证均不出现在任何日志行", async () => {
+  it("日志捕获全量零凭证材料:启动授权凭证与会话凭证均不出现在任何日志行", async () => {
     const rig = await buildAuthTestRig();
-    const { credential } = await fullChain(rig);
+    const { credential, grantToken } = await fullChain(rig);
     const raw = rig.capture.raw();
     expect(raw.length).toBeGreaterThan(0); // 日志面确有产出
     expect(raw).not.toContain(credential);
-    // embed token 的 JWT 三段结构语料全量扫描。
+    expect(raw).not.toContain(grantToken);
+    // JWT 三段结构语料全量扫描(两族凭证同载体形态)。
     expect(raw).not.toMatch(/ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/);
   });
 
@@ -162,15 +163,14 @@ describe("传输卫生(凭证不入 URL / 日志 / 错误响应)", () => {
 
   it("凭证不出现在 URL:消费为 POST 体交付,请求 URL 无 query 面", async () => {
     const rig = await buildAuthTestRig();
-    const issued = await rig.issueEmbedToken();
+    const issued = await rig.issueLaunchGrant();
     const created = await rig.app.inject({
       method: "POST",
       url: "/test/sessions",
+      headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${issued.token}` },
       payload: {
-        embedToken: issued.token,
         challengeId: TEST_CHALLENGE_ID,
         challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
       },
     });
     expect(created.statusCode).toBe(201);
@@ -191,7 +191,7 @@ describe("传输卫生(凭证不入 URL / 日志 / 错误响应)", () => {
   });
 });
 
-describe("审计面:七类事件可观察 + 零秘密语料", () => {
+describe("审计面:事件可观察 + 零秘密语料", () => {
   it("强制终止事件与会话凭证吊销组合(编排路径演示)后,事件面完整且零凭证材料", async () => {
     const rig = await buildAuthTestRig();
     const { sessionId, credential } = await fullChain(rig);
@@ -237,8 +237,6 @@ describe("审计面:七类事件可观察 + 零秘密语料", () => {
 
     const events = rig.audit.snapshot();
     for (const kind of [
-      "embed_token_issued",
-      "embed_token_consumed",
       "session_credential_issued",
       "create_session",
       "submit",

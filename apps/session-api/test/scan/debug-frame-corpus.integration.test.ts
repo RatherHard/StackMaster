@@ -53,12 +53,8 @@ import {
 } from "../../src/scan/debug-frame-corpus-scanner.js";
 import { checkDebugVariantDerivation } from "../../src/scan/debug-variant-derivation-checker.js";
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   TEST_TENANT_ID,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type RigWssClient,
 } from "../routes/helpers/session-rig.js";
 
@@ -165,19 +161,8 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
   async function createSessionWithActions(
     rig: Awaited<ReturnType<typeof buildSessionTestRig>>,
   ): Promise<{ sessionId: string; cookie: string }> {
-    const issued = await rig.issueEmbedToken();
-    const createResponse = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response: createResponse, sessionId, cookie } = await rig.createSession();
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { payload: { sessionId: string } }).payload.sessionId;
     // 玩家输入(权威动作日志;同时构成 ZR-B12 的玩家输入回显语料)。
     await rig.manager.applyAction(sessionId, TEST_TENANT_ID, {
       type: "write_bytes",
@@ -185,7 +170,7 @@ describe.skipIf(!IT_ENABLED)("ZR-B12 调试通道帧语料包含性(生产变体
     });
     await rig.manager.applyAction(sessionId, TEST_TENANT_ID, { type: "step", args: {} });
     await rig.manager.submit(sessionId, TEST_TENANT_ID);
-    return { sessionId, cookie: sessionCredentialFromSetCookie(createResponse) };
+    return { sessionId, cookie };
   }
 
   /** 捕获变体 → 扫描器输入面(语料全集 = 变体自身 memoryRegions)。 */

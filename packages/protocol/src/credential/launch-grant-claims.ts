@@ -38,7 +38,7 @@
  */
 import { z } from "zod";
 import { OpaqueIdSchema } from "../common/identifiers.js";
-import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../embed/embed-token-claims.js";
+import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../common/challenge-content-version.js";
 
 /**
  * 启动授权凭证的绑定字段集合(**恰六字段**,D-LT-5 实施细化 5a 表):

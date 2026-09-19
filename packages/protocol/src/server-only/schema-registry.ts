@@ -7,18 +7,17 @@
  *   跨域载荷,"Schema 存在不等于可下发";
  * - 调试变体镜像(DebugVariantBundle,阶段四 WP-40):编排器 ↔ 调试 worker 的
  *   进程间内部契约,整体 SERVER_ONLY,浏览器永不可见(WP-1 清单 §6.9);
- * - 凭证类 BOUNDARY Schema(EmbedTokenClaims / SessionCredentialClaims /
- *   LaunchGrantClaims):载荷可穿越浏览器,但浏览器对凭证不解析——
- *   claims 解析器只供后端签发 / 校验消费,防"解析凭证做条件渲染"反模式。
- *   其落盘产物 x-sm-class 仍为 boundary(分类随 SCHEMA_CLASSIFICATIONS,
- *   与本注册表位置无关)。
+ * - 凭证类 BOUNDARY Schema(SessionCredentialClaims / LaunchGrantClaims):
+ *   载荷可穿越浏览器,但浏览器对凭证不解析——claims 解析器只供后端签发 /
+ *   校验消费,防"解析凭证做条件渲染"反模式。其落盘产物 x-sm-class 仍为
+ *   boundary(分类随 SCHEMA_CLASSIFICATIONS,与本注册表位置无关)。
+ *   ~~EmbedTokenClaims~~ 已随嵌入协议面 2026-09-19 物理删除(WP-96)。
  *
  * 本表仅由两处消费:
  * - 生成管线(schema/generate.ts,node:fs,不进浏览器构建图)落盘 JSON Schema;
  * - 后端包经 @stackmaster/protocol/server-only 子路径做跨语言一致性校验。
  */
 import { SCHEMA_CLASSIFICATIONS } from "../common/classification.js";
-import { EmbedTokenClaimsSchema } from "../embed/embed-token-claims.js";
 import { SessionCredentialClaimsSchema } from "../credential/session-credential-claims.js";
 import {
   SCHEMA_REGISTRY,
@@ -27,7 +26,6 @@ import {
 } from "../schema/registry.js";
 import {
   DEBUG_SCHEMA_BASE_ID,
-  EMBED_SCHEMA_BASE_ID,
   SESSION_ACTION_SCHEMA_BASE_ID,
 } from "../version.js";
 import { DebugVariantBundleSchema } from "../debug/debug-variant-bundle.js";
@@ -43,12 +41,10 @@ export const SERVER_ONLY_SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     schema: ProjectionPolicySchema,
   },
   {
-    name: "embed-token-claims",
-    title: "EmbedTokenClaims",
-    baseId: EMBED_SCHEMA_BASE_ID,
-    schema: EmbedTokenClaimsSchema,
-  },
-  {
+    // 「embed-token-claims」条目已随嵌入协议面 2026-09-19 物理删除(WP-96):
+    // 该 Schema、其 `$id` 命名空间 `…/schemas/embed/v1` 与落盘产物
+    // `schema/embed-token-claims.schema.json` 同批移除(退役登记见
+    // docs/contracts/数据分类与秘密零驻留清单.md §6.4)。
     name: "session-credential-claims",
     title: "SessionCredentialClaims",
     baseId: SESSION_ACTION_SCHEMA_BASE_ID,
@@ -65,7 +61,7 @@ export const SERVER_ONLY_SCHEMA_REGISTRY: readonly SchemaEntry[] = [
   {
     // 启动授权凭证 claims(分发改版 WP-90 / D-LT-5 实施细化 5a):换票产物,
     // 分类 BOUNDARY(载荷可穿越浏览器),但**解析器不给浏览器**
-    // —— 与 EmbedTokenClaims / SessionCredentialClaims 同机制不同实例。
+    // —— 与 SessionCredentialClaims 同机制不同实例。
     // 恰六字段、**无 sessionId / embedSessionId**(授权凭证 ≠ 会话凭证的
     // 结构性表达);$id 归会话动作协议族(与 create_session 同族演进)。
     name: "launch-grant-claims",

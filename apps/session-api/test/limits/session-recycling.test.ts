@@ -14,33 +14,15 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   TEST_TENANT_ID,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type SessionTestRig,
 } from "../routes/helpers/session-rig.js";
 import type { RegistryChannel } from "../../src/wss/connection-registry.js";
 
 async function createSessionWithCookie(rig: SessionTestRig): Promise<{ sessionId: string; cookie: string }> {
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response, sessionId, cookie } = await rig.createSession();
   expect(response.statusCode).toBe(201);
-  const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
-  const cookie = sessionCredentialFromSetCookie({
-    headers: response.headers as Record<string, unknown>,
-  });
   return { sessionId, cookie };
 }
 

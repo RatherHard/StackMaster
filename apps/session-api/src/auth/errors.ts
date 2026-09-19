@@ -18,8 +18,16 @@ export type CredentialFailureKind = "expired" | "signature_invalid" | "malformed
 /** 凭证种类(日志 / 审计判别用,非秘密)。 */
 export type CredentialKind = "embed_token" | "session_credential" | "launch_grant";
 
+/*
+ * ⚠ `"embed_token"` 成员**现无写入方**(2026-09-19,分发改版 WP-96):embed token
+ * 的 verify 路径(`verifyEmbedTokenClaims`)已随嵌入协议面物理删除。成员**保留**
+ * 而不是收窄的理由与审计 kind 十值封闭集同款 —— 它是**受控日志 / 审计的历史
+ * 判别面**,既往日志行里的该 kind 必须仍可解释;收窄会让"读旧日志"变成一个
+ * 需要另建映射表的动作。本批按"只删写入方、不收窄判别面"处置。
+ */
+
 /**
- * 凭证校验失败(signEmbedToken 的 verify 侧确定性异常)。
+ * 凭证校验失败(当前由会话凭证 / 启动授权凭证的 verify 侧抛出;确定性异常)。
  * message 携带技术细节(错误子类名、issue 计数等)——调用方只允许将其送入
  * 受控日志,绝不回显到任何响应面。
  */

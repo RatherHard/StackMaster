@@ -20,11 +20,7 @@ import { ensureWorkerBinary } from "@stackmaster/session-core";
 import { DebugFrameSchema, type DebugFrame } from "@stackmaster/protocol";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type RigWssClient,
   type SessionTestRig,
 } from "../routes/helpers/session-rig.js";
@@ -88,26 +84,15 @@ describe.skipIf(!IT_ENABLED)("调试克隆对齐源(真实 vm-worker;SESSION_API
 
   /** 建会话 + 已接受动作(栈区写入 + step),**不 submit**(权威日志零落库)。 */
   async function createUnsubmittedSession(rig: SessionTestRig): Promise<{ sessionId: string; cookie: string }> {
-    const issued = await rig.issueEmbedToken();
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response, sessionId, cookie } = await rig.createSession();
     expect(response.statusCode).toBe(201);
-    const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
     const write = await rig.manager.applyAction(sessionId, TENANT_ID, {
       type: "write_bytes",
       args: { addressHex: STACK_ADDRESS_HEX, bytesHex: PLAYER_BYTES_HEX },
     });
     expect(write.status).toBe("running");
     await rig.manager.applyAction(sessionId, TENANT_ID, { type: "step", args: {} });
-    return { sessionId, cookie: sessionCredentialFromSetCookie(response) };
+    return { sessionId, cookie };
   }
 
   /** 通道 attach 至指定 revision(每次独立连接,故回执恒为该连接的第 1 帧)。 */

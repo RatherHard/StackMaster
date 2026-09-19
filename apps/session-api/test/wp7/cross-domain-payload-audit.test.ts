@@ -23,7 +23,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WssFrame } from "@stackmaster/protocol";
-import { WssFrameSchema } from "@stackmaster/protocol";
+import { SESSION_ACTION_PROTOCOL_VERSION, WssFrameSchema } from "@stackmaster/protocol";
 
 import {
   formatCrossDomainHits,
@@ -38,7 +38,7 @@ import {
   sessionCredentialFromSetCookie,
   type SessionTestRig,
 } from "../routes/helpers/session-rig.js";
-import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../src/auth/cookie.js";
+import { SESSION_CREDENTIAL_COOKIE_NAME, LAUNCH_GRANT_COOKIE_NAME } from "../../src/auth/index.js";
 
 /** HTTP 响应体录制器(全链路 inject 的机检采集面)。 */
 class HttpBodyRecorder {
@@ -73,6 +73,35 @@ async function buildAuditedRig(): Promise<{ rig: SessionTestRig; http: HttpBodyR
   const rig = await buildSessionTestRig();
   RIGS.push(rig);
   return { rig, http: new HttpBodyRecorder() };
+}
+
+/**
+ * 经录制器走 create_session 链(WP-96:授权来源 = 启动授权凭证 Cookie,
+ * 载荷为 v2 恰两键)。
+ *
+ * 授权凭证经 `rig.issueLaunchGrant()` **直接铸造**(无 HTTP 面;换票端点
+ * `GET /app/c/:id/:version` 的响应是 302 + Set-Cookie,其跨边界载荷面由
+ * `test/launch/launch-routes.test.ts` 承接,见下方注释),故其本身不进录制集;
+ * 需要进录制集的是 create_session 的**响应体**。
+ */
+async function createSessionRecorded(
+  rig: SessionTestRig,
+  http: HttpBodyRecorder,
+): Promise<{ sessionId: string; cookie: string }> {
+  const grant = await rig.issueLaunchGrant();
+  const created = await http.inject(rig.app, {
+    url: "/sessions",
+    payload: sessionCommand("create_session", {
+      challengeId: TEST_CHALLENGE_ID,
+      challengeVersion: TEST_CHALLENGE_VERSION,
+    }),
+    headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${grant.token}` },
+  });
+  expect(created.statusCode).toBe(201);
+  return {
+    sessionId: (created.body as { payload: { sessionId: string } }).payload.sessionId,
+    cookie: sessionCredentialFromSetCookie(created),
+  };
 }
 
 afterEach(async () => {
@@ -113,31 +142,18 @@ describe("跨域载荷录制机检:全链路录制 + 零命中", () => {
     const { rig, http } = await buildAuditedRig();
     await rig.registerChallenge();
 
-    // 1. embed token **铸造**(无 HTTP 面)。`/auth/embed-tokens` 端点已退役
-    //    (WP-91;D-LT-1 第 5 项硬切,不留别名)⇒ 该端点的响应面**不再存在**,
-    //    故它从录制集里消失。
+    // 1. 启动授权凭证**铸造**(无 HTTP 面)。旧链的 `/auth/embed-tokens` 端点已
+    //    随嵌入协议面物理删除(WP-91 退役 + WP-96 硬切,不留别名)⇒ 该端点的
+    //    响应面**不再存在**,故它从录制集里消失。
     //
     //    录制集覆盖面**不缩水**:承继端点 `POST /auth/launch-tickets` 的响应面
     //    (`{launchUrl, expiresAt}`,跨边界可达)由
     //    `test/launch/launch-routes.test.ts` 承接 —— 那里有**响应键集冻结**
     //    (机检 ⑧)、**票据只在 launchUrl 内**、**票据零入日志**(机检 ⑦)三条
     //    断言,比"把响应塞进本录制集"更直接。
-    const issued = await rig.issueEmbedToken();
-    const embedToken = issued.token;
 
-    // 2. create_session(201 + Cookie)。
-    const created = await http.inject(rig.app, {
-            url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken,
-      }),
-    });
-    expect(created.statusCode).toBe(201);
-    const sessionId = (created.body as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie(created);
+    // 2. create_session(201 + Cookie);授权凭证经 Cookie 呈递(v2 恰两键载荷)。
+    const { sessionId, cookie } = await createSessionRecorded(rig, http);
 
     // 3. WSS 动作序列:覆盖 12 动作中通道承载的代表性面(含确定性拒绝帧)。
     const client = await rig.connectChannel(cookie);
@@ -156,12 +172,12 @@ describe("跨域载荷录制机检:全链路录制 + 零命中", () => {
     for (const action of actions) {
       clientSeq += 1;
       client.send(JSON.stringify({
-        protocolVersion: 1,
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         type: "action",
         sessionId,
         seq: action.seq,
         payload: {
-          protocolVersion: 1,
+          protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
           sessionId,
           clientSeq,
           baseRevision: action.seq - 1,
@@ -218,24 +234,12 @@ describe("跨域载荷录制机检:全链路录制 + 零命中", () => {
   it("全部录制帧均为封闭帧类型;响应载荷零凭证字段(通道形态复核)", async () => {
     const { rig, http } = await buildAuditedRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const created = await http.inject(rig.app, {
-            url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
-    expect(created.statusCode).toBe(201);
-    const sessionId = (created.body as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie(created);
+    const { sessionId, cookie } = await createSessionRecorded(rig, http);
     const client = await rig.connectChannel(cookie);
     const collector = collectClientFrames(client);
     client.send(JSON.stringify({
-      protocolVersion: 1, type: "action", sessionId, seq: 1,
-      payload: { protocolVersion: 1, sessionId, clientSeq: 1, baseRevision: 0, idempotencyKey: "audit-shape-1", action: { type: "step", args: {} } },
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, type: "action", sessionId, seq: 1,
+      payload: { protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, sessionId, clientSeq: 1, baseRevision: 0, idempotencyKey: "audit-shape-1", action: { type: "step", args: {} } },
     }));
     await collector.waitFor((frames) => frames.length === 1);
 
@@ -255,23 +259,12 @@ describe("红灯反例:违规载荷注入录制集 → 扫描器必检出(每违
   async function recordBaseline(): Promise<{ rig: SessionTestRig; recorded: unknown[] }> {
     const { rig, http } = await buildAuditedRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const created = await http.inject(rig.app, {
-            url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
-    const sessionId = (created.body as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie(created);
+    const { sessionId, cookie } = await createSessionRecorded(rig, http);
     const client = await rig.connectChannel(cookie);
     const collector = collectClientFrames(client);
     client.send(JSON.stringify({
-      protocolVersion: 1, type: "action", sessionId, seq: 1,
-      payload: { protocolVersion: 1, sessionId, clientSeq: 1, baseRevision: 0, idempotencyKey: "redlamp-1", action: { type: "step", args: {} } },
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, type: "action", sessionId, seq: 1,
+      payload: { protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, sessionId, clientSeq: 1, baseRevision: 0, idempotencyKey: "redlamp-1", action: { type: "step", args: {} } },
     }));
     await collector.waitFor((frames) => frames.length === 1);
     const recorded: unknown[] = [...rig.outboundRecorder.frames(), ...http.bodies];

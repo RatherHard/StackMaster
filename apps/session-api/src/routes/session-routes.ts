@@ -2,16 +2,16 @@
  * REST 生命周期路由(任务分解 WP-4 第 1 / 2 条;D-API-1 路由表,D-API-30/31/32)。
  *
  * 五个会话级命令(12 动作不设 REST 镜像,WSS-only,D-API-1):
- *   POST /sessions                    create_session(消费 embed token,免会话凭证)
+ *   POST /sessions                    create_session(消费启动授权凭证,免会话凭证)
  *   POST /sessions/projection-sync    sync_projection(凭证保护)
  *   POST /sessions/checkpoints        list_checkpoints(凭证保护)
  *   POST /sessions/submissions        submit(凭证保护)
  *   POST /sessions/close              close_session(凭证保护)
  *
  * 纪律:
- *  - 一切入站按冻结 Schema 重新校验(session-contract:N-1 受理集合路由 +
- *    strictObject + 结构护栏);失败 = 冻结 PublicError,零校验器细节,
- *    原始 issue 路径只进受控日志(基线 #8);
+ *  - 一切入站按冻结 Schema 重新校验(session-contract:受理集合(窗口已关闭,
+ *    现为单元素)路由 + strictObject + 结构护栏);失败 = 冻结 PublicError,
+ *    零校验器细节,原始 issue 路径只进受控日志(基线 #8);
  *  - 身份只读 request.sessionAuth(基线 #1;凭证 preHandler 产出);
  *    会话定位 = 请求体 payload.sessionId 为权威锚,与凭证绑定三方对齐
  *    (跨租户 / 跨会话呈递在 preHandler 即 401);
@@ -21,23 +21,23 @@
  *    兜底,绝不下发非契约形态);
  *  - create-session 的重复创建与并发预算接入点:`createSessionGuard` 钩子
  *    (执行面归 WP-6;缺省放行,D-API-35)。
+ *
+ * **退役登记(2026-09-19,分发改版 WP-96)**:create_session 的 **v1 分支**
+ * (请求体呈递 embed token 的三方比对路径)已随 v1 冻结面与嵌入协议面
+ * **物理删除** —— 授权来源现只有一条:**换票产出的启动授权凭证 Cookie**
+ * (D-LT-5 第 2 / 5c 条)。v1 请求现在在契约层即被拒(不在受理集合,400)。
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import {
-  CreateSessionRequestPayloadSchema,
-  CreateSessionRequestPayloadV1Schema,
-  SESSION_ACTION_PROTOCOL_VERSION,
+  SessionCommandResponseSchema,
   type SessionCommandRequest,
   type PublicError,
-  SessionCommandResponseSchema,
 } from "@stackmaster/protocol";
 
 import {
   AUTH_FAILED_ERROR,
   AUTH_FAILED_HTTP_STATUS,
-  EmbedTokenConsumptionRejected,
   LaunchGrantConsumptionRejected,
-  consumeEmbedToken,
   consumeLaunchGrant,
   issueSessionCredential,
   launchGrantFromCookieHeader,
@@ -47,7 +47,6 @@ import {
   type AuditSink,
   type CredentialRevocationStore,
   type LaunchGrantStore,
-  type TokenIssuanceStore,
   type TokenSigner,
 } from "../auth/index.js";
 import type { Logger } from "pino";
@@ -89,16 +88,13 @@ export interface SessionRouteDeps {
   readonly config: Pick<SessionApiConfig, "nodeEnv" | "sessionCredentialTtlSeconds">;
   readonly manager: LiveSessionManager;
   readonly guards: RequestGuardLimits;
-  /** pino 根 logger(consumeEmbedToken 等域服务要求 pino Logger;请求关联经 reqId 子日志)。 */
+  /** pino 根 logger(consumeLaunchGrant 等域服务要求 pino Logger;请求关联经 reqId 子日志)。 */
   readonly logger: Logger;
   // ── 认证面(与签发路由同源实例;由运行时装配注入)──
   readonly signer: TokenSigner;
-  readonly issuanceStore: TokenIssuanceStore;
   /**
    * 启动授权凭证签发记录(`launchGrant:{jti}`;WP-91 / D-LT-5 5c)。
-   * `create_session` **v2** 的授权来源,与 `issuanceStore`(embed token,
-   * 上一版的授权来源)分域并存:窗口期内两条链各自完整,窗口期结束随 v1
-   * 冻结面一并删除前者。
+   * `create_session` 的**唯一**授权来源(换票产出)。
    */
   readonly grantStore: LaunchGrantStore;
   readonly revocationStore: CredentialRevocationStore;
@@ -144,7 +140,7 @@ export function buildSessionRoutes(deps: SessionRouteDeps): FastifyPluginAsync {
   const now = deps.now ?? Date.now;
 
   return async function sessionRoutes(fastify): Promise<void> {
-    // ── 凭证保护(四个会话命令;create-session 除外——它消费 embed token)──
+    // ── 凭证保护(四个会话命令;create-session 除外——它消费启动授权凭证 Cookie)──
     const requireSessionCredential = buildCredentialPreHandler(
       {
         signer: deps.signer,
@@ -224,7 +220,7 @@ export function buildSessionRoutes(deps: SessionRouteDeps): FastifyPluginAsync {
         }
       };
 
-    // ── create_session(**v2:启动授权凭证驱动**;v1:embed token,N-1 窗口期)──
+    // ── create_session(授权来源 = 启动授权凭证 Cookie;D-LT-5 第 2 / 5c 条)──
     type CreatedOutcome = Awaited<ReturnType<LiveSessionManager["createSession"]>>;
     fastify.post(SESSION_ROUTES.create, async (request, reply) => {
       const parsed = parseSessionCommandRequest(request.body, deps.guards);
@@ -237,124 +233,65 @@ export function buildSessionRoutes(deps: SessionRouteDeps): FastifyPluginAsync {
         request.log.warn({ reason: "command_route_mismatch" }, "create_session rejected at contract layer");
         return sendFailure(reply, 400, mapValidationFailure({ kind: "malformed_body" }).body);
       }
-      const createRequest = parsed.request;
+      /**
+       * **不在此处做第二次 `safeParse`**(D-LT-5 四·补.3 第 3 条,2026-09-19
+       * 随 WP-96 一并修):契约包的 `sessionCommandRequestSchemaForVersion` 已
+       * 改为保留推断的泛型 `<T extends z.ZodTypeAny>`,判别联合解析出的
+       * `payload` 在 `command === "create_session"` 分支是**具体对象类型**
+       * (`{challengeId: string; challengeVersion: string}`),不再是 `unknown`
+       * —— 逐字段读取天然受类型保护,原先"只为拿回类型"的第二次 `safeParse`
+       * 因此删除。
+       *
+       * ⚠ **入站校验语义一个字没变**:本请求体的**唯一运行时入站闸**是上面
+       * `parseSessionCommandRequest`(内部 `SessionCommandRequestSchema.safeParse`,
+       * strictObject + 结构护栏),它原样保留 —— 类型不再是 `unknown` 只提升编译期
+       * 可读性,不替代运行时校验(5.6:不信任客户端类型标注)。
+       */
+      const createPayload = parsed.request.payload;
 
       /**
-       * 授权来源按**协议版本**分支(D-LT-5 第 2 / 4 条):
-       *
-       *  - **v2(当前)** = 换票时下发的**启动授权凭证 Cookie**。payload 恰两键
-       *    (`challengeId` / `challengeVersion`)只提供**导航信息**,且必须与凭证
-       *    绑定**逐字一致**;
-       *  - **v1(上一版,N-1 窗口期)** = 请求体呈递的 embed token(嵌入协议 §六
-       *    三方比对)。窗口期结束(运维显式下线动作)时 v1 冻结面与**本分支**
-       *    一并删除 —— 故它不构成"长期存在的第二套授权"。
-       *
-       * **两条分支产出的身份形状逐字相同**(`{tenantId, userId, challengeId,
-       * challengeVersion}`)⇒ 下游(守卫 / 建会话 / 会话凭证签发)**零分支**,
-       * 授权来源的差异被完全吸收在这一处。
+       * 授权来源(D-LT-5 第 2 / 4 条):换票时下发的**启动授权凭证 Cookie**。
+       * payload 恰两键(`challengeId` / `challengeVersion`)只提供**导航信息**,
+       * 且必须与凭证绑定**逐字一致**(不一致 ⇒ 401,绝不"以 payload 为准")。
+       * v1 的"请求体呈递 embed token"路径已随窗口关闭物理删除。
        */
       let identity: VerifiedCreateIdentity;
-      if (createRequest.protocolVersion === SESSION_ACTION_PROTOCOL_VERSION) {
-        /**
-         * payload **再校验一次**用冻结的 v2 载荷 Schema。
-         *
-         * **为什么不是多余**:契约包的 `sessionCommandRequestSchemaForVersion`
-         * 的 `createSessionPayload` 形参类型是 `z.ZodType`(无类型参数 ⇒
-         * `ZodType<unknown>`),故判别联合解析出的 `payload` 在 **TS 层是
-         * `unknown`** —— 直接取字段会拿不到类型保护。这里用冻结 Schema
-         * `safeParse` 取出**有类型**的载荷,顺带把"契约层的形状"与"消费层的
-         * 形状"再对齐一次(入站一律重新校验的纪律,5.6)。失败按畸形请求 400
-         * (理论上不可达:同一 body 已过判别联合;真到这一步说明契约层与
-         * 消费层漂移,是可观测的实现事故而不是静默放行)。
-         */
-        const payloadV2 = CreateSessionRequestPayloadSchema.safeParse(createRequest.payload);
-        if (!payloadV2.success) {
-          request.log.warn(
-            { reason: "create_session_payload_drift", issueCount: payloadV2.error.issues.length },
-            "create_session rejected at payload re-validation",
-          );
-          return sendFailure(reply, 400, mapValidationFailure({ kind: "malformed_body" }).body);
-        }
-        // v2:授权来源 = 启动授权凭证(单次消费;重放即拒绝)。
-        const grantToken = launchGrantFromCookieHeader(request.headers.cookie);
-        if (grantToken === undefined) {
-          request.log.warn({ reason: "launch_grant_cookie_absent" }, "create_session rejected");
+      const grantToken = launchGrantFromCookieHeader(request.headers.cookie);
+      if (grantToken === undefined) {
+        request.log.warn({ reason: "launch_grant_cookie_absent" }, "create_session rejected");
+        return sendFailure(reply, AUTH_FAILED_HTTP_STATUS, AUTH_FAILED_ERROR);
+      }
+      try {
+        const granted = await consumeLaunchGrant(
+          {
+            signer: deps.signer,
+            grantStore: deps.grantStore,
+            logger: requestCorrelatedLogger(deps, request),
+            now,
+          },
+          {
+            grantToken,
+            // payload 只作为**待校验的导航信息**进入比对;不一致即拒绝,
+            // 绝不"以 payload 为准"(D-LT-5 第 2 条)。
+            payload: {
+              challengeId: createPayload.challengeId,
+              challengeVersion: createPayload.challengeVersion,
+            },
+          },
+        );
+        identity = {
+          tenantId: granted.tenantId,
+          userId: granted.userId,
+          challengeId: granted.challengeId,
+          challengeVersion: granted.challengeVersion,
+          credentialJti: granted.launchGrantJti,
+          credentialKind: "launch_grant",
+        };
+      } catch (error) {
+        if (error instanceof LaunchGrantConsumptionRejected) {
           return sendFailure(reply, AUTH_FAILED_HTTP_STATUS, AUTH_FAILED_ERROR);
         }
-        try {
-          const granted = await consumeLaunchGrant(
-            {
-              signer: deps.signer,
-              grantStore: deps.grantStore,
-              logger: requestCorrelatedLogger(deps, request),
-              now,
-            },
-            {
-              grantToken,
-              // payload 只作为**待校验的导航信息**进入比对;不一致即拒绝,
-              // 绝不"以 payload 为准"(D-LT-5 第 2 条)。
-              payload: {
-                challengeId: payloadV2.data.challengeId,
-                challengeVersion: payloadV2.data.challengeVersion,
-              },
-            },
-          );
-          identity = {
-            tenantId: granted.tenantId,
-            userId: granted.userId,
-            challengeId: granted.challengeId,
-            challengeVersion: granted.challengeVersion,
-            credentialJti: granted.launchGrantJti,
-            credentialKind: "launch_grant",
-          };
-        } catch (error) {
-          if (error instanceof LaunchGrantConsumptionRejected) {
-            return sendFailure(reply, AUTH_FAILED_HTTP_STATUS, AUTH_FAILED_ERROR);
-          }
-          throw error;
-        }
-      } else {
-        // v1(窗口期):embed token 三方比对消费(payload 四键,含 token 与嵌入会话)。
-        const payloadV1 = CreateSessionRequestPayloadV1Schema.safeParse(createRequest.payload);
-        if (!payloadV1.success) {
-          request.log.warn(
-            { reason: "create_session_payload_drift_v1", issueCount: payloadV1.error.issues.length },
-            "create_session rejected at payload re-validation",
-          );
-          return sendFailure(reply, 400, mapValidationFailure({ kind: "malformed_body" }).body);
-        }
-        try {
-          const consumed = await consumeEmbedToken(
-            {
-              signer: deps.signer,
-              issuanceStore: deps.issuanceStore,
-              audit: deps.audit,
-              logger: requestCorrelatedLogger(deps, request),
-              now,
-            },
-            {
-              embedToken: payloadV1.data.embedToken,
-              context: {
-                challengeId: payloadV1.data.challengeId,
-                challengeVersion: payloadV1.data.challengeVersion,
-                embedSessionId: payloadV1.data.embedSessionId,
-              },
-            },
-          );
-          identity = {
-            tenantId: consumed.tenantId,
-            userId: consumed.userId,
-            challengeId: consumed.challengeId,
-            challengeVersion: consumed.challengeVersion,
-            credentialJti: consumed.embedTokenJti,
-            credentialKind: "embed_token",
-          };
-        } catch (error) {
-          if (error instanceof EmbedTokenConsumptionRejected) {
-            return sendFailure(reply, AUTH_FAILED_HTTP_STATUS, AUTH_FAILED_ERROR);
-          }
-          throw error;
-        }
+        throw error;
       }
 
       // 2. WP-6 接入点:重复创建 / 并发预算(缺省放行;拒绝即冻结形态)。

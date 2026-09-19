@@ -7,7 +7,7 @@
  *  3. 跨租户 session —— REST 凭证绑定 401;WSS 会话绑定错误帧;
  *  4. 断线重连与投影重同步 —— 重连(凭证重验)→ sync-projection 对齐 →
  *     新锚继续;
- *  5. 权限校验 —— 过期 embed token、已消费 jti 重放、未认证、过期会话凭证
+ *  5. 权限校验 —— 过期启动授权凭证、已消费 jti 重放、未认证、过期会话凭证
  *     全部确定性 401 统一形态;
  *  6. 限流 —— REST 429 冻结形态逐字节确定(rate:{tenant}:{user});
  *  7. 超时和资源限制 —— worker 看门狗超时(timeout 映射)、请求体字节
@@ -20,9 +20,11 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SESSION_CREDENTIAL_COOKIE_NAME } from "../../src/auth/cookie.js";
+import { SESSION_CREDENTIAL_COOKIE_NAME, LAUNCH_GRANT_COOKIE_NAME } from "../../src/auth/index.js";
 import {
   DEFAULT_ALLOWED_ORIGINS,
+  TEST_CHALLENGE_ID,
+  TEST_CHALLENGE_VERSION,
   TEST_TENANT_BETA_ID,
   buildSessionTestRig,
   sessionCommand,
@@ -149,40 +151,18 @@ describe("13.3-3 跨租户 session:凭证绑定与会话绑定双层拒绝", () 
     // 以独立 challengeId 登记(跨租户隔离在注册表层即为独立行)。
     await rig.registerChallenge({ challengeId: "chal-beta-stack", tenantId: TEST_TENANT_BETA_ID });
 
-    // 租户 A 会话。
-    const issuedA = await rig.issueEmbedToken();
-    const createdA = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: issuedA.claims.challengeId,
-        challengeVersion: issuedA.claims.challengeVersion,
-        embedSessionId: issuedA.claims.embedSessionId,
-        embedToken: issuedA.token,
-      }),
-    });
-    expect(createdA.statusCode).toBe(201);
-    const sessionIdA = (createdA.json() as { payload: { sessionId: string } }).payload.sessionId;
+    // 租户 A 会话(WP-96:授权来源 = 启动授权凭证 Cookie;载荷为 v2 恰两键)。
+    const createdA = await rig.createSession();
+    expect(createdA.response.statusCode).toBe(201);
+    const sessionIdA = createdA.sessionId;
 
     // 租户 B 会话(独立凭证;独立 challengeId)。
-    const issuedB = await rig.issueEmbedToken({
-      claims: { tenantId: TEST_TENANT_BETA_ID, challengeId: "chal-beta-stack" },
+    const createdB = await rig.createSession({
+      tenantId: TEST_TENANT_BETA_ID,
+      challengeId: "chal-beta-stack",
     });
-    const createdB = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: issuedB.claims.challengeId,
-        challengeVersion: issuedB.claims.challengeVersion,
-        embedSessionId: issuedB.claims.embedSessionId,
-        embedToken: issuedB.token,
-      }),
-    });
-    expect(createdB.statusCode).toBe(201);
-    const cookieB = createdA.headers["set-cookie"] === undefined ? "" : "";
-    void cookieB;
-    const credentialB = createdB.headers["set-cookie"] as unknown as string;
-    const cookieValueB = credentialB.slice(credentialB.indexOf("=") + 1, credentialB.indexOf(";", credentialB.indexOf("=")));
+    expect(createdB.response.statusCode).toBe(201);
+    const cookieValueB = createdB.cookie;
 
     // REST 层:B 的凭证 + A 的 sessionId → 凭证绑定 401 统一形态(防枚举)。
     const crossRest = await rig.app.inject({
@@ -219,7 +199,7 @@ describe("13.3-3 跨租户 session:凭证绑定与会话绑定双层拒绝", () 
     expect(rejected.payload?.message).toBe("session mismatch");
 
     // 会话定位双条件:manager 以 (sessionId, tenantId) 定位——B 会话命令不受影响。
-    const ownSession = (createdB.json() as { payload: { sessionId: string } }).payload.sessionId;
+    const ownSession = createdB.sessionId;
     const ownSync = await rig.app.inject({
       method: "POST",
       url: "/sessions/projection-sync",
@@ -275,54 +255,56 @@ describe("13.3-4 断线重连与投影重同步", () => {
 
 /** 13.3-5:权限校验。 */
 describe("13.3-5 权限校验:过期 / 重放 / 未认证 / 过期会话凭证", () => {
-  it("过期 embed token → 401 统一形态(时钟注入,无需真实等待)", async () => {
+  it("过期启动授权凭证 → 401 统一形态(时钟注入,无需真实等待)", async () => {
     let nowMs = 1_700_000_000_000;
     const rig = await buildSessionTestRig({ now: () => nowMs });
     RIGS.push(rig);
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken({ ttlSeconds: 60 });
-    nowMs += 61_000; // token 过期
+    const grant = await rig.issueLaunchGrant({ ttlSeconds: 60 });
+    nowMs += 61_000; // 授权凭证过期
     const response = await rig.app.inject({
       method: "POST",
       url: "/sessions",
+      headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${grant.token}` },
       payload: sessionCommand("create_session", {
-        challengeId: issued.claims.challengeId,
-        challengeVersion: issued.claims.challengeVersion,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
+        challengeId: TEST_CHALLENGE_ID,
+        challengeVersion: TEST_CHALLENGE_VERSION,
       }),
     });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ code: "invalid_input_format", message: "authentication failed" });
   });
 
-  it("已消费 jti 重放(同 token 二次 create_session)→ 401;绑定不符(embedSessionId 不一致)→ 401", async () => {
+  it("已消费 jti 重放(同授权凭证二次 create_session)→ 401;绑定不符(payload 与凭证不一致)→ 401", async () => {
     const rig = await buildSessionTestRig();
     RIGS.push(rig);
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
+    const grant = await rig.issueLaunchGrant();
     const body = sessionCommand("create_session", {
-      challengeId: issued.claims.challengeId,
-      challengeVersion: issued.claims.challengeVersion,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
+      challengeId: TEST_CHALLENGE_ID,
+      challengeVersion: TEST_CHALLENGE_VERSION,
     });
-    const first = await rig.app.inject({ method: "POST", url: "/sessions", payload: body });
+    const request = {
+      method: "POST" as const,
+      url: "/sessions",
+      headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${grant.token}` },
+      payload: body,
+    };
+    const first = await rig.app.inject(request);
     expect(first.statusCode).toBe(201);
-    const replay = await rig.app.inject({ method: "POST", url: "/sessions", payload: body });
+    const replay = await rig.app.inject(request);
     expect(replay.statusCode).toBe(401);
     expect(replay.json()).toEqual({ code: "invalid_input_format", message: "authentication failed" });
 
-    // 绑定不符:同一 token 换 embedSessionId 消费(与签发记录比对不一致)。
-    const issued2 = await rig.issueEmbedToken();
+    // 绑定不符:同一形态的凭证换 challengeId 消费(与签发记录比对不一致)。
+    const issued2 = await rig.issueLaunchGrant();
     const mismatched = await rig.app.inject({
       method: "POST",
       url: "/sessions",
+      headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${issued2.token}` },
       payload: sessionCommand("create_session", {
-        challengeId: issued2.claims.challengeId,
-        challengeVersion: issued2.claims.challengeVersion,
-        embedSessionId: "different-embed-session",
-        embedToken: issued2.token,
+        challengeId: "chal-different-bundle",
+        challengeVersion: TEST_CHALLENGE_VERSION,
       }),
     });
     expect(mismatched.statusCode).toBe(401);
@@ -332,21 +314,8 @@ describe("13.3-5 权限校验:过期 / 重放 / 未认证 / 过期会话凭证",
     const rig = await buildSessionTestRig({ env: { SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS: "1" } });
     RIGS.push(rig);
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const created = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: issued.claims.challengeId,
-        challengeVersion: issued.claims.challengeVersion,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response: created, sessionId, cookie: cookieValue } = await rig.createSession();
     expect(created.statusCode).toBe(201);
-    const sessionId = (created.json() as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = created.headers["set-cookie"] as unknown as string;
-    const cookieValue = cookie.slice(cookie.indexOf("=") + 1, cookie.indexOf(";", cookie.indexOf("=")));
 
     const unauthenticated = await rig.app.inject({
       method: "POST",
@@ -377,21 +346,8 @@ describe("13.3-6 限流:触顶 429 冻结形态,逐字节确定", () => {
     });
     RIGS.push(rig);
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const created = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: issued.claims.challengeId,
-        challengeVersion: issued.claims.challengeVersion,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response: created, sessionId, cookie: cookieValue } = await rig.createSession();
     expect(created.statusCode).toBe(201); // 第 1 次(窗口内)
-    const sessionId = (created.json() as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = created.headers["set-cookie"] as unknown as string;
-    const cookieValue = cookie.slice(cookie.indexOf("=") + 1, cookie.indexOf(";", cookie.indexOf("=")));
 
     const command = () => rig.app.inject({
       method: "POST",
@@ -438,7 +394,7 @@ describe("13.3-7 超时和资源限制", () => {
       method: "POST",
       url: "/sessions",
       headers: { origin: DEFAULT_ALLOWED_ORIGINS },
-      payload: { command: "create_session", protocolVersion: 1, payload: { pad: oversized } },
+      payload: sessionCommand("create_session", { pad: oversized }),
     });
     expect(response.statusCode).toBe(413);
     expect(response.json()).toEqual({ code: "invalid_input_format", message: "request too large" });

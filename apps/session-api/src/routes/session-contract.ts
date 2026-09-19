@@ -2,57 +2,55 @@
  * 路由级契约校验(任务分解 WP-4 第 2 条;计划书 5.6"一切入站按冻结契约
  * 重新校验,不信任客户端类型标注";N-1 双版本受理,协议 §5.2 / D-API-4)。
  *
- *  - 受理集合锚点 = `SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS`(冻结期
- *    恒 [1];窗口期追加 N-1 后,各版本以其独立 Schema 校验——版本 → Schema
- *    注册表即路由点,当前版本映射冻结 `SessionCommandRequestSchema`);
- *  - 不在受理集合的版本 = 确定性拒绝(冻结 `PublicError`,单一静态文案);
+ *  - 受理集合锚点 = `SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS`
+ *    (**N-1 窗口已于 2026-09-19 随 WP-96 关闭 ⇒ 现为单元素 `[2]`**;
+ *    版本 → Schema 注册表即路由点,当前版本映射冻结
+ *    `SessionCommandRequestSchema`);
+ *  - 不在受理集合的版本 = 确定性拒绝(冻结 `PublicError`,单一静态文案)——
+ *    **v1 请求现在落在此分支**(窗口期它曾走 v1 冻结 Schema);
  *  - 校验失败响应面零校验器细节(基线 #8):Zod 原始 issue 的字段路径与
  *    issue code 只进受控日志(调用方持 logger),message 一律不入日志
  *    (Zod message 可能回显输入片段);
  *  - 装配期自检:受理集合中的每个版本必须有已注册 Schema,缺失即模块
  *    加载失败(契约漂移/漏实现即拒绝启动,与 server.ts 自检同纪律)。
+ *    **窗口关闭后本断言恒真**(集合单元素且该元素已登记)—— 但它**不是**
+ *    死代码:它锁的是「受理集合与 Schema 注册表同步」这一不变量,下一次
+ *    破坏性递增 / 窗口开启时,缺 Schema 会立即在装配期失败。故断言与
+ *    其注释原样保留在场。
  */
 import {
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS,
   SessionCommandRequestSchema,
-  SessionCommandRequestV1Schema,
   SessionCommandResponseSchema,
   type PublicError,
   type SessionCommandRequest,
-  type SessionCommandRequestV1,
 } from "@stackmaster/protocol";
 import type { z } from "zod";
 
 import { assertRequestWithinLimits, GuardViolation, type RequestGuardLimits } from "./request-guards.js";
 
 /**
- * 任一被受理版本的会话命令请求(N-1 窗口期的形状联合)。
+ * 任一被受理版本的会话命令请求(受理集合的成员类型)。
  *
- * **两版唯一差异在 `create_session` 的载荷**:v2(v2)恰两键
- * `{challengeId, challengeVersion}`(授权来源 = 启动授权凭证 Cookie,D-LT-5 5c),
- * v1(上一版)仍为四键含 `embedToken` / `embedSessionId`。其余四个命令**逐字同形**
- * (只用 `sessionId` 定位会话)。窗口期结束(运维显式下线动作)时本联合与 v1
- * 分支一并删除。
- *
- * ⚠ **不得**用"取 v2 类型再强转"的方式糊过去:v1 的 `create_session` 载荷
- * 真的多两个键,把它标注成 v2 形状会让 `payload.embedToken` 在运行期是
- * `undefined` 而类型检查通过 —— 那正是本仓库最忌的"类型撒谎"。
+ * 窗口期本别名曾是 `SessionCommandRequest | SessionCommandRequestV1` 的形状联合
+ * (两版唯一差异在 `create_session` 载荷);**2026-09-19 窗口关闭(随 WP-96)**
+ * 后 v1 冻结面物理删除,别名收敛为单一版本类型 —— 保留别名使调用方(路由 /
+ * 通道)不必在类型面区分"当前只有一版"这一偶然事实。
  */
-export type AnySessionCommandRequest = SessionCommandRequest | SessionCommandRequestV1;
+export type AnySessionCommandRequest = SessionCommandRequest;
 
-/** 版本 → 请求 Schema 注册表(N-1 窗口期双版本登记)。 */
+/** 版本 → 请求 Schema 注册表(单版本登记;窗口关闭后的形态)。 */
 const REQUEST_SCHEMAS_BY_VERSION = new Map<number, z.ZodType<AnySessionCommandRequest>>([
   [SESSION_ACTION_PROTOCOL_VERSION, SessionCommandRequestSchema],
-  [SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION, SessionCommandRequestV1Schema],
 ]);
 
 // 装配期自检:受理集合中的每个版本必须有已注册 Schema(缺实现即拒绝启动)。
+// 现为对单元素集合的恒真断言 —— 保留理由见文件头。
 for (const version of SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS) {
   if (!REQUEST_SCHEMAS_BY_VERSION.has(version)) {
     throw new Error(
-      `会话命令受理集合中的协议版本 ${version} 缺少已注册请求 Schema(N-1 受理实现不完整)`,
+      `会话命令受理集合中的协议版本 ${version} 缺少已注册请求 Schema(受理实现不完整)`,
     );
   }
 }

@@ -4,32 +4,37 @@
  * src/server.ts 之外的最终装配)。
  *
  * 替身路由是"WP-4 装配面"的最小演示:
- *  - POST /test/sessions:create-session 消费链(三方比对 → 会话签发 →
- *    Set-Cookie 交付 → create_session 审计);
+ *  - POST /test/sessions:create-session 消费链(启动授权凭证三方比对 →
+ *    会话签发 → Set-Cookie 交付 → create_session 审计);
  *  - POST /test/actions:凭证 preHandler 保护的命令路由(submit 审计)。
  * 正式生命周期路由(编译器装载、会话表、限流)归 WP-4,不在本测试面。
+ *
+ * **2026-09-19(WP-96)**:原"铸造 embed token → 消费 embed token"的替身链
+ * 已随嵌入协议面与 create_session v1 分支物理删除 ⇒ 本装配台一律走
+ * **启动授权凭证**链(与换票端点同签名 / 同记录面;`launchGrant:{jti}`)。
  */
 
-import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { EmbedTokenClaims } from "@stackmaster/protocol/server-only";
+import type { LaunchGrantClaims } from "@stackmaster/protocol/server-only";
 import {
   AUDIT_EVENT_KINDS,
   type AuditEventKind,
-  type IssuedEmbedTokenRecord,
+  type IssuedLaunchGrantRecord,
 } from "../../src/auth/index.js";
 import {
   AUTH_FAILED_ERROR,
   AUTH_FAILED_HTTP_STATUS,
-  EmbedTokenConsumptionRejected,
   InMemoryAuditSink,
   InMemoryCredentialRevocationStore,
-  InMemoryTokenIssuanceStore,
+  InMemoryLaunchGrantStore,
+  LAUNCH_GRANT_COOKIE_NAME,
   buildAuthPlugin,
   buildCredentialPreHandler,
-  consumeEmbedToken,
+  consumeLaunchGrant,
   createTokenSigner,
   issueSessionCredential,
+  LaunchGrantConsumptionRejected,
   setSessionCredentialCookie,
   type TokenSigner,
 } from "../../src/auth/index.js";
@@ -52,11 +57,6 @@ export const TEST_USER_ID = "user-42";
 export const TEST_CHALLENGE_ID = "chal-stack-escape";
 export const TEST_CHALLENGE_VERSION = "1.2.3";
 
-/** 合成 embedSessionId(128-bit CSPRNG base64url,满足 ≥ 22 字符冻结约束)。 */
-export function makeEmbedSessionId(): string {
-  return randomBytes(16).toString("base64url");
-}
-
 /** 测试专用 Ed25519 私钥 PEM(进程内生成,非真实凭据)。 */
 export const TEST_SIGNING_KEY_PEM: string = (() => {
   const { privateKey } = generateKeyPairSync("ed25519");
@@ -70,10 +70,10 @@ export interface AuthRigOptions {
   readonly now?: () => number;
 }
 
-export interface IssuedTestEmbedToken {
+export interface IssuedTestLaunchGrant {
   readonly token: string;
-  readonly claims: EmbedTokenClaims;
-  readonly record: IssuedEmbedTokenRecord;
+  readonly claims: LaunchGrantClaims;
+  readonly record: IssuedLaunchGrantRecord;
 }
 
 export interface AuthTestRig {
@@ -82,14 +82,16 @@ export interface AuthTestRig {
   readonly logger: Logger;
   readonly capture: LogCapture;
   readonly signer: TokenSigner;
-  readonly issuanceStore: InMemoryTokenIssuanceStore;
+  readonly grantStore: InMemoryLaunchGrantStore;
   readonly revocationStore: InMemoryCredentialRevocationStore;
   readonly audit: InMemoryAuditSink;
-  /** 直接经 signer + store 签发测试 embed token(绕过 HTTP 签发端点的矩阵用例)。 */
-  issueEmbedToken(overrides?: {
+  /** 直接经 signer + grantStore 铸造测试启动授权凭证(绕过 HTTP 签发端点的矩阵用例)。 */
+  issueLaunchGrant(overrides?: {
     readonly ttlSeconds?: number;
-    readonly claims?: Partial<Pick<EmbedTokenClaims, "tenantId" | "userId" | "challengeId" | "challengeVersion" | "embedSessionId">>;
-  }): Promise<IssuedTestEmbedToken>;
+    readonly claims?: Partial<
+      Pick<LaunchGrantClaims, "tenantId" | "userId" | "challengeId" | "challengeVersion">
+    >;
+  }): Promise<IssuedTestLaunchGrant>;
   /** 宿主后端签发请求头。 */
   hostHeaders(): { authorization: string };
 }
@@ -110,39 +112,43 @@ export async function buildAuthTestRig(options: AuthRigOptions = {}): Promise<Au
   const logger = createLogger(config, capture.stream);
   const app = buildServer(config, logger);
   const signer = await createTokenSigner(config.signingKey);
-  const issuanceStore = new InMemoryTokenIssuanceStore({ now: options.now });
+  const grantStore = new InMemoryLaunchGrantStore({ now: options.now });
   const revocationStore = new InMemoryCredentialRevocationStore({ now: options.now });
   const audit = new InMemoryAuditSink();
 
   await app.register(
-    buildAuthPlugin({ config, signer, issuanceStore, revocationStore, audit }),
+    buildAuthPlugin({ config, signer, revocationStore, audit }),
   );
 
   // —— WP-4 替身:create-session 消费链(装配面的最小演示)——
   app.post("/test/sessions", async (request, reply) => {
     const body = request.body as {
-      embedToken?: unknown;
       challengeId?: unknown;
       challengeVersion?: unknown;
-      embedSessionId?: unknown;
     };
-    if (
-      typeof body.embedToken !== "string" ||
-      typeof body.challengeId !== "string" ||
-      typeof body.challengeVersion !== "string" ||
-      typeof body.embedSessionId !== "string"
-    ) {
+    if (typeof body.challengeId !== "string" || typeof body.challengeVersion !== "string") {
       return reply.code(400).send({ code: "invalid_input_format", message: "invalid request" });
     }
+    const cookieHeader = request.headers.cookie;
+    const grantToken =
+      typeof cookieHeader === "string"
+        ? cookieHeader
+            .split(";")
+            .map((part) => part.trim())
+            .find((part) => part.startsWith(`${LAUNCH_GRANT_COOKIE_NAME}=`))
+            ?.slice(LAUNCH_GRANT_COOKIE_NAME.length + 1)
+        : undefined;
+    if (grantToken === undefined || grantToken.length === 0) {
+      return reply.code(AUTH_FAILED_HTTP_STATUS).send(AUTH_FAILED_ERROR);
+    }
     try {
-      const identity = await consumeEmbedToken(
-        { signer, issuanceStore, audit, logger, now: options.now },
+      const identity = await consumeLaunchGrant(
+        { signer, grantStore, logger, now: options.now },
         {
-          embedToken: body.embedToken,
-          context: {
+          grantToken,
+          payload: {
             challengeId: body.challengeId,
             challengeVersion: body.challengeVersion,
-            embedSessionId: body.embedSessionId,
           },
         },
       );
@@ -162,12 +168,12 @@ export async function buildAuthTestRig(options: AuthRigOptions = {}): Promise<Au
         at: (options.now ?? Date.now)(),
         actor: { tenantId: identity.tenantId, userId: identity.userId },
         sessionId,
-        detail: { embedTokenJti: identity.embedTokenJti },
+        detail: { launchGrantJti: identity.launchGrantJti },
       });
       setSessionCredentialCookie(reply, issued.token, issued.ttlSeconds, config.nodeEnv);
       return reply.code(201).send({ sessionId });
     } catch (err) {
-      if (err instanceof EmbedTokenConsumptionRejected) {
+      if (err instanceof LaunchGrantConsumptionRejected) {
         return reply.code(AUTH_FAILED_HTTP_STATUS).send(AUTH_FAILED_ERROR);
       }
       throw err;
@@ -225,51 +231,31 @@ export async function buildAuthTestRig(options: AuthRigOptions = {}): Promise<Au
     logger,
     capture,
     signer,
-    issuanceStore,
+    grantStore,
     revocationStore,
     audit,
-    async issueEmbedToken(overrides = {}) {
-      const ttlSeconds = overrides.ttlSeconds ?? config.embedTokenTtlSeconds;
+    async issueLaunchGrant(overrides = {}) {
+      const ttlSeconds = overrides.ttlSeconds ?? config.launchTicketTtlSeconds;
       const nowMs = (options.now ?? Date.now)();
-      const claims: EmbedTokenClaims = {
+      const claims: LaunchGrantClaims = {
         tenantId: overrides.claims?.tenantId ?? TEST_TENANT_ID,
         userId: overrides.claims?.userId ?? TEST_USER_ID,
         challengeId: overrides.claims?.challengeId ?? TEST_CHALLENGE_ID,
         challengeVersion: overrides.claims?.challengeVersion ?? TEST_CHALLENGE_VERSION,
-        embedSessionId: overrides.claims?.embedSessionId ?? makeEmbedSessionId(),
         jti: randomUUID(),
         expiresAt: Math.floor(nowMs / 1000) + ttlSeconds,
       };
-      const token = await signer.signEmbedToken(claims);
-      const record: IssuedEmbedTokenRecord = {
+      const token = await signer.signLaunchGrant(claims);
+      const record: IssuedLaunchGrantRecord = {
         jti: claims.jti,
         tenantId: claims.tenantId,
         userId: claims.userId,
         challengeId: claims.challengeId,
         challengeVersion: claims.challengeVersion,
-        embedSessionId: claims.embedSessionId,
         issuedAt: nowMs,
         expiresAt: claims.expiresAt * 1000,
       };
-      await issuanceStore.put(record, ttlSeconds);
-      // **审计面与已退役的签发端点逐字对齐**(WP-91):`/auth/embed-tokens`
-      // 是该事件的**唯一生产点**,它退役后若不在此补上,`embed_token_issued`
-      // 会从审计面**静默消失**(而它仍是冻结十值封闭集的成员,且 e2e 审计
-      // 用例正靠它证明"签发事实可审计")。本助手宣称"绕过 HTTP 端点",故它
-      // 必须自带端点原本的可观察副作用 —— 否则测试面与生产面出现语义差,
-      // 正是本仓库反复登记的"测试接缝绕开真实装配"缺陷族。
-      await audit.append({
-        kind: "embed_token_issued",
-        at: nowMs,
-        actor: { tenantId: claims.tenantId, userId: claims.userId },
-        detail: {
-          jti: claims.jti,
-          challengeId: claims.challengeId,
-          challengeVersion: claims.challengeVersion,
-          embedSessionId: claims.embedSessionId,
-          ttlSeconds,
-        },
-      });
+      await grantStore.put(record, ttlSeconds);
       return { token, claims, record };
     },
     hostHeaders() {

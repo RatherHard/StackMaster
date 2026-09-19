@@ -4,17 +4,22 @@
  * 真实路由 / 错误映射 / 冻结 Schema 校验(与 src/runtime/runtime.ts 同一
  * 装配拓扑,载体换成内存实现——端口契约逐一同构)。
  *
- * 覆盖面:签发 embed token → create_session → sync_projection →
- * checkpoint(manager.applyAction,WSS 归 WP-5 的同一入口)→
- * list_checkpoints → submit → close_session 全链路 + 红灯矩阵。
+ * 覆盖面:铸造启动授权凭证 → create_session(**v2:授权来源 = 授权凭证
+ * Cookie**)→ sync_projection → checkpoint(manager.applyAction,WSS 归 WP-5
+ * 的同一入口)→ list_checkpoints → submit → close_session 全链路 + 红灯矩阵。
+ *
+ * **2026-09-19(WP-96)**:create_session 的 v1 分支(请求体呈递 embed token)
+ * 与 embed token 铸造面已随窗口关闭物理删除 ⇒ 本装配台的铸造助手
+ * `issueLaunchGrant` / `createSession` 一律走**启动授权凭证**链
+ * (与 `POST /auth/launch-tickets` + 换票端点同签名 / 同记录面)。
  */
 
 import { join } from "node:path";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
-import type { EmbedTokenClaims } from "@stackmaster/protocol/server-only";
-import type { WssFrame } from "@stackmaster/protocol";
+import type { LaunchGrantClaims } from "@stackmaster/protocol/server-only";
+import { SESSION_ACTION_PROTOCOL_VERSION, type WssFrame } from "@stackmaster/protocol";
 import {
   buildBytePair,
   buildIrPair,
@@ -23,10 +28,10 @@ import {
   InMemoryAuditSink,
   InMemoryCredentialRevocationStore,
   InMemoryLaunchGrantStore,
-  InMemoryTokenIssuanceStore,
+  LAUNCH_GRANT_COOKIE_NAME,
   buildAuthPlugin,
   createTokenSigner,
-  type IssuedEmbedTokenRecord,
+  type IssuedLaunchGrantRecord,
   type TokenSigner,
 } from "../../../src/auth/index.js";
 import { loadSessionApiConfig, type SessionApiConfig } from "../../../src/config.js";
@@ -136,8 +141,35 @@ export function fakeDebugWorkerCommand() {
   };
 }
 
-export function makeEmbedSessionId(): string {
-  return randomBytes(16).toString("base64url");
+/** inject 响应类型(inject 返回类型的结构收口)。 */
+export type RigInjectResponse = Awaited<ReturnType<FastifyInstance["inject"]>>;
+
+/** 铸造出的测试启动授权凭证(与生产签发面同签名 + 同记录面)。 */
+export interface IssuedTestLaunchGrant {
+  readonly token: string;
+  readonly claims: LaunchGrantClaims;
+  readonly record: IssuedLaunchGrantRecord;
+}
+
+/** `createSession` 一站式助手的入参(覆盖面只用于红灯用例)。 */
+export interface CreateSessionOptions {
+  readonly ttlSeconds?: number;
+  readonly tenantId?: string;
+  readonly userId?: string;
+  readonly challengeId?: string;
+  readonly challengeVersion?: string;
+  /** 覆盖送往路由的 payload(红灯:payload 与凭证绑定不逐字一致)。 */
+  readonly payload?: Record<string, unknown>;
+  /** 不携带授权凭证 Cookie(红灯:缺 Cookie)。 */
+  readonly omitCookie?: boolean;
+  readonly headers?: Record<string, string>;
+}
+
+export interface CreateSessionOutcome {
+  readonly response: RigInjectResponse;
+  readonly grant: IssuedTestLaunchGrant;
+  readonly sessionId: string;
+  readonly cookie: string;
 }
 
 export interface SessionRigOptions {
@@ -194,8 +226,7 @@ export interface SessionTestRig {
   readonly manager: LiveSessionManager;
   readonly signer: TokenSigner;
   readonly audit: InMemoryAuditSink;
-  readonly issuanceStore: InMemoryTokenIssuanceStore;
-  /** 启动授权凭证签发记录(WP-91;v2 create_session 的授权来源)。 */
+  /** 启动授权凭证签发记录(WP-91;create_session 的**唯一**授权来源)。 */
   readonly grantStore: InMemoryLaunchGrantStore;
   /** 启动票据 CAS 端口(launch:{jti};WP-91)。 */
   readonly ticketStore: MemoryLaunchTicketStore;
@@ -248,13 +279,21 @@ export interface SessionTestRig {
     readonly challengeVersion?: string;
     readonly tenantId?: string;
   }): Promise<void>;
-  /** 直接经 signer + store 签发测试 embed token(嵌入协议 §六的签发面替身)。 */
-  issueEmbedToken(overrides?: {
+  /**
+   * 直接经 signer + grantStore 铸造测试启动授权凭证
+   * (与 `POST /auth/launch-tickets` + 换票端点同一签名 / 同一记录面)。
+   */
+  issueLaunchGrant(overrides?: {
     readonly ttlSeconds?: number;
     readonly claims?: Partial<
-      Pick<EmbedTokenClaims, "tenantId" | "userId" | "challengeId" | "challengeVersion" | "embedSessionId">
+      Pick<LaunchGrantClaims, "tenantId" | "userId" | "challengeId" | "challengeVersion">
     >;
-  }): Promise<{ token: string; claims: EmbedTokenClaims; record: IssuedEmbedTokenRecord }>;
+  }): Promise<IssuedTestLaunchGrant>;
+  /**
+   * **create_session 一站式助手**(铸造授权凭证 → 带 Cookie 请求 `/sessions`)。
+   * 返回原始响应,供既有断言逐字沿用(状态码 / 响应体 / Set-Cookie)。
+   */
+  createSession(overrides?: CreateSessionOptions): Promise<CreateSessionOutcome>;
 }
 
 export async function buildSessionTestRig(options: SessionRigOptions = {}): Promise<SessionTestRig> {
@@ -288,8 +327,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
 
   // ── WP-2 内存认证端口 ──
   const audit = new InMemoryAuditSink();
-  const issuanceStore = new InMemoryTokenIssuanceStore({ now });
-  // 启动授权凭证签发记录(WP-91;v2 create_session 的授权来源)。
+  // 启动授权凭证签发记录(WP-91;create_session 的授权来源)。
   const grantStore = new InMemoryLaunchGrantStore({ now });
   // 启动票据 CAS 端口(launch:{jti};内存同构替身)。
   const ticketStore = new MemoryLaunchTicketStore(now);
@@ -457,7 +495,7 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         });
 
   const app = buildServer(config, logger, {
-    authPlugin: buildAuthPlugin({ config, signer, issuanceStore, revocationStore, audit }),
+    authPlugin: buildAuthPlugin({ config, signer, revocationStore, audit }),
     sessionRoutes: buildSessionRoutes({      config,
       manager,
       logger,
@@ -467,7 +505,6 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         maxStringLength: 4096,
       },
       signer,
-      issuanceStore,
       grantStore,
       revocationStore,
       audit,
@@ -544,6 +581,39 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
   });
   await app.ready();
 
+  /** 铸造启动授权凭证(与生产签发面同签名 + 同记录面;TTL 取配置族)。 */
+  const issueLaunchGrant = async (
+    overrides: {
+      readonly ttlSeconds?: number;
+      readonly claims?: Partial<
+        Pick<LaunchGrantClaims, "tenantId" | "userId" | "challengeId" | "challengeVersion">
+      >;
+    } = {},
+  ): Promise<IssuedTestLaunchGrant> => {
+    const ttlSeconds = overrides.ttlSeconds ?? config.launchTicketTtlSeconds;
+    const nowMs = (now ?? Date.now)();
+    const claims: LaunchGrantClaims = {
+      tenantId: overrides.claims?.tenantId ?? TEST_TENANT_ID,
+      userId: overrides.claims?.userId ?? TEST_USER_ID,
+      challengeId: overrides.claims?.challengeId ?? TEST_CHALLENGE_ID,
+      challengeVersion: overrides.claims?.challengeVersion ?? TEST_CHALLENGE_VERSION,
+      jti: randomUUID(),
+      expiresAt: Math.floor(nowMs / 1000) + ttlSeconds,
+    };
+    const token = await signer.signLaunchGrant(claims);
+    const record: IssuedLaunchGrantRecord = {
+      jti: claims.jti,
+      tenantId: claims.tenantId,
+      userId: claims.userId,
+      challengeId: claims.challengeId,
+      challengeVersion: claims.challengeVersion,
+      issuedAt: nowMs,
+      expiresAt: claims.expiresAt * 1000,
+    };
+    await grantStore.put(record, ttlSeconds);
+    return { token, claims, record };
+  };
+
   return {
     app,
     config,
@@ -552,7 +622,6 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
     manager,
     signer,
     audit,
-    issuanceStore,
     grantStore,
     ticketStore,
     revocationStore,
@@ -680,31 +749,42 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
       );
       await bundles.putPublic(challengeId, challengeVersion, publicDescriptorBytes);
     },
-    async issueEmbedToken(overrides = {}) {
-      const ttlSeconds = overrides.ttlSeconds ?? config.embedTokenTtlSeconds;
-      const nowMs = (now ?? Date.now)();
-      const claims: EmbedTokenClaims = {
-        tenantId: overrides.claims?.tenantId ?? TEST_TENANT_ID,
-        userId: overrides.claims?.userId ?? TEST_USER_ID,
-        challengeId: overrides.claims?.challengeId ?? TEST_CHALLENGE_ID,
-        challengeVersion: overrides.claims?.challengeVersion ?? TEST_CHALLENGE_VERSION,
-        embedSessionId: overrides.claims?.embedSessionId ?? makeEmbedSessionId(),
-        jti: randomUUID(),
-        expiresAt: Math.floor(nowMs / 1000) + ttlSeconds,
+    async issueLaunchGrant(overrides = {}) {
+      return issueLaunchGrant(overrides);
+    },
+    async createSession(overrides = {}): Promise<CreateSessionOutcome> {
+      const grant = await issueLaunchGrant({
+        ...(overrides.ttlSeconds === undefined ? {} : { ttlSeconds: overrides.ttlSeconds }),
+        claims: {
+          ...(overrides.tenantId === undefined ? {} : { tenantId: overrides.tenantId }),
+          ...(overrides.userId === undefined ? {} : { userId: overrides.userId }),
+          ...(overrides.challengeId === undefined ? {} : { challengeId: overrides.challengeId }),
+          ...(overrides.challengeVersion === undefined
+            ? {}
+            : { challengeVersion: overrides.challengeVersion }),
+        },
+      });
+      const payload = overrides.payload ?? {
+        challengeId: overrides.challengeId ?? TEST_CHALLENGE_ID,
+        challengeVersion: overrides.challengeVersion ?? TEST_CHALLENGE_VERSION,
       };
-      const token = await signer.signEmbedToken(claims);
-      const record: IssuedEmbedTokenRecord = {
-        jti: claims.jti,
-        tenantId: claims.tenantId,
-        userId: claims.userId,
-        challengeId: claims.challengeId,
-        challengeVersion: claims.challengeVersion,
-        embedSessionId: claims.embedSessionId,
-        issuedAt: nowMs,
-        expiresAt: claims.expiresAt * 1000,
+      const response = await app.inject({
+        method: "POST",
+        url: "/sessions",
+        headers: {
+          ...(overrides.omitCookie === true ? {} : { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${grant.token}` }),
+          ...(overrides.headers ?? {}),
+        },
+        payload: sessionCommand("create_session", payload),
+      });
+      const body = response.json() as { payload?: { sessionId?: string } };
+      return {
+        response,
+        grant,
+        sessionId: body.payload?.sessionId ?? "",
+        cookie:
+          response.statusCode === 201 ? sessionCredentialFromSetCookie(response) : "",
       };
-      await issuanceStore.put(record, ttlSeconds);
-      return { token, claims, record };
     },
   };
 }
@@ -723,8 +803,21 @@ export function sessionCredentialFromSetCookie(response: {
   return value;
 }
 
-/** 构造会话命令请求体(冻结信封;protocolVersion 固定当前版本 1)。 */
+/** 构造会话命令请求体(冻结信封;protocolVersion = 当前版本 2)。 */
 export function sessionCommand(
+  command: "create_session" | "sync_projection" | "list_checkpoints" | "submit" | "close_session",
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  return { command, protocolVersion: SESSION_ACTION_PROTOCOL_VERSION, payload };
+}
+
+/**
+ * 构造**窗口期 v1 形态**的请求体(上一版本字面量 + 四键 create_session 载荷)。
+ *
+ * ⚠ 专供**回归红灯**用例:窗口已于 2026-09-19 关闭,v1 请求现在必须被拒
+ * (与窗口期受理相反)。任何"能跑通"的用例都不得使用本助手。
+ */
+export function sessionCommandV1(
   command: "create_session" | "sync_projection" | "list_checkpoints" | "submit" | "close_session",
   payload: Record<string, unknown>,
 ): Record<string, unknown> {

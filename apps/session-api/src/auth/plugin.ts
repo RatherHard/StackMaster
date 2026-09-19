@@ -1,13 +1,7 @@
 /**
  * buildAuthPlugin:可装配的认证插件(WP-2 交付面;最终装配归 WP-4)。
  *
- * 职责(任务分解 WP-2 第 1 / 4 条):
- *  - 注册 embed token 签发端点(宿主后端 → session-api;嵌入协议 §六):
- *    宿主凭证认证(无凭证 / 错凭证一律统一 401,先于请求体校验,防未认证
- *    探测)→ 生成 jti → 域 2 密钥签名七字段 claims → 写签发记录
- *    (token:{jti},TTL = token TTL ≤ MAX_EMBED_TOKEN_TTL_SECONDS)→
- *    响应体 JSON 交付(D-API-11;接收方是宿主后端服务器,token 禁入 URL
- *    query、不经 postMessage 下发——交付通道归阶段五);
+ * 职责:
  *  - 传输卫生装配:@fastify/cookie(凭证呈递依赖)+ @fastify/cors 精确
  *    来源白名单(D-API-16;空表 = 不放行任何跨源)。CSRF 防护在凭证
  *    preHandler 内(D-API-17,middleware.ts)。
@@ -19,6 +13,16 @@
  * 依赖注入:端口(signer / stores / audit)可注入,默认内存实现
  * (memory.ts;测试与未接线期)。插件测试用独立 fastify 实例 + inject,
  * 不依赖 src/server.ts / src/index.ts 的最终装配。
+ *
+ * ⚠ **`/auth/embed-tokens` 端点已退役**(分发改版 WP-91;D-LT-1 第 5 项
+ * 「与嵌入协议同批硬切,不留过渡别名」)。**承继者** = `POST /auth/launch-tickets`
+ * (`src/launch/launch-routes.ts`)。
+ * **2026-09-19(WP-96)补记**:该端点在 N-1 窗口期内遗留的 v1 分支函数
+ * (`consumeEmbedToken` / `verifyEmbedToken` / `signEmbedToken` /
+ * `EmbedTokenClaims` / `TokenIssuanceStore`)已随 v1 冻结面与嵌入协议面
+ * **物理删除** —— 本文件现在只保留 `hostBackendTokenMatches`(被
+ * `/host/scores`、`/auth/launch-tickets` 共用同一份实现)、Cookie / CORS 装配、
+ * `authRuntimeDeps` 装饰。
  */
 
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -27,27 +31,9 @@ import cors from "@fastify/cors";
 import type { FastifyPluginAsync } from "fastify";
 
 import { createTokenSigner, type TokenSigner } from "./keys.js";
-import {
-  InMemoryAuditSink,
-  InMemoryCredentialRevocationStore,
-  InMemoryTokenIssuanceStore,
-} from "./memory.js";
-import type { AuditSink, CredentialRevocationStore, TokenIssuanceStore } from "./ports.js";
+import { InMemoryAuditSink, InMemoryCredentialRevocationStore } from "./memory.js";
+import type { AuditSink, CredentialRevocationStore } from "./ports.js";
 
-/**
- * ⚠ **`/auth/embed-tokens` 端点与 `EMBED_TOKEN_ISSUANCE_ROUTE` 已退役**
- * (分发改版 WP-91;D-LT-1 第 5 项「与嵌入协议同批硬切,不留过渡别名」)。
- *
- * **退役面**:该端点本体 + 其请求体私有 Schema + `EmbedTokenIssuanceResponse`
- * interface + 路由常量。**承继者** = `POST /auth/launch-tickets`
- * (`src/launch/launch-routes.ts`)。
- *
- * **本文件保留面(不得删)**:`hostBackendTokenMatches`(被 `/host/scores` 与
- * 新的签发端点**共用同一份实现**)、Cookie / CORS 装配、`authRuntimeDeps`
- * 装饰 —— 以及 `consumeEmbedToken` / `verifyEmbedToken` / `signEmbedToken` /
- * `EmbedTokenClaims` 等函数:它们在 **N-1 窗口期内仍服务 create_session 的 v1
- * 分支**,物理删除归 WP-96(届时 v1 冻结面与本文件的相关残留一并清理)。
- */
 /** 宿主凭证的 Authorization 头前缀(签发端点与成绩面共用)。 */
 const BEARER_PREFIX = "Bearer ";
 
@@ -68,7 +54,6 @@ export interface AuthPluginOptions {
   readonly signer?: TokenSigner;
   readonly signingKeyPem?: string;
   /** 端口默认内存实现(测试与未接线期;生产由 WP-4 接 Redis / PG 适配器)。 */
-  readonly issuanceStore?: TokenIssuanceStore;
   readonly revocationStore?: CredentialRevocationStore;
   readonly audit?: AuditSink;
 }
@@ -102,7 +87,6 @@ const SKIP_OVERRIDE = Symbol.for("skip-override");
 export interface AuthRuntimeDeps {
   readonly config: AuthModuleConfig;
   readonly signer: TokenSigner;
-  readonly issuanceStore: TokenIssuanceStore;
   readonly revocationStore: CredentialRevocationStore;
   readonly audit: AuditSink;
 }
@@ -129,7 +113,6 @@ export function buildAuthPlugin(options: AuthPluginOptions): FastifyPluginAsync 
       );
     }
     const signer = options.signer ?? (await createTokenSigner(signingKeyPem ?? ""));
-    const issuanceStore = options.issuanceStore ?? new InMemoryTokenIssuanceStore();
     const revocationStore = options.revocationStore ?? new InMemoryCredentialRevocationStore();
     const audit = options.audit ?? new InMemoryAuditSink();
 
@@ -138,7 +121,6 @@ export function buildAuthPlugin(options: AuthPluginOptions): FastifyPluginAsync 
     fastify.decorate("authRuntimeDeps", {
       config,
       signer,
-      issuanceStore,
       revocationStore,
       audit,
     });
@@ -176,9 +158,10 @@ export function buildAuthPlugin(options: AuthPluginOptions): FastifyPluginAsync 
     // 同一位置、同一宿主凭证姿态、同一限流纪律;交付面从"回 embed token
     // 给宿主后端"变为"回一次性启动地址给平台后端"。
     //
-    // 本文件其余内容(hostBackendTokenMatches / Cookie / CORS / 装饰)与
-    // 认证域其它模块(consumeEmbedToken 等)在 N-1 窗口期内**继续服役**
-    // (create_session 的 v1 分支仍走 embed token),物理删除归 WP-96。
+    // **2026-09-19(WP-96)补记**:该端点在 N-1 窗口期的 v1 残留(embed token
+    // 铸造 / 消费 / 吊销函数、claims 载体面、`token:{jti}` 存储端口)已随 v1
+    // 冻结面与嵌入协议面**物理删除**。本文件与认证域其余模块现在只服务
+    // 会话凭证 + 启动授权凭证两条链。
   };
 
   Object.assign(plugin, {

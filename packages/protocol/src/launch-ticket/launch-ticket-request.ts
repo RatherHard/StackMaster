@@ -30,7 +30,7 @@
  */
 import { z } from "zod";
 import { OpaqueIdSchema } from "../common/identifiers.js";
-import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../embed/embed-token-claims.js";
+import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../common/challenge-content-version.js";
 
 /**
  * 签发请求体(恰两键:`challengeId` / `version`;D-LT-1)。
@@ -43,9 +43,11 @@ export const LaunchTicketRequestSchema = z.strictObject({
    */
   challengeId: OpaqueIdSchema,
   /**
-   * 题目内容版本(`X.Y.Z` 语义化版本字面,**复用** `embed-token-claims.ts` 的
-   * `CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE`,不复制第二份正则字面量 ——
-   * 该常量是题目内容版本格式的单一来源,格式变更属契约变更,两端必须同步)。
+   * 题目内容版本(`X.Y.Z` 语义化版本字面,**复用**
+   * `common/challenge-content-version.ts` 的 `CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE`
+   * ——2026-09-19 随 WP-96 迁出 `embed-token-claims.ts`,正则源码逐字不变,
+   * 不复制第二份正则字面量:该常量是题目内容版本格式的单一来源,格式变更属
+   * 契约变更,两端必须同步)。
    */
   version: z
     .string()

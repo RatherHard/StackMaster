@@ -5,10 +5,14 @@
  * 注入也不被采信)。
  */
 
-import { SessionCommandRequestSchema } from "@stackmaster/protocol";
+import {
+  SESSION_ACTION_PROTOCOL_VERSION,
+  SessionCommandRequestSchema,
+} from "@stackmaster/protocol";
 import { describe, expect, it } from "vitest";
 
 import {
+  LAUNCH_GRANT_COOKIE_NAME,
   SessionCredentialRejected,
   authenticateSessionCredential,
   revokeSessionCredential,
@@ -25,17 +29,16 @@ import {
 
 type Rig = Awaited<ReturnType<typeof buildAuthTestRig>>;
 
-/** 走完整链路取得会话与凭证(消费 → 签发 → Set-Cookie)。 */
+/** 走完整链路取得会话与凭证(消费启动授权凭证 → 签发 → Set-Cookie)。 */
 async function establishSession(rig: Rig): Promise<{ sessionId: string; credential: string }> {
-  const issued = await rig.issueEmbedToken();
+  const issued = await rig.issueLaunchGrant();
   const response = await rig.app.inject({
     method: "POST",
     url: "/test/sessions",
+    headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${issued.token}` },
     payload: {
-      embedToken: issued.token,
       challengeId: TEST_CHALLENGE_ID,
       challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
     },
   });
   expect(response.statusCode).toBe(201);
@@ -199,13 +202,14 @@ describe("CSRF 闸(D-API-17:Cookie 呈递 + 变更方法)", () => {
 describe("身份派生(基线 #1:不接受请求体自报身份)", () => {
   it("契约面:create_session 载荷注入身份字段被 SessionCommandRequestSchema(strictObject)拒绝", () => {
     const probe = {
-      protocolVersion: 1,
+      // 当前版本字面量(2026-09-19 随 WP-96:窗口关闭,受理集合单元素)——
+      // 否则红灯会从"身份字段被 strictObject 拒"漂移成"版本不受支持",
+      // 断言虽仍通过但**被测对象被换掉**。
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       command: "create_session",
       payload: {
         challengeId: "chal-x",
         challengeVersion: "1.0.0",
-        embedSessionId: "a".repeat(22),
-        embedToken: "token-material",
         tenantId: "tenant-attacker",
       },
     };

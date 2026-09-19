@@ -21,19 +21,16 @@
 import { z } from "zod";
 import { OpaqueIdSchema } from "../common/identifiers.js";
 import { PublicErrorSchema } from "../error/public-error.js";
-import { ActionRequestSchema, ActionRequestV1Schema } from "../session-action/action-request.js";
+import { ActionRequestSchema } from "../session-action/action-request.js";
 import { ActionResponseSchema } from "../session-action/action-response.js";
-import {
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
-  SESSION_ACTION_PROTOCOL_VERSION,
-} from "../version.js";
+import { SESSION_ACTION_PROTOCOL_VERSION } from "../version.js";
 
 /** 全部 WSS 消息类型(封闭枚举;扩展 = 协议版本演进)。 */
 export const WSS_MESSAGE_TYPES = ["action", "action_response", "error"] as const;
 
 export type WssMessageType = (typeof WSS_MESSAGE_TYPES)[number];
 
-/** 客户端 → 服务端方向的消息类型(接收端方向检查;嵌入协议规则 V-6 同纪律)。 */
+/** 客户端 → 服务端方向的消息类型(接收端方向检查;原嵌入协议规则 V-6 的同款纪律,该协议面已于 2026-09-19 随 WP-96 退役)。 */
 export const WSS_CLIENT_TO_SERVER_TYPES = ["action"] as const;
 
 /** 服务端 → 客户端方向的消息类型。 */
@@ -44,13 +41,15 @@ export type WssServerToClientType = (typeof WSS_SERVER_TO_CLIENT_TYPES)[number];
 
 /**
  * WSS 消息帧判别联合:统一信封六字段(8.2 基线),type ↔ payload 耦合由结构
- * 表达,TS 与 Rust 校验结论一致(与 EmbedMessage 同形)。
+ * 表达,TS 与 Rust 校验结论一致。
  *
- * **N-1 兼容窗口(D-LT-5 第 2 条)**:帧面按版本字面量参数化产出两份
- * (`WssFrameSchema` = 当前版本,`WssFrameV1Schema` = 上一版本);v1 变体的
- * `action` 分支载荷用 v1 动作信封(`ActionRequestV1Schema`),其余分支
- * (`action_response` / `error`)载荷在 v1 → v2 之间零变化。窗口期结束删除
- * v1 变体。
+ * **N-1 兼容窗口的历史与关闭(D-LT-5 第 2 条)**:v2 生效时帧面曾按版本字面量
+ * 参数化产出两份(`WssFrameSchema` = 当前版本,`WssFrameV1Schema` = 上一版本);
+ * v1 变体的 `action` 分支载荷曾用 v1 动作信封(`ActionRequestV1Schema`),其余分支
+ * (`action_response` / `error`)载荷在 v1 → v2 之间零变化。**2026-09-19 窗口关闭
+ * (随 WP-96)**:`WssFrameV1Schema` / `ActionRequestV1Schema` 与
+ * `SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION` **同批物理删除**,本参数化工厂保留
+ * (单一版本调用)。
  */
 function wssFrameSchemaForVersion(
   version: number,
@@ -93,12 +92,4 @@ export const WssFrameSchema = wssFrameSchemaForVersion(
   ActionRequestSchema,
 );
 
-/** N-1 窗口期的冻结 v1 帧(载荷用 v1 动作信封;窗口期结束即删除)。 */
-export const WssFrameV1Schema = wssFrameSchemaForVersion(
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
-  ActionRequestV1Schema,
-);
-
 export type WssFrame = z.infer<typeof WssFrameSchema>;
-
-export type WssFrameV1 = z.infer<typeof WssFrameV1Schema>;

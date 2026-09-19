@@ -21,12 +21,8 @@ import { ensureWorkerBinary } from "@stackmaster/session-core";
 import { DebugFrameSchema, type DebugFrame } from "@stackmaster/protocol";
 import { productionDebugVariantProvider } from "../../src/debug/index.js";
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   TEST_TENANT_ID,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type RigWssClient,
 } from "../routes/helpers/session-rig.js";
 
@@ -64,26 +60,15 @@ async function createSessionWithActions(rig: Awaited<ReturnType<typeof buildSess
   sessionId: string;
   cookie: string;
 }> {
-  const issued = await rig.issueEmbedToken();
-  const createResponse = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response: createResponse, sessionId, cookie } = await rig.createSession();
   expect(createResponse.statusCode).toBe(201);
-  const sessionId = (createResponse.json() as { payload: { sessionId: string } }).payload.sessionId;
   await rig.manager.applyAction(sessionId, TEST_TENANT_ID, {
     type: "write_bytes",
     args: { addressHex: "0x7ffff000", bytesHex: "41414141" },
   });
   await rig.manager.applyAction(sessionId, TEST_TENANT_ID, { type: "step", args: {} });
   await rig.manager.submit(sessionId, TEST_TENANT_ID);
-  return { sessionId, cookie: sessionCredentialFromSetCookie(createResponse) };
+  return { sessionId, cookie };
 }
 
 describe.skipIf(!IT_ENABLED)("调试变体生产路径与双实例重放一致性(真实 vm-worker;SESSION_API_IT 门控)", () => {
@@ -226,22 +211,11 @@ describe.skipIf(!IT_ENABLED)("调试变体生产路径与双实例重放一致�
     const IR_CHALLENGE_ID = "chal-ir-mode";
     const IR_CHALLENGE_VERSION = "1.0.0";
     await rig.registerChallenge({ challengeId: IR_CHALLENGE_ID, challengeVersion: IR_CHALLENGE_VERSION });
-    const issued = await rig.issueEmbedToken({
-      claims: { challengeId: IR_CHALLENGE_ID, challengeVersion: IR_CHALLENGE_VERSION },
-    });
-    const createResponse = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: IR_CHALLENGE_ID,
-        challengeVersion: IR_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
+    const { response: createResponse, sessionId, cookie } = await rig.createSession({
+      challengeId: IR_CHALLENGE_ID,
+      challengeVersion: IR_CHALLENGE_VERSION,
     });
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie(createResponse);
 
     const client = await rig.connectDebugChannel(cookie);
     const collector = new DebugFrameCollector();

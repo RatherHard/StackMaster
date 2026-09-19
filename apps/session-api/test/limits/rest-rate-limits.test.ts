@@ -38,32 +38,15 @@ interface CreateOutcome {
   cookie?: string;
 }
 
-/** create-session 请求(冻结信封;embed token 由 rig 签发面提供)。 */
+/** create-session 请求(v2:授权来源 = 启动授权凭证 Cookie;rig 一站式助手)。 */
 async function createSession(
   rig: SessionTestRig,
   overrides: { tenantId?: string; userId?: string; challengeId?: string } = {},
 ): Promise<CreateOutcome> {
-  const challengeId = overrides.challengeId ?? TEST_CHALLENGE_ID;
-  const issued = await rig.issueEmbedToken({
-    ...(overrides.tenantId === undefined && overrides.userId === undefined
-      ? {}
-      : {
-          claims: {
-            ...(overrides.tenantId === undefined ? {} : { tenantId: overrides.tenantId }),
-            ...(overrides.userId === undefined ? {} : { userId: overrides.userId }),
-            ...(overrides.challengeId === undefined ? {} : { challengeId: overrides.challengeId }),
-          },
-        }),
-  });
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
+  const { response } = await rig.createSession({
+    ...(overrides.tenantId === undefined ? {} : { tenantId: overrides.tenantId }),
+    ...(overrides.userId === undefined ? {} : { userId: overrides.userId }),
+    ...(overrides.challengeId === undefined ? {} : { challengeId: overrides.challengeId }),
   });
   const outcome: CreateOutcome = {
     status: response.statusCode,
@@ -107,8 +90,8 @@ describe("每租户 / 每用户请求频率触顶(create-session 守卫,D-API-50
     const firstReject = await createSession(rig);
     const secondReject = await createSession(rig);
 
-    // 确定性拒绝:同状态、同请求字节相同(I-4;不同的 token / embedSessionId
-    // 不影响呈现面)。
+    // 确定性拒绝:同状态、同请求字节相同(I-4;不同的启动授权凭证 jti /
+    // 会话标识不影响呈现面)。
     expect(firstReject.status).toBe(429);
     expect(secondReject.status).toBe(429);
     expect(firstReject.bodyText).toBe(secondReject.bodyText);

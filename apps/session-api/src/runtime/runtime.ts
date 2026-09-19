@@ -103,7 +103,6 @@ import {
 import {
   KeyValueCredentialRevocationStore,
   KeyValueLaunchGrantStore,
-  KeyValueTokenIssuanceStore,
 } from "./redis-token-stores.js";
 
 /** 迁移目录(apps/session-api/migrations;src 与 dist 同深度布局共用)。 */
@@ -352,8 +351,8 @@ export async function buildSessionApiRuntime(
   const kv = new RedisKeyValueStore(redis);
   /** 启动票据 CAS 端口(launch:{jti};WP-91)。 */
   const ticketStore = new RedisLaunchTicketStore(redis);
-  const issuanceStore = new KeyValueTokenIssuanceStore(kv);
-  // 启动授权凭证签发记录(WP-91;独立键域 launchGrant:{jti}——见 auth/ports.ts 的理由段)。
+  // 启动授权凭证签发记录(WP-91;键域 launchGrant:{jti}——见 auth/ports.ts 的理由段)。
+  // (原 embed token 签发记录 issuanceStore 已随嵌入协议面 2026-09-19 删除。)
   const grantStore = new KeyValueLaunchGrantStore(kv);
   const revocationStore = new KeyValueCredentialRevocationStore(kv);
   const idempotencyWindow = new ResilientIdempotencyWindow(
@@ -410,7 +409,7 @@ export async function buildSessionApiRuntime(
   //    已知留白——append-only 端口语义零改动,落库失败 fail-closed 不静默)──
   const signer = await createTokenSigner(config.signingKey);
   const audit = new PgAuditSink(pool);
-  const authPlugin = buildAuthPlugin({ config, signer, issuanceStore, revocationStore, audit });
+  const authPlugin = buildAuthPlugin({ config, signer, revocationStore, audit });
 
   // ── 6. 在途会话管理器(WP-6 执行面:并发预算 / 配额 / action_log 落库)──
   // 指标面(WP-8,D-API-70):五指标族 + /metrics 插件在此创建并注入 manager。
@@ -563,7 +562,6 @@ export async function buildSessionApiRuntime(
       maxStringLength: 4096,
     },
     signer,
-    issuanceStore,
     grantStore,
     revocationStore,
     audit,

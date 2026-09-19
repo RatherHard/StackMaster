@@ -1,5 +1,5 @@
 /**
- * Zod → JSON Schema 2020-12 产出管线(WP-2 建线,WP-3 扩面,WP-5 增嵌入契约族;计划书 5.6 / ADR-5)。
+ * Zod → JSON Schema 2020-12 产出管线(WP-2 建线,WP-3 扩面;计划书 5.6 / ADR-5)。
  *
  * - JSON Schema 是 TS 与 Rust 的共同权威:本脚本产出的文件提交入库,
  *   供 Rust 侧 serde + schemars 消费(WP-6 完成 Rust 消费冒烟验证);
@@ -10,6 +10,10 @@
  * - 附带 schema/classification.json:字段分类清单(WP-1 §4–§6),供 CI 的
  *   ZR-P1 / I-1 机检直接引用;
  * - test/schema-drift.test.ts 断言入库文件与本管线输出一致,防止双端漂移。
+ *
+ * ~~嵌入协议族(WP-5)~~ 的两份产物(`embed-message` / `embed-token-claims`)已随
+ * 该面 2026-09-19 物理删除(WP-96);`embedProtocolVersion` 字段同批从
+ * classification.json 移除。
  *
  * superRefine 纪律(实验结论,见任务 #1):refinement 对 z.toJSONSchema 透明,
  * 不进落盘产物——跨字段规则由本管线以等价 if/then 显式注入(见下方
@@ -24,7 +28,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
-  EMBED_PROTOCOL_VERSION,
   PROTOCOL_PACKAGE_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
 } from "../version.js";
@@ -239,7 +242,8 @@ export function generateManifestDocument(): JsonSchemaDocument {
   return {
     packageVersion: PROTOCOL_PACKAGE_VERSION,
     sessionActionProtocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
-    embedProtocolVersion: EMBED_PROTOCOL_VERSION,
+    // embedProtocolVersion 字段已随嵌入协议面 2026-09-19 物理删除(WP-96):
+    // 该面整体退役、不做版本演进,不存在可供消费的版本号。
     note:
       "字段分类唯一依据 docs/contracts/数据分类与秘密零驻留清单.md 第四、五、六章;机检消费见 ZR-P1 / I-1。" +
       "Schema 存在不等于可下发:server-only 类型仅供后端包跨语言校验消费。",

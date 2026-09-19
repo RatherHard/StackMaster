@@ -9,19 +9,12 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use std::collections::BTreeSet;
 
-/// `schema/embed-token-claims.schema.json` 的镜像。
-/// `deny_unknown_fields` 对应 Schema 的 `additionalProperties: false`。
-#[derive(Deserialize, JsonSchema, Debug)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct EmbedTokenClaimsMirror {
-    pub tenant_id: String,
-    pub user_id: String,
-    pub challenge_id: String,
-    pub challenge_version: String,
-    pub embed_session_id: String,
-    pub jti: String,
-    pub expires_at: u64,
-}
+// ── 退役登记(2026-09-19,分发改版 WP-96)────────────────────────────────
+// `EmbedTokenClaimsMirror`(镜像 `schema/embed-token-claims.schema.json`)已随
+// 嵌入协议面**物理删除**:该 Schema 产物与 fixture 目录均已移除,镜像失去
+// 比对对象。反向锚 —— 启动授权凭证 claims(`LaunchGrantClaims`,六字段)是
+// 该族的**现行**替代物,但它的落盘产物 `launch-grant-claims.schema.json` 的
+// serde 消费面暂未建镜像(不在本批范围内;登记为后续增量)。
 
 /// `schema/verdict-result.schema.json`(11 值结果枚举,9.1)的镜像。
 #[derive(Deserialize, Debug, PartialEq, Eq)]

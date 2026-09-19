@@ -129,12 +129,13 @@ describe("宿主凭证门(D-API-122:宿主凭证 ≠ 会话凭证)", () => {
 
   it("会话凭证不得通行宿主面(凭证域分离:宿主面只认宿主共享凭证)", async () => {
     const rig = await buildHostRig();
-    // 会话凭证(合法签发形态)在宿主面必须与"未呈递"同形拒绝。
-    const issued = await rig.issueEmbedToken();
+    // 会话侧授权凭证(启动授权凭证,WP-96 起 create_session 的唯一授权来源;
+    // 合法签发形态)在宿主面必须与"未呈递"同形拒绝。
+    const grant = await rig.issueLaunchGrant();
     const response = await rig.app.inject({
       method: "GET",
       url: "/host/scores",
-      headers: { authorization: `Bearer ${issued.token}` },
+      headers: { authorization: `Bearer ${grant.token}` },
     });
     expect(response.statusCode).toBe(401);
     expect(response.body).toBe(AUTH_FAILED_BODY);

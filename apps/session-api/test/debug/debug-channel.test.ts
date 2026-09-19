@@ -13,12 +13,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RigWssClient } from "../routes/helpers/session-rig.js";
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
   credentialHeaders,
   sessionCommand,
-  sessionCredentialFromSetCookie,
   type SessionTestRig,
 } from "../routes/helpers/session-rig.js";
 import { WSS_ACTION_RATE_LIMIT_ERROR } from "../../src/wss/channel-constants.js";
@@ -95,20 +92,10 @@ async function createDebugStack(
   options: { attach?: boolean } = {},
 ): Promise<DebugStack> {
   await rig.registerChallenge();
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  // create_session v2:授权来源 = 启动授权凭证 Cookie(rig 一站式助手铸造
+  // 凭证并以同一身份签发请求体)。
+  const { response, sessionId, cookie } = await rig.createSession();
   expect(response.statusCode).toBe(201);
-  const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
-  const cookie = sessionCredentialFromSetCookie(response);
   const client = await rig.connectDebugChannel(cookie);
   const collector = new DebugFrameCollector();
   collector.attach(client);

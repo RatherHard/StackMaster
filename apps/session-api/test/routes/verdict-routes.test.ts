@@ -26,11 +26,9 @@ import { describe, expect, it } from "vitest";
 import { VerdictQueryResponseSchema } from "@stackmaster/protocol";
 
 import {
-  TEST_CHALLENGE_ID,
   TEST_CHALLENGE_VERSION,
   TEST_TENANT_ID,
   buildSessionTestRig,
-  sessionCommand,
   sessionCredentialFromSetCookie,
   type SessionTestRig,
 } from "./helpers/session-rig.js";
@@ -50,24 +48,12 @@ interface SessionHandle {
 /** 已登记题目的 rig 集合(registerChallenge 幂等;版本不可变约束防重复登记)。 */
 const REGISTERED = new WeakSet<object>();
 
-async function createSession(rig: SessionTestRig, embedSessionId?: string): Promise<SessionHandle> {
+async function createSession(rig: SessionTestRig): Promise<SessionHandle> {
   if (!REGISTERED.has(rig)) {
     await rig.registerChallenge();
     REGISTERED.add(rig);
   }
-  const issued = await rig.issueEmbedToken({
-    ...(embedSessionId === undefined ? {} : { claims: { embedSessionId } }),
-  });
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response } = await rig.createSession();
   expect(response.statusCode).toBe(201);
   return {
     sessionId: (response.json() as { payload: { sessionId: string } }).payload.sessionId,
@@ -182,7 +168,7 @@ describe("GET /verdicts/:submissionId 定位链 404 同形矩阵(D-API-83 防枚
   it("跨会话提交行(同租户他会话 submissionId)→ 404 同形", async () => {
     const rig = await buildSessionTestRig();
     const mine = await createSession(rig);
-    const theirs = await createSession(rig, "another-embed-session-0123456789");
+    const theirs = await createSession(rig);
     const theirsSubmission = await seedSubmission(rig, theirs.sessionId);
     const result = await getVerdict(rig, mine.cookie, theirsSubmission);
     expect(result.status).toBe(404);
@@ -287,24 +273,12 @@ describe("重询限流(D-API-84 / D-API-86:SESSION_API_VERDICT_QUERIES_PER_MINUT
     // beta 租户独立登记题目(内存注册表按 challengeId@version 键域)。
     const betaChallenge = "chal-verdict-beta";
     await rig.registerChallenge({ challengeId: betaChallenge, tenantId: "tenant-verdict-beta" });
-    const betaToken = await rig.issueEmbedToken({
-      claims: { tenantId: "tenant-verdict-beta", challengeId: betaChallenge },
+    const beta = await rig.createSession({
+      tenantId: "tenant-verdict-beta",
+      challengeId: betaChallenge,
+      challengeVersion: TEST_CHALLENGE_VERSION,
     });
-    const betaResponse = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: betaChallenge,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: betaToken.claims.embedSessionId,
-        embedToken: betaToken.token,
-      }),
-    });
-    expect(betaResponse.statusCode).toBe(201);
-    const beta = {
-      sessionId: (betaResponse.json() as { payload: { sessionId: string } }).payload.sessionId,
-      cookie: sessionCredentialFromSetCookie(betaResponse),
-    };
+    expect(beta.response.statusCode).toBe(201);
     const alphaSubmission = await seedSubmission(rig, alpha.sessionId);
     const betaSubmission = await seedSubmission(rig, beta.sessionId, 3, "tenant-verdict-beta");
 
@@ -318,17 +292,7 @@ describe("Cookie Path 调宽(D-API-83:Path=/ 覆盖 /sessions 与 /verdicts 两�
   it("create_session 的 Set-Cookie 为 Path=/(HttpOnly / SameSite=Strict 属性零改动)", async () => {
     const rig = await buildSessionTestRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response } = await rig.createSession();
     const setCookie = (response.headers as Record<string, unknown>)["set-cookie"];
     const raw = Array.isArray(setCookie) ? String(setCookie[0]) : String(setCookie);
     expect(raw).toContain("Path=/");

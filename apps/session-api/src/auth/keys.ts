@@ -1,9 +1,9 @@
 /**
- * 域 2 签名密钥载体:embed token 与会话凭证的签发 / 校验(WP-2;D-API-10)。
+ * 域 2 签名密钥载体:会话凭证与启动授权凭证的签发 / 校验(WP-2;D-API-10)。
  *
  * 载体决策:JWT + EdDSA(Ed25519,jose 库,Node WebCrypto 实现)。PASETO
  * 无同等维护度;密钥仅信任域 2,签发 / 校验只经 `@stackmaster/protocol/
- * server-only` 的 claims 解析器消费。JWT 载荷 = 七字段冻结 claims + 标准保留
+ * server-only` 的 claims 解析器消费。JWT 载荷 = 冻结 claims + 标准保留
  * 字段 `exp`(与 claims.expiresAt 同值,epoch 秒)——除 exp 外不引入任何
  * 额外保留字段(iat / iss / aud 均不签发),使"签名前 claims 字段集合"与
  * 冻结 Schema 逐字段对应,载体可严格校验(多余字段即 malformed)。
@@ -15,17 +15,19 @@
  * 校验失败的确定性异常:CredentialVerificationError(kind = expired /
  * signature_invalid / malformed);alg 锁定 EdDSA + 显式公钥注入,结构性排除
  * alg 混淆(HS256 换算法)与算法降级。
+ *
+ * **退役登记(2026-09-19,分发改版 WP-96)**:embed token 一族
+ * (`signEmbedToken` / `verifyEmbedToken` / `EmbedTokenJwtPayloadSchema`,七字段
+ * claims + exp 的载体面)随嵌入协议面与该面的消费链(v1 create_session 分支)
+ * **同批物理删除**。本文件保留的两族 = 会话凭证 + 启动授权凭证;两者**同密钥、
+ * 同 alg、各自独立 claims 面**。
  */
 
 import { createPrivateKey, createPublicKey } from "node:crypto";
+import { EMBED_TOKEN_MAX_LENGTH } from "@stackmaster/protocol";
 import {
-  EMBED_TOKEN_MAX_LENGTH,
-} from "@stackmaster/protocol";
-import {
-  EmbedTokenClaimsSchema,
   LaunchGrantClaimsSchema,
   SessionCredentialClaimsSchema,
-  type EmbedTokenClaims,
   type LaunchGrantClaims,
   type SessionCredentialClaims,
 } from "@stackmaster/protocol/server-only";
@@ -34,7 +36,13 @@ import { z } from "zod";
 
 import { CredentialVerificationError, type CredentialKind } from "./errors.js";
 
-/** 会话凭证载体长度外圈护栏(与 embed token 同值;D-API-19)。 */
+/**
+ * 凭证签名载体长度外圈护栏(载体 = 短期凭证,JWT 紧凑形态远低于此;D-API-19)。
+ *
+ * 常量来源说明:protocol 的 `EMBED_TOKEN_MAX_LENGTH` 是「短期凭证载体的协议外圈
+ * 上限」的**单源命名**(它在嵌入协议面退役后仍被本处与配置面消费;名字里的
+ * EMBED 是历史命名,语义见 protocol `common/limits.ts` 的同名常量注释)。
+ */
 export const SESSION_CREDENTIAL_MAX_LENGTH = EMBED_TOKEN_MAX_LENGTH;
 
 /** 校验时钟注入点(默认当前时刻;测试注入以确定性覆盖过期路径)。 */
@@ -46,11 +54,6 @@ type SignKey = Parameters<SignJWT["sign"]>[0];
 type VerifyKey = Parameters<typeof jwtVerify>[1];
 
 /** JWT 载荷形态 = 七字段冻结 claims + exp(jose 校验后仍留在载荷内)。 */
-const EmbedTokenJwtPayloadSchema = z.strictObject({
-  ...EmbedTokenClaimsSchema.shape,
-  exp: z.number().int().min(0),
-});
-
 const SessionCredentialJwtPayloadSchema = z.strictObject({
   ...SessionCredentialClaimsSchema.shape,
   exp: z.number().int().min(0),
@@ -74,11 +77,9 @@ const LaunchGrantJwtPayloadSchema = z.strictObject({
  * 判别面,响应面不消费它(D-API-14 统一形态)。
  */
 export interface TokenSigner {
-  signEmbedToken(claims: EmbedTokenClaims): Promise<string>;
-  verifyEmbedToken(token: string, clock?: VerifyClockOptions): Promise<EmbedTokenClaims>;
   signSessionCredential(claims: SessionCredentialClaims): Promise<string>;
   verifySessionCredential(token: string, clock?: VerifyClockOptions): Promise<SessionCredentialClaims>;
-  /** 启动授权凭证(WP-91;D-LT-5 5a):与另两族**同密钥、同 alg、独立 claims 面**。 */
+  /** 启动授权凭证(WP-91;D-LT-5 5a):与会话凭证**同密钥、同 alg、独立 claims 面**。 */
   signLaunchGrant(claims: LaunchGrantClaims): Promise<string>;
   verifyLaunchGrant(token: string, clock?: VerifyClockOptions): Promise<LaunchGrantClaims>;
 }
@@ -101,12 +102,6 @@ export async function createTokenSigner(signingKeyPem: string): Promise<TokenSig
   ]);
 
   return {
-    async signEmbedToken(claims: EmbedTokenClaims): Promise<string> {
-      return signClaims(claims, privateKey, "embed token");
-    },
-    async verifyEmbedToken(token: string, clock?: VerifyClockOptions): Promise<EmbedTokenClaims> {
-      return verifyEmbedTokenClaims(token, publicKey, clock);
-    },
     async signSessionCredential(claims: SessionCredentialClaims): Promise<string> {
       return signClaims(claims, privateKey, "session credential");
     },
@@ -127,7 +122,7 @@ export async function createTokenSigner(signingKeyPem: string): Promise<TokenSig
 
 /** 签名:六 / 七字段 claims 原样进载荷,exp = expiresAt(同一值,双重表达合一)。 */
 function signClaims(
-  claims: EmbedTokenClaims | SessionCredentialClaims | LaunchGrantClaims,
+  claims: SessionCredentialClaims | LaunchGrantClaims,
   key: SignKey,
   label: string,
 ): Promise<string> {
@@ -136,39 +131,13 @@ function signClaims(
     .setExpirationTime(claims.expiresAt)
     .sign(key)
     .then((token) => {
-      // 签发面后置护栏:超限载体永不外发(七字段 claims 的紧凑 JWS 远低于
+      // 签发面后置护栏:超限载体永不外发(六 / 七字段 claims 的紧凑 JWS 远低于
       // 协议外圈护栏;触限即实现漂移,抛错而非静默发出)。
       if (token.length > SESSION_CREDENTIAL_MAX_LENGTH) {
         throw new Error(`签发的 ${label} 载体超过长度上限(${SESSION_CREDENTIAL_MAX_LENGTH})`);
       }
       return token;
     });
-}
-
-async function verifyEmbedTokenClaims(
-  token: string,
-  key: VerifyKey,
-  clock?: VerifyClockOptions,
-): Promise<EmbedTokenClaims> {
-  const payload = await verifyPayload(token, key, "embed_token", clock);
-  const parsed = EmbedTokenJwtPayloadSchema.safeParse(payload);
-  if (!parsed.success) {
-    throw new CredentialVerificationError(
-      "embed_token",
-      "malformed",
-      `claims 形态非法(${parsed.error.issues.length} 处)`,
-    );
-  }
-  // 白名单装配(exp 已由 jose 断言;七字段逐一显式取值,零保留字段残留)。
-  return {
-    tenantId: parsed.data.tenantId,
-    userId: parsed.data.userId,
-    challengeId: parsed.data.challengeId,
-    challengeVersion: parsed.data.challengeVersion,
-    embedSessionId: parsed.data.embedSessionId,
-    jti: parsed.data.jti,
-    expiresAt: parsed.data.expiresAt,
-  };
 }
 
 async function verifySessionCredentialClaims(
@@ -199,7 +168,7 @@ async function verifySessionCredentialClaims(
 /**
  * 启动授权凭证的 claims 提取(六字段白名单装配;exp 已由 jose 断言)。
  *
- * 与另两族**同形不同 Schema**:六字段逐一显式取值 ⇒ 载荷内任何多余保留字段
+ * 与会话凭证**同形不同 Schema**:六字段逐一显式取值 ⇒ 载荷内任何多余保留字段
  * (iat / iss / aud 等)都被 `strictObject` 判为 malformed,零字段残留。
  */
 async function verifyLaunchGrantClaims(

@@ -80,38 +80,31 @@ export const ERROR_HINT_MAX_LENGTH = 256;
 export const MAX_ERROR_HINTS = 4;
 
 /* ------------------------------------------------------------------ */
-/* 嵌入协议护栏(WP-5;计划书 8.1 / 8.2)                                */
+/* 嵌入协议护栏(原 WP-5;计划书 8.1 / 8.2)                              */
 /* ------------------------------------------------------------------ */
 
-/**
- * 单条嵌入消息的序列化字节上限(64 KiB)。嵌入协议只承载加载、主题、语言、
- * 自适应高度与生命周期控制,不含投影与动作负载——投影走浏览器 ↔ 编排器的
- * 认证通道(8.2),不经 postMessage。接收端在 JSON.parse 前按本值拒绝
- * (校验规则 V-2,docs/contracts/嵌入协议.md §五)。
+/*
+ * **退役登记(2026-09-19,分发改版 WP-96)**:下表中与**嵌入协议形态**
+ * 绑定的四个护栏随嵌入协议面同批物理删除(该面整体退役、不做版本演进;
+ * D-API-153 第 5 项 / D-LT-1):
+ *   - `MAX_EMBED_MESSAGE_BYTES`(单条 postMessage 消息字节上限);
+ *   - `MAX_EMBED_SUPPORTED_VERSIONS`(hello.supportedVersions 数组上限);
+ *   - `MAX_EMBED_CAPABILITIES`(能力声明 / 授予数组上限);
+ *   - `EMBED_LANGUAGE_MAX_LENGTH`(BCP-47 标签长度上限);
+ *   - `MAX_EMBED_HEIGHT_PX`(height_changed 高度上限)。
+ * 它们的唯一消费者是 `src/embed/embed-message.ts`,同批删除后**零引用**。
  */
-export const MAX_EMBED_MESSAGE_BYTES = 65536;
-
-/** hello.supportedVersions 数组长度上限(版本协商候选集外圈护栏)。 */
-export const MAX_EMBED_SUPPORTED_VERSIONS = 8;
-
-/**
- * 能力声明 / 授予数组长度上限(与冻结枚举 EmbedCapability 的基数一致:
- * theme / language / auto_resize;扩展能力 = 协议版本演进,不靠枚举外预留)。
- */
-export const MAX_EMBED_CAPABILITIES = 3;
-
-/** 语言标签最大长度(BCP-47 规范语法上限;模式约束见 embed-message.ts)。 */
-export const EMBED_LANGUAGE_MAX_LENGTH = 35;
-
-/**
- * height_changed 携带的高度上限(像素;协议外圈护栏,防止伪造巨型高度值
- * 冲击宿主布局;实际渲染上限由宿主按布局自行收紧)。
- */
-export const MAX_EMBED_HEIGHT_PX = 100000;
 
 /**
  * embed token 有效期上限(秒;7 天外圈护栏)。计划书 9.2 要求短期、单用途
  * 或有限次数的 token;具体签发 TTL 属阶段五运维参数,必须 ≤ 本值。
+ *
+ * **为什么它在嵌入协议面退役后仍然在场(2026-09-19,WP-96)**:该常量是
+ * `apps/session-api/src/config.ts` 中配置键 `SESSION_API_EMBED_TOKEN_TTL_SECONDS`
+ * 的**.max() 外圈护栏**——配置面不在本批退役面内(WP-96 的删除面 = 嵌入协议
+ * 契约 / v1 冻结面 / embed token 消费链),删掉它会让该配置键失去护栏、
+ * 或迫使 WP-96 越界改配置文件。名字里的 `EMBED` 是历史命名,语义是
+ * 「短期凭证 TTL 的协议外圈上限」。**登记:本常量在配置面仍被消费**。
  */
 export const MAX_EMBED_TOKEN_TTL_SECONDS = 604800;
 
@@ -120,10 +113,19 @@ export const MAX_EMBED_TOKEN_TTL_SECONDS = 604800;
 /* ------------------------------------------------------------------ */
 
 /**
- * embed token 签名载体的序列化长度上限(字符)。载体格式(JWT / PASETO /
- * 自有格式)是签发侧实现决策(D-API-3),本值仅为外圈护栏——七字段 claims
- * 加签名的任何紧凑载体都远低于此;token 值禁入 URL query、日志与错误响应
- * (嵌入协议 V-13 / WP-2 传输卫生同纪律)。
+ * 凭证签名载体的序列化长度上限(字符)。载体格式(JWT / PASETO / 自有格式)
+ * 是签发侧实现决策(D-API-3),本值仅为外圈护栏——七字段 claims 加签名的任何
+ * 紧凑载体都远低于此;token 值禁入 URL query、日志与错误响应(原嵌入协议
+ * V-13 / WP-2 传输卫生同纪律)。
+ *
+ * **为什么它在嵌入协议面退役后仍然在场(2026-09-19,WP-96)**:本常量原是
+ * embed token 签名载体的上限,但**同一数值**被 `apps/session-api/src/auth/keys.ts`
+ * 用作 `SESSION_CREDENTIAL_MAX_LENGTH`(会话凭证载体上限,活跃面)——删掉它会让
+ * 会话凭证与启动授权凭证的载体护栏失去单一来源。名字里的 `EMBED` 是历史命名,
+ * 语义是「短期凭证载体的协议外圈上限」。
+ *
+ * **登记:本常量现无 embed token 写入方,唯一活跃消费方 = 会话凭证 /
+ * 启动授权凭证的载体护栏。**
  */
 export const EMBED_TOKEN_MAX_LENGTH = 4096;
 
@@ -203,8 +205,9 @@ export const DEBUG_FUNCTION_TABLE_MAX_ENTRIES = 256;
  *
  * **量级核算**:本族实际最坏形态 = 短基址 + `/app/c/{challengeId}/{version}` +
  * `?t=<22 字符票据>`(标识符 ≤ `OPAQUE_ID_MAX_LENGTH` = 128)≈ **300 字符**
- * ⇒ 本上限是护栏而非约束(与 `MAX_EMBED_MESSAGE_BYTES`「最坏形态远低于上限」
- * 同款论证)。计数口径同本文件其他长度常量:JSON Schema `maxLength` 按 code
+ * ⇒ 本上限是护栏而非约束(与 `MAX_WRITE_BYTES` / `MAX_WSS_FRAME_BYTES`「最坏形态
+ * 远低于上限」同款论证;原引的 `MAX_EMBED_MESSAGE_BYTES` 已随嵌入协议面
+ * 2026-09-19 退役删除)。计数口径同本文件其他长度常量:JSON Schema `maxLength` 按 code
  * point 计,Zod `.max()` 按 UTF-16 码元计(对增补平面字符只会更严,保守方向)。
  */
 export const LAUNCH_URL_MAX_LENGTH = 2048;

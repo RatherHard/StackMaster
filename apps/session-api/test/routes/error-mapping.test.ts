@@ -10,8 +10,6 @@ import { describe, expect, it } from "vitest";
 import type { LightMyRequestResponse } from "fastify";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   TEST_TENANT_ID,
   buildSessionTestRig,
   sessionCommand,
@@ -20,21 +18,16 @@ import {
   type SessionTestRig,
 } from "./helpers/session-rig.js";
 
-/** 创建会话(路由面;返回凭证 Cookie 供命令路由使用)。 */
+/**
+ * 创建会话(路由面;返回凭证 Cookie 供命令路由使用)。
+ *
+ * WP-96 起会话建立 = 启动授权凭证 Cookie + v2 两键载荷,由装配台一站式
+ * 助手 `rig.createSession()` 承载;本助手只保留"创建 + 取会话凭证"的收口。
+ */
 async function createSessionViaHttp(
   rig: SessionTestRig,
 ): Promise<{ sessionId: string; cookie: string; created: LightMyRequestResponse }> {
-  const issued = await rig.issueEmbedToken();
-  const created = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response: created } = await rig.createSession();
   expect(created.statusCode).toBe(201);
   const body = created.json() as { payload: { sessionId: string } };
   return {

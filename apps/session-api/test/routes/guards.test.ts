@@ -4,7 +4,10 @@
  *    受控日志(捕获内存日志断言);
  *  - 请求超限红灯:体大小(bodyLimit 413)/ 嵌套深度 / 字符串长度;
  *  - 认证红灯:未认证 / 过期凭证 / 吊销凭证 / 跨租户会话(绑定锚比对);
- *  - 命令与路由不匹配的确定性拒绝。
+ *  - 命令与路由不匹配的确定性拒绝;
+ *  - **★ 回归(N-1 窗口已关闭,2026-09-19 随 WP-96)**:窗口期受理的 v1 请求
+ *    (上一版本字面量 + 四键 create_session 载荷)现在必须被拒 —— 与窗口期
+ *    "照旧受理"相反,冻结在 400 + 单一静态文案。
  */
 import { describe, expect, it } from "vitest";
 import { PublicErrorSchema } from "@stackmaster/protocol";
@@ -17,6 +20,7 @@ import {
   TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
   sessionCommand,
+  sessionCommandV1,
   sessionCredentialFromSetCookie,
   credentialHeaders,
   type SessionTestRig,
@@ -25,22 +29,12 @@ import {
 async function rigWithSession(): Promise<{ rig: SessionTestRig; sessionId: string; cookie: string }> {
   const rig = await buildSessionTestRig();
   await rig.registerChallenge();
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
-  expect(response.statusCode).toBe(201);
+  const created = await rig.createSession();
+  expect(created.response.statusCode).toBe(201);
   return {
     rig,
-    sessionId: (response.json().payload as { sessionId: string }).sessionId,
-    cookie: sessionCredentialFromSetCookie(response),
+    sessionId: (created.response.json().payload as { sessionId: string }).sessionId,
+    cookie: sessionCredentialFromSetCookie(created.response),
   };
 }
 
@@ -54,7 +48,6 @@ describe("畸形请求:冻结错误形态 + 原始错误仅入受控日志(基�
   it("未知字段(strictObject)拒绝:响应零校验器细节,字段路径只进日志", async () => {
     const rig = await buildSessionTestRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
     const response = await rig.app.inject({
       method: "POST",
       url: "/sessions",
@@ -62,8 +55,6 @@ describe("畸形请求:冻结错误形态 + 原始错误仅入受控日志(基�
         ...sessionCommand("create_session", {
           challengeId: TEST_CHALLENGE_ID,
           challengeVersion: TEST_CHALLENGE_VERSION,
-          embedSessionId: issued.claims.embedSessionId,
-          embedToken: issued.token,
         }),
         // 自报身份字段(ZR 红灯形态):strictObject 结构性拒绝。
         tenantId: "tenant-self-reported",
@@ -78,6 +69,34 @@ describe("畸形请求:冻结错误形态 + 原始错误仅入受控日志(基�
     expect(rejections.length).toBeGreaterThan(0);
     expect(rejections[0]?.["issueCount"]).toBeGreaterThan(0);
     expect(Array.isArray(rejections[0]?.["issuePaths"])).toBe(true);
+  });
+
+  it("★ 回归:v1 请求(上一版本字面量 + 四键 create_session 载荷)现被拒(N-1 窗口已关闭)", async () => {
+    const rig = await buildSessionTestRig();
+    await rig.registerChallenge();
+    // 窗口期形态:protocolVersion = 1 且载荷含 embedSessionId / embedToken。
+    const response = await rig.app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: sessionCommandV1("create_session", {
+        challengeId: TEST_CHALLENGE_ID,
+        challengeVersion: TEST_CHALLENGE_VERSION,
+        embedSessionId: "3xK9mQ7pL2vN8wRtY5uB1a",
+        embedToken: "header.payload.signature",
+      }),
+    });
+    // 冻结错误形态:400 + 版本族单一静态文案(与畸形体文案可辨,零校验器细节)。
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: "invalid_input_format",
+      message: "unsupported protocol version",
+    });
+    expect(response.body).not.toContain("embedToken");
+    // 拒绝原因在受控日志里可辨(unsupported_version,而非形状漂移)。
+    const rejections = contractRejections(rig.capture);
+    expect(rejections.some((entry) => entry["reason"] === "unsupported_version")).toBe(true);
+    // 未建立任何会话:审计面只有零事件。
+    expect(rig.audit.size).toBe(0);
   });
 
   it("命令与路由不匹配(sync 载体打到 close 路由)确定性拒绝", async () => {
@@ -116,15 +135,15 @@ describe("请求超限红灯(8.3 护栏;D-API-31)", () => {
       env: { SESSION_API_MAX_REQUEST_BODY_BYTES: "128" },
     });
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
     const response = await rig.app.inject({
       method: "POST",
       url: "/sessions",
       payload: sessionCommand("create_session", {
         challengeId: TEST_CHALLENGE_ID,
         challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: `${issued.token}${"x".repeat(512)}`,
+        // 超长填充字段:bodyLimit 先于 Schema 校验触发(8.3),故它无需合法
+        // (原用例用超长 embed token 撑体量;该字段已随 v1 面退场)。
+        padding: "x".repeat(512),
       }),
     });
     expect(response.statusCode).toBe(413);
@@ -246,35 +265,16 @@ describe("认证红灯(未认证 / 过期 / 吊销 / 跨租户)", () => {
     await rig.registerChallenge({ tenantId: "tenant-alpha" });
     // 租户各自的题目登记与签发(版本行按租户隔离;beta 用独立题目 ID)。
     await rig.registerChallenge({ tenantId: "tenant-beta", challengeId: "chal-beta" });
-    const issuedBeta = await rig.issueEmbedToken({
-      claims: { tenantId: "tenant-beta", challengeId: "chal-beta" },
+    const betaSession = await rig.createSession({
+      tenantId: "tenant-beta",
+      challengeId: "chal-beta",
     });
-    const betaSession = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: "chal-beta",
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issuedBeta.claims.embedSessionId,
-        embedToken: issuedBeta.token,
-      }),
-    });
-    expect(betaSession.statusCode).toBe(201);
-    const betaCookie = sessionCredentialFromSetCookie(betaSession);
+    expect(betaSession.response.statusCode).toBe(201);
+    const betaCookie = sessionCredentialFromSetCookie(betaSession.response);
 
     // 以 beta 凭证访问 alpha 用户的会话(sessionId 锚不在绑定内)。
-    const issuedAlpha = await rig.issueEmbedToken();
-    const alphaSession = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issuedAlpha.claims.embedSessionId,
-        embedToken: issuedAlpha.token,
-      }),
-    });
-    const alphaSessionId = (alphaSession.json().payload as { sessionId: string }).sessionId;
+    const alphaSession = await rig.createSession();
+    const alphaSessionId = (alphaSession.response.json().payload as { sessionId: string }).sessionId;
 
     const crossTenant = await rig.app.inject({
       method: "POST",
@@ -291,42 +291,25 @@ describe("认证红灯(未认证 / 过期 / 吊销 / 跨租户)", () => {
     // 跨租户探测与"会话不存在"零差异信号(401 是认证面统一形态)。
   });
 
-  it("跨题目版本绑定:embed token 与请求上下文版本不符 → 401(三方比对)", async () => {
+  it("跨题目版本绑定:payload 版本与授权凭证绑定不符 → 401(三方比对第 3 方)", async () => {
     const rig = await buildSessionTestRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: "9.9.9",
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toEqual({
+    const created = await rig.createSession({ payload: { challengeId: TEST_CHALLENGE_ID, challengeVersion: "9.9.9" } });
+    expect(created.response.statusCode).toBe(401);
+    expect(created.response.json()).toEqual({
       code: "invalid_input_format",
       message: "authentication failed",
     });
+    // 凭证**未被消费**?否 —— 第 3 方比对在 jti 消费之后 ⇒ 该凭证已作废
+    // (D-LT-5 5c 的校验序:签名 → 记录(取删一体)→ payload)。登记为显式断言,
+    // 防"顺序被静默调换"。
+    await expect(rig.grantStore.consume(created.grant.claims.jti)).resolves.toBeNull();
   });
 
   it("题目版本未登记(challenge_invalid 方向)→ 422 冻结形态,细节只进日志", async () => {
     const rig = await buildSessionTestRig();
-    const issued = await rig.issueEmbedToken({
-      claims: { challengeId: "chal-never-registered" },
-    });
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: "chal-never-registered",
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const created = await rig.createSession({ challengeId: "chal-never-registered" });
+    const response = created.response;
     expect(response.statusCode).toBe(422);
     expect(() => PublicErrorSchema.parse(response.json())).not.toThrow();
     expect(response.json()).toEqual({ code: "internal_error", message: "challenge invalid" });

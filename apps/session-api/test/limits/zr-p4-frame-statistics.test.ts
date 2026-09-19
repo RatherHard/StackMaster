@@ -6,7 +6,7 @@
  * 本层是通道级兜底统计——捕获"执行域产物之外"的通道行为差异(投影形态、
  * 事件聚合、错误面、帧化节奏)。
  *
- * 变体语义:同一题目、同一动作脚本、两个独立签发的会话(不同 embed 实例 →
+ * 变体语义:同一题目、同一动作脚本、两个独立签发的会话(不同启动授权凭证 →
  * 不同 jti / 会话标识 / 独立会话状态);真实秘密语料变体(异 seed / 秘密
  * 长度变体)随题目 fixture 到位后逐题必跑(ZR-B1 🔜),本测试锁定统计面
  * harness 与红灯反例的检出能力。
@@ -20,11 +20,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SESSION_ACTION_PROTOCOL_VERSION, type WssFrame } from "@stackmaster/protocol";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type SessionTestRig,
   type RigWssClient,
 } from "../routes/helpers/session-rig.js";
@@ -128,22 +124,8 @@ function scriptFrames(sessionId: string, variant: "baseline" | "mutated"): Recor
 }
 
 async function runVariant(rig: SessionTestRig, variant: "baseline" | "mutated"): Promise<VariantSession> {
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response, sessionId, cookie } = await rig.createSession();
   expect(response.statusCode).toBe(201);
-  const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
-  const cookie = sessionCredentialFromSetCookie({
-    headers: response.headers as Record<string, unknown>,
-  });
   const client = await rig.app.injectWS("/sessions/channel", {
     headers: { cookie: `${SESSION_CREDENTIAL_COOKIE_NAME}=${cookie}` },
   });

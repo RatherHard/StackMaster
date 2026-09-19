@@ -1,21 +1,23 @@
 /**
  * 端口的进程内内存实现(WP-2;测试与未接线期的默认装配)。
  *
- * 边界声明:内存实现**不是生产持久化面**——TokenIssuanceStore /
+ * 边界声明:内存实现**不是生产持久化面**——LaunchGrantStore /
  * CredentialRevocationStore 的 Redis 适配器与 AuditSink 的 PostgreSQL 落库
  * 归 WP-3 / WP-4(D-API-18)。进程内单线程 + Map 的同步"取删一体"天然
  * 提供原子单次消费;跨进程语义由 Redis 适配器以 GETDEL / Lua 承接。
  * InMemoryAuditSink 无容量上限,仅供测试与未接线期,不得用于生产常驻。
+ *
+ * **退役登记(2026-09-19,分发改版 WP-96)**:embed token 签发记录的内存实现
+ * `InMemoryTokenIssuanceStore`(与 `IssuedEmbedTokenRecord` / `TokenIssuanceStore`
+ * 端口)随嵌入协议面与 create_session v1 分支**同批物理删除**。
  */
 
 import type {
   AuditEvent,
   AuditSink,
   CredentialRevocationStore,
-  IssuedEmbedTokenRecord,
   IssuedLaunchGrantRecord,
   LaunchGrantStore,
-  TokenIssuanceStore,
 } from "./ports.js";
 
 /** 内存实现的时钟注入点(默认 Date.now;测试注入以覆盖 TTL 过期路径)。 */
@@ -23,48 +25,13 @@ export interface InMemoryStoreOptions {
   readonly now?: () => number;
 }
 
-/** embed token 签发记录的内存实现(put / 原子单次 consume / revoke)。 */
-export class InMemoryTokenIssuanceStore implements TokenIssuanceStore {
-  readonly #records = new Map<string, { record: IssuedEmbedTokenRecord; expiresAtMs: number }>();
-  readonly #now: () => number;
-
-  constructor(options: InMemoryStoreOptions = {}) {
-    this.#now = options.now ?? Date.now;
-  }
-
-  async put(record: IssuedEmbedTokenRecord, ttlSeconds: number): Promise<void> {
-    // 存储副本:调用方持有的引用后续变更不得影响签发记录(存储是权威锚)。
-    this.#records.set(record.jti, {
-      record: { ...record },
-      expiresAtMs: this.#now() + ttlSeconds * 1000,
-    });
-  }
-
-  async consume(jti: string): Promise<IssuedEmbedTokenRecord | null> {
-    const entry = this.#records.get(jti);
-    if (entry === undefined) {
-      return null;
-    }
-    // 原子单次消费:存在则删除并返回(取删一体,无窗口)。
-    this.#records.delete(jti);
-    if (this.#now() >= entry.expiresAtMs) {
-      return null;
-    }
-    return entry.record;
-  }
-
-  async revoke(jti: string): Promise<boolean> {
-    return this.#records.delete(jti);
-  }
-}
-
 /**
  * 启动授权凭证签发记录的内存实现(键域 `launchGrant:{jti}`;WP-91,D-LT-5 5a)。
  *
- * 消费语义与 `InMemoryTokenIssuanceStore` **逐条对齐**(取删一体 ⇒ 单线程下
- * 原子单次消费;先删后判过期 ⇒ 过期记录不可复得)。**独立类而非泛型复用**:
- * 两个记录类型的字段集合不同(授权凭证无 sessionId / embedSessionId),
- * 合成一个泛型容器会让"给授权凭证写入 embedSessionId"在类型上变得可能。
+ * 消费语义 = **取删一体** ⇒ 单线程下原子单次消费;先删后判过期 ⇒ 过期记录
+ * 不可复得。**独立类而非泛型复用**:记录类型的字段集合有明确语义(授权凭证
+ * 无 sessionId / embedSessionId),合成一个泛型容器会让"给授权凭证写入
+ * 会话字段"在类型上变得可能。
  */
 export class InMemoryLaunchGrantStore implements LaunchGrantStore {
   readonly #records = new Map<string, { record: IssuedLaunchGrantRecord; expiresAtMs: number }>();

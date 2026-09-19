@@ -12,8 +12,7 @@
 use crate::bundle_builder;
 use crate::canonical::{self};
 use crate::mirrors::{
-    DebugVariantBundleMirror, EmbedTokenClaimsMirror, VerdictResultMirror, schema_property_names,
-    schema_required_names,
+    DebugVariantBundleMirror, VerdictResultMirror, schema_property_names, schema_required_names,
 };
 use crate::semantic;
 use crate::strict_value::StrictValue;
@@ -29,8 +28,8 @@ const PROTOCOL_CONTRACTS: &[(&str, &str)] = &[
     ("action-response", "action-response.schema.json"),
     ("debug-frame", "debug-frame.schema.json"),
     ("debug-variant-bundle", "debug-variant-bundle.schema.json"),
-    ("embed-message", "embed-message.schema.json"),
-    ("embed-token-claims", "embed-token-claims.schema.json"),
+    // 「embed-message」/「embed-token-claims」两条已随嵌入协议面
+    // 2026-09-19 物理删除(WP-96):Schema 产物与 fixture 目录同批移除。
     ("projection-delta", "projection-delta.schema.json"),
     ("projection-policy", "projection-policy.schema.json"),
     ("public-error", "public-error.schema.json"),
@@ -287,19 +286,9 @@ pub fn run_all() -> Result<SmokeReport, String> {
     }
 
     // ── §4 serde + schemars 消费 ──────────────────────────────────────
+    // EmbedTokenClaims 的镜像块已随嵌入协议面 2026-09-19 物理删除(WP-96):
+    // 该 Schema 产物与 fixture 目录同批移除,镜像失去比对对象。
     let mut serde_mirrors_checked = 0usize;
-    let claims_dir = root.join("packages/protocol/test/fixtures/embed-token-claims/valid");
-    for path in sorted_json_files(&claims_dir) {
-        let text = fs::read_to_string(&path)
-            .map_err(|error| format!("fixture 读取失败 {}: {error}", path.display()))?;
-        serde_json::from_str::<EmbedTokenClaimsMirror>(&text).map_err(|error| {
-            format!(
-                "EmbedTokenClaims serde 反序列化失败 {}: {error}",
-                path.display()
-            )
-        })?;
-        serde_mirrors_checked += 1;
-    }
     let verdict_valid_dir = root.join("packages/protocol/test/fixtures/verdict-result/valid");
     for path in sorted_json_files(&verdict_valid_dir) {
         let text = fs::read_to_string(&path)
@@ -320,16 +309,6 @@ pub fn run_all() -> Result<SmokeReport, String> {
             return Err(format!("非法结果类型被 serde 接受:{}", path.display()));
         }
         serde_mirrors_checked += 1;
-    }
-
-    let claims_schema = read_json(&protocol_schema_dir.join("embed-token-claims.schema.json"))?;
-    let generated = serde_json::to_value(schemars::schema_for!(EmbedTokenClaimsMirror))
-        .map_err(|error| format!("schemars 生成失败:{error}"))?;
-    if schema_property_names(&claims_schema) != schema_property_names(&generated) {
-        return Err("schemars 属性集合与 protocol Schema 不一致(embed-token-claims)".to_owned());
-    }
-    if schema_required_names(&claims_schema) != schema_required_names(&generated) {
-        return Err("schemars 必需键集合与 protocol Schema 不一致(embed-token-claims)".to_owned());
     }
 
     // ── §4.1 DebugVariantBundle serde 消费(阶段四 WP-40:调试变体镜像)────

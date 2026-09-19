@@ -1,10 +1,10 @@
 /**
  * WSS 动作通道集成测试(阶段三任务分解 WP-5 完成标准;D-API-40 ~ D-API-48)。
  *
- * 全链路绿(13.3 断线重连):签发 embed token → REST create_session(拿
- * Cookie)→ WSS 升级(Cookie)→ 发动作 → 收 action_response(过冻结
- * WssFrameSchema 断言,ProjectionDelta 原样)→ 断开 → 重连 → REST
- * sync-projection → 新 baseRevision 继续。
+ * 全链路绿(13.3 断线重连):铸造启动授权凭证 → REST create_session(凭证
+ * Cookie 呈递 + v2 两键载荷,拿会话凭证 Cookie)→ WSS 升级(Cookie)→ 发动作
+ * → 收 action_response(过冻结 WssFrameSchema 断言,ProjectionDelta 原样)→
+ * 断开 → 重连 → REST sync-projection → 新 baseRevision 继续。
  * 红灯:未认证升级拒;跨会话帧拒;首帧版本不受支持拒;锚定后版本漂移帧拒;
  * 畸形载荷(strictObject)错误帧 + 零校验器细节;帧超 MAX_WSS_FRAME_BYTES;
  * 频率超限确定性;多连接踢旧;优雅停机有序关闭;串行不变性。
@@ -21,11 +21,8 @@ import {
 } from "@stackmaster/protocol";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
   sessionCommand,
-  sessionCredentialFromSetCookie,
   credentialHeaders,
   type SessionTestRig,
   type SessionRigOptions,
@@ -85,10 +82,11 @@ function actionFrame(input: {
     seq: input.seq,
     ...(input.requestId === undefined ? {} : { requestId: input.requestId }),
     payload: {
-      // 载荷版本**跟随帧版本**(窗口期内两版并存):v1 帧的动作信封必须是
-      // `ActionRequestV1`(其 protocolVersion 字面量为 1),否则帧 Schema 的
-      // v1 分支会因"帧版本与载荷版本不一致"而拒绝 —— 此处原先写死当前版本,
-      // 在只有一版的年代恒等,窗口期一开始就变成恒假红。
+      // 载荷版本**跟随帧版本**:传输帧与动作信封共用同一版本常量
+      // (D-API-2)。**2026-09-19(WP-96)起只有一版** —— v1 冻结面
+      // (`ActionRequestV1Schema` / `WssFrameV1Schema`)随 N-1 窗口关闭物理删除,
+      // 故此处写死当前版本即唯一合法取值;窗口期"帧版本与载荷版本必须一致"
+      // 的约束仍然成立,只是不再有第二个可选值。
       protocolVersion: input.protocolVersion ?? SESSION_ACTION_PROTOCOL_VERSION,
       sessionId: payloadSessionId,
       clientSeq: input.clientSeq ?? input.seq,
@@ -112,22 +110,8 @@ async function createConnectedStack(rig: SessionTestRig): Promise<{
   client: RigWssClient;
 }> {
   await rig.registerChallenge();
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response, sessionId, cookie } = await rig.createSession();
   expect(response.statusCode).toBe(201);
-  const sessionId = (response.json() as {
-    payload: { sessionId: string };
-  }).payload.sessionId;
-  const cookie = sessionCredentialFromSetCookie(response);
   const client = await rig.connectChannel(cookie);
   return { sessionId, cookie, client };
 }
@@ -379,10 +363,11 @@ describe("WSS 通道红灯矩阵(确定性拒绝)", () => {
 
     // 首帧版本**不在受理集合** → unsupported protocol version。
     //
-    // ⚠ 版本取值**不得硬编码**(WP-90 v2 落地时本用例曾因此变红):窗口期内
-    // 受理集合 = `[当前, 上一版]`(D-LT-5 第 2 条),原先写死的 `2` 当时是
-    // "不受支持"的取值,如今已**在集合内** ⇒ 必须由集合推出,否则每次协议
-    // 演进都要重新猜哪个数字没被占用。
+    // ⚠ 版本取值**不得硬编码**(WP-90 v2 落地时本用例曾因此变红):受理集合
+    // 现为**单元素** `[SESSION_ACTION_PROTOCOL_VERSION]`(N-1 窗口已于
+    // 2026-09-19 随 WP-96 关闭,v1 冻结面物理删除),故"不受支持"的取值必须
+    // **由集合推出**(当前版 + 1),而不是写死一个数字 —— 否则每次协议演进
+    // 都要重新猜哪个数字没被占用。
     const unsupportedVersion = SESSION_ACTION_PROTOCOL_VERSION + 1;
     client.send(JSON.stringify(actionFrame({
       sessionId, seq: 1, idempotencyKey: "idem-ver-1", protocolVersion: unsupportedVersion,
@@ -566,18 +551,8 @@ describe("WSS 通道空闲超时(D-API-42)", () => {
     await rig.registerChallenge();
     // 原始 socket 需要真实监听(injectWS 客户端会自动回 pong,无法模拟静默)。
     await rig.app.listen({ port: 0, host: "127.0.0.1" });
-    const issued = await rig.issueEmbedToken();
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
-    const cookie = sessionCredentialFromSetCookie(response);
+    const { response, cookie } = await rig.createSession();
+    expect(response.statusCode).toBe(201);
     const addresses = rig.app.addresses();
     const listenAddress = addresses[0];
     if (listenAddress === undefined) {

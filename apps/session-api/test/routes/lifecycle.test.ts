@@ -1,8 +1,8 @@
 /**
  * 生命周期全链路 REST 面测试(任务分解 WP-4 完成标准;D-API-1 路由表):
- * 签发 embed token → create_session → sync_projection → checkpoint(WSS
- * 动作入口的 manager.applyAction;12 动作不设 REST 镜像,D-API-1)→
- * list_checkpoints → submit → close_session。
+ * 启动授权凭证 Cookie + v2 两键载荷 → create_session → sync_projection →
+ * checkpoint(WSS 动作入口的 manager.applyAction;12 动作不设 REST 镜像,
+ * D-API-1)→ list_checkpoints → submit → close_session。
  * 断言:一切响应面通过冻结 `SessionCommandResponseSchema`(含 superRefine
  * 跨字段耦合);响应零凭证字段、零协议版本字段、零快照信封字段。
  */
@@ -18,10 +18,12 @@ import {
   TEST_TENANT_ID,
   buildSessionTestRig,
   sessionCommand,
+  sessionCommandV1,
   sessionCredentialFromSetCookie,
   credentialHeaders,
   type SessionTestRig,
 } from "./helpers/session-rig.js";
+import { LAUNCH_GRANT_COOKIE_NAME } from "../../src/auth/index.js";
 
 function parseEnvelope(body: unknown): unknown {
   // 过冻结 Schema(superRefine 耦合含内)即证明形态、字段集与取值域全在契约内。
@@ -32,22 +34,11 @@ async function createSessionViaHttp(
   rig: SessionTestRig,
   overrides: {
     readonly tenantId?: string;
-    readonly embedSessionId?: string;
   } = {},
 ): Promise<{ sessionId: string; cookie: string; status: number }> {
-  const issued = await rig.issueEmbedToken({
-    ...(overrides.tenantId === undefined ? {} : { claims: { tenantId: overrides.tenantId } }),
-  });
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: overrides.embedSessionId ?? issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response } = await rig.createSession(
+    overrides.tenantId === undefined ? {} : { tenantId: overrides.tenantId },
+  );
   expect(response.statusCode).toBe(201);
   const body = parseEnvelope(response.json()) as {
     command: "create_session";
@@ -62,22 +53,11 @@ async function createSessionViaHttp(
 }
 
 describe("生命周期全链路(REST 命令 + WSS 动作入口)", () => {
-  it("create_session:三方比对 → 会话签发 → Cookie 交付 → 冻结 create_session 响应", async () => {
+  it("create_session:凭证绑定比对 → 会话签发 → Cookie 交付 → 冻结 create_session 响应", async () => {
     const rig = await buildSessionTestRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const embedSessionId = issued.claims.embedSessionId;
 
-    const response = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response } = await rig.createSession();
 
     expect(response.statusCode).toBe(201);
     const body = parseEnvelope(response.json()) as {
@@ -237,19 +217,22 @@ describe("生命周期全链路(REST 命令 + WSS 动作入口)", () => {
     expect([blob?.[0], blob?.[1], blob?.[2], blob?.[3]]).toEqual([0x53, 0x4d, 0x45, 0x4e]);
   });
 
-  it("create_session 后 embed token 不可重放(jti 单次原子消费)", async () => {
+  it("create_session 后启动授权凭证不可重放(jti 单次原子消费)", async () => {
     const rig = await buildSessionTestRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const payload = sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    });
-    const first = await rig.app.inject({ method: "POST", url: "/sessions", payload });
+    const grant = await rig.issueLaunchGrant();
+    const request = {
+      method: "POST" as const,
+      url: "/sessions",
+      headers: { cookie: `${LAUNCH_GRANT_COOKIE_NAME}=${grant.token}` },
+      payload: sessionCommand("create_session", {
+        challengeId: TEST_CHALLENGE_ID,
+        challengeVersion: TEST_CHALLENGE_VERSION,
+      }),
+    };
+    const first = await rig.app.inject(request);
     expect(first.statusCode).toBe(201);
-    const second = await rig.app.inject({ method: "POST", url: "/sessions", payload });
+    const second = await rig.app.inject(request);
     expect(second.statusCode).toBe(401);
     expect(second.json()).toEqual({
       code: "invalid_input_format",
@@ -257,10 +240,9 @@ describe("生命周期全链路(REST 命令 + WSS 动作入口)", () => {
     });
   });
 
-  it("协议版本受理:当前版本受理,集合外版本确定性拒绝(N-1 受理集合路由)", async () => {
+  it("协议版本受理:仅当前版本受理,集合外版本与已关闭窗口的 v1 确定性拒绝", async () => {
     const rig = await buildSessionTestRig();
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
     const response = await rig.app.inject({
       method: "POST",
       url: "/sessions",
@@ -270,13 +252,27 @@ describe("生命周期全链路(REST 命令 + WSS 动作入口)", () => {
         payload: {
           challengeId: TEST_CHALLENGE_ID,
           challengeVersion: TEST_CHALLENGE_VERSION,
-          embedSessionId: issued.claims.embedSessionId,
-          embedToken: issued.token,
         },
       },
     });
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
+      code: "invalid_input_format",
+      message: "unsupported protocol version",
+    });
+
+    // N-1 窗口已于 2026-09-19 随 WP-96 关闭:上一版(v1)请求不再受理
+    // (窗口期它曾走 v1 冻结 Schema),与集合外版本同走版本族 400。
+    const v1 = await rig.app.inject({
+      method: "POST",
+      url: "/sessions",
+      payload: sessionCommandV1("create_session", {
+        challengeId: TEST_CHALLENGE_ID,
+        challengeVersion: TEST_CHALLENGE_VERSION,
+      }),
+    });
+    expect(v1.statusCode).toBe(400);
+    expect(v1.json()).toEqual({
       code: "invalid_input_format",
       message: "unsupported protocol version",
     });

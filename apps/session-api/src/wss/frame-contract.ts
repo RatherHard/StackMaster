@@ -2,49 +2,47 @@
  * WSS 帧级契约校验(任务分解 WP-5 第 2 条;D-API-46)。
  *
  * 与 REST 侧 routes/session-contract.ts 同构的版本路由形态:
- *  - 受理集合锚点 = `SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS`(D-API-4;
- *    冻结期恒 [1]);版本 → 帧冻结 Schema 注册表,各版本独立校验;
+ *  - 受理集合锚点 = `SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS`
+ *    (**N-1 窗口已于 2026-09-19 随 WP-96 关闭 ⇒ 现为单元素 `[2]`**);
+ *    版本 → 帧冻结 Schema 注册表;
  *  - 连接级版本锚定(D-API-2)在通道状态机执行:首帧(受理集合内的)版本即
  *    本连接解释版本,此后任何帧携带其他版本一律确定性拒绝;
  *  - 结构护栏(深度 / 数组 / 字符串)先于 Schema 校验触发(与 REST 同一面,
  *    防 Schema 校验前的资源消耗;8.3 纪律);
  *  - 校验失败零校验器细节:issue 的字段路径与计数只进受控日志,message 一律
  *    不入日志(Zod message 可能回显输入片段),响应面恒为冻结 PublicError。
+ *
+ * **装配期自检保留在场**:受理集合中的每个版本必须有已注册帧 Schema。窗口关闭
+ * 后本断言恒真(集合单元素且已登记),但它锁的是「受理集合与 Schema 注册表
+ * 同步」这一不变量,不是死代码 —— 下一次破坏性递增 / 窗口开启时缺 Schema 会
+ * 立即在模块加载期失败(与 session-contract.ts 同纪律)。
  */
 import {
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS,
   WssFrameSchema,
-  WssFrameV1Schema,
   type WssFrame,
-  type WssFrameV1,
 } from "@stackmaster/protocol";
 import type { z } from "zod";
 
 import { assertRequestWithinLimits, GuardViolation, type RequestGuardLimits } from "../routes/request-guards.js";
 
 /**
- * 任一被受理版本的帧形状(N-1 窗口期的形状联合;窗口期结束随
- * `SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION` 一并回到单版)。
- *
- * `WssFrameV1` 与 `WssFrame` 的**唯一差异在 `action` 分支的动作信封**
- * (v1 的 `action` 是 `ActionRequestV1`),其余帧族同形。
+ * 任一被受理版本的帧形状(受理集合的成员类型;窗口关闭后收敛为单一版本)。
  */
-export type AnyWssFrame = WssFrame | WssFrameV1;
+export type AnyWssFrame = WssFrame;
 
-/** 版本 → 帧冻结 Schema 注册表(N-1 窗口期双版本登记)。 */
+/** 版本 → 帧冻结 Schema 注册表(单版本登记;窗口关闭后的形态)。 */
 const FRAME_SCHEMAS_BY_VERSION = new Map<number, z.ZodType<AnyWssFrame>>([
   [SESSION_ACTION_PROTOCOL_VERSION, WssFrameSchema],
-  [SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION, WssFrameV1Schema],
 ]);
 
 // 装配期自检:受理集合中的每个版本必须有已注册帧 Schema(缺实现即模块加载
-// 失败,与 session-contract.ts 同纪律)。
+// 失败,与 session-contract.ts 同纪律)。现为恒真断言 —— 保留理由见文件头。
 for (const version of SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS) {
   if (!FRAME_SCHEMAS_BY_VERSION.has(version)) {
     throw new Error(
-      `WSS 帧受理集合中的协议版本 ${version} 缺少已注册帧 Schema(N-1 受理实现不完整)`,
+      `WSS 帧受理集合中的协议版本 ${version} 缺少已注册帧 Schema(受理实现不完整)`,
     );
   }
 }

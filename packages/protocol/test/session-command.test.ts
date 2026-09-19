@@ -2,10 +2,15 @@
  * SessionCommandRequest / SessionCommandResponse 契约测试(阶段三 WP-0:会话级
  * 命令 Schema 冻结的可测面;语义文档 §5.1 / §九,WP-1 清单 §6.5。
  * **v2 增补(分发改版 WP-90 / D-LT-5)**:create_session 载荷收为恰两键、
- * `embedToken` / `embedSessionId` 退场,以及 v1 冻结面的 N-1 窗口形状分离)。
+ * `embedToken` / `embedSessionId` 退场。
+ * **N-1 窗口关闭(2026-09-19,随 WP-96)**:v1 冻结面已物理删除,受理集合回落
+ * 单元素 —— 窗口期受理的形态现在必须被拒(回归机检见
+ * `session-action-version-window.test.ts`);本文件另承担
+ * 「`create_session` 分支 payload 是具体对象类型而非 `unknown`」的**类型层断言**
+ * (D-LT-5 四·补.3 第 3 条的类型参数缺口修法的判定面)。
  *
  * 红灯样例覆盖:未知命令、自报身份(6.2 第 1 条:请求体零身份字段)、信封
- * 篡改、版本不符、题目版本非语义化、载荷 ↔ 命令错位(v2 下 `embedToken` /
+ * 篡改、版本不符、题目版本非语义化、载荷 ↔ 命令错位(`embedToken` /
  * `embedSessionId` 作为多余键被拒);响应侧:SERVER_ONLY 载荷注入(seedState)、
  * 响应携带版本字段(§5.2 红灯)、裁决引用下发(SERVER_ONLY 禁令)、投影
  * revision 耦合(superRefine)。
@@ -15,14 +20,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CreateSessionRequestPayloadSchema,
-  CreateSessionRequestPayloadV1Schema,
   SessionCommandRequestSchema,
-  SessionCommandRequestV1Schema,
   SESSION_COMMANDS,
+  type CreateSessionCommandPayload,
+  type SessionCommandRequest,
 } from "../src/session-command/session-command-request.js";
 import { SessionCommandResponseSchema } from "../src/session-command/session-command-response.js";
 import {
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS,
 } from "../src/version.js";
@@ -72,13 +76,11 @@ describe("SessionCommandRequest 契约(阶段三 WP-0)", () => {
     );
   });
 
-  it("请求信封统一携带 protocolVersion 且只接受本版本字面量(N-1 由独立 Schema 受理)", () => {
+  it("请求信封统一携带 protocolVersion 且只接受本版本字面量(窗口已关闭,受理集合单元素)", () => {
     expect(SESSION_ACTION_PROTOCOL_VERSION).toBe(2);
     expect(SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS).toEqual([
       SESSION_ACTION_PROTOCOL_VERSION,
-      SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
     ]);
-    expect(SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION).toBe(1);
     for (const command of SESSION_COMMANDS) {
       const result = SessionCommandRequestSchema.safeParse({
         protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
@@ -87,22 +89,43 @@ describe("SessionCommandRequest 契约(阶段三 WP-0)", () => {
       });
       expect(result.success).toBe(command !== "create_session");
     }
-    // v2 面拒绝 v1 字面量(版本判定不因窗口而放宽:两版各自独立校验)。
+    // 上一版本字面量(窗口期受理的 v1)现在被拒:版本判定不因窗口史而放宽。
     expect(
       SessionCommandRequestSchema.safeParse({
-        protocolVersion: SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
+        protocolVersion: 1,
         command: "sync_projection",
         payload: { sessionId: "s-x" },
       }).success,
     ).toBe(false);
-    // v1 面拒绝 v2 字面量。
-    expect(
-      SessionCommandRequestV1Schema.safeParse({
-        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
-        command: "sync_projection",
-        payload: { sessionId: "s-x" },
-      }).success,
-    ).toBe(false);
+  });
+
+  /**
+   * **类型层断言(D-LT-5 四·补.3 第 3 条)**:`create_session` 分支的 `payload`
+   * 必须是**具体对象类型**,不得退化为 `unknown`。
+   *
+   * 若 `sessionCommandRequestSchemaForVersion` 的形参退回 `z.ZodType`
+   * (无类型参数),`payload` 即成为 `unknown` ⇒ 下面的字段读取会编译失败 ⇒
+   * `pnpm --filter @stackmaster/protocol typecheck` 转红。这就是该修法的机检锚
+   * (运行期断言只是陪衬:类型断言在编译期生效)。
+   */
+  it("类型面:create_session 分支 payload 是具体对象类型(非 unknown)", () => {
+    const request: SessionCommandRequest = {
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+      command: "create_session",
+      payload: { challengeId: "stack-smash-101", challengeVersion: "1.0.0" },
+    };
+    expect(request.command).toBe("create_session");
+    if (request.command === "create_session") {
+      // 编译期:unknown 无法读取字段;能读到即说明类型具体。
+      const challengeVersion: string = request.payload.challengeVersion;
+      expect(challengeVersion).toBe("1.0.0");
+      // 类型别名同款(导出面也不许退化成 unknown)。
+      const typed: CreateSessionCommandPayload = request.payload;
+      expect(Object.keys(typed).sort()).toEqual(["challengeId", "challengeVersion"]);
+      // unknown 上做属性访问会编译失败;这里断言"具体类型上不存在的键"同样编译失败。
+      // @ts-expect-error embedToken 在 v2 载荷类型上不存在(类型面即退场表达)
+      void request.payload.embedToken;
+    }
   });
 
   it("v2 create_session 载荷恰两键(challengeId / challengeVersion)", () => {
@@ -112,7 +135,7 @@ describe("SessionCommandRequest 契约(阶段三 WP-0)", () => {
     ]);
   });
 
-  it("v2 下 embedToken / embedSessionId 退场:出现在载荷即被拒(strictObject)", () => {
+  it("embedToken / embedSessionId 退场:出现在载荷即被拒(strictObject)", () => {
     for (const [field, value] of [
       ["embedToken", "token-material"],
       ["embedSessionId", "3xK9mQ7pL2vN8wRtY5uB1a"],
@@ -128,23 +151,6 @@ describe("SessionCommandRequest 契约(阶段三 WP-0)", () => {
           },
         }).success,
       ).toBe(false);
-    }
-  });
-
-  it("v1 冻结面(窗口期)仍受理四键 create_session,且拒 v2 两键形态(形状按版本分离)", () => {
-    expect(Object.keys(CreateSessionRequestPayloadV1Schema.shape).sort()).toEqual([
-      "challengeId",
-      "challengeVersion",
-      "embedSessionId",
-      "embedToken",
-    ]);
-    expect(
-      SessionCommandRequestV1Schema.safeParse(
-        loadFixtures("session-command-request-v1", "valid")[0]?.payload,
-      ).success,
-    ).toBe(true);
-    for (const { payload } of loadFixtures("session-command-request-v1", "invalid")) {
-      expect(SessionCommandRequestV1Schema.safeParse(payload).success).toBe(false);
     }
   });
 

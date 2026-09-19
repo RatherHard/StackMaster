@@ -41,7 +41,7 @@ import {
 import { PermissionsSchema } from "../projection/visible-memory-region.js";
 import { RegisterNameSchema } from "../common/register-name.js";
 import { ENGINE_PROCESS_PROTOCOL_VERSION } from "../version.js";
-import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../embed/embed-token-claims.js";
+import { CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE } from "../common/challenge-content-version.js";
 
 /**
  * 变体镜像格式信封版本(const 1);扩展走版本演进,无预留字段。

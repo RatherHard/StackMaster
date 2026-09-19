@@ -7,14 +7,10 @@
  */
 
 import { vi, expect } from "vitest";
-import type { WssFrame } from "@stackmaster/protocol";
+import { SESSION_ACTION_PROTOCOL_VERSION, type WssFrame } from "@stackmaster/protocol";
 
 import {
-  TEST_CHALLENGE_ID,
-  TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type SessionRigOptions,
   type SessionTestRig,
 } from "../../routes/helpers/session-rig.js";
@@ -48,7 +44,14 @@ export class WssFrameCollector {
   }
 }
 
-/** 入站动作帧构造(冻结信封;额外字段用于篡改矩阵的 strictObject 红灯)。 */
+/**
+ * 入站动作帧构造(冻结信封;额外字段用于篡改矩阵的 strictObject 红灯)。
+ *
+ * **2026-09-19(WP-96)**:帧与载荷的 `protocolVersion` 一律取
+ * `SESSION_ACTION_PROTOCOL_VERSION`。此前本助手写死 `1` —— 那是 v2 落地后
+ * N-1 窗口期的合法形态,窗口关闭后 v1 帧会被通道以 unsupported version
+ * 确定性拒绝(本助手的所有用例都会退化成"每帧一个错误帧")。
+ */
 export function actionFrame(input: {
   sessionId: string;
   seq: number;
@@ -62,13 +65,13 @@ export function actionFrame(input: {
 }): Record<string, unknown> {
   const actionType = input.actionType ?? "step";
   return {
-    protocolVersion: 1,
+    protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
     type: "action",
     sessionId: input.sessionId,
     seq: input.seq,
     ...(input.requestId === undefined ? {} : { requestId: input.requestId }),
     payload: {
-      protocolVersion: 1,
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       sessionId: input.sessionId,
       clientSeq: input.clientSeq ?? input.seq,
       baseRevision: input.baseRevision ?? 0,
@@ -104,20 +107,8 @@ export async function createConnectedStack(
 ): Promise<ConnectedStack> {
   const rig = await buildSessionTestRig(options);
   await rig.registerChallenge();
-  const issued = await rig.issueEmbedToken();
-  const response = await rig.app.inject({
-    method: "POST",
-    url: "/sessions",
-    payload: sessionCommand("create_session", {
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId: issued.claims.embedSessionId,
-      embedToken: issued.token,
-    }),
-  });
+  const { response, sessionId, cookie } = await rig.createSession();
   expect(response.statusCode).toBe(201);
-  const sessionId = (response.json() as { payload: { sessionId: string } }).payload.sessionId;
-  const cookie = sessionCredentialFromSetCookie(response);
   const client = await rig.connectChannel(cookie);
   const collector = new WssFrameCollector();
   collector.attach(client);

@@ -11,6 +11,15 @@
  * 发射面归属(定案登记):session-api 现有事件沿七既有值;裁决域三值由
  * WP-62 在 verifier 侧(信任域 4)发射——本包只定案集合与预留库层
  * (audit_log CHECK + verifier 角色 INSERT 授权),不实现 verifier 发射。
+ *
+ * **退役登记(2026-09-19,分发改版 WP-96)**:前三个 embed 域 kind 的写入方
+ * (已退役的 `/auth/embed-tokens` 端点、已删除的 `consumeEmbedToken` /
+ * `revokeEmbedToken`)随嵌入协议面与 create_session 的 v1 分支**物理删除**
+ * ⇒ **这三个 kind 现无写入方**。集合**零新增、零删减**(D-API-90 的封闭集是
+ * 账目契约:既往审计行必须仍可表达 / 库层 CHECK 不许收紧),故本文件对本
+ * 七值的断言**逐字不变**;"现无写入方"的行为面断言在
+ * `test/auth/consumption.test.ts` 与 `test/auth/e2e-chain.test.ts`(现行链路
+ * 上它们恒不出现)。
  */
 import { describe, expect, it } from "vitest";
 
@@ -18,7 +27,10 @@ import { AUDIT_EVENT_KINDS, type AuditEvent } from "../../src/auth/ports.js";
 import { PersistenceError } from "../../src/persistence/errors.js";
 import { PgAuditSink } from "../../src/persistence/pg/audit-sink.js";
 
-/** 阶段三 WP-2 定案的七既有值(D-API-18;顺序即冻结序)。 */
+/**
+ * 阶段三 WP-2 定案的七既有值(D-API-18;顺序即冻结序)。
+ * ⚠ 前三值(embed 域)**现无写入方**(2026-09-19 随 WP-96);留档理由见文件头。
+ */
 const LEGACY_SEVEN = [
   "embed_token_issued",
   "embed_token_consumed",

@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import type { SessionCredentialClaims } from "@stackmaster/protocol/server-only";
 import type { ActionResponse, WssFrame } from "@stackmaster/protocol";
-import { WssFrameSchema } from "@stackmaster/protocol";
+import { SESSION_ACTION_PROTOCOL_VERSION, WssFrameSchema } from "@stackmaster/protocol";
 
 import { BoundedSendBuffer } from "../../src/wss/bounded-send-buffer.js";
 import { MessageRateLimiter } from "../../src/wss/message-rate-limiter.js";
@@ -182,12 +182,12 @@ function buildChannel(socket: StubChannelSocket, options: { sendBufferLimit: num
 
 function frameText(seq: number): string {
   return JSON.stringify({
-    protocolVersion: 1,
+    protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
     type: "action",
     sessionId: CLAIMS.sessionId,
     seq,
     payload: {
-      protocolVersion: 1,
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       sessionId: CLAIMS.sessionId,
       clientSeq: seq,
       baseRevision: 0,

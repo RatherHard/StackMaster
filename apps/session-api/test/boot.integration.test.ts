@@ -152,10 +152,12 @@ describe("进程启动与 fail-closed", () => {
     });
 
     // 生命周期路由已装配:未认证访问业务路由 → 认证统一 401 形态。
+    // 版本字面量取当前版本(2026-09-19 随 WP-96:N-1 窗口已关闭,受理集合
+    // 单元素 [2]);本用例考的是认证闸,版本面不得成为拒绝原因。
     const guarded = await fetch(`${base}/sessions/projection-sync`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ command: "sync_projection", protocolVersion: 1, payload: { sessionId: "sess-x" } }),
+      body: JSON.stringify({ command: "sync_projection", protocolVersion: 2, payload: { sessionId: "sess-x" } }),
     });
     expect(guarded.status).toBe(401);
     expect(await guarded.json()).toEqual({

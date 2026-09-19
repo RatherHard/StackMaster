@@ -31,8 +31,6 @@ import {
   TEST_CHALLENGE_ID,
   TEST_CHALLENGE_VERSION,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
 } from "../routes/helpers/session-rig.js";
 
 const IT_ENABLED = process.env.SESSION_API_IT === "1";
@@ -106,20 +104,8 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
     await rig.registerByteChallenge({
       byteProgramHex: "5589cd0100000000000000",
     });
-    const issued = await rig.issueEmbedToken();
-    const createResponse = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response: createResponse, sessionId, cookie } = await rig.createSession();
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie(createResponse);
 
     // 真实会话:两个已接受动作(栈区写入 + step),submit 落权威动作日志。
     const writeResponse = await rig.manager.applyAction(sessionId, "tenant-alpha", {
@@ -299,20 +285,8 @@ describe.skipIf(!IT_ENABLED)("调试通道全链路(真实 vm-worker 二进制;S
 
     // IR 模式题目(公开包无编码表):变体路径不可装配 → attach 错误帧。
     await rig.registerChallenge();
-    const issued = await rig.issueEmbedToken();
-    const createResponse = await rig.app.inject({
-      method: "POST",
-      url: "/sessions",
-      payload: sessionCommand("create_session", {
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId: issued.claims.embedSessionId,
-        embedToken: issued.token,
-      }),
-    });
+    const { response: createResponse, sessionId, cookie } = await rig.createSession();
     expect(createResponse.statusCode).toBe(201);
-    const sessionId = (createResponse.json() as { payload: { sessionId: string } }).payload.sessionId;
-    const cookie = sessionCredentialFromSetCookie(createResponse);
 
     const client = await rig.connectDebugChannel(cookie);
     const collector = new DebugFrameCollector();

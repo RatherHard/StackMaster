@@ -55,8 +55,6 @@ import { productionDebugVariantProvider } from "../../src/debug/debug-variant-pr
 import {
   TEST_TENANT_ID,
   buildSessionTestRig,
-  sessionCommand,
-  sessionCredentialFromSetCookie,
   type SessionTestRig,
 } from "../routes/helpers/session-rig.js";
 import {
@@ -252,26 +250,13 @@ describe.skipIf(process.env.SESSION_API_IT !== "1")(
       });
       try {
         await registerDemoChallengeIntoRig(rig);
-        // 凭证 claim 必须绑定演示题(缺省绑定 rig 的 IR 测试题 ⇒ 创建会话 401)。
-        const issued = await rig.issueEmbedToken({
-          claims: {
-            challengeId: DEMO_CHALLENGE_ID,
-            challengeVersion: LIFECYCLE_CHALLENGE_CONTENT_VERSION,
-          },
-        });
-        const create = await rig.app.inject({
-          method: "POST",
-          url: "/sessions",
-          payload: sessionCommand("create_session", {
-            challengeId: DEMO_CHALLENGE_ID,
-            challengeVersion: LIFECYCLE_CHALLENGE_CONTENT_VERSION,
-            embedSessionId: issued.claims.embedSessionId,
-            embedToken: issued.token,
-          }),
+        // 启动授权凭证 claim 必须绑定演示题(缺省绑定 rig 的 IR 测试题 ⇒
+        // create_session 401 或题目不符)。
+        const { response: create, sessionId, cookie } = await rig.createSession({
+          challengeId: DEMO_CHALLENGE_ID,
+          challengeVersion: LIFECYCLE_CHALLENGE_CONTENT_VERSION,
         });
         expect(create.statusCode).toBe(201);
-        const sessionId = (create.json() as { payload: { sessionId: string } }).payload.sessionId;
-        const cookie = sessionCredentialFromSetCookie(create);
 
         const client = await rig.connectDebugChannel(cookie);
         const frames: ReturnType<typeof DebugFrameSchema.parse>[] = [];

@@ -1,9 +1,8 @@
 /**
  * 认证域端口(WP-2 交付面;权威 API 语义规约 D-API-18)。
  *
- * 三个端口的 PostgreSQL / Redis 适配器归 WP-4(以 WP-3 的 KeyValueStore /
- * PG 存储接入),本文件只冻结端口形状与语义:
- *  - TokenIssuanceStore.consume 是**原子单次消费**:记录存在则删除并返回,
+ * 端口形状与语义在本文冻结:
+ *  - LaunchGrantStore.consume 是**原子单次消费**:记录存在则删除并返回,
  *    否则返回 null——并发调用方至多一方拿到记录;Redis 适配器须以 GETDEL
  *    或 Lua 等价语义实现,不得退化成"读后删"两步;
  *  - CredentialRevocationStore 是会话凭证 jti 的吊销键域(存在即拒绝),
@@ -14,35 +13,13 @@
  *    双层,migrations/006),内存实现(本包)以深冻结对象表达同一语义。
  *
  * 端口方法全部异步:内存实现即时返回,Redis / PG 适配器不因签名形状受限。
+ *
+ * **退役登记(2026-09-19,分发改版 WP-96)**:embed token 签发记录端口
+ * (`TokenIssuanceStore` / `IssuedEmbedTokenRecord`,键域 `token:{jti}`)随嵌入
+ * 协议面与 create_session 的 v1 分支**同批物理删除**;其内存 / Redis 实现
+ * (`InMemoryTokenIssuanceStore` / `KeyValueTokenIssuanceStore`)同批移除,
+ * `src/runtime/redis-token-stores.ts` 的 `token:` 键域随之退场。
  */
-
-/** embed token 签发记录(token:{jti} 键域的载荷;嵌入协议 §六)。 */
-export interface IssuedEmbedTokenRecord {
-  readonly jti: string;
-  readonly tenantId: string;
-  readonly userId: string;
-  readonly challengeId: string;
-  readonly challengeVersion: string;
-  readonly embedSessionId: string;
-  /** 签发时刻(Unix epoch 毫秒)。 */
-  readonly issuedAt: number;
-  /** 过期时刻(Unix epoch 毫秒;与签名 claims 的秒值 expiresAt × 1000 一致)。 */
-  readonly expiresAt: number;
-}
-
-/** embed token 签发记录存储(键域 token:{jti};删除即吊销)。 */
-export interface TokenIssuanceStore {
-  /** 写入签发记录,ttlSeconds 内可消费(超时由 TTL 自然失效)。 */
-  put(record: IssuedEmbedTokenRecord, ttlSeconds: number): Promise<void>;
-  /**
-   * 原子单次消费:记录存在(且未过 TTL)则删除并返回该记录;否则返回 null。
-   * 返回 null 的语义:未签发 / 已消费 / 已吊销 / 已过期——调用方不再区分
-   * (失败响应面统一,D-API-14),细节判断只允许依赖消费前后的受控日志。
-   */
-  consume(jti: string): Promise<IssuedEmbedTokenRecord | null>;
-  /** 删除即吊销;返回是否确有记录被删除(幂等)。 */
-  revoke(jti: string): Promise<boolean>;
-}
 
 /** 会话凭证 jti 吊销键域(存在即拒绝;TTL ≥ 凭证剩余有效期)。 */
 export interface CredentialRevocationStore {
@@ -53,11 +30,11 @@ export interface CredentialRevocationStore {
 /**
  * 启动授权凭证的签发记录(键域 `launchGrant:{jti}`;D-LT-5 实施细化 5a / 5c)。
  *
- * **为什么独立于 `token:{jti}`**:两者虽同为"签发记录 × 签名 claims 双向比对"
- * 的形态,但**语义不同源** —— `token:{jti}` 是 embed token 的消费锚(嵌入协议
- * 面,**整体退役中**),`launchGrant:{jti}` 是启动授权凭证的消费锚(页面分发
- * 面的**新**授权入口)。共用键域会让"退役 embed 面"这件事牵连到新链的存储
- * 面,并使两个凭证族的吊销 / 计数口径混在一起 ⇒ **分域**。
+ * **键域是本族唯一形态**:原 embed token 的 `token:{jti}` 键域已随该面退役删除
+ * (2026-09-19,WP-96)。两个凭证族曾是"签发记录 × 签名 claims 双向比对"的同形
+ * 不同源形态 —— `launchGrant:{jti}` 是页面分发面授权入口的消费锚,**分域**的
+ * 理由(退役 embed 面不得牵连新链存储面 / 两族吊销与计数口径不混)在退役后
+ * 依然成立:本族不因另一族的消失而改变键名。
  *
  * 字段 = `LaunchGrantClaims` 的六字段(tenantId / userId / challengeId /
  * challengeVersion / jti)+ 两个时刻(`issuedAt` / `expiresAt`,毫秒),
@@ -79,7 +56,7 @@ export interface IssuedLaunchGrantRecord {
 /**
  * 启动授权凭证签发记录存储(键域 `launchGrant:{jti}`;**删除即吊销**)。
  *
- * 消费语义与 `TokenIssuanceStore` 同款(GETDEL 原子单次消费),因为**威胁模型
+ * **消费语义与 `LaunchGrantStore` 同款**(GETDEL 原子单次消费),因为**威胁模型
  * 同款**:重放一枚授权凭证即可反复建会话。**分级 = fail-closed**(Redis 不可用
  * ⇒ 拒绝,不降级进程内)。
  */
@@ -100,8 +77,16 @@ export interface LaunchGrantStore {
  * D-API-59 的阶段六开口由此收口;库层 CHECK 约束同锚,migrations/006)。
  *
  * 会话凭证的吊销不设独立种类:运行期吊销由强制终止流程触发(以
- * `session_force_closed` 承载),embed token 的吊销以 `embed_token_revoked`
- * 承载。
+ * `session_force_closed` 承载)。
+ *
+ * **退役登记(2026-09-19,分发改版 WP-96)**:嵌入协议面与 create_session 的
+ * v1 分支物理删除后,三个 embed 域 kind **现无写入方**
+ * (`embed_token_issued` 的唯一生产点 = 已退役的 `/auth/embed-tokens` 端点;
+ * `embed_token_consumed` 的唯一生产点 = 已删除的 `consumeEmbedToken`;
+ * `embed_token_revoked` 的唯一生产点 = 已删除的 `revokeEmbedToken`)。
+ * **它们仍然留在集合内、断言强度零变化** —— D-API-90 的封闭集是**账目契约**
+ * (历史审计行必须仍可解释 / 库层 CHECK 不许收紧),删除条目会让既往审计行
+ * 变成不可表达形态。集合**零新增、零删减**。
  *
  * 裁决域三值(发射面归属:verifier 侧,信任域 4,WP-62 接线;本包只定案
  * 集合并预留库层,verifier 角色对 audit_log 仅有 INSERT,D-API-93):
@@ -121,9 +106,11 @@ export interface LaunchGrantStore {
  */
 export const AUDIT_EVENT_KINDS = [
   // ── 阶段三 WP-2 七值(D-API-18,原样零改动)──
-  "embed_token_issued",
-  "embed_token_consumed",
-  "embed_token_revoked",
+  // ⚠ 前三个 embed 域 kind **现无写入方**(2026-09-19 随 WP-96 物理删除 embed
+  //   面与 create_session v1 分支);保留理由见上方「退役登记」段。
+  "embed_token_issued", // 该 kind 现无写入方(原生产点 = /auth/embed-tokens 端点,已退役)
+  "embed_token_consumed", // 该 kind 现无写入方(原生产点 = consumeEmbedToken,已删除)
+  "embed_token_revoked", // 该 kind 现无写入方(原生产点 = revokeEmbedToken,已删除)
   "session_credential_issued",
   "create_session",
   "submit",
