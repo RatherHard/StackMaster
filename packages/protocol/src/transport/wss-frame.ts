@@ -21,9 +21,12 @@
 import { z } from "zod";
 import { OpaqueIdSchema } from "../common/identifiers.js";
 import { PublicErrorSchema } from "../error/public-error.js";
-import { ActionRequestSchema } from "../session-action/action-request.js";
+import { ActionRequestSchema, ActionRequestV1Schema } from "../session-action/action-request.js";
 import { ActionResponseSchema } from "../session-action/action-response.js";
-import { SESSION_ACTION_PROTOCOL_VERSION } from "../version.js";
+import {
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
+  SESSION_ACTION_PROTOCOL_VERSION,
+} from "../version.js";
 
 /** 全部 WSS 消息类型(封闭枚举;扩展 = 协议版本演进)。 */
 export const WSS_MESSAGE_TYPES = ["action", "action_response", "error"] as const;
@@ -42,35 +45,60 @@ export type WssServerToClientType = (typeof WSS_SERVER_TO_CLIENT_TYPES)[number];
 /**
  * WSS 消息帧判别联合:统一信封六字段(8.2 基线),type ↔ payload 耦合由结构
  * 表达,TS 与 Rust 校验结论一致(与 EmbedMessage 同形)。
+ *
+ * **N-1 兼容窗口(D-LT-5 第 2 条)**:帧面按版本字面量参数化产出两份
+ * (`WssFrameSchema` = 当前版本,`WssFrameV1Schema` = 上一版本);v1 变体的
+ * `action` 分支载荷用 v1 动作信封(`ActionRequestV1Schema`),其余分支
+ * (`action_response` / `error`)载荷在 v1 → v2 之间零变化。窗口期结束删除
+ * v1 变体。
  */
-export const WssFrameSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    protocolVersion: z.literal(SESSION_ACTION_PROTOCOL_VERSION),
-    type: z.literal("action"),
-    /** 帧绑定会话:必须与连接绑定凭证的会话一致,不一致拒绝(WP-5)。 */
-    sessionId: OpaqueIdSchema,
-    /** 发送方连接内严格递增(允许跳号);传输层关联与诊断用,非权威序号。 */
-    seq: z.number().int().min(1),
-    /** 可选发送方关联值;响应对应帧回显同一值(传输层关联,载荷内 requestId 语义独立)。 */
-    requestId: OpaqueIdSchema.optional(),
-    payload: ActionRequestSchema,
-  }),
-  z.strictObject({
-    protocolVersion: z.literal(SESSION_ACTION_PROTOCOL_VERSION),
-    type: z.literal("action_response"),
-    sessionId: OpaqueIdSchema,
-    seq: z.number().int().min(1),
-    requestId: OpaqueIdSchema.optional(),
-    payload: ActionResponseSchema,
-  }),
-  z.strictObject({
-    protocolVersion: z.literal(SESSION_ACTION_PROTOCOL_VERSION),
-    type: z.literal("error"),
-    sessionId: OpaqueIdSchema,
-    seq: z.number().int().min(1),
-    requestId: OpaqueIdSchema.optional(),
-    payload: PublicErrorSchema,
-  }),
-]);
+function wssFrameSchemaForVersion(
+  version: number,
+  actionRequestSchema: typeof ActionRequestSchema,
+) {
+  return z.discriminatedUnion("type", [
+    z.strictObject({
+      protocolVersion: z.literal(version),
+      type: z.literal("action"),
+      /** 帧绑定会话:必须与连接绑定凭证的会话一致,不一致拒绝(WP-5)。 */
+      sessionId: OpaqueIdSchema,
+      /** 发送方连接内严格递增(允许跳号);传输层关联与诊断用,非权威序号。 */
+      seq: z.number().int().min(1),
+      /** 可选发送方关联值;响应对应帧回显同一值(传输层关联,载荷内 requestId 语义独立)。 */
+      requestId: OpaqueIdSchema.optional(),
+      payload: actionRequestSchema,
+    }),
+    z.strictObject({
+      protocolVersion: z.literal(version),
+      type: z.literal("action_response"),
+      sessionId: OpaqueIdSchema,
+      seq: z.number().int().min(1),
+      requestId: OpaqueIdSchema.optional(),
+      payload: ActionResponseSchema,
+    }),
+    z.strictObject({
+      protocolVersion: z.literal(version),
+      type: z.literal("error"),
+      sessionId: OpaqueIdSchema,
+      seq: z.number().int().min(1),
+      requestId: OpaqueIdSchema.optional(),
+      payload: PublicErrorSchema,
+    }),
+  ]);
+}
+
+/** 当前版本的传输帧(`protocolVersion` = `SESSION_ACTION_PROTOCOL_VERSION`)。 */
+export const WssFrameSchema = wssFrameSchemaForVersion(
+  SESSION_ACTION_PROTOCOL_VERSION,
+  ActionRequestSchema,
+);
+
+/** N-1 窗口期的冻结 v1 帧(载荷用 v1 动作信封;窗口期结束即删除)。 */
+export const WssFrameV1Schema = wssFrameSchemaForVersion(
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
+  ActionRequestV1Schema,
+);
 
 export type WssFrame = z.infer<typeof WssFrameSchema>;
+
+export type WssFrameV1 = z.infer<typeof WssFrameV1Schema>;

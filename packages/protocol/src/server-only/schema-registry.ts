@@ -7,10 +7,11 @@
  *   跨域载荷,"Schema 存在不等于可下发";
  * - 调试变体镜像(DebugVariantBundle,阶段四 WP-40):编排器 ↔ 调试 worker 的
  *   进程间内部契约,整体 SERVER_ONLY,浏览器永不可见(WP-1 清单 §6.9);
- * - 凭证类 BOUNDARY Schema(EmbedTokenClaims):载荷可穿越浏览器,但浏览器对
- *   token 不解析——claims 解析器只供后端签发 / 校验消费,防"解析 token 做
- *   条件渲染"反模式。其落盘产物 x-sm-class 仍为 boundary(分类随
- *   SCHEMA_CLASSIFICATIONS,与本注册表位置无关)。
+ * - 凭证类 BOUNDARY Schema(EmbedTokenClaims / SessionCredentialClaims /
+ *   LaunchGrantClaims):载荷可穿越浏览器,但浏览器对凭证不解析——
+ *   claims 解析器只供后端签发 / 校验消费,防"解析凭证做条件渲染"反模式。
+ *   其落盘产物 x-sm-class 仍为 boundary(分类随 SCHEMA_CLASSIFICATIONS,
+ *   与本注册表位置无关)。
  *
  * 本表仅由两处消费:
  * - 生成管线(schema/generate.ts,node:fs,不进浏览器构建图)落盘 JSON Schema;
@@ -30,6 +31,7 @@ import {
   SESSION_ACTION_SCHEMA_BASE_ID,
 } from "../version.js";
 import { DebugVariantBundleSchema } from "../debug/debug-variant-bundle.js";
+import { LaunchGrantClaimsSchema } from "../credential/launch-grant-claims.js";
 import { ProjectionPolicySchema } from "./projection-policy.js";
 
 /** 不向浏览器可达代码暴露解析器的根 Schema(server-only 类型 + 凭证类)。 */
@@ -59,6 +61,17 @@ export const SERVER_ONLY_SCHEMA_REGISTRY: readonly SchemaEntry[] = [
     title: "DebugVariantBundle",
     baseId: DEBUG_SCHEMA_BASE_ID,
     schema: DebugVariantBundleSchema,
+  },
+  {
+    // 启动授权凭证 claims(分发改版 WP-90 / D-LT-5 实施细化 5a):换票产物,
+    // 分类 BOUNDARY(载荷可穿越浏览器),但**解析器不给浏览器**
+    // —— 与 EmbedTokenClaims / SessionCredentialClaims 同机制不同实例。
+    // 恰六字段、**无 sessionId / embedSessionId**(授权凭证 ≠ 会话凭证的
+    // 结构性表达);$id 归会话动作协议族(与 create_session 同族演进)。
+    name: "launch-grant-claims",
+    title: "LaunchGrantClaims",
+    baseId: SESSION_ACTION_SCHEMA_BASE_ID,
+    schema: LaunchGrantClaimsSchema,
   },
 ];
 

@@ -5,7 +5,9 @@
  * - "Schema 可存在、载荷禁下发"的 server-only 类型(ProjectionPolicy,WP-1 第五章);
  * - "载荷可穿越浏览器、解析器只给后端"的凭证类 Schema(EmbedTokenClaims,WP-5:
  *   浏览器对 embed token 不解析,claims 解析器仅供签发 / 校验消费;
- *   SessionCredentialClaims,阶段三 WP-0:浏览器对会话凭证同样不解析);
+ *   SessionCredentialClaims,阶段三 WP-0:浏览器对会话凭证同样不解析;
+ *   LaunchGrantClaims,分发改版 WP-90 / D-LT-5 实施细化 5a:换票产出的启动
+ *   授权凭证,BOUNDARY 载荷但解析器不给浏览器);
  * - 调试变体镜像(DebugVariantBundle,阶段四 WP-40):编排器 ↔ 调试 worker 的
  *   进程间内部契约,整体 SERVER_ONLY,浏览器永不可见(WP-1 清单 §6.9)。
  *
@@ -24,6 +26,8 @@ export {
 export type { EmbedTokenClaims } from "../embed/embed-token-claims.js";
 export { SessionCredentialClaimsSchema } from "../credential/session-credential-claims.js";
 export type { SessionCredentialClaims } from "../credential/session-credential-claims.js";
+export { LaunchGrantClaimsSchema } from "../credential/launch-grant-claims.js";
+export type { LaunchGrantClaims } from "../credential/launch-grant-claims.js";
 export {
   DEBUG_VARIANT_BUNDLE_SCHEMA_VERSION,
   DEBUG_VARIANT_SEED_ALGORITHM_ID,

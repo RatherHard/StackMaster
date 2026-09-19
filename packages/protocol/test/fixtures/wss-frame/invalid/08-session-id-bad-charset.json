@@ -1,10 +1,10 @@
 {
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "type": "action",
   "sessionId": "s/01J9KA7EXAMPLE0000",
   "seq": 1,
   "payload": {
-    "protocolVersion": 1,
+    "protocolVersion": 2,
     "sessionId": "s/01J9KA7EXAMPLE0000",
     "clientSeq": 1,
     "baseRevision": 0,

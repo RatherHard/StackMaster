@@ -45,6 +45,19 @@
  *   供 WP-91 / WP-92 单源引用;分类论证 WP-1 清单 §6.12,决策登记
  *   D-LT-1 ~ D-LT-3;语义与生命周期成文于 docs/contracts/启动票据协议.md。
  *   两份载荷**登记公开注册表**(跨边界形态,浏览器可达侧需可校验响应)。
+ * - 分发改版 WP-90 / **D-LT-5**:会话动作协议 **v2** —— `create_session` 请求
+ *   载荷收为**恰两键** `{challengeId, challengeVersion}`,`embedToken` /
+ *   `embedSessionId` **退场**(授权来源 = 换票产出的「启动授权凭证」Cookie)。
+ *   破坏性变更 ⇒ `SESSION_ACTION_PROTOCOL_VERSION = 2`,N-1 窗口期受理集合
+ *   `[2, 1]`,**两版各以其独立 Schema 校验**:契约包同批导出 v1 冻结面
+ *   (`CreateSessionRequestPayloadV1Schema` / `SessionCommandRequestV1Schema` /
+ *   `ActionRequestV1Schema` / `WssFrameV1Schema`,窗口结束即随
+ *   `SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION` 一并删除)。`…/schemas/session-action/v2/`
+ *   命名空间随常量派生;**同一 v2 已切换**。语义见
+ *   packages/protocol/docs/会话动作协议语义.md §5.1 / §5.2 / §九。
+ *   同批新增**启动授权凭证 claims**(`LaunchGrantClaims`,server-only 导出,
+ *   恰六字段、**无 sessionId / embedSessionId**,D-LT-5 实施细化 5a;WP-1 清单
+ *   §6.12.1)。
  *
  * 另:题目内容版本格式常量 `CHALLENGE_CONTENT_VERSION_PATTERN_SOURCE` 从本
  * 入口导出(值 = `X.Y.Z` 冻结字面)——启动票据签发请求与宿主成绩同步的
@@ -53,9 +66,10 @@
  * 仍只经 server-only 子路径导出)。
  *
  * server-only 边界(WP-1 §五):ProjectionPolicy(载荷禁下发的 server-only 类型)
- * 与 EmbedTokenClaims / SessionCredentialClaims(凭证解析器)不从本入口导出,
- * 仅经子路径 @stackmaster/protocol/server-only 供后端包消费——浏览器可达包导入
- * 该子路径即违规(dependency-cruiser 强制);"Schema 存在不等于可下发"。
+ * 与 EmbedTokenClaims / SessionCredentialClaims / LaunchGrantClaims
+ * (凭证解析器)不从本入口导出,仅经子路径 @stackmaster/protocol/server-only
+ * 供后端包消费——浏览器可达包导入该子路径即违规(dependency-cruiser 强制);
+ * "Schema 存在不等于可下发"。
  *
  * 依赖纪律(5.5):本包是所有 TS 包唯一可依赖的跨域共享面,自身不得依赖任何
  * 工作区包或 vm-engine 产物(tooling/dependency-cruiser.cjs 强制)。

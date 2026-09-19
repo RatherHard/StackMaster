@@ -178,6 +178,23 @@ export const SCHEMA_CLASSIFICATIONS = {
       expiresAt: "boundary",
     },
   },
+  "launch-grant-claims": {
+    // 启动授权凭证 claims(分发改版 WP-90 / D-LT-5 实施细化 5a;v1.21 增补):
+    // 换票产物,证明「该浏览器被授予 (tenant, challengeId, version) 的入场权」;
+    // **恰六字段,无 sessionId / embedSessionId**(授权凭证 ≠ 会话凭证的结构性
+    // 表达,故与 §6.6 各自独立、不做 shape 复用)。分类论证与 §6.6 同源
+    // (BOUNDARY:claims 对持票方无秘密性;防伪造靠签名,防重放靠 jti 单次
+    // 消费 + 过期 + 题目绑定;解析器不给浏览器)。
+    rootClass: "boundary",
+    fieldClasses: {
+      tenantId: "boundary",
+      userId: "boundary",
+      challengeId: "boundary",
+      challengeVersion: "boundary",
+      jti: "boundary",
+      expiresAt: "boundary",
+    },
+  },
   "wss-frame": {
     rootClass: "boundary",
     fieldClasses: {

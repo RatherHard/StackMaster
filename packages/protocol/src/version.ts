@@ -4,23 +4,53 @@
  * SESSION_ACTION_PROTOCOL_VERSION 是会话动作协议(ActionRequest / ActionResponse、
  * 12 种动作 args、结果类型)的版本;破坏性变更递增版本并保留 N-1 兼容窗口(5.6)。
  * EMBED_PROTOCOL_VERSION 是嵌入协议(postMessage 信封与 handshake,WP-5)的版本,
- * 与会话动作协议互不重叠;题目包 Schema(WP-4)与引擎进程协议各自独立版本。
+ * 与会话动作协议互不重叠(**该面已随插件形态整体退役,不做版本演进**);
+ * 题目包 Schema(WP-4)与引擎进程协议各自独立版本。
  */
 
-/** 会话动作协议当前版本(ActionRequest.protocolVersion 的唯一合法值)。 */
-export const SESSION_ACTION_PROTOCOL_VERSION = 1;
+/**
+ * 会话动作协议当前版本(ActionRequest.protocolVersion 的唯一合法值)。
+ *
+ * **v2(2026-09-18,分发改版 WP-90 / D-LT-5)**:破坏性变更 —— `create_session`
+ * 请求载荷由四键收为**恰两键** `{challengeId, challengeVersion}`:
+ * `embedToken` 与 `embedSessionId` **退场**(新链的授权来源 = 换票产出的
+ * 「启动授权凭证」Cookie,由服务端从凭证签名 claims × 签发存储派生身份与题目
+ * 绑定;本形态**没有嵌入会话**,故 `embedSessionId` 无绑定对象)。
+ * **零身份字段的硬门槛不变**:载荷仍无 `tenantId` / `userId` 位,任何自报身份
+ * 字段照旧被 `strictObject` 拒绝。
+ */
+export const SESSION_ACTION_PROTOCOL_VERSION = 2;
+
+/**
+ * 会话动作协议的**上一版本号**(N-1 兼容窗口期的被受理版本;D-LT-5 第 2 条)。
+ *
+ * 该常量存在的唯一理由是让窗口期的 v1 冻结面有一处单源命名
+ * (`ActionRequestV1Schema` / `WssFrameV1Schema` / `SessionCommandRequestV1Schema`
+ * 三处版本字面量,以及 `SUPPORTED_*` 集合)。**窗口期结束(运维显式下线动作)
+ * 时,本常量与依附于它的三处 v1 冻结面一并删除** —— 它不是长期契约面。
+ * 窗口时长为实现期运维参数(权威 API 语义规约 D-API-4),不属契约面。
+ */
+export const SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION = 1;
 
 /**
  * 当前受理的会话动作协议版本集合(N-1 兼容窗口的实现约定锚点,5.6 / 语义文档 §5.2)。
  *
- * 冻结期恒为 `[SESSION_ACTION_PROTOCOL_VERSION]`;破坏性变更递增版本后,窗口期
- * 在此追加 N-1(如 `[2, 1]`),服务端按路由对各版本以其独立 Schema 双版本受理,
- * 窗口期结束移除旧值。窗口时长为实现期运维参数(权威 API 语义规约 D-API-4),
- * 不属契约面。WSS 传输帧与 REST 命令体共用本集合(传输帧随会话动作协议同一
- * 版本编号演进,D-API-2)。
+ * **窗口期形态 = `[2, 1]`**(D-LT-5 第 2 条):服务端按路由对各版本以其**独立
+ * Schema** 双版本受理 —— REST 命令体用 `SessionCommandRequestSchema`(v2)与
+ * `SessionCommandRequestV1Schema`,WSS 帧用 `WssFrameSchema`(v2)与
+ * `WssFrameV1Schema`,动作载荷用 `ActionRequestSchema`(v2)与
+ * `ActionRequestV1Schema`;两个服务端注册表(session-contract.ts /
+ * frame-contract.ts)在装配期断言「受理集合中每个版本都有已注册 Schema」,
+ * 故本集合一旦含某版本,契约包就必须提供该版本的冻结 Schema(缺一即拒绝启动)。
+ * 窗口期结束移除旧值 ⇒ 集合回到 `[SESSION_ACTION_PROTOCOL_VERSION]`,v1 冻结面
+ * 随之删除。
+ *
+ * WSS 传输帧与 REST 命令体共用本集合(传输帧随会话动作协议同一版本编号演进,
+ * D-API-2)。
  */
 export const SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS: readonly number[] = [
   SESSION_ACTION_PROTOCOL_VERSION,
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
 ];
 
 /**

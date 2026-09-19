@@ -1,0 +1,7 @@
+{
+  "protocolVersion": 2,
+  "command": "create_session",
+  "payload": {
+    "challengeId": "stack-smash-101"
+  }
+}

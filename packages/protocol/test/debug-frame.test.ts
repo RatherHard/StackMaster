@@ -103,7 +103,8 @@ describe("DebugFrame 契约(阶段四 WP-40)", () => {
     expect(version.DEBUG_CHANNEL_PROTOCOL_VERSION).toBe(1);
     expect([...version.SUPPORTED_DEBUG_CHANNEL_PROTOCOL_VERSIONS]).toEqual([1]);
     expect(version.DEBUG_SCHEMA_BASE_ID).toBe("https://stackmaster.dev/schemas/debug/v1");
-    // 既有通道零改动自证:会话动作协议版本常量原值不动。
-    expect(version.SESSION_ACTION_PROTOCOL_VERSION).toBe(1);
+    // 独立性自证:调试通道版本不随会话动作协议版本演进(后者已由分发改版
+    // WP-90 / D-LT-5 递增为 2,本通道的常量与受理集合仍冻结为 1)。
+    expect(version.SESSION_ACTION_PROTOCOL_VERSION).toBe(2);
   });
 });

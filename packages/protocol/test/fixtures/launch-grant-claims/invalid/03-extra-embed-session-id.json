@@ -1,0 +1,9 @@
+{
+  "tenantId": "tenant-A",
+  "userId": "launch-anon",
+  "challengeId": "stack-smash-101",
+  "challengeVersion": "1.0.0",
+  "embedSessionId": "3xK9mQ7pL2vN8wRtY5uB1a",
+  "jti": "lg-01J9KE8EXAMPLE007",
+  "expiresAt": 1799000300
+}

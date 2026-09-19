@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://stackmaster.dev/schemas/session-action/v1/session-command-response.schema.json",
+  "$id": "https://stackmaster.dev/schemas/session-action/v2/session-command-response.schema.json",
   "title": "SessionCommandResponse",
   "x-sm-class": "public",
   "oneOf": [

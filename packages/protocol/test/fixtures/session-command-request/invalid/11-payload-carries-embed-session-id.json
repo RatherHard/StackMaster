@@ -1,10 +1,9 @@
 {
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "command": "create_session",
   "payload": {
     "challengeId": "stack-smash-101",
     "challengeVersion": "1.0.0",
-    "embedSessionId": "3xK9mQ7pL2vN8wRtY5uB1a",
-    "embedToken": ""
+    "embedSessionId": "3xK9mQ7pL2vN8wRtY5uB1a"
   }
 }

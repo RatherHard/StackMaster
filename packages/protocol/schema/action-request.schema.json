@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://stackmaster.dev/schemas/session-action/v1/action-request.schema.json",
+  "$id": "https://stackmaster.dev/schemas/session-action/v2/action-request.schema.json",
   "title": "ActionRequest",
   "x-sm-class": "boundary",
   "type": "object",
   "properties": {
     "protocolVersion": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "sessionId": {
       "type": "string",

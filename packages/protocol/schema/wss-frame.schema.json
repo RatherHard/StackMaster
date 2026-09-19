@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://stackmaster.dev/schemas/session-action/v1/wss-frame.schema.json",
+  "$id": "https://stackmaster.dev/schemas/session-action/v2/wss-frame.schema.json",
   "title": "WssFrame",
   "x-sm-class": "boundary",
   "oneOf": [
@@ -9,7 +9,7 @@
       "properties": {
         "protocolVersion": {
           "type": "number",
-          "const": 1
+          "const": 2
         },
         "type": {
           "type": "string",
@@ -37,7 +37,7 @@
           "properties": {
             "protocolVersion": {
               "type": "number",
-              "const": 1
+              "const": 2
             },
             "sessionId": {
               "type": "string",
@@ -380,7 +380,7 @@
       "properties": {
         "protocolVersion": {
           "type": "number",
-          "const": 1
+          "const": 2
         },
         "type": {
           "type": "string",
@@ -836,7 +836,7 @@
       "properties": {
         "protocolVersion": {
           "type": "number",
-          "const": 1
+          "const": 2
         },
         "type": {
           "type": "string",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://stackmaster.dev/schemas/session-action/v1/public-error.schema.json",
+  "$id": "https://stackmaster.dev/schemas/session-action/v2/public-error.schema.json",
   "title": "PublicError",
   "x-sm-class": "public",
   "type": "object",

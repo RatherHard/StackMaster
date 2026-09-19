@@ -1,21 +1,31 @@
 /**
  * SessionCommandRequest / SessionCommandResponse 契约测试(阶段三 WP-0:会话级
- * 命令 Schema 冻结的可测面;语义文档 §5.1 / §九,WP-1 清单 §6.5)。
+ * 命令 Schema 冻结的可测面;语义文档 §5.1 / §九,WP-1 清单 §6.5。
+ * **v2 增补(分发改版 WP-90 / D-LT-5)**:create_session 载荷收为恰两键、
+ * `embedToken` / `embedSessionId` 退场,以及 v1 冻结面的 N-1 窗口形状分离)。
  *
  * 红灯样例覆盖:未知命令、自报身份(6.2 第 1 条:请求体零身份字段)、信封
- * 篡改、版本不符、题目版本非语义化、嵌入会话熵下限、载荷 ↔ 命令错位;响应侧:
- * SERVER_ONLY 载荷注入(seedState)、响应携带版本字段(§5.2 红灯)、裁决引用
- * 下发(SERVER_ONLY 禁令)、投影 revision 耦合(superRefine)。
+ * 篡改、版本不符、题目版本非语义化、载荷 ↔ 命令错位(v2 下 `embedToken` /
+ * `embedSessionId` 作为多余键被拒);响应侧:SERVER_ONLY 载荷注入(seedState)、
+ * 响应携带版本字段(§5.2 红灯)、裁决引用下发(SERVER_ONLY 禁令)、投影
+ * revision 耦合(superRefine)。
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CreateSessionRequestPayloadSchema,
+  CreateSessionRequestPayloadV1Schema,
   SessionCommandRequestSchema,
+  SessionCommandRequestV1Schema,
   SESSION_COMMANDS,
 } from "../src/session-command/session-command-request.js";
 import { SessionCommandResponseSchema } from "../src/session-command/session-command-response.js";
-import { SESSION_ACTION_PROTOCOL_VERSION } from "../src/version.js";
+import {
+  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
+  SESSION_ACTION_PROTOCOL_VERSION,
+  SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS,
+} from "../src/version.js";
 
 const FIXTURE_DIR = join(import.meta.dirname, "fixtures");
 
@@ -62,8 +72,13 @@ describe("SessionCommandRequest 契约(阶段三 WP-0)", () => {
     );
   });
 
-  it("请求信封统一携带 protocolVersion 且锚定当前协议版本(N-1 窗口由服务端双版本受理)", () => {
-    expect(SESSION_ACTION_PROTOCOL_VERSION).toBe(1);
+  it("请求信封统一携带 protocolVersion 且只接受本版本字面量(N-1 由独立 Schema 受理)", () => {
+    expect(SESSION_ACTION_PROTOCOL_VERSION).toBe(2);
+    expect(SUPPORTED_SESSION_ACTION_PROTOCOL_VERSIONS).toEqual([
+      SESSION_ACTION_PROTOCOL_VERSION,
+      SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
+    ]);
+    expect(SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION).toBe(1);
     for (const command of SESSION_COMMANDS) {
       const result = SessionCommandRequestSchema.safeParse({
         protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
@@ -72,17 +87,74 @@ describe("SessionCommandRequest 契约(阶段三 WP-0)", () => {
       });
       expect(result.success).toBe(command !== "create_session");
     }
+    // v2 面拒绝 v1 字面量(版本判定不因窗口而放宽:两版各自独立校验)。
+    expect(
+      SessionCommandRequestSchema.safeParse({
+        protocolVersion: SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
+        command: "sync_projection",
+        payload: { sessionId: "s-x" },
+      }).success,
+    ).toBe(false);
+    // v1 面拒绝 v2 字面量。
+    expect(
+      SessionCommandRequestV1Schema.safeParse({
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+        command: "sync_projection",
+        payload: { sessionId: "s-x" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("v2 create_session 载荷恰两键(challengeId / challengeVersion)", () => {
+    expect(Object.keys(CreateSessionRequestPayloadSchema.shape).sort()).toEqual([
+      "challengeId",
+      "challengeVersion",
+    ]);
+  });
+
+  it("v2 下 embedToken / embedSessionId 退场:出现在载荷即被拒(strictObject)", () => {
+    for (const [field, value] of [
+      ["embedToken", "token-material"],
+      ["embedSessionId", "3xK9mQ7pL2vN8wRtY5uB1a"],
+    ] as const) {
+      expect(
+        SessionCommandRequestSchema.safeParse({
+          protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+          command: "create_session",
+          payload: {
+            challengeId: "stack-smash-101",
+            challengeVersion: "1.0.0",
+            [field]: value,
+          },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("v1 冻结面(窗口期)仍受理四键 create_session,且拒 v2 两键形态(形状按版本分离)", () => {
+    expect(Object.keys(CreateSessionRequestPayloadV1Schema.shape).sort()).toEqual([
+      "challengeId",
+      "challengeVersion",
+      "embedSessionId",
+      "embedToken",
+    ]);
+    expect(
+      SessionCommandRequestV1Schema.safeParse(
+        loadFixtures("session-command-request-v1", "valid")[0]?.payload,
+      ).success,
+    ).toBe(true);
+    for (const { payload } of loadFixtures("session-command-request-v1", "invalid")) {
+      expect(SessionCommandRequestV1Schema.safeParse(payload).success).toBe(false);
+    }
   });
 
   it("create_session 请求不携带任何身份字段(身份只来自认证上下文,6.2 第 1 条)", () => {
     const result = SessionCommandRequestSchema.safeParse({
-      protocolVersion: 1,
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       command: "create_session",
       payload: {
         challengeId: "stack-smash-101",
         challengeVersion: "1.0.0",
-        embedSessionId: "3xK9mQ7pL2vN8wRtY5uB1a",
-        embedToken: "token-material",
         tenantId: "tenant-A",
         userId: "user-B",
       },

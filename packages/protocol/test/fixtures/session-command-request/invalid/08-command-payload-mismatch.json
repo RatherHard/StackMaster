@@ -1,5 +1,5 @@
 {
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "command": "create_session",
   "payload": { "sessionId": "s-01J9KA7EXAMPLE0000" }
 }
