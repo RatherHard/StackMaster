@@ -1,0 +1,70 @@
+{
+  "colorContrast": {
+    "incompleteNodes": 79,
+    "passedNodes": 17,
+    "status": "passed",
+    "violationsNodes": 0
+  },
+  "face": "page-app-1024x768-default",
+  "incomplete": [
+    {
+      "count": 79,
+      "id": "color-contrast",
+      "nodes": [
+        {
+          "html": "<span data-notice-level=\"info\">题目描述包未加载:简介与教学面暂不可用(会话不受影响)。</span>",
+          "target": [
+            "span[data-notice-level=\"info\"]"
+          ]
+        },
+        {
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"structure\" aria-pressed=\"false\" title=\"聚焦「结构视图」并滚动到该视图\">\n        结构视图\n      </button>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"structure\"]"
+            ]
+          ]
+        },
+        {
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"call-stack\" aria-pressed=\"false\" title=\"聚焦「调用栈」并滚动到该视图\">\n        调用栈\n      </button>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"call-stack\"]"
+            ]
+          ]
+        },
+        {
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"memory-diff\" aria-pressed=\"false\" title=\"聚焦「内存 diff」并滚动到该视图\">\n        内存 diff\n      </button>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"memory-diff\"]"
+            ]
+          ]
+        },
+        {
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"timeline\" aria-pressed=\"false\" title=\"聚焦「时间线」并滚动到该视图\">\n        时间线\n      </button>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"timeline\"]"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "incompleteNodes": 79,
+  "passedNodes": 1194,
+  "rationale": "中档默认形态(工具区开始换行)",
+  "state": "default",
+  "url": "http://localhost:5190/app/c/chal-stack-escape/1.2.3",
+  "viewport": "1024x768",
+  "violations": []
+}
