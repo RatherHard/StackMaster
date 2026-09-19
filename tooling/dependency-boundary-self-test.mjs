@@ -14,33 +14,47 @@
  *   反例 3  apps/session-api → 浏览器可达包         session-api-workspace-deps-allowlist
  *                                                  + no-backend-dependency-on-browser-packages
  *   反例 4  packages/session-core → 浏览器可达包    no-backend-dependency-on-browser-packages
- *                                                  (允许清单规则不得误伤 packages 侧)
- *   反例 5  embed-runtime → vm-ui(浏览器包横向)   browser-package-cross-dependency-into-vm-ui
- *                                                  (WP-51 立;放行边之外全红灯)
- *   反例 6  vm-ui → react-wrapper(浏览器包横向)   browser-package-cross-dependency-into-react-wrapper
- *   反例 7  apps/session-api → react-wrapper        session-api-workspace-deps-allowlist
- *                                                  + no-backend-dependency-on-browser-packages
- *   反例 8  vm-ui → web-component(浏览器包横向)   browser-package-cross-dependency-into-web-component
- *                                                  (WP-52:→ web-component 方向无放行边)
- *   反例 9  embed-runtime → web-component(横向)    browser-package-cross-dependency-into-web-component(同上)
- *   正控 10 web-component → embed-runtime / vm-ui /
- *           protocol 零违规                        (WP-52 两条放行边:Q4 无状态构件复用 +
- *                                                  Q3 工作区装配;其余规则不得误触发)
+ *                                                  (允许清单规则不得误伤 packages 侧;
+ *                                                   WP-96:目标由 embed-runtime 换为 vm-ui)
  *   正控 11 packages/vm-ui 包内边(index → 自包子模块)浏览器包规则不得触发
  *                                                  (WP-F1:包内边经 pathNot 排除)
- *   正控 12 react-wrapper → embed-runtime / protocol 零违规
- *                                                  (WP-51 放行横向边 + protocol 公开入口)
  *   反例 13 apps/admin → 未登记工作区包            admin-workspace-deps-allowlist
  *                                                  (WP-79 新增规则;不得误伤其它应用的
  *                                                   允许清单规则)
- *   反例 14 apps/plugin-dev → challenge-schema     challenge-schema-dependents-restricted
- *                                                  (WP-79 扩白名单后,规则对**名单外**
- *                                                   应用仍真实可红灯——改白名单不等于放松)
+ *   反例 14 apps/page-app → challenge-schema       challenge-schema-dependents-restricted
+ *                                                  (白名单外应用仍须真实可红灯——改白名单
+ *                                                   不等于放松。WP-96:来源由 apps/plugin-dev
+ *                                                   **换点**为 apps/page-app,覆盖不减)
  *   正控 15 apps/admin → protocol / challenge-schema 零违规
  *                                                  (WP-79 允许清单全量 + challenge-schema
  *                                                   白名单入位后的正向对照)
+ *   反例 16 packages/vm-ui → 未登记工作区包        browser-packages-only-depend-on-protocol
+ *                                                  (WP-96 新增:退役四面后唯一浏览器包
+ *                                                   规则的正向反例;原反例 5 的边已不存在)
  *   对照组  apps/session-api → protocol / challenge-schema /
  *           challenge-compiler / session-core       零违规(允许清单全量,无误报)
+ *
+ * **2026-09-19 WP-96 随退役面删除**(编号保留原号、不重排,便于与历史记录对读;
+ * 依附被删规则的反例必须同批删除,否则自检自身变红):
+ *   反例 5  embed-runtime → vm-ui(横向)               ⇒ 随 embed-runtime 删除
+ *   反例 6  vm-ui → react-wrapper(横向)               ⇒ 随 react-wrapper 删除
+ *   反例 7  apps/session-api → react-wrapper            ⇒ 随 react-wrapper 删除
+ *   反例 8  vm-ui → web-component(横向)               ⇒ 随 web-component 删除
+ *   反例 9  embed-runtime → web-component(横向)        ⇒ 随两包删除
+ *   正控 10 web-component → embed-runtime / vm-ui / protocol 零违规 ⇒ 随 web-component 删除
+ *   正控 12 react-wrapper → embed-runtime / protocol 零违规        ⇒ 随 react-wrapper 删除
+ *   (被删规则:`browser-package-cross-dependency-into-{web-component,react-wrapper,embed-runtime}`;
+ *    见 tooling/dependency-cruiser.cjs 文件头与「随退役面删除」注释块)
+ *
+ * **删除后的覆盖核对(2026-09-19 WP-96)**:配置规则条数 **16 → 13**。**新增「零反例」
+ * 规则仅 1 条** = `browser-package-cross-dependency-into-vm-ui`:其唯一正向反例(反例 5)
+ * 随 embed-runtime 删除,而它现在 from 侧只有 `vm-ui`、to 侧也是 `vm-ui`、from 侧 pathNot
+ * 又排除目标包自身 ⇒ **该规则已结构性不可触发**(保留它的理由见配置内注释:为将来新增
+ * 浏览器包留一条已接线的方向规则)。其余 12 条的反例覆盖与退役前一致或更强(反例 4 换目标、
+ * 反例 14 换来源、新增反例 16)。另有 5 条**在退役前后都**无自检引用(既有缺口,非本次引入,
+ * 未削弱):`protocol-is-leaf` / `challenge-schema-is-leaf` /
+ * `challenge-compiler-dependents-restricted` / `protocol-schema-generator-not-importable` /
+ * `protocol-server-only-backend-consumers-only`。
  *
  * 运行:`pnpm lint:deps:self-test`(CI ts-gate 接线)。任何断言不过 = 退出码 1。
  */
@@ -60,30 +74,12 @@ const FIXTURE_FILES = {
   "packages/challenge-schema/src/index.ts": "export const placeholder = true;\n",
   "packages/challenge-compiler/src/index.ts": "export const placeholder = true;\n",
   "packages/session-core/src/index.ts": "export const placeholder = true;\n",
-  "packages/vm-ui/src/index.ts": "export const placeholder = true;\n",
-  "packages/embed-runtime/src/index.ts": "export const placeholder = true;\n",
-  "packages/web-component/src/ui/inner.ts": "export const placeholder = true;\n",
-  // 正控 10:web-component → embed-runtime(WP-52 放行边:Q4 无状态构件复用)+
-  // vm-ui(WP-52 放行边:Q3 工作区装配)+ protocol(公开入口)。
-  "packages/web-component/src/index.ts": [
-    'export * from "../../../packages/embed-runtime/src/index";',
-    'export * from "../../../packages/vm-ui/src/index";',
-    'export * from "../../../packages/protocol/src/index";',
-    "",
-  ].join("\n"),
   // 未登记进 session-api 允许清单、也不属浏览器面的假想工作区包。
   "packages/telemetry-extra/src/index.ts": "export const placeholder = true;\n",
   // 浏览器包包内结构:positive control(包内边不得触发浏览器包规则)。
   "packages/vm-ui/src/ui/inner.ts": "export const placeholder = true;\n",
   "packages/vm-ui/src/index.ts": 'export * from "./ui/inner";\n',
   "vm-engine/dist/index.ts": "export const placeholder = true;\n",
-
-  // 正控 9:react-wrapper → embed-runtime(WP-51 唯一放行横向边)+ protocol。
-  "packages/react-wrapper/src/index.ts": [
-    'export * from "../../../packages/embed-runtime/src/index";',
-    'export * from "../../../packages/protocol/src/index";',
-    "",
-  ].join("\n"),
 
   // 反例 1:apps → vm-engine 产物(TS 构建图红线,ADR-3 / ADR-8)。
   "apps/session-api/src/ce-vm-engine.ts":
@@ -95,31 +91,23 @@ const FIXTURE_FILES = {
   "apps/session-api/src/ce-browser-package.ts":
     'export * from "../../../packages/vm-ui/src/index";\n',
   // 反例 4:packages 侧 → 浏览器可达包(反向依赖禁令覆盖 packages)。
+  // 2026-09-19 WP-96:目标由已删的 embed-runtime 换为唯一浏览器包 vm-ui。
   "packages/session-core/src/ce-browser-package.ts":
-    'export * from "../../../packages/embed-runtime/src/index";\n',
-  // 反例 5:embed-runtime → vm-ui(浏览器包横向依赖,WP-51 收紧)。
-  "packages/embed-runtime/src/ce-browser-import.ts":
-    'export * from "../../../packages/vm-ui/src/ui/inner";\n',
-  // 反例 6:vm-ui → react-wrapper(任何包 → react-wrapper 均禁止)。
-  "packages/vm-ui/src/ce-react-wrapper.ts":
-    'export * from "../../../packages/react-wrapper/src/index";\n',
-  // 反例 7:apps → react-wrapper(双规则同边触发)。
-  "apps/session-api/src/ce-react-wrapper.ts":
-    'export * from "../../../packages/react-wrapper/src/index";\n',
-  // 反例 8:vm-ui → web-component(→ web-component 方向无放行边,WP-52)。
-  "packages/vm-ui/src/ce-web-component.ts":
-    'export * from "../../../packages/web-component/src/ui/inner";\n',
-  // 反例 9:embed-runtime → web-component(→ web-component 方向无放行边,WP-52)。
-  "packages/embed-runtime/src/ce-web-component.ts":
-    'export * from "../../../packages/web-component/src/ui/inner";\n',
+    'export * from "../../../packages/vm-ui/src/index";\n',
   // 反例 13(WP-79):apps/admin → 未登记工作区包(admin 允许清单只放行
   // protocol / challenge-schema)。
   "apps/admin/src/ce-foreign-package.ts":
     'export * from "../../../packages/telemetry-extra/src/index";\n',
-  // 反例 14(WP-79):apps/plugin-dev → challenge-schema(白名单外应用;
-  // 证明 challenge-schema-dependents-restricted 扩白名单后仍真实可红灯)。
-  "apps/plugin-dev/src/ce-challenge-schema.ts":
+  // 反例 14(WP-79):白名单外应用 → challenge-schema(证明
+  // challenge-schema-dependents-restricted 扩白名单后仍真实可红灯)。
+  // 2026-09-19 WP-96:来源由 apps/plugin-dev **换点**为 apps/page-app
+  // (前者已物理删除);白名单外应用的覆盖不减。
+  "apps/page-app/src/ce-challenge-schema.ts":
     'export * from "../../../packages/challenge-schema/src/index";\n',
+  // 反例 16(WP-96):唯一浏览器包 → 未登记工作区包
+  // (browser-packages-only-depend-on-protocol 的正向反例)。
+  "packages/vm-ui/src/ce-foreign-package.ts":
+    'export * from "../../../packages/telemetry-extra/src/index";\n',
   // 正控 15(WP-79):apps/admin 允许清单全量(必须零违规)。
   "apps/admin/src/clean-allowlist.ts": [
     'export * from "../../../packages/protocol/src/index";',
@@ -141,15 +129,10 @@ const ENTRY_FILES = Object.keys(FIXTURE_FILES).filter(
   (file) =>
     file.startsWith("apps/session-api/src/") ||
     file.startsWith("apps/admin/src/") ||
-    file === "apps/plugin-dev/src/ce-challenge-schema.ts" ||
+    file === "apps/page-app/src/ce-challenge-schema.ts" ||
     file === "packages/session-core/src/ce-browser-package.ts" ||
     file === "packages/vm-ui/src/index.ts" ||
-    file === "packages/vm-ui/src/ce-react-wrapper.ts" ||
-    file === "packages/vm-ui/src/ce-web-component.ts" ||
-    file === "packages/embed-runtime/src/ce-browser-import.ts" ||
-    file === "packages/embed-runtime/src/ce-web-component.ts" ||
-    file === "packages/web-component/src/index.ts" ||
-    file === "packages/react-wrapper/src/index.ts",
+    file === "packages/vm-ui/src/ce-foreign-package.ts",
 );
 
 /** 逐边期望:from 以 fromSuffix(可选)且 to 以 edgeSuffix 结尾的依赖边必须/不得触发的规则。
@@ -184,88 +167,18 @@ const EDGE_EXPECTATIONS = [
     reject: [],
   },
   {
-    label: "反例4 packages→浏览器包",
-    edgeSuffix: "embed-runtime/src/index.ts",
+    label: "反例4 packages→浏览器包(WP-96:目标换为唯一浏览器包 vm-ui)",
+    edgeSuffix: "vm-ui/src/index.ts",
     fromSuffix: "packages/session-core/src/ce-browser-package.ts",
     expect: ["no-backend-dependency-on-browser-packages"],
-    reject: ["session-api-workspace-deps-allowlist", "browser-package-cross-dependency-into-embed-runtime"],
-  },
-  {
-    label: "反例5 embed-runtime→vm-ui(横向)",
-    edgeSuffix: "vm-ui/src/ui/inner.ts",
-    fromSuffix: "packages/embed-runtime/src/ce-browser-import.ts",
-    expect: ["browser-package-cross-dependency-into-vm-ui"],
     reject: [
-      "browser-packages-only-depend-on-protocol",
-      "no-backend-dependency-on-browser-packages",
-    ],
-  },
-  {
-    label: "反例6 vm-ui→react-wrapper(横向)",
-    edgeSuffix: "react-wrapper/src/index.ts",
-    fromSuffix: "packages/vm-ui/src/ce-react-wrapper.ts",
-    expect: ["browser-package-cross-dependency-into-react-wrapper"],
-    reject: ["browser-packages-only-depend-on-protocol"],
-  },
-  {
-    label: "反例7 apps→react-wrapper(双规则)",
-    edgeSuffix: "react-wrapper/src/index.ts",
-    fromSuffix: "apps/session-api/src/ce-react-wrapper.ts",
-    expect: [
       "session-api-workspace-deps-allowlist",
-      "no-backend-dependency-on-browser-packages",
-    ],
-    reject: [],
-  },
-  {
-    label: "反例8 vm-ui→web-component(横向)",
-    edgeSuffix: "web-component/src/ui/inner.ts",
-    fromSuffix: "packages/vm-ui/src/ce-web-component.ts",
-    expect: ["browser-package-cross-dependency-into-web-component"],
-    reject: [
       "browser-packages-only-depend-on-protocol",
-      "no-backend-dependency-on-browser-packages",
-    ],
-  },
-  {
-    label: "反例9 embed-runtime→web-component(横向)",
-    edgeSuffix: "web-component/src/ui/inner.ts",
-    fromSuffix: "packages/embed-runtime/src/ce-web-component.ts",
-    expect: ["browser-package-cross-dependency-into-web-component"],
-    reject: [
-      "browser-packages-only-depend-on-protocol",
-      "no-backend-dependency-on-browser-packages",
-    ],
-  },
-  {
-    label: "正控10a web-component→embed-runtime 放行(WP-52 Q4)",
-    edgeSuffix: "embed-runtime/src/index.ts",
-    fromSuffix: "packages/web-component/src/index.ts",
-    expect: [],
-    reject: [
-      "browser-package-cross-dependency-into-embed-runtime",
-      "browser-packages-only-depend-on-protocol",
-      "no-backend-dependency-on-browser-packages",
-    ],
-  },
-  {
-    label: "正控10b web-component→vm-ui 放行(WP-52 Q3)",
-    edgeSuffix: "vm-ui/src/index.ts",
-    fromSuffix: "packages/web-component/src/index.ts",
-    expect: [],
-    reject: [
       "browser-package-cross-dependency-into-vm-ui",
-      "browser-packages-only-depend-on-protocol",
-      "no-backend-dependency-on-browser-packages",
     ],
   },
-  {
-    label: "正控10c web-component→protocol 放行",
-    edgeSuffix: "protocol/src/index.ts",
-    fromSuffix: "packages/web-component/src/index.ts",
-    expect: [],
-    reject: ["browser-packages-only-depend-on-protocol"],
-  },
+  // 2026-09-19 WP-96 随退役面删除:反例 5 / 6 / 7 / 8 / 9 与正控 10a / 10b / 10c
+  // 依附的五条横向规则已删,反例必须同批删除(否则自检自身变红)。
   {
     label: "正控11 vm-ui包内边不违规",
     edgeSuffix: "vm-ui/src/ui/inner.ts",
@@ -276,27 +189,8 @@ const EDGE_EXPECTATIONS = [
       "browser-package-cross-dependency-into-vm-ui",
     ],
   },
-  {
-    label: "正控12 react-wrapper→embed-runtime 放行",
-    edgeSuffix: "embed-runtime/src/index.ts",
-    fromSuffix: "packages/react-wrapper/src/index.ts",
-    expect: [],
-    reject: [
-      "browser-package-cross-dependency-into-embed-runtime",
-      "no-backend-dependency-on-browser-packages",
-      "browser-packages-only-depend-on-protocol",
-    ],
-  },
-  {
-    label: "正控12 react-wrapper→protocol 放行",
-    edgeSuffix: "protocol/src/index.ts",
-    fromSuffix: "packages/react-wrapper/src/index.ts",
-    expect: [],
-    reject: [
-      "browser-packages-only-depend-on-protocol",
-      "browser-package-cross-dependency-into-embed-runtime",
-    ],
-  },
+  // 2026-09-19 WP-96 随退役面删除:正控 12(react-wrapper → embed-runtime / protocol)
+  // 依附的两条横向规则与两个目标包均已删除,正控同批删除。
   {
     label: "反例13 apps/admin→未登记包(WP-79)",
     edgeSuffix: "telemetry-extra/src/index.ts",
@@ -309,9 +203,9 @@ const EDGE_EXPECTATIONS = [
     ],
   },
   {
-    label: "反例14 apps/plugin-dev→challenge-schema(WP-79 白名单外仍红灯)",
+    label: "反例14 apps/page-app→challenge-schema(WP-96 换点;白名单外仍红灯)",
     edgeSuffix: "challenge-schema/src/index.ts",
-    fromSuffix: "apps/plugin-dev/src/ce-challenge-schema.ts",
+    fromSuffix: "apps/page-app/src/ce-challenge-schema.ts",
     expect: ["challenge-schema-dependents-restricted"],
     reject: [
       "admin-workspace-deps-allowlist",
@@ -338,6 +232,18 @@ const EDGE_EXPECTATIONS = [
     reject: [
       "admin-workspace-deps-allowlist",
       "no-backend-dependency-on-browser-packages",
+    ],
+  },
+  {
+    // WP-96 新增:退役四面后浏览器包只剩 vm-ui,browser-packages-only-depend-on-protocol
+    // 是唯一仍需正向反例的浏览器包规则(原反例 5 的边已随 embed-runtime 删除)。
+    label: "反例16 vm-ui→未登记工作区包(WP-96 唯一浏览器包规则)",
+    edgeSuffix: "telemetry-extra/src/index.ts",
+    fromSuffix: "packages/vm-ui/src/ce-foreign-package.ts",
+    expect: ["browser-packages-only-depend-on-protocol"],
+    reject: [
+      "no-backend-dependency-on-browser-packages",
+      "browser-package-cross-dependency-into-vm-ui",
     ],
   },
   {

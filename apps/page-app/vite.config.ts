@@ -14,10 +14,11 @@ import { defineConfig } from "vite";
  * ## 2) vm-ui 产物为什么走 publicDir 而不是静态 import
  *
  * `tooling/dependency-cruiser.cjs` 的 `no-backend-dependency-on-browser-packages`
- * **禁止 apps/** 静态依赖浏览器可达包(vm-ui / web-component / embed-runtime /
- * react-wrapper)。这不是可以绕过的风格问题,而是安全边界:浏览器包的机制面
- * 不进服务端可达的构建图。`apps/plugin-dev` 的既有做法是「vm-ui dist 作为静态
- * 资源提供 + 运行期按 **URL** 动态 import」——本应用沿用同一形态,只是把资源
+ * **禁止 apps/** 静态依赖浏览器可达包(2026-09-19 WP-96 起**仅 `vm-ui`**;退役的
+ * web-component / embed-runtime / react-wrapper 已物理删除)。这不是可以绕过的
+ * 风格问题,而是安全边界:浏览器包的机制面
+ * 不进服务端可达的构建图。已删除的 `apps/plugin-dev` 曾用同一形态(「vm-ui dist
+ * 作为静态资源提供 + 运行期按 **URL** 动态 import」)——本应用沿用,只是把资源
  * 位置从"平铺到产物根"改为 "`dist/vm-ui/` 子目录":
  *
  *  - 构建前:`scripts/sync-vm-ui-dist.mjs` 把 `packages/vm-ui/dist` 同步到本应用
@@ -58,7 +59,8 @@ export default defineConfig({
   server: {
     port: 5180,
     /**
-     * 文件监视忽略面(dev-only;与 `apps/plugin-dev/vite.config.ts` 同款加固)。
+     * 文件监视忽略面(dev-only;与已删除的 `apps/plugin-dev/vite.config.ts` 同款
+     * 加固,2026-09-19 WP-96)。
      * 写文件工具与编辑器的原子写会留下 `<name>.<pid>.<guid>.tmpdir/`,而
      * Windows 对该目录内文件的 `watch` 返回 **EBUSY**,会让 Vite 的 FSWatcher
      * **整个进程退出**。前缀不固定(见过 `._…` 与 `.…` 两种)⇒ **必须按后缀

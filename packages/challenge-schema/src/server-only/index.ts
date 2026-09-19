@@ -4,7 +4,8 @@
  * **Schema 存在不等于可下发**(WP-1 第五章 ProjectionPolicy 镜像纪律):
  * 本入口导出的私有判题包契约、校验器与字段分类检查器只允许后端包
  * (challenge-compiler、session-api、verifier)导入;浏览器可达包
- * (vm-ui、web-component、embed-runtime、react-wrapper)导入本子路径
+ * (**2026-09-19 WP-96 起仅 `vm-ui`**;退役的 web-component / embed-runtime /
+ * react-wrapper 已物理删除)导入本子路径
  * 即依赖边界违规(dependency-cruiser 强制)。
  *
  * 私有判题包整体 SERVER_ONLY:校验通过的实例只存在于执行域进程内,

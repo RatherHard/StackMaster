@@ -61,16 +61,16 @@ stackmaster/
 │   ├── session-api/          # 会话编排器(信任域 2;工程载体已落地,阶段三 WP-1)
 │   ├── verifier/             # 独立裁决服务(信任域 4)
 │   ├── admin/                # 最小管理面(只读:题目登记 / 裁决查询 / 成绩导出;独立凭证 +
-│   │                         #   独立网络域 + 独立只读库角色 admin_ro,不入插件链路)——信任域 4
-│   └── ~~plugin-dev/~~       # **退役(2026-09-18 定案;实现未落地)**:插件 iframe 开发壳
+│   │                         #   独立网络域 + 独立只读库角色 admin_ro,不入页面分发链路)——信任域 4
+│   └── page-app/             # 与 API 同源的独立页面应用(2026-09-18 分发改版;承载启动地址进入的整页形态)
 ├── packages/                 # TS 包(pnpm workspaces)
-│   ├── protocol/             # @stackmaster/protocol:Zod 契约 → JSON Schema(已落地,会话动作协议 v1)
-│   ├── challenge-schema/     # 公开/私有题目包 Schema(WP-4,进行中)
+│   ├── protocol/             # @stackmaster/protocol:Zod 契约 → JSON Schema(跨语言契约唯一来源)
+│   ├── challenge-schema/     # 公开/私有题目包 Schema(WP-4)
 │   ├── challenge-compiler/   # DSL → 受限 IR(仅后端)
-│   ├── ~~embed-runtime/~~    # **退役(2026-09-18 定案;实现未落地)**:postMessage 嵌入协议(宿主侧 SDK)
-│   ├── ~~web-component/~~    # **退役(2026-09-18 定案;实现未落地)**:<pwn-memory-vm>(Lit 3)
 │   ├── vm-ui/                # 投影渲染:字节视图、寄存器、调用栈、时间线
-│   └── ~~react-wrapper/~~    # **退役(2026-09-18 定案;实现未落地)**:可选 React 薄包装
+│   ├── ~~embed-runtime/~~    # **已删除(2026-09-19 WP-96)**:postMessage 嵌入协议(平台后端侧 SDK);替代 = 启动票据 / 启动地址
+│   ├── ~~web-component/~~    # **已删除(2026-09-19 WP-96)**:<pwn-memory-vm>(Lit 3);替代 = page-app 内 Lit 组件
+│   └── ~~react-wrapper/~~    # **已删除(2026-09-19 WP-96)**:可选 React 薄包装
 ├── vm-engine/                # Rust workspace(信任域 3,阶段二起搭建)
 │   ├── vm-worker/            # 单会话进程入口,stdio JSON 协议
 │   ├── vm-core/              # 纯 VM 语义(safe Rust,无 async、无直接 IO)
@@ -142,7 +142,7 @@ pnpm scan:public        # 公开产物隔离扫描
 | [`docs/user/界面帮助手册.html`](docs/user/界面帮助手册.html) | 使用文档(网页):工作区各界面逐项参考 + 调试→解题→提交→反馈完整交互链 |
 | [`docs/user/出题人指南.md`](docs/user/出题人指南.md) | 使用文档:双包制作、DSL 词汇、判题面与隐藏测试、装载门禁与发布 |
 | [`docs/user/出题人文档/index.html`](docs/user/出题人文档/index.html) | 使用文档(网页·分层分页):目录首页 + 认知入门 / 概念详解 7 页(31 概念) / 任务指南 / 精确参考 |
-| [`docs/user/宿主平台接入指南.md`](docs/user/宿主平台接入指南.md) | 使用文档:CTF 平台嵌入插件的部署、token 与握手、能力与外观 |
+| [`docs/user/宿主平台接入指南.md`](docs/user/宿主平台接入指南.md) | 使用文档:平台后端接入启动地址链(签发端点 / 地址下发 / 换票 / 建会话)、配置键与成绩边界 |
 
 CLAUDE.md 是 Claude Code 在本仓库工作的操作规范(计划书的执行摘要);两者冲突时以计划书为准。
 

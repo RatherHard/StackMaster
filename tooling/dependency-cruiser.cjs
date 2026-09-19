@@ -6,12 +6,24 @@
  * 规则编码 5.5 的 TS 侧依赖方向:
  *  - protocol 是所有 TS 包唯一可依赖的跨域共享面,自身不得依赖任何工作区包;
  *  - challenge-schema 是 Schema 叶子包,只被 challenge-compiler、session-api、verifier 依赖;
- *  - 浏览器侧包(vm-ui、web-component、embed-runtime、react-wrapper)只依赖 protocol;
+ *  - 浏览器侧包(**2026-09-19 WP-96 起仅 `vm-ui`**;此前为 vm-ui、web-component、
+ *    embed-runtime、react-wrapper)只依赖 protocol;
  *  - 任何 TS 包不得引用 vm-engine 产物——TS 与 Rust 只通过进程边界
  *    (spawn + JSON 协议)通信(ADR-3/ADR-8,安全红线)。
  *
- * apps/(session-api、verifier、admin、plugin-dev)自阶段二起搭建;
+ * apps/(session-api、verifier、admin、page-app)自阶段二起搭建;
  * 规则中一并纳入,避免后续补规则时出现窗口期。
+ *
+ * WP-96 退役面物理删除(2026-09-19,分发改版):
+ *  - `packages/web-component` / `packages/embed-runtime` / `packages/react-wrapper`
+ *    与 `apps/plugin-dev` 已从磁盘删除 ⇒ 浏览器包清单由 4 个收敛为**仅 `vm-ui`**,
+ *    应用清单中 `plugin-dev` 由 `page-app` 取代;
+ *  - **2026-09-19 WP-96 随退役面删除**三条横向规则
+ *    `browser-package-cross-dependency-into-{web-component,react-wrapper,embed-runtime}`
+ *    —— 目标包已不存在(只留 `browser-package-cross-dependency-into-vm-ui` 一条);
+ *    依附这三条的反例 / 正控在 tooling/dependency-boundary-self-test.mjs 同批删除;
+ *  - `browser-package-cross-dependency-*` 规则族的语义基础随之改变:只剩 `vm-ui`
+ *    一个浏览器包,「横向依赖」在结构上只剩「→ vm-ui」这一个方向。
  *
  * 中期 M3 WP-79(2026-09-17,D-MP-5 分支 A「落地 apps/admin 只读最小面」)
  * 对本文件的两处演进(与 tooling/dependency-boundary-self-test.mjs 同批,
@@ -64,7 +76,7 @@ module.exports = {
       name: "challenge-schema-dependents-restricted",
       severity: "error",
       comment:
-        "challenge-schema 只能被后端 TS 包(challenge-compiler、session-api、verifier)与信任域 4 独立应用(session-api、verifier、admin)依赖;浏览器侧与其余应用不得依赖。排除包自身(其内部模块边不属于“依赖方”约束)。WP-79(2026-09-17)按 D-MP-5 分支 A 把 admin 纳入白名单:管理面必须按公开包 Schema 展示题目登记元数据(challenges / challenge_versions 语义),与 verifier 同款先例;白名单演进与 tooling/dependency-boundary-self-test.mjs 同批(自测新增 apps/plugin-dev → challenge-schema 反例,证明本规则对白名单外应用仍真实可红灯)。",
+        "challenge-schema 只能被后端 TS 包(challenge-compiler、session-api、verifier)与信任域 4 独立应用(session-api、verifier、admin)依赖;浏览器侧与其余应用不得依赖。排除包自身(其内部模块边不属于“依赖方”约束)。WP-79(2026-09-17)按 D-MP-5 分支 A 把 admin 纳入白名单:管理面必须按公开包 Schema 展示题目登记元数据(challenges / challenge_versions 语义),与 verifier 同款先例;白名单演进与 tooling/dependency-boundary-self-test.mjs 同批(自测以 **apps/page-app → challenge-schema** 反例证明本规则对白名单外应用仍真实可红灯;该反例原为 `apps/plugin-dev`,随该应用 2026-09-19 WP-96 物理删除而**换点**,覆盖不减)。",
       from: {
         path: "^(packages|apps)/",
         pathNot: [
@@ -94,58 +106,31 @@ module.exports = {
       name: "browser-packages-only-depend-on-protocol",
       severity: "error",
       comment:
-        "浏览器侧包(vm-ui、web-component、embed-runtime、react-wrapper)对**其他工作区包**只允许依赖 protocol;浏览器包自身包内边(src/test/dist 的内部模块边)不属工作区包依赖,经 to 侧 pathNot 一并排除(WP-F1:规则原形会把任何多模块浏览器包连自身测试在内全部误伤,与本注释声明的意图相悖——浏览器包横向依赖由 browser-package-cross-dependency-* 规则族单独收紧,WP-51)。",
-      from: { path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/" },
+        "浏览器侧包(**2026-09-19 WP-96 起仅 `vm-ui`**;退役前为 vm-ui、web-component、embed-runtime、react-wrapper)对**其他工作区包**只允许依赖 protocol;浏览器包自身包内边(src/test/dist 的内部模块边)不属工作区包依赖,经 to 侧 pathNot 一并排除(WP-F1:规则原形会把任何多模块浏览器包连自身测试在内全部误伤,与本注释声明的意图相悖——浏览器包横向依赖由 browser-package-cross-dependency-* 规则族单独收紧,WP-51)。**WP-96 改述**:浏览器包只剩 `vm-ui` 一个,该规则族原本要收紧的「浏览器包互相依赖」在结构上只剩「→ vm-ui」一个方向(其余三条已随目标包删除,见文件头 WP-96 段)。",
+      from: { path: "^packages/vm-ui/" },
       to: {
         path: "^packages/",
-        pathNot: [
-          "^packages/protocol/",
-          "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
-        ],
+        pathNot: ["^packages/protocol/", "^packages/vm-ui/"],
       },
     },
     {
       name: "browser-package-cross-dependency-into-vm-ui",
       severity: "error",
       comment:
-        "浏览器包横向依赖收紧(WP-51 立,WP-52 扩展):横向边只允许 react-wrapper → embed-runtime(WP-51,薄封装消费宿主侧 SDK)与 web-component → vm-ui(WP-52,Q3 定案「分层同源 + 自包含装配」:插件 Shell 挂载 vm-ui 工作区)。本规则族按目标包各立一条,from 侧 pathNot 排除目标包自身(包内边不属跨包依赖,WP-F1 先例)与已放行的来源包;其余横向边一律禁止。",
+        "浏览器包横向依赖收紧(WP-51 立,WP-52 扩展;**2026-09-19 WP-96 随退役面收敛为唯一一条**):规则族原按目标包各立一条,`into-web-component` / `into-react-wrapper` / `into-embed-runtime` **已随目标包物理删除**(2026-09-19 WP-96)。**本规则当前结构上不可能触发**:`vm-ui` 已是唯一浏览器包 ⇒ from 侧只可能是 `vm-ui`,而 from 侧 pathNot 排除目标包自身(包内边不属跨包依赖,WP-F1 先例)⇒ 触发集为空。**保留理由**:为「将来新增浏览器包」保留一条已接线的方向规则(新增时须按放行边重写 from 侧 pathNot)。历史放行边 = react-wrapper → embed-runtime(WP-51,薄封装消费平台侧 SDK)与 web-component → vm-ui(WP-52,Q3 定案「分层同源 + 自包含装配」)。",
       from: {
-        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
-        pathNot: ["^packages/vm-ui/", "^packages/web-component/"],
+        path: "^packages/vm-ui/",
+        pathNot: ["^packages/vm-ui/"],
       },
       to: { path: "^packages/vm-ui/" },
     },
-    {
-      name: "browser-package-cross-dependency-into-web-component",
-      severity: "error",
-      comment:
-        "见 browser-package-cross-dependency-into-vm-ui(WP-51 立,WP-52 扩展:放行边 = react-wrapper → embed-runtime 与 web-component → vm-ui 两条;任何包 → web-component 均禁止——插件 Shell 是装配叶子,不被其他浏览器包消费)。",
-      from: {
-        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
-        pathNot: "^packages/web-component/",
-      },
-      to: { path: "^packages/web-component/" },
-    },
-    {
-      name: "browser-package-cross-dependency-into-react-wrapper",
-      severity: "error",
-      comment: "见 browser-package-cross-dependency-into-vm-ui(WP-51:两条放行边均不含 → react-wrapper 方向;任何包 → react-wrapper 均禁止)。",
-      from: {
-        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
-        pathNot: "^packages/react-wrapper/",
-      },
-      to: { path: "^packages/react-wrapper/" },
-    },
-    {
-      name: "browser-package-cross-dependency-into-embed-runtime",
-      severity: "error",
-      comment: "见 browser-package-cross-dependency-into-vm-ui(WP-51:react-wrapper → embed-runtime 为放行边,from 侧一并豁免 react-wrapper;WP-52:web-component → embed-runtime 为第二条放行边——Q4 定案「分层同源」,插件侧复用 embed-runtime 的无状态纯构件[esid 校验 / TypeRateLimiter / 违规计数键],角色编排自实现)。",
-      from: {
-        path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
-        pathNot: ["^packages/embed-runtime/", "^packages/react-wrapper/", "^packages/web-component/"],
-      },
-      to: { path: "^packages/embed-runtime/" },
-    },
+    // 2026-09-19 WP-96 随退役面删除:
+    // `browser-package-cross-dependency-into-web-component` /
+    // `...-into-react-wrapper` / `...-into-embed-runtime` 三条规则,**整条移除**
+    // (目标包 packages/web-component、packages/react-wrapper、packages/embed-runtime
+    // 已物理删除);依附它们的反例 6/7/8/9、正控 10a/10b/10c、正控 12 在
+    // tooling/dependency-boundary-self-test.mjs 同批删除。此处保留删除痕迹,
+    // 不允许静默消失。
     {
       name: "protocol-schema-generator-not-importable",
       severity: "error",
@@ -207,12 +192,12 @@ module.exports = {
       name: "no-backend-dependency-on-browser-packages",
       severity: "error",
       comment:
-        "浏览器可达包(vm-ui / web-component / embed-runtime / react-wrapper)禁反向依赖(WP-1):服务端包与应用引入浏览器面即扩大公开构建图——浏览器面只被浏览器加载,投影 / 嵌入 SDK 的机制面不进服务端。浏览器包自身的依赖方向由 browser-packages-only-depend-on-protocol 单独强制。",
+        "浏览器可达包(**2026-09-19 WP-96 起仅 `vm-ui`**)禁反向依赖(WP-1):服务端包与应用引入浏览器面即扩大公开构建图——浏览器面只被浏览器加载,投影的机制面不进服务端(平台侧嵌入 SDK 面已随 WP-96 退役)。浏览器包自身的依赖方向由 browser-packages-only-depend-on-protocol 单独强制。",
       from: {
         path: "^(packages|apps)/",
-        pathNot: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/",
+        pathNot: "^packages/vm-ui/",
       },
-      to: { path: "^packages/(vm-ui|web-component|embed-runtime|react-wrapper)/" },
+      to: { path: "^packages/vm-ui/" },
     },
   ],
   options: {

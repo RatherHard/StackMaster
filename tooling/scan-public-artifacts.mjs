@@ -2,8 +2,9 @@
 /**
  * R8 公开构建图与产物隔离扫描(整改清单 §十;WP-0 扩展 ZR-B3 / ZR-B9 Rust 侧)。
  *
- * 对浏览器可达包(protocol、vm-ui、web-component、embed-runtime、
- * react-wrapper;尚未落地的包自动跳过)执行:
+ * 对浏览器可达包(**2026-09-19 WP-96 起仅 protocol、vm-ui**;退役的
+ * web-component / embed-runtime / react-wrapper 三包已随 WP-96 物理删除;
+ * dist 尚未落地的包自动跳过)执行:
  *   1. 从 package.json exports 的**公开入口**(排除 server-only 子路径)
  *      做 dist 产物静态依赖图 BFS,检查导入边界(node 内建、server-only、
  *      challenge-schema 等);
@@ -27,14 +28,9 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 浏览器可达包(dist 落地后才纳入扫描;challenge-schema 刻意不在列)。 */
-const PUBLIC_PACKAGES = [
-  "protocol",
-  "vm-ui",
-  "web-component",
-  "embed-runtime",
-  "react-wrapper",
-];
+/** 浏览器可达包(dist 落地后才纳入扫描;challenge-schema 刻意不在列)。
+ *  2026-09-19 WP-96:web-component / embed-runtime / react-wrapper 随退役面删除。 */
+const PUBLIC_PACKAGES = ["protocol", "vm-ui"];
 
 /**
  * 误报豁免(文件路径含包名,正则标记,原因,到期日 YYYY-MM-DD)。
