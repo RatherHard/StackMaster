@@ -43,10 +43,20 @@ pnpm --filter @stackmaster/session-api test                              # 全�
 pnpm lint                                                                # 仓库门禁</code></pre>
 
 <h4 id="t5-2">2 · 起联调拓扑</h4>
-<pre><code>pnpm --filter @stackmaster/session-api compose:deps:up   # PostgreSQL/Redis/MinIO 容器(需 Docker Desktop)
-pnpm --filter @stackmaster/session-api dev:host          # session-api:13000 + verifier:13100(开发联调启动器)</code></pre>
-<p class="muted"><code>dev:host</code> 会把开发壳 origin(http://localhost:5173)加入来源白名单并注入本地合成凭证；
-这是浏览器联调的专用启动器。</p>
+<pre><code># ① 先构建页面产物 —— compose 把宿主 apps/page-app/dist 只读挂进容器(镜像不构建 page-app)
+pnpm --filter @stackmaster/vm-ui build
+pnpm --filter @stackmaster/page-app build
+# ② 再起全拓扑(PostgreSQL/Redis/MinIO + session-api:13000 + verifier:13100;需 Docker Desktop)
+pnpm --filter @stackmaster/session-api compose:app:up</code></pre>
+<p class="muted">只想要依赖容器、应用跑宿主进程时:<code>compose:deps:up</code> 起依赖,再 <code>pnpm --filter @stackmaster/session-api dev:host</code>
+(session-api:13000 + verifier:13100,开发联调启动器;本地合成凭证只用于联调)。
+⚠ 该形态的 <code>SESSION_API_PUBLIC_ORIGIN</code> 取自 <code>compose/integration.env</code>(测试用 origin,<b>不是页面开发服务器</b>),
+其签发的 <code>launchUrl</code> 不能直接贴进浏览器 ⇒ <b>浏览器实测请走上面的 compose 形态</b>。</p>
+<p class="muted">页面(<code>apps/page-app</code>)由 <b>session-api 同源托管</b>:<code>SESSION_API_PAGE_APP_DIR</code> 未设时用仓库内 <code>apps/page-app/dist</code>(存在即启用);
+显式配了<b>却指不到目录</b>会拒绝启动;compose 形态该键指向容器内 <code>/app/apps/page-app/dist</code>(由 bind mount 承载)——
+<b>宿主没构建页面时那里是空目录</b>,容器照常起、换票照常,但页面打不开(静态面零路由)。</p>
+<p class="muted">两个与启动链同批登记的键:<code>SESSION_API_PUBLIC_ORIGIN</code>(页面 origin;<b>未配 ⇒ 签发面一律 404</b>)必须与
+<code>SESSION_API_ALLOWED_ORIGINS</code> 里的<b>同一个值</b>成对出现 —— 页面上的变更请求带 Cookie 与 <code>Origin</code>,CSRF 闸按白名单精确比对,不登记就是 401。</p>
 
 <h4 id="t5-3">3 · 登记题目（完整代码，拓扑就绪后执行）</h4>
 <p>新建 <code>apps/session-api/test/my-challenges/register-my-challenge.compose.integration.test.ts</code>
@@ -58,7 +68,7 @@ pnpm --filter @stackmaster/session-api dev:host          # session-api:13000 + v
  *   SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec vitest run test/my-challenges/register-my-challenge.compose.integration.test.ts
  *
  * 登记链路:规范化 JSON 落桶 → 摘要自证 → Ed25519 签名验签 → PG 建档(版本不可变,
- * 重跑前清理旧行/旧对象)。登记租户必须与后续 embed token 的租户一致。
+ * 重跑前清理旧行/旧对象)。登记租户必须与后续签发启动地址时服务端派生的租户一致。
  */
 import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -163,8 +173,9 @@ describe.skipIf(!COMPOSE_ENABLED)(`我的题目登记(联调租户 ${DEV_TENANT_
 </code></pre>
 <p>执行（<b>SESSION_API_COMPOSE=1 是门控开关；依赖容器须已起</b>）：</p>
 <pre><code>SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec vitest run test/my-challenges/register-my-challenge.compose.integration.test.ts</code></pre>
-<div class="warnbox">两个必须记住的纪律：<b>① 登记租户 = token 租户</b>——题目版本按（租户,题目,版本）三键定位，
-后续签发 embed token 的 <code>E2E_TENANT_ID</code> 必须与这里的租户一致，否则会话创建失败；
+<div class="warnbox">两个必须记住的纪律：<b>① 登记租户 = 启动面租户</b>——题目版本按（租户,题目,版本）三键定位，
+后续换一次性启动地址（<code>POST /auth/launch-tickets</code>）时，服务端由<b>宿主凭证 × <code>SESSION_API_HOST_TENANTS</code> 白名单</b>派生租户，
+该租户必须与这里的登记租户一致，否则签发与换票都拿不到题目；
 <b>② 版本不可变</b>——重复登记确定性拒绝，改题后递增 <code>challengeContentVersion</code> 重新登记
 （测试模板自带旧行/旧对象清理，可直接重跑）。</div>
 
@@ -173,18 +184,46 @@ describe.skipIf(!COMPOSE_ENABLED)(`我的题目登记(联调租户 ${DEV_TENANT_
 # 200 + ETag "&lt;64 位十六进制&gt;"  = 已登记(ETag 即公开包登记摘要)
 # 404                          = 未登记 / 租户不符</code></pre>
 
-<h4 id="t5-5">5 · 浏览器实测</h4>
-<pre><code># ① 签发 embed token(每次开局一枚:单次消费,TTL 1 小时)
-SESSION_API_ORIGIN=http://127.0.0.1:13000 \
-SESSION_API_HOST_BACKEND_TOKEN=&lt;宿主共享凭证,见 dev:host 输出或联调文档&gt; \
-E2E_TENANT_ID=tenant-dev-0001  E2E_USER_ID=user-dev-0001 \
-E2E_CHALLENGE_ID=sm-t01-write-marker  E2E_CHALLENGE_VERSION=1.0.0 \
-E2E_EMBED_SESSION_ID=esid-dev-local-browser-000000001 \
-node apps/plugin-dev/scripts/issue-embed-token.mjs
-# ② 起开发壳
-pnpm --filter @stackmaster/plugin-dev dev      # http://localhost:5173</code></pre>
-<p>浏览器打开 <b>http://localhost:5173</b>（必须 localhost），表单填四元组（与签发命令一致）→「创建并连接」→
-按〈<a href="../界面帮助手册.html">界面帮助手册</a>〉§13 的完整交互链游玩 → 菜单「提交」→ 等待 verdicted。</p>
+<h4 id="t5-5">5 · 浏览器实测（页面分发形态）</h4>
+<p>两步：把页面产物交给 session-api 同源托管，再用平台后端凭证换一个<b>一次性启动地址</b>。</p>
+<pre><code># ① 构建页面产物(第 2 节已做过可跳过;vm-ui 必须先构建,page-app 的 prebuild 会自动同步 vm-ui 产物)
+pnpm --filter @stackmaster/vm-ui build
+pnpm --filter @stackmaster/page-app build
+
+# ② 登记题目(真实登记链路;脚本自述用法与缺省值见 apps/session-api/k6/seed-challenge.mjs)
+#    ⚠ 登记租户必须与启动面的「锚租户」一致(compose / integration.env 的 SESSION_API_HOST_TENANTS
+#      = host-scores-tenant,而脚本缺省租户是 k6-tenant):两者取其一改齐
+cd apps/session-api
+$env:K6_TENANT_ID='host-scores-tenant'
+node --env-file=compose/integration.env k6/seed-challenge.mjs   # 缺省登记 chal-k6-baseline@1.0.0
+
+# ③ 换一次性启动地址(宿主凭证;请求体恰两键 {challengeId, version};响应恰两键 {launchUrl, expiresAt})
+$env:SESSION_API_HOST_BACKEND_TOKEN='&lt;宿主共享凭证;本地联调的 dev 合成值见 compose/app.yaml,严禁用于真实环境&gt;'
+curl.exe -sS -X POST http://127.0.0.1:13000/auth/launch-tickets `
+  -H "authorization: Bearer $env:SESSION_API_HOST_BACKEND_TOKEN" `
+  -H 'content-type: application/json' `
+  -d '{"challengeId":"chal-k6-baseline","version":"1.0.0"}'    # 换成你自己的 challengeId / 版本亦可</code></pre>
+<p>把返回的 <code>launchUrl</code> <b>贴进浏览器地址栏</b>（顶层导航）：页面服务端换票后 <b>302</b> 到不含票据的干净路径并下发启动授权凭证 Cookie，
+页面随即<b>自动建会话</b>并挂出工作区。按〈<a href="../界面帮助手册.html">界面帮助手册</a>〉的完整交互链游玩 → 菜单「提交」→ 等待 verdicted。</p>
+<p class="muted">四个运维/联调要点：<b>①</b> 启动地址<b>只能打开一次</b>（票据与授权凭证都是单次消费；重复打开 = <b>401</b>）；
+<b>②</b> 换票要求 <code>Sec-Fetch-Mode: navigate</code>，所以必须<b>顶层导航</b>，用 <code>fetch</code> / 脚本抓会 401；
+<b>③</b> 未配 <code>SESSION_API_PUBLIC_ORIGIN</code>、或 <code>SESSION_API_HOST_TENANTS</code> 为空 ⇒ 签发面<b>一律 404</b>（fail-closed，与"题目不存在"同形）；
+白名单里的<b>锚租户</b>(= 字典序最小项)必须是题目的登记租户:compose 与 <code>integration.env</code> 都取
+<code>host-scores-tenant</code>,所以种子脚本要用 <code>K6_TENANT_ID=host-scores-tenant</code>(脚本缺省 <code>k6-tenant</code>)——
+租户不符的后果是 <code>create_session</code> <b>422 <code>challenge_invalid</code></b>(不是 404);
+<b>④</b> 签发的 TTL 缺省 <b>300 秒</b>（<code>SESSION_API_LAUNCH_TICKET_TTL_SECONDS</code>，天花板 3600）。</p>
+<p>页面侧零后端的真机冒烟（<b>不需要 Docker</b>，已实测）：</p>
+<pre><code>pnpm --filter @stackmaster/page-app test        # 单测(vitest + jsdom;23 例)
+pnpm --filter @stackmaster/page-app test:e2e    # 真 chromium + 真 vm-ui 产物(23 例 + 2 skip)</code></pre>
+<p>全链的自动化形态 = <code>apps/page-app/e2e/launch-chain.spec.ts</code>（签发 → 顶层导航 → 302 抹票 → <code>connection-status=connected</code>；
+另一例断言票据单次消费：同一张票二次导航 = 401）。需要真拓扑，且必须显式开启：</p>
+<pre><code>$env:E2E_LAUNCH_CHAIN='1'                          # 否则整文件 skip(不伪装成通过)
+$env:SESSION_API_HOST_BACKEND_TOKEN='&lt;宿主凭证&gt;'   # 只经环境变量
+$env:SESSION_API_ORIGIN='http://127.0.0.1:13000'
+pnpm --filter @stackmaster/page-app exec playwright test e2e/launch-chain.spec.ts</code></pre>
+<div class="warnbox"><b>如实边界</b>：上面「换票 + 浏览器实测」与 <code>launch-chain</code> 全链在<b>本仓库当前机器上未实测</b>
+（Docker 引擎不可达，起不了依赖拓扑）；页面侧单测与 <code>test:e2e</code> 冒烟已实测通过。三引擎矩阵
+（<code>$env:E2E_MATRIX='1'</code>）跑的是同一套 <code>page-app</code> 用例。</div>
 
 <h4 id="t5-6">6 · 发布检查清单</h4>
 <div class="okbox">☐ 双包身份三元组一致、vmEngineVersion 正确　☐ 公开包零秘密（fileId/flag/seed/隐藏痕迹）
