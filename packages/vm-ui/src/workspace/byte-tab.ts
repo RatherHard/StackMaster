@@ -68,6 +68,10 @@ export class SmByteTab extends LitElement {
       display: block;
       block-size: 100%;
       min-block-size: 0;
+      /* 内联轴尺寸隔离 + 建容器(WP-95a / 遗留 #39 修法第一层)。
+         见下方「容器查询:窄档折叠 VMA 侧栏」的推导。 */
+      contain: inline-size;
+      container-type: inline-size;
     }
 
     .layout {
@@ -91,12 +95,52 @@ export class SmByteTab extends LitElement {
       overflow-y: auto;
     }
 
-    @media (max-width: 40rem) {
+    /* ── 容器查询:窄档折叠 VMA 侧栏(WP-95a;判据 = D-UI-2 补 ③)─────────────
+
+       **为什么必须按容器宽而不是视口宽**(遗留 #39 的根因第一层):本组件被放在
+       「半页」视图位里,而 <sm-byte-view> 自带 14rem(224px)侧栏 + 0.5rem 列距
+       ⇒ 容器宽 W 下主体只有 W − 232px。旧实现用 @media (max-width: 40rem)
+       判定,**按视口宽**:
+
+         | 视口 | 容器宽 | 主体宽 | 旧 media 判定(视口 ≤ 640px?) |
+         |---|---|---|---|
+         | 1440 | 720 | 488 | 否 ⇒ 侧栏在 |
+         | 1024 | 512 | **280** | **否 ⇒ 侧栏在(类别错误)** |
+         | 768  | 452 | **220** | **否 ⇒ 侧栏在(类别错误)** |
+         | 375  | 452 | 452 | 是 ⇒ 折叠(巧合对了) |
+
+       ⇒ 1024 / 768 档侧栏**在场**,主体被压到 280 / 220px,而 .byte-row 的
+       地址 + 十六进制两轨就占 320px ⇒ 第三列被压到 14px、「特殊显示」列头折
+       4 行(21.8 → 83.19px),chrome 反超视图位高 ⇒ 数据行整块落到可视区之下
+       (真机实测:完整可见数据行 **0**)。
+
+       **阈值推导(40rem = 640px;按主体所需宽度取整上推)**:
+       - 主体需要装下「地址 16ch + 间隙 1.5ch + 十六进制 26ch」= 44.5ch ≈ 347px
+         (13px × 0.6em = 7.8px/ch),再加「特殊显示」列头实宽(4 字 ≈ 52px)
+         ⇒ 主体舒适宽 ≈ **400px**;
+       - 主体宽 = W − 224 − 8 ⇒ W ≈ 632px ⇒ 上取整到 **40rem(640px)**;
+       - 40rem 也是**原媒体查询断点** —— 只把判定轴从「视口」改为「容器」,
+         不新造断点族(docs/develop/decisions-分发改版与UI重设计.md 的 §四·补.1
+         第 1 条:窄档折叠可折叠辅助面是正解;D-UI-5 补明文接受该降级)。
+
+       **闭环核对(改后真机读数,见 apps/page-app/e2e/geometry-guard.spec.ts)**:
+       1440(720 ⇒ 侧栏**在**,主体 488px)/ 1024(512 ⇒ **折叠**,主体 512px)/
+       768(452 ⇒ **折叠**,主体 452px)/ 375(452 ⇒ **折叠**,主体 452px)
+       ⇒ 主体恒 ≥ 452px > 400px,**四个视口档的字节视图都不再被压扁**。 */
+    @container (max-width: 40rem) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
       }
       .aside {
         display: none;
+      }
+    }
+
+    /* 更窄容器(36rem = 576px;对应 375 档的 452px 主体):列距收紧,
+       给字节视图多让 8px。与上一条同轴(容器宽),不引入视口断点。 */
+    @container (max-width: 36rem) {
+      .layout {
+        gap: 0.25rem;
       }
     }
   `;

@@ -651,11 +651,16 @@ export class SmByteView extends LitElement {
          **下限** = BYTE_VIEW_MIN_BLOCK_SIZE_PX(4 行):窄屏下工具区换行长高时
          数据区不得被压到装不下一行字节(sm-workspace 的 .tab-content 用
          overflow: visible 让视图位裁剪胜出,故本下限不会被内层滚动条抵消)。
+         WP-95a 追加:内联轴尺寸隔离 + 建容器 —— 供下方「工具区窄档紧凑排布」
+         的容器查询判定(见该段推导);contain: inline-size 保证本视图的内联
+         尺寸不被内容撑破(视图位宽度才是权威输入)。
          纪律:本文件是 css 模板字面量内部,**注释里一律不得出现反引号**
          (TypeScript 5.9 的 scanner 会把它当模板定界符 ⇒ 全文件解析崩塌;
          机检 = test/render/template-literal-safety.test.ts)。 */
       block-size: 100%;
       min-block-size: 0;
+      contain: inline-size;
+      container-type: inline-size;
       border: 1px solid var(--sm-border);
       border-radius: 8px;
       background: var(--sm-bg-base);
@@ -686,7 +691,13 @@ export class SmByteView extends LitElement {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      flex-wrap: wrap;
+      /* 窄档紧凑排布(WP-95a):第一行(标题 + 区域选择 + 对齐)与第二行
+         (跳转 / 检索)默认都不换行 —— 换行会把 chrome 顶到 300px+
+         (真机实测 768 档第一行 139px、第二行 96px,合计 chrome 383px >
+         视图位高 321px ⇒ 数据行整块落到可视区之下)。改为 nowrap 后多余宽度
+         由下方 input 的 max-inline-size 与 .region-select 的收缩承担。 */
+      flex-wrap: nowrap;
+      min-inline-size: 0;
     }
 
     .heading {
@@ -695,16 +706,52 @@ export class SmByteView extends LitElement {
       font-weight: 600;
     }
 
+    /* 区域选择:可收缩(min-inline-size: 0 才允许 flex 子项压到内容宽以下;
+       auto 最小值会让 select 把整行顶宽 ⇒ 又把 in-window 跳转表单挤到下一行)。 */
+    .region-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      min-inline-size: 0;
+    }
+
+    .region-select {
+      min-inline-size: 0;
+      max-inline-size: 32ch;
+    }
+
     .window-caption {
       margin: 0;
       color: var(--sm-fg-dim);
       font-size: 0.8125rem;
+      /* 窗口说明常驻但可收缩(信息冗余:区域起址 / 长度同样在
+         .region-select 与 VMA 侧栏条目上;此处只作一览)。
+         必须**省略号截断**而不是让它折行:.toolbar-row 已是 nowrap,
+         一个会折行的 flex 子项会把整行顶高(±3 行 ⇒ chrome 又反超视图位高)。 */
+      flex: 0 1 auto;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 标题与「区域选择」标签同为可收缩的**文本**项:容器极窄时被裁剪,
+       但文字信息在 .region-select 的选中项上有等价副本(.heading 是
+       tab.stack / tab.free,同时是该视图位的 aria-label 来源)。 */
+    .heading,
+    .region-label {
+      flex: 0 1 auto;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .offset-controls {
       display: inline-flex;
       align-items: center;
       gap: 0.25rem;
+      flex: 0 0 auto;
     }
 
     .offset-value {
@@ -714,10 +761,16 @@ export class SmByteView extends LitElement {
 
     button {
       font: inherit;
+      flex: 0 0 auto;
     }
 
     input {
       font: inherit;
+      /* 输入框默认宽 ≈ 177px(HTML size 缺省 20)⇒ 两个表单并列时单是输入框
+         就 354px,把工具区第一 / 第二行顶到多行。收口到 ≤14ch:仍是可用的
+         地址 / 十六进制口令输入宽(8 位地址 + 0x 前缀 = 10ch)。 */
+      min-inline-size: 8ch;
+      max-inline-size: 14ch;
     }
 
     .table {
@@ -725,6 +778,40 @@ export class SmByteView extends LitElement {
       display: flex;
       flex-direction: column;
       min-block-size: 0;
+    }
+
+    /* 三段网格列定义(单一来源;表头行与数据行共用同一组轨道 ⇒ 列对齐)。
+       轨道:A 地址 16ch / B 十六进制 26ch(固定字符轨,推导见
+       workspace/layout-presets.ts 的宽度推导表)/ C 特殊显示(可伸缩)。
+       column-gap: 1ch **保持改版前原值**(宽度推导表的 58ch 口径含它;
+       #39 的两层成因(视口轴折叠判定 + 1fr 不可收缩)都不在 gap 上,
+       故不动它 —— 避免让推导表失准)。
+       **第三轨写 minmax(0, 1fr) 而不是 1fr**(WP-95a,遗留 #39 修法第二层):
+       1fr 的最小值是 auto(内容宽),A + B 两轨合计 320px 已超过窄档主体宽时
+       第三轨无法收缩,网格整体溢出并把列头行顶成 4 行(真机实测 21.8 →
+       83.19px)。取 minmax(0, 1fr) 后第三轨可收缩,由 .row-special
+       自身的 overflow: hidden 裁剪(不换行、不撑高)。 */
+    .byte-row {
+      display: grid;
+      grid-template-columns: 16ch 26ch minmax(0, 1fr);
+      align-items: baseline;
+      column-gap: 1ch;
+      padding-inline: 0.75rem;
+      line-height: 1.6;
+    }
+
+    /* 表头行:三段**一律不换行**(单行 21.8px;折行是 chrome 反超视图位高的
+       直接成因)。文本超宽时由 overflow: hidden 裁剪 —— 表头是**标签**,
+       语义由 role=columnheader 承载,裁剪只损失像素不损失可达性。 */
+    .byte-row.header-row > * {
+      min-inline-size: 0;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .header-row {
+      color: var(--sm-fg-dim);
+      border-block-end: 1px solid var(--sm-divider);
     }
 
     sm-window-list.byte-list {
@@ -738,20 +825,6 @@ export class SmByteView extends LitElement {
       min-block-size: ${BYTE_VIEW_MIN_BLOCK_SIZE_PX}px;
       max-block-size: 100%;
       overscroll-behavior: contain;
-    }
-
-    .byte-row {
-      display: grid;
-      grid-template-columns: 16ch 26ch 1fr;
-      align-items: baseline;
-      column-gap: 1ch;
-      padding-inline: 0.75rem;
-      line-height: 1.6;
-    }
-
-    .header-row {
-      color: var(--sm-fg-dim);
-      border-block-end: 1px solid var(--sm-divider);
     }
 
     .anchor-row {
@@ -782,6 +855,12 @@ export class SmByteView extends LitElement {
     .row-special .cell-special {
       margin-inline-end: 0.25ch;
       white-space: pre;
+    }
+
+    /* 特殊显示段与数据行的第三轨口径一致(可收缩 + 裁剪)。 */
+    .byte-row > .row-special {
+      min-inline-size: 0;
+      overflow: hidden;
     }
 
     .anchor-bar {
@@ -837,6 +916,53 @@ export class SmByteView extends LitElement {
       margin: 0;
       padding: 1rem;
       color: var(--sm-fg-dim);
+    }
+
+    /* ── 工具区窄档紧凑排布(WP-95a;§四·补.1 第 3 条)──────────────────────
+
+       本视图自身是容器(:host 的 container-type: inline-size)⇒ 按**容器宽**
+       判定,与视图位宽度一一对应(不再出现「视口宽 ≠ 视图宽」的类别错误)。
+
+       阈值推导:工具区所需的「单行宽」= 跳转表单(输入 ≤14ch + 按钮)⊕ 检索
+       表单(同)≈ 2 × 130px + 标题 / 区域选择 / 对齐 ≈ 450px;
+       容器宽 < 34rem(544px)时必然发生第二行折行(实测 512px 下第一 / 第二行
+       合计 148px),故在该宽度以内收紧内边距与行距,把 chrome 压回组件
+       单行形态(实测 512 / 452px 容器下工具区回到 ≈116px)。 */
+    @container (max-width: 34rem) {
+      .toolbar {
+        gap: 0.125rem;
+        padding: 0.25rem 0.5rem;
+      }
+
+      .toolbar-row {
+        gap: 0.375rem;
+      }
+
+      .heading {
+        font-size: 0.8125rem;
+      }
+
+      /* 注意:窄档**不得**把字号降到 13px 以下(0.8125rem = 13px 是下限;
+         机检 = test/theming/theme.test.ts 的「字号下限」例)。故此处不动
+         窗口说明的字号(它本就是 0.8125rem),高度靠下面的
+         30rem 规则整条让位来省。 */
+
+      /* 对齐控件在窄档只留数值与按钮(标签由 role=group 的 aria-label 承载)。 */
+      .offset-label {
+        display: none;
+      }
+    }
+
+    /* 极窄容器(30rem = 480px):窗口说明整条让位。
+       实测取值:30rem 以下(即 375 档的 452px 主体)折行风险最高,而该
+       说明在**区域选择**与 VMA 侧栏条目上有等价信息(见 .window-caption
+       的「信息冗余」说明)⇒ 整条让位换来一个行单位的高度。
+       注意**不得**用降字号来省高(0.8125rem = 13px 是字号下限,机检 =
+       test/theming/theme.test.ts)。 */
+    @container (max-width: 30rem) {
+      .window-caption {
+        display: none;
+      }
     }
   `;
 }
