@@ -111,13 +111,38 @@ session-api 用 `@fastify/static` 托管本包产物,由**一个配置键**开�
 
 ```powershell
 pnpm --filter @stackmaster/page-app test        # 单测(vitest + jsdom;23 例)
-pnpm --filter @stackmaster/page-app test:e2e    # 真机冒烟(真 chromium + 真 vm-ui 产物;5 例)
+pnpm --filter @stackmaster/page-app test:e2e    # 真机(真 chromium + 真 vm-ui 产物;23 例 + 2 skip)
 ```
 
 `test:e2e` 会先 `pnpm run build`,然后以 `vite preview` 托管**已构建产物**
-(端口 5190),并用 Playwright 按契约形态注入 `POST /sessions` 应答。它断言:
-两个可见视图位、恰一次 `create_session` 且载荷恰两键、零 401、整页不纵向溢出、
-窄屏 375px 右半侧仍可达。
+(端口 5190),并用 Playwright 按契约形态注入 `POST /sessions` 应答。**不需要 Docker**。
+
+测试面(WP-95 之后):
+
+| spec | 例数 | 判什么 |
+|---|---|---|
+| `e2e/page-app.spec.ts` | 5 | 两个可见视图位 / 恰一次 `create_session` 且载荷恰两键 / 零 401 / 整页不纵向溢出 / 375px 右半侧可达 |
+| `e2e/geometry-guard.spec.ts` | 9(×3 引擎 = 27) | **几何护栏**(承接遗留 #33):D-UI-2 几何契约四条 × 四视口;**断言渲染结果,不断言常量算式** |
+| `e2e/axe-matrix.spec.ts` | 9 | **axe 新面矩阵**(chromium 门禁口径):`page-app-<视口>-<状态>` 九面;归档 `e2e/reports/axe/<日期>/<run-N>/` |
+| `e2e/launch-chain.spec.ts` | 2 | **启动地址链**(`E2E_LAUNCH_CHAIN=1` 才跑;见 §5.2):签发 → 顶层导航 → 302 抹票 → 同源 WSS → 票据单次消费 401 |
+
+**三引擎矩阵**(WP-95 从 plugin-dev 迁入):
+
+```powershell
+$env:E2E_MATRIX='1'; pnpm --filter @stackmaster/page-app test:e2e
+```
+
+`E2E_MATRIX=1` 追加 firefox / webkit(chromium 恒在)。**本机实测**:整套
+**51 passed / 24 skipped**(skipped = `launch-chain` 需真拓扑 + axe 的 firefox / webkit 面)。
+⚠ **不得**据「三引擎在 stub 后端下全通」记为「遗留 #1 已修复」—— 那是**载体退役的验证**,
+结案归 **WP-97**(仍需真拓扑三引擎复跑)。
+
+**几何缺口的登记(如实)**:`e2e/geometry-guard.spec.ts` 首跑即抓出真实缺口 ——
+字节视图**完整可见数据行**在窄档为 **0**(chromium 1024×768 / 768×900;firefox 同两档;
+webkit 1024 / 768 / 375),即 **D-UI-2 的 N ≥ 1 红线在 9 / 12 个「引擎 × 视口」格上不成立**;
+成因 = 字节视图列头行在窄档折成 4 行(21.8 → **84.2px**)+ 工具区换行 ⇒ chrome 超过视图位高。
+缺口以 `<引擎>:<视口>` 登记表留档(`KNOWN_GEOMETRY_GAPS`)+「状态已变即红」机检;
+**修法落在 `packages/vm-ui`**(列头 / 工具区的窄档形态),本 WP 不改产品代码。
 
 ### 5.2 全链(需要后端;本机 Docker 不可用时**不可达**)
 
@@ -142,8 +167,20 @@ curl.exe -sS -X POST http://127.0.0.1:13000/auth/launch-tickets `
 ```
 
 **本机实测登记(如实)**:本机 Docker 不可用(`dockerDesktopLinuxEngine` 管道缺失)
-⇒ 上面 ①③④ 三步**未实测**;②(构建)与 5.1(页面侧真机冒烟)已实测通过。
-全链复跑归 **WP-95**(门禁改造:几何护栏 + E2E 改页面分发 + axe 面矩阵重定义)。
+⇒ 上面 ①③④ 三步**未实测**;②(构建)与 5.1(页面侧真机冒烟)**已实测通过**。
+全链的**自动化形态** = `apps/page-app/e2e/launch-chain.spec.ts`:
+
+```powershell
+$env:E2E_LAUNCH_CHAIN='1'                          # 显式开启(否则整文件 skip)
+$env:SESSION_API_HOST_BACKEND_TOKEN='<宿主凭证>'   # 只经环境变量
+$env:SESSION_API_ORIGIN='http://127.0.0.1:13000'
+pnpm --filter @stackmaster/page-app exec playwright test e2e/launch-chain.spec.ts
+```
+
+它断言:签发响应恰两键 → `page.goto(launchUrl)` **顶层导航**(`Sec-Fetch-Mode: navigate`)
+→ 302 后**地址栏无 `?t=`** → `<sm-workspace>` 就位 → `connection-status=connected`;
+另一例断言**票据单次消费**(同一张票二次导航 = **401**)。
+**本机未实测**(Docker 引擎不可达,起不了拓扑),如实登记。
 
 ## 6. 纪律(不得回退)
 

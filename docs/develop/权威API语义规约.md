@@ -1894,3 +1894,39 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **未实测(明文登记,不得视为通过)**:① **真后端的全链冒烟**(compose `up` → 登记题目 → 签票 → 浏览器打开)**本机不可达** —— Docker 引擎管道缺失(`dockerDesktopLinuxEngine`),`pnpm --filter @stackmaster/session-api compose:app:up` 起不来;可复跑命令与三步流程写在 `apps/page-app/README.md` §5.2,**承接方 = WP-95**。② 已实测通过的部分:**页面侧真机冒烟 5/5 例**(真 chromium + 真 vm-ui 产物,`POST /sessions` 由 Playwright 按契约形态注入)、**服务端托管与优先级集成 8/8 例**(in-process 装配,含真实 `apps/page-app/dist`)、page-app 单测 23/23、`pnpm build` 14/14、`pnpm typecheck` 19/19、`pnpm lint` exit 0、`lint:deps` + `self-test` exit 0、`scan:public` 0 违规 / 3 豁免、`fixtures:manifest --check` 289 一致、`smoke:contract` 24 / 70 / 162 / 289。③ **未做**:k6 三场景与 compose 集成用例的链路改写(= D-API-160 的「未处置清单」,本 WP 亦未承接:同因"本机无法实测",半改更坏)。
 - **文档面回填**:`apps/page-app/README.md` 新建(同源拓扑 / 构建与托管步骤 / 本地联调命令 / 与 `plugin-dev` 的关系 / 六条纪律 / 测试面);**未改** `docs/user/**`(D-LT-4:WP-96 之后由 WP-98 回填)、**未改** `docs/phases/**`(仅按授权在接手入口 §九 追加一行)。
 
+### D-API-162 WP-95 门禁改造之一:**几何护栏升级为真浏览器 E2E**(承接遗留 #33;2026-09-18)
+
+- **裁定依据**:D-UI-2 的「几何契约」四条 + 遗留 #33 的原文要求(「在 E2E 增加几何护栏用例」)。**纪律**:单元 / 结构断言不算数(本仓库两次教训:axe 9/9 面 0 违规时窗口只有 146px;vm-ui 895 单测全绿时窗高拖拽真机失效)⇒ 断言面必须是**真浏览器布局引擎的渲染结果**。
+- **落点**:`apps/page-app/e2e/geometry-guard.spec.ts`(真 chromium + 真 vm-ui 产物 + `vite preview` + Playwright 注入 `POST /sessions`;**不需要 Docker**)。
+- **判据实现(不引用任何常量算式)**:① 左半侧 `scrollHeight > clientHeight`;② 每个**可见视图位** `clientHeight` ≥ **实测 chrome**(`.toolbar` 盒 + `.byte-row.header-row` 盒,由真实元素盒相加)+ 1 个 **实测行高**,且每个字节视图**完整可见数据行 ≥ 1**(红线)/ **≥ 4**(目标);③ `documentElement.scrollHeight ≤ innerHeight + 1`;④ 两半侧严格 1:1 + 间隙 0px + 零边框。**已废止的 `MIN_ROW_HEIGHT_PX` / `columnMinHeightPx` / `columnChromePx` 不出现在任何断言里**(D-UI-2 第 3 条);`layout-presets.ts` 的高度面常量也**不被引用**。
+- **多视口**:`1440×900` / `1024×768` / `768×900` / `375×667`(与 WP-93/94 的 harness 同档,便于逐值对照);`E2E_MATRIX=1` 下三引擎各跑一遍(共 27 例)。
+- **⚠ 实测发现(本项**只取证、不修产品代码**;承接方待派单)**:字节视图在**窄档**把「列头行」折成 4 行(21.8px → 84.2px)——根因 = `.byte-row` 网格 `16ch 26ch 1fr`(+`1ch` gap + `0.75rem` padding)的**固定轨宽 ≈ 346px**,而 `<sm-byte-tab>` 的 `.layout` 在 `> 40rem` **恒切出 224px(14rem)VMA 侧栏** ⇒ 1024 档字节视图只剩 278px、768 档只剩 218px;工具区(跳转 / 搜索表单)也换行长高 ⇒ **chrome(≈296 ~ 410)超过视图位高(267 ~ 350)** ⇒ 数据行整块落到面板可视区之下。**读数**(完整可见数据行;`chrome` / 视图位高 / 可见行数**三者都随引擎变**):
+  - chromium:`1440 → 4 行`、**`1024 / 768 → 0 行`**、`375 → 1 行`;
+  - firefox:`1440 → 7 行`、**`1024 / 768 → 0 行`**、`375 → 1 行`;
+  - webkit:`1440 → 6 行`、**`1024 / 768 / 375 → 0 行`**。
+  ⇒ **D-UI-2 的 N ≥ 1 红线在 9 / 12 个「引擎 × 视口」格上不成立,N = 4 目标只在 1440 档成立**。**如实登记,不粉饰**;登记表键取 **`<引擎>:<视口>`**(引擎差异是真实差异,不得抹平),并用「实测逐类型行数 == 登记值」+「失败形态与登记表逐字一致」双层断言,使**缺口被修好或形态漂移都会立刻变红**(不允许 `test.fail()` 静默吞掉 —— 实测发现 `test.fail()` 标注下的 `expect(...).toEqual(...)` 失败**不抛错**)。
+- **与 WP-93/94 harness 的关系(订正)**:harness 在 1024×768 实测 `byteVisibleRowCount = 2 / listClientHeight = 83`;其 `N = 4` 结论建立在「列表容器高 83px ≈ 4 × 20.8px」之上,而**首个数据行实测 43.59px**(挂跳转链)⇒ 「4 行」在真机上**从未成立**。本项把判据从「容器高」改为「**完整可见行数**」,是「按渲染结果断言」的直接后果。**未改** harness(它在本 WP 授权面外),但其 `N = 4` 的表述**不得**再被当作已达成。
+- **反例自证(实测)**:① 红线行数阈值改为 `≥ 4` ⇒ 375×667 变红;② 视图位下限加 `≥ 4000` ⇒ 四档全红;③ 文档层溢出判据改为 `≤ innerHeight − 100` ⇒ 1440 变红;④ 1:1 断言**未实跑**(需改 vm-ui 产品代码),按机制预期窄档红 / 宽档绿,**如实登记为未实测**。
+- **动 `docs/phases/**` 的授权面**:仅 #33 / #34 / #36 的**状态描述**(且同批两处:遗留清单 §十 / 评审 §六)+ 接手入口 §九 追加一行。**#33 不得据此判为已解决**(判据换载体后仍开放;结案归 WP-97)。
+
+### D-API-163 WP-95 门禁改造之二:**E2E 改页面分发 + 启动地址链夹具**(2026-09-18)
+
+- **新夹具**:`apps/page-app/e2e/helpers/launch-chain.ts` —— `POST /auth/launch-tickets`(Bearer = `SESSION_API_HOST_BACKEND_TOKEN`;body **恰两键** `{challengeId, version}`)→ `{launchUrl, expiresAt}` → **`page.goto(launchUrl)` 顶层导航**(只有顶层导航由浏览器带 `Sec-Fetch-Mode: navigate`,而它是换票路由的闸之一 —— `fetch` / `APIRequestContext` 的 `cors` / `no-cors` 必然 401,**不是**被测语义)→ 断言 302 后**地址栏无 `?t=`** → 等 `connection-status=connected`。
+- **新 spec**:`apps/page-app/e2e/launch-chain.spec.ts`(`E2E_LAUNCH_CHAIN=1` 显式开启;未开启即 `test.skip`,**不伪装成通过**;后端 `/healthz` 不可达时用例体先 skip 并打印原因)。含**票据单次消费**用例(同一张票二次导航 = **401**)。
+- **plugin-dev 的处置(「退役 ≠ 现在可删」的逐文件登记)**:新增 `apps/plugin-dev/e2e/helpers/launch-chain.ts`(同链路的 plugin-dev 版)与 **`apps/plugin-dev/e2e/RETIRED-SURFACE.md`**(逐文件:可改 / 改不动 + 理由 + 承接方)。**未改**的六个「可改」spec 的理由 = 其**服务端前置**(题目登记 / 描述包 / 调试通道)全依赖 compose 拓扑,而本机 **Docker 引擎不可达** ⇒ **无法实测** ⇒ 不提交无法验证的半改(与 k6 / compose 集成用例同批承接)。**改不动的**(`embed-protocol` / `browser-matrix` / `axe-contrast`)随 WP-96 删除该面消解;其可迁移断言(320px 横向溢出)已由本 WP 的几何护栏在 page-app 侧承接。
+- **未改断言面**:`plugin-dev` 的既有断言**一条未放松**(唯一改动是 `breakpoint-linkage.spec.ts` 的 **遗留 #20 收紧**,见 D-API-165)。
+
+### D-API-164 WP-95 门禁改造之三:**axe 面矩阵重定义 + 归档确定性**(2026-09-18)
+
+- **新面集合(9 面;取代退役的 `plugin-iframe-*` 九面)**:`page-app-{1440x900,1024x768,768x900,375x667}` × 关键状态 = `1440×{default,list-open,instruction,payload}` / `1024×{default,list-open}` / `768×default` / `375×{default,payload}`。**理由**:视口档与几何护栏同档(同一读数集合可对照);状态取「结构上不同的子树」——默认面(面板 + 视图内标签)、列表展开面(原生 checkbox + `aria-live` 播报区)、指令视图(跳转链 chip,历史 `graytext` 4.47:1 缺陷所在面)、payload(惰性宿主 + Blockly 画布 = `--sm-canvas-sprite-filter` 的消费面)。**不再有 light / dark 面**(终端单主题)与 **degraded 面**(属嵌入形态)。
+- **落点**:`apps/page-app/e2e/axe-matrix.spec.ts`(chromium 门禁口径;`E2E_MATRIX` 下其余引擎 skip);归档 `apps/page-app/e2e/reports/axe/<YYYY-MM-DD>/<run-N>/`(**新形态另起目录**;`apps/plugin-dev/e2e/reports/axe/**` 历史证据**只增不改**)。
+- **遗留 #13 修法落地**:① **同日复跑不覆盖** = `run-N` 序号目录(或 `AXE_ARCHIVE_LABEL` 显式命名);② **归档确定性** = 剥 `esid`(UUID)与 Lit `?lit$<hash>$` 标记、对象键排序、统一 LF ⇒ 「测量结果相同 ⇒ 归档字节相同」;③ `summary.md` 记**未扫描面清单**;④ `summary.md` **分列两栏**「自动判定通过 / 无法判定」。
+- **遗留 #14 的薄绿纪律落地 + 一处口径订正**:实测发现 axe 对**同一条规则**可能**同时**放进 `passes` 与 `incomplete` 两桶(本形态下 `color-contrast` 即如此)⇒ 逐桶求和,**不得只取首个命中**(首版按「首个命中」聚合,把 114 个「无法判定」节点误报成 0 —— 正是薄绿形态,已修)。**实测读数(9 面)**:`violations = 0`;自动判定通过节点合计 **10712**;**无法判定合计 839,且 9 面全部含 `color-contrast` 的 incomplete**(逐面 62 ~ 132 节点)⇒ **单主题下 axe 无法自动判定全部对比度**,本报告**逐面分列**,不写成「正向通过」。
+
+### D-API-165 WP-95 门禁改造之四:**三引擎矩阵迁至 page-app + 遗留 #20 收紧**(2026-09-18)
+
+- **`E2E_MATRIX=1` 挂到 `apps/page-app/playwright.config.ts`**(追加 firefox / webkit;chromium 恒在),**plugin-dev 保留一份**(它仍是唯一带 iframe 面的壳),但**新形态的门禁口径 = page-app**。理由:矩阵要覆盖的是**新形态**(与 API 同源的独立页面);plugin-dev 的矩阵格跑的是**退役面**(独立来源 iframe + 跨源 API),其 webkit 失败根因(第三方 Cookie 被拒)**在新形态下载体不存在**(同源)。
+- **本机可跑(订正「矩阵需真实拓扑」的旧口径)**:page-app 的用例**不需要 Docker**(stub `POST /sessions`)⇒ `E2E_MATRIX=1` 在本机**已实测三引擎**(几何护栏 27 例全绿 = 9 例 × 3 引擎;整套 **51 passed / 24 skipped**;skipped = `launch-chain`(需真拓扑)+ axe 的 firefox / webkit 面)。**遗留 #1 的口径不变**:**不得**据「三引擎在 stub 后端下全通」记为「#1 已修复」—— 那是**载体退役的验证**,结案归 **WP-97**(仍需真拓扑三引擎复跑)。
+- **遗留 #20 的修法落地**:`apps/plugin-dev/e2e/breakpoint-linkage.spec.ts` 的锚点行断言由裸 `toBeInViewport()` 收紧为 `toBeInViewport({ ratio: 0.9 })` + 锚点行 `boundingBox().height ≤ 28px`(真机一行 20.8px;113.38px 是「模板幻影空行」缺陷形态)。本机**未实测**(该 spec 需真实 compose 拓扑 ⇒ Docker 不可达),如实登记。
+
+
