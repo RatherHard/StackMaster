@@ -1,0 +1,70 @@
+{
+  "colorContrast": {
+    "incompleteNodes": 96,
+    "passedNodes": 18,
+    "status": "passed",
+    "violationsNodes": 0
+  },
+  "face": "page-app-768x900-default",
+  "incomplete": [
+    {
+      "count": 96,
+      "id": "color-contrast",
+      "nodes": [
+        {
+          "html": "<span data-notice-level=\"info\">题目描述包未加载:简介与教学面暂不可用(会话不受影响)。</span>",
+          "target": [
+            "span[data-notice-level=\"info\"]"
+          ]
+        },
+        {
+          "html": "<button type=\"button\" class=\"focus-window\" data-window-type=\"checkpoints\" aria-pressed=\"false\" title=\"聚焦「checkpoint」并滚动到该视图\">\n        checkpoint\n      </button>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              "button[data-window-type=\"checkpoints\"]"
+            ]
+          ]
+        },
+        {
+          "html": "<button type=\"button\" class=\"reset-views-button\" title=\"恢复默认顺序并全选(视图集不变,不存在开 / 关语义)\">\n            重置视图\n          </button>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".reset-views-button"
+            ]
+          ]
+        },
+        {
+          "html": "<span class=\"group-label\">模式</span>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".group:nth-child(2) > .group-label"
+            ]
+          ]
+        },
+        {
+          "html": "<strong class=\"mode-indicator\">解题模式</strong>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".mode-indicator"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "incompleteNodes": 96,
+  "passedNodes": 1120,
+  "rationale": "窄档默认形态(页面横向滚动,右半侧在视口外)",
+  "state": "default",
+  "url": "http://localhost:5190/app/c/chal-stack-escape/1.2.3",
+  "viewport": "768x900",
+  "violations": []
+}
