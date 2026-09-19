@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SessionClient, type ConnectionStatusEvent } from "../../src/client/session-client.js";
 import { SessionClientError, SessionCommandError } from "../../src/client/session-errors.js";
 import { resolveWebSocketUrl } from "../../src/client/transport.js";
+import { SESSION_ACTION_PROTOCOL_VERSION } from "@stackmaster/protocol";
 import {
   CREATE_INPUT,
   FakeFrames,
@@ -142,7 +143,10 @@ describe("SessionClient REST 5 命令", () => {
     expect(call?.init.credentials).toBe("include");
     expect(call?.init.headers).toEqual({ "content-type": "application/json" });
     expect(JSON.parse(String(call?.init.body))).toEqual({
-      protocolVersion: 1,
+      // ⚠ 版本字面量**必须引用契约常量**(WP-90 协议递增为 v2 后,此处写死的
+      // `1` 让用例变成恒假红;源码侧 `session-client.ts` 早已用常量,只有测试
+      // 硬编码 —— 这类"源码对、测试错"的形态最容易被误判成产品缺陷)。
+      protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
       command: "create_session",
       payload: { ...CREATE_INPUT },
     });
@@ -184,7 +188,7 @@ describe("SessionClient REST 5 命令", () => {
     ]);
     for (const call of rest) {
       const body = JSON.parse(String(call.init.body));
-      expect(body.protocolVersion).toBe(1);
+      expect(body.protocolVersion).toBe(SESSION_ACTION_PROTOCOL_VERSION);
       expect(body.payload).toEqual({ sessionId: SESSION_ID });
       expect(call.init.credentials).toBe("include");
     }
@@ -300,8 +304,12 @@ describe("SessionClient 认证 WSS 通道", () => {
     harness.client.sendAction(stepAction());
     expect(socket.sent).toHaveLength(2);
     for (const frame of socket.sent) {
-      expect(frame).toMatchObject({ protocolVersion: 1, type: "action", sessionId: SESSION_ID });
-      expect(frame).toHaveProperty("payload.protocolVersion", 1);
+      expect(frame).toMatchObject({
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
+        type: "action",
+        sessionId: SESSION_ID,
+      });
+      expect(frame).toHaveProperty("payload.protocolVersion", SESSION_ACTION_PROTOCOL_VERSION);
     }
   });
 
@@ -593,7 +601,11 @@ describe("SessionClient 动作响应处理", () => {
     socket.serverSends({ unexpected: true });
     socket.serverSends(
       serverFrame("action", {
-        protocolVersion: 1,
+        // 版本取契约常量(此处**不是**被测维度):本帧被拒的原因是**方向违规**
+        // ——服务端 → 客户端不得下发 `action` 帧(只允许 action_response 等)。
+        // 原先写死的 `1` 在协议递增后既不影响本用例意图、又会随窗口期语义
+        // 漂移(1 现已是被受理的上一版),故改为常量。
+        protocolVersion: SESSION_ACTION_PROTOCOL_VERSION,
         sessionId: SESSION_ID,
         clientSeq: 1,
         baseRevision: 0,
