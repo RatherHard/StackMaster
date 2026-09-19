@@ -1,0 +1,70 @@
+{
+  "colorContrast": {
+    "incompleteNodes": 93,
+    "passedNodes": 19,
+    "status": "passed",
+    "violationsNodes": 0
+  },
+  "face": "page-app-1440x900-default",
+  "incomplete": [
+    {
+      "count": 93,
+      "id": "color-contrast",
+      "nodes": [
+        {
+          "html": "<span data-notice-level=\"info\">题目描述包未加载:简介与教学面暂不可用(会话不受影响)。</span>",
+          "target": [
+            "span[data-notice-level=\"info\"]"
+          ]
+        },
+        {
+          "html": "<span class=\"status\" role=\"status\" aria-label=\"会话状态\">",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".status"
+            ]
+          ]
+        },
+        {
+          "html": "<strong class=\"session-status\">running</strong>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".session-status"
+            ]
+          ]
+        },
+        {
+          "html": "<strong class=\"revision\">0</strong>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".revision"
+            ]
+          ]
+        },
+        {
+          "html": "<strong class=\"connection-status\">reconnecting</strong>",
+          "target": [
+            [
+              "sm-workspace",
+              "sm-workspace-menu",
+              ".connection-status"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "incompleteNodes": 93,
+  "passedNodes": 814,
+  "rationale": "默认形态:两个可见视图位(栈 + 寄存器)+ 列表收起 + 右半侧 payload 同屏",
+  "state": "default",
+  "url": "http://localhost:5190/app/c/chal-stack-escape/1.2.3",
+  "viewport": "1440x900",
+  "violations": []
+}
