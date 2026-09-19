@@ -1929,4 +1929,27 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 - **本机可跑(订正「矩阵需真实拓扑」的旧口径)**:page-app 的用例**不需要 Docker**(stub `POST /sessions`)⇒ `E2E_MATRIX=1` 在本机**已实测三引擎**(几何护栏 27 例全绿 = 9 例 × 3 引擎;整套 **51 passed / 24 skipped**;skipped = `launch-chain`(需真拓扑)+ axe 的 firefox / webkit 面)。**遗留 #1 的口径不变**:**不得**据「三引擎在 stub 后端下全通」记为「#1 已修复」—— 那是**载体退役的验证**,结案归 **WP-97**(仍需真拓扑三引擎复跑)。
 - **遗留 #20 的修法落地**:`apps/plugin-dev/e2e/breakpoint-linkage.spec.ts` 的锚点行断言由裸 `toBeInViewport()` 收紧为 `toBeInViewport({ ratio: 0.9 })` + 锚点行 `boundingBox().height ≤ 28px`(真机一行 20.8px;113.38px 是「模板幻影空行」缺陷形态)。本机**未实测**(该 spec 需真实 compose 拓扑 ⇒ Docker 不可达),如实登记。
 
+### D-API-166 WP-95a **遗留 #39 修复落地**:字节视图窄档降级 + `KNOWN_GEOMETRY_GAPS` 清空(2026-09-19)
+
+- **依据**:主控 **2026-09-19** 裁定 `docs/develop/decisions-分发改版与UI重设计.md` **§四·补.1**(修法顺序)/ **§四·补.2**(规格改述)/ **D-UI-2 补**(N 分档)/ **D-UI-5 补**(452.4px 改述)。**不改任何常量数值、不改工作区几何、不放宽任何护栏断言**。
+- **实现的降级形态(显式登记;§四·补.1 第 3 条允许择一)**:选定 **「折叠 VMA 侧栏(容器查询)」+「列头可伸缩不折行」+「工具区窄档紧凑」** 三件,全部落在 `packages/vm-ui`;**未选**「视图内横向滚动」。理由:字节视图的真实可用宽由「视图位宽 − 224px(14rem 侧栏)− 8px 列距」决定,而侧栏是**可折叠的辅助面**(区域一览与区域切换在 `.region-select` 上有等价入口)⇒ 折叠它比让主内容横向滚动更符合「主内容优先」;实测该选择下**四档全部回到 ≥ 5 行**(无需横向滚动即达标)。
+- **三处落点**:
+  1. `src/workspace/byte-tab.ts`:`:host` 声明 `contain: inline-size` + `container-type: inline-size`;折叠判定由 `@media (max-width: 40rem)`(**视口轴**)改为 `@container (max-width: 40rem)`(**容器轴**);阈值推导(主体需 ≈347px 轨宽 + ≈52px 列头实宽 ⇒ 主体 ≈400px ⇒ 容器 ≈632px ⇒ 上取整 40rem)逐段写在注释里。**根因第一层 = 类别错误**:旧 media 查询在 1024 档(视口 1024 > 640)不折叠,而视图位只有 512px。
+  2. `src/views/byte/byte-view.ts`:`.byte-row` 第三轨 `1fr` → **`minmax(0, 1fr)`**(`1fr` 的最小值 = auto ⇒ 轨宽溢出时无法收缩,是列头折 4 行的直接机制);表头行三段 `white-space: nowrap` + `overflow: hidden`(**列头行 84.19 → 21.8px**);工具区 `input` 宽度收口(`max-inline-size: 14ch`,默认 `size=20` ≈177px 是换行主因)+ 两行 `flex-wrap: nowrap` + `:host` 建容器后按 `@container` 收紧内边距(**工具区 166.3 → 92.3px**)。
+  3. `src/workspace/layout-presets.ts`:按 **D-UI-5 补**改述 `SIDE_PANEL_MIN_WIDTH_PX` 的含义(**数值一字未改**):不含 14rem 侧栏、左半侧 < ≈766px 时必有某种降级 = **已接受的代价**;并写明 `N = 4` 的适用范围与 `N ≥ 1` 的红线地位。原「遗留 #36 已知偏离」段随之改为「适用条件(已结案)」。
+- **逐格读数(真机;12 格「引擎 × 视口」的**完整可见数据行**)**:
+
+  | 引擎 | 1440×900 | 1024×768 | 768×900 | 375×667 |
+  |---|---|---|---|---|
+  | chromium | 4 → **8** | **0 → 5** | **0 → 7** | 1 → **5** |
+  | firefox | 7 → **9** | **0 → 5** | **0 → 9** | 1 → **5** |
+  | webkit | 6 → **8** | **0 → 5** | **0 → 8** | **0 → 4** |
+
+  ⇒ **12 / 12 格满足红线 `N ≥ 1`,且 12 / 12 达到目标 `N = 4`**;实测 chrome 降至 chromium **114.09** / firefox **116.1** / webkit **128.09**(修前 157 ~ 410)。
+- **`KNOWN_GEOMETRY_GAPS` 收敛结果 = 空表**(只允许留 `N = 4` 未达登记的规则由 D-UI-2 补第 4 条给出;现已无 `N = 4` 未达的格)。**登记机制保留在场**(空表 + 「未登记项必须全绿」的断言路径)⇒ 将来某档回落:要么被未登记项判红,要么必须显式写明成因才允许登记。**不得**把护栏退回成「容器高」类结构断言(本次能抓到 #39 正因它量的是**完整可见行盒**;结构断言在 1024 档会被 83px 容器高判绿,而真实首行 43.59px、完整可见 0 行)。
+- **反例自证(第二轮,修后实测)**:红线阈值 `RED_LINE_VISIBLE_HEX_ROWS` 1 → **9** ⇒ **chromium 四档全部变红**(红线套件 4 failed / 5 passed),失败文本回读**实测值**「可见 8 行 / 5 行 / 7 行 / 5 行」;还原为 1 ⇒ 全套通过。第二轮用「抬高阈值」而非「调低阈值」,是因为修后红线**已满足** —— 原第一轮反例(阈值改 ≥ 4 时 375 档变红)随之失效,如实登记为「该反例已随缺陷修复自然失效」。
+- **门禁读数(本机真跑)**:`E2E_MATRIX=1` `page-app test:e2e` = **51 passed / 24 skipped / 0 failed**(与基线一致);`page-app test:e2e`(chromium)= **23 passed / 2 skipped**;`vm-ui build` / `typecheck` / `test` 全绿;`page-app build` / `test` 绿。
+- **未做 / 偏离(如实)**:① **未**改 `SIDE_PANEL_MIN_WIDTH_PX` 数值、**未**改工作区两分比例 / 视图位高度算式、**未**动 `packages/protocol` / `session-core` / `session-api` / `page-app` 的产品代码;② **未**删任何退役面(WP-96);③ 本轮**未**重跑 `test:coverage` 完整形态 / `test:miri` / `fuzz:smoke` / `test:compose`(本机 Docker 引擎不可达)/ plugin-dev 全量 E2E;④ **未实测** axe 面矩阵(`page-app` 九面)与残障对比度是否受窄档紧凑排布影响 —— 该面由**独立的 axe 门禁**承担,本轮未复跑,**不得视为已通过**。
+- **决策** = **D-API-166**(本条);遗留 #39 的状态订正见 `docs/phases/中期遗留清单.md` §十二 与 `docs/phases/中期验收评审.md` §六·一(两处同批)。
+
 
