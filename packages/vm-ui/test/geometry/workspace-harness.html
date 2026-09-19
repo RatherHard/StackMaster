@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>工作区整页布局真机几何测量(2026-09-18 改版 / D-API-153)</title>
+    <style>
+      /* 测量骨架 = **整页布局语义的最小复刻**:页面根不可滚动
+         (`html, body { margin:0; overflow:hidden }`),工作区自身即页面主体
+         (`100dvh`)。这正是「无宿主高度上报、无 iframe」的形态 —— 与
+         `apps/plugin-dev` / `page-app` 的整页壳同构。 */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        block-size: 100%;
+        /* 纵向不滚(工作区占满视口);**横向必须允许滚** —— D-UI-5 的窄屏形态
+           要求「两半侧各保底 452.4px ⇒ 页面横向滚动」。⚠ 实测要点:此处若给
+           `overflow-y: hidden`,浏览器会同时把 `overflow-x` 升格为 auto ⇒ body
+           自己成为**裁剪容器**、内容宽不再上浮到文档层 ⇒ `documentElement
+           .scrollWidth` 停在视口宽、**右半侧不可达**(实测 375px 视口下
+           docScrollWidth=375 而 body scrollWidth=905)。故两侧一律 `visible`。 */
+        overflow: visible;
+        background: #0b0f0b;
+        color: #b9ffc4;
+      }
+
+      #stage {
+        display: block;
+        block-size: 100dvh;
+        /* 同上:横向不裁切(让页面级横向滚动真实发生)。 */
+        overflow: visible;
+      }
+
+      #report {
+        position: fixed;
+        inset-block-start: 0;
+        inset-inline-start: 0;
+        z-index: 9;
+        max-inline-size: 24rem;
+        font: 11px/1.4 monospace;
+        white-space: pre-wrap;
+        padding: 4px;
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <pre id="report"></pre>
+    <script type="module" src="./mount-workspace.mjs"></script>
+  </body>
+</html>
