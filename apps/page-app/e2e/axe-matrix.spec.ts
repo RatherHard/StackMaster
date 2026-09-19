@@ -3,7 +3,7 @@
  *
  * ## 为什么面集合要重定义
  *
- * 现行 `apps/plugin-dev/e2e/reports/axe/**` 的九面 = `plugin-iframe-{light,dark,terminal}
+ * 退役面的历史九面 = `plugin-iframe-{light,dark,terminal}
  * × {registers,stack}` + `plugin-dev-shell-{light,terminal}` + `plugin-degraded-light`
  * —— **全部属退役面**(嵌入协议整体退役;light / dark 随终端单主题退役)。新形态是
  * 「与 API 同源的独立页面 + 终端单主题」⇒ 面集合按**视口档 × 关键形态**重切。
@@ -39,7 +39,10 @@
  *
  *  - **目录**:`e2e/reports/axe/<YYYY-MM-DD>/<run>/`(`run` = `run-1` / `run-2` …
  *    或环境变量 `AXE_ARCHIVE_LABEL` 显式命名)⇒ **同日复跑不覆盖**;
- *    `apps/plugin-dev/e2e/reports/axe/**` 是**历史证据,只增不改**(本文件绝不写它);
+ *    **退役面的历史归档**已随 WP-96 从 `apps/plugin-dev/e2e/reports/axe/**`
+ *    **搬迁**到 `docs/archive/axe-归档-plugin-dev/**`(原件随该应用物理删除;归档
+ *    **只增不改**,本文件绝不写它;搬迁是**字节级拷贝**,逐文件 SHA256 一致 ——
+ *    见 `docs/archive/README.md`);
  *  - **确定性**:归档前**规范化** —— 剥 `esid`(会话 UUID)、剥 Lit
  *    `?lit$<hash>$` / `<!--?lit$…$-->` 标记、对象键排序、LF 行尾、末尾换行。
  *    于是「测量结果相同 ⇒ 字节相同」,不再产生伪 diff;
@@ -58,7 +61,8 @@
  *
  * 与 `page-app.spec.ts` 同一基座:真 chromium + 真 vm-ui 产物 + `vite preview` +
  * Playwright 注入 `POST /sessions`(**不需要 Docker**)。归档目录落
- * `apps/page-app/e2e/reports/axe/**`(新增面集合,与 plugin-dev 的历史目录并列)。
+ * `apps/page-app/e2e/reports/axe/**`(新增面集合,与 `docs/archive/axe-归档-plugin-dev/**`
+ * 的历史目录**分处两地**、互不影响)。
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -451,7 +455,8 @@ test.afterAll(() => {
     "  (**同日复跑不覆盖**:序号目录或 `AXE_ARCHIVE_LABEL` 显式命名;遗留 #13 修法)。",
     "- 归档确定性(遗留 #13):剥 `esid`(UUID)与 Lit `?lit$…$` 标记、对象键排序、统一 LF ⇒",
     "  「测量结果相同 ⇒ 归档字节相同」,不再产生伪 diff。",
-    "- **历史归档** `apps/plugin-dev/e2e/reports/axe/**`(九面 `plugin-iframe-*` 等)**只增不改**,",
+    "- **退役面的历史归档** = `docs/archive/axe-归档-plugin-dev/**`(原 `apps/plugin-dev/e2e/reports/axe/**`,",
+    "  2026-09-19 随 WP-96 **字节级搬迁**后删除原件;九面 `plugin-iframe-*` 等)**只增不改**,",
     "  本报告不触碰;那些面随嵌入协议整体退役而不再可达。",
     "",
     "## 面集合(新形态;逐面理由)",
