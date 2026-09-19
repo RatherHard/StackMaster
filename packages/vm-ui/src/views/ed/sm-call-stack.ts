@@ -64,35 +64,35 @@ export class SmCallStack extends LitElement {
       padding-block: 0.25rem;
       text-align: start;
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     th,
     td {
       padding: 0.25rem 0.5rem;
       text-align: start;
-      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
+      border-block-end: 1px solid var(--sm-divider-faint);
     }
 
     thead th {
       font-size: 0.8125rem;
       font-weight: 600;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .index-cell {
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
     }
 
     .addr {
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
     }
 
     .innermost {
       margin-inline-start: 0.5rem;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
+      background: var(--sm-badge-bg);
       font-size: 0.8125rem;
     }
 
@@ -100,13 +100,13 @@ export class SmCallStack extends LitElement {
       margin: 0.25rem 0 0;
       padding: 0.25rem 0.5rem;
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.875rem;
     }
   `;

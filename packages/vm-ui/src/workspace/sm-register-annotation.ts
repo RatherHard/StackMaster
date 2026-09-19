@@ -12,10 +12,10 @@
  *
  * 动画纪律:零动画;语义化 DOM(button + 展开 detail 列表)。
  *
- * 主题消费(WP-74):标注面原色 `highlight` 归 `--sm-warn`(其 light / dark 值
- * 即 `highlight` 原样 ⇒ 明暗零变化,terminal 下转为琥珀);前景 / 焦点环 / 等宽
- * 字体同走 token。该标注**不可归入 `--sm-accent`(青绿 = 可点击地址)**:其
- * light 值为 `linktext`,替换会改变 light / dark 渲染(与「零变化」硬约束冲突)。
+ * 主题消费(WP-74;2026-09-18 D-UI-6 单主题口径):标注面原色 `highlight` 归
+ * `--sm-warn`(单主题下为琥珀 `#ffc857`);前景 / 焦点环 / 等宽字体同走 token,
+ * 且**不带回退值**(`:root` 缺省 = 终端 ⇒ 回退不可达)。该标注**不可归入
+ * `--sm-accent`(青绿 = 可点击地址)**:语义不同(标注 ≠ 可跳转地址)。
  */
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -53,16 +53,16 @@ export class SmRegisterAnnotation extends LitElement {
 
     .reg-annotation {
       padding: 0 0.25rem;
-      border: 1px solid color-mix(in srgb, var(--sm-warn, highlight) 40%, transparent);
+      border: 1px solid color-mix(in srgb, var(--sm-warn) 40%, transparent);
       border-radius: 4px;
-      background: color-mix(in srgb, var(--sm-warn, highlight) 10%, transparent);
-      color: var(--sm-warn, highlight);
+      background: color-mix(in srgb, var(--sm-warn) 10%, transparent);
+      color: var(--sm-warn);
       font: inherit;
       cursor: pointer;
     }
 
     .reg-annotation:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
+      outline: 2px solid var(--sm-focus-ring);
       outline-offset: 1px;
     }
 
@@ -78,7 +78,7 @@ export class SmRegisterAnnotation extends LitElement {
     }
 
     .reg-values li {
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg);
     }
 
     .reg-value {

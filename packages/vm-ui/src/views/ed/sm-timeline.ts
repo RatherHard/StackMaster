@@ -67,14 +67,14 @@ export class SmTimeline extends LitElement {
       gap: 0.5rem;
       align-items: baseline;
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
+      border-block-end: 1px solid var(--sm-divider-faint);
     }
 
     .seq {
       flex: none;
       min-inline-size: 2ch;
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
-      color: var(--sm-fg-dim, graytext);
+      font-family: var(--sm-font-mono);
+      color: var(--sm-fg-dim);
     }
 
     .kind-badge,
@@ -83,20 +83,20 @@ export class SmTimeline extends LitElement {
       flex: none;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
+      background: var(--sm-badge-bg);
       font-size: 0.8125rem;
     }
 
     .status-badge {
-      background: var(--sm-badge-bg-soft, rgb(0 0 0 / 4%));
-      color: var(--sm-fg-dim, graytext);
+      background: var(--sm-badge-bg-soft);
+      color: var(--sm-fg-dim);
     }
 
-    /* 系统色 highlight / highlighttext:当前无对应 token(Selection 底为半透明
-       14% 混色,与这里的不透明 highlight 底不同值 ⇒ 替换会改 light / dark 渲染);
-       且二者是**配对**系统色(Highlight / HighlightText 随 color-scheme 成对自适应),
-       单拆其中一支会在 terminal(dark 菜单色)下产生白字压琥珀的对比度风险 ⇒ 逐字
-       保留,待真机 axe 判定。 */
+    /* 系统色 highlight / highlighttext:当前无对应 token(Selection 底为暗绿底
+       #1c3a25,与这里的不透明 highlight 底不同语义 ⇒ 不并入);且二者是**配对**
+       系统色(Highlight / HighlightText 随 color-scheme 成对自适应),单拆其中一支
+       会失去配对保证 ⇒ 逐字保留,待真机 axe 判定(2026-09-18 D-UI-6 单主题下
+       仍是**未收敛的浅色语义系统色**,登记于本轮 D-UI-6 报告)。 */
     .current-badge {
       background: highlight;
       color: highlighttext;
@@ -109,15 +109,15 @@ export class SmTimeline extends LitElement {
 
     .meta {
       flex: none;
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.875rem;
     }
   `;

@@ -7,10 +7,10 @@
  * 工作区 shadow 根),主题锚在 shadow 树之外,树内样式表匹配不到树外祖先。
  *
  * 本测试固定修法的三条不变量:
- *  1. 样式表以 `var(--sm-canvas-sprite-filter, none)` 承载滤镜(自定义属性继承
+ *  1. 样式表以 `var(--sm-canvas-sprite-filter)` 承载滤镜(自定义属性继承
  *     穿透 shadow 边界 ⇒ 无需祖先选择器);
  *  2. 样式表内**不出现主题锚选择器**(`[data-sm-theme…]`)—— 死规则不得回潮;
- *  3. 三预设键集齐备(light `none` = 零视觉变化)。
+ *  3. 单主题下该 token **恒有定义**且为提亮度(`light` 档 `none` 已随 D-UI-6 退役)。
  */
 import { describe, expect, it } from "vitest";
 
@@ -21,7 +21,7 @@ describe("深底画布精灵处理(WP-80;token 承载而非锚选择器)", () =>
   it("画布样式表把垃圾桶 / 缩放滤镜绑定到主题 token(单一色源)", () => {
     expect(PAYLOAD_CANVAS_CSS).toContain(".blocklyTrash");
     expect(PAYLOAD_CANVAS_CSS).toContain(".blocklyZoom");
-    expect(PAYLOAD_CANVAS_CSS).toContain("filter: var(--sm-canvas-sprite-filter, none)");
+    expect(PAYLOAD_CANVAS_CSS).toContain("filter: var(--sm-canvas-sprite-filter)");
   });
 
   it("画布样式表不含主题锚选择器(树内样式表匹配不到树外祖先 = 死规则)", () => {
@@ -29,10 +29,10 @@ describe("深底画布精灵处理(WP-80;token 承载而非锚选择器)", () =>
     expect(PAYLOAD_CANVAS_CSS).not.toContain(":host(");
   });
 
-  it("三预设均声明该 token;light 取 none(light / dark 像素级零变化前提)", () => {
-    for (const preset of SM_THEME_PRESET_VALUES) {
-      expect(SM_THEME_VARIABLES[preset]["--sm-canvas-sprite-filter"]).toBeTypeOf("string");
-    }
-    expect(SM_THEME_VARIABLES.light["--sm-canvas-sprite-filter"]).toBe("none");
+  it("单主题下该 token 恒有定义且取提亮度(无「light 下 none」口径)", () => {
+    expect([...SM_THEME_PRESET_VALUES]).toEqual(["terminal"]);
+    const value = SM_THEME_VARIABLES["--sm-canvas-sprite-filter"];
+    expect(value).toBeTypeOf("string");
+    expect(value).toMatch(/^brightness\([\d.]+\)$/);
   });
 });

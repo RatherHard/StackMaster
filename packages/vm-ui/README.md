@@ -293,96 +293,85 @@ const client = new SessionClient({
 本 WP 未强制跑 compose E2E(留给 WP-F7 的 Playwright 最小集);上述接入面已由
 mock 全链路测试覆盖同一代码路径。
 
-## 主题与语言机制面(WP-53,2026-09-11;WP-73 主题边界修订)
+## 主题与语言机制面(WP-53,2026-09-11;WP-73 主题边界修订;2026-09-18 D-UI-6 终端单主题)
 
 嵌入协议冻结面的实现义务(阶段五边界裁决 2:**主题/语言是机制不是视觉美化**);
 定案细节与遗留登记见 `docs/develop/阶段五WP53决策草稿.md`。
-**WP-73 修订**:阶段五的「视觉风格零重设计」边界已按中期计划 §2.1 显式修订为
-**完整设计 token 集 + terminal 预设**(黑客氛围靠一致性 + 克制达成,学习可读性
-优先级高于氛围);机制(锚 + 文档级样式表 + 自定义属性继承)与协议面均不变。
+**WP-73 修订(历史,三预设期)**:阶段五的「视觉风格零重设计」边界曾按中期计划 §2.1
+修订为**完整设计 token 集 + terminal 预设**;**2026-09-18 D-UI-6** 进一步把三预设
+退役为**终端单主题**(机制:锚 + 文档级样式表 + 自定义属性继承,均不变)。
 
-### 主题(src/theme/theme-tokens.ts;WP-73 三预设 token 表)
+### 主题(src/theme/theme-tokens.ts;2026-09-18 D-UI-6 **终端单主题**)
 
-> **本节 = WP-77 回填点**(中期计划 §2.1 变量面文档):三预设 token 集与承载口径
-> 已由 WP-73 落地;组件消费面(逐组件改读 token)+ 真机 axe 三预设门禁属 WP-74,
-> 完成后由 WP-77 复核本文档。
+> **本节 = 单主题回填点**(2026-09-18 UI 改版 D-UI-6;`docs/develop/decisions-分发改版与UI重设计.md`):
+> `light` / `dark` / `auto` 三预设**已退役**,21 枚 token 名**全部保留**、取值收敛为
+> 终端一套。历史口径(WP-73「三预设 token 表」)不删,见文末沿革段。
 
-**边界变更登记(WP-73)**:`theme-tokens.ts` 头注释此前为「视觉风格零重设计,
-只做功能对比度最小变量面(8 个)」,已按中期计划 §2.1 **显式修订**为完整设计
-token 集 + 新增 `terminal` 预设;冻结不变量 = 8 个功能对比度变量的 light / dark
-值逐值不变(机检语料 `test/theming/theme.test.ts` 的 `FROZEN_CONTRAST_VARIABLES`);
-契约面零改动(嵌入协议 `EMBED_THEMES` 三值不动,见下方 D-MP-2 承载口径)。
+**变量面 = 21 个 CSS 自定义属性 × 单套取值**(`SM_THEME_PRESET_VALUES` =
+`SM_THEME_VALUES` = `["terminal"]`;`auto` 与 `@media (prefers-color-scheme)` 系统
+跟随分支一并退场;第 21 个 = M3 WP-80 的深底画布精灵处理,见下表末行):
 
-**变量面 = 21 个 CSS 自定义属性 × light / dark / terminal 三预设**(键集与键序
-三预设一致,`SM_THEME_PRESET_VALUES`;值域 `SM_THEME_VALUES` = 预设三值 + `auto`;
-第 21 个 = M3 WP-80 的深底画布精灵处理,见下表末行):
+| 族 | token | 取值(终端单套) |
+|---|---|---|
+| 背景三层 | `--sm-bg-base` | `#0b0f0b` 近黑(非纯黑) |
+| | `--sm-bg-panel` | `#101610` 面板 |
+| | `--sm-bg-inset` | `#070907` 内嵌区 |
+| 前景 | `--sm-fg` | `#b9ffc4` 磷光绿(16.7:1) |
+| | `--sm-fg-dim` | `#6dd47f` 暗绿(10.5:1) |
+| 语义色 | `--sm-accent` | `#4fe6c2` 青绿(12.4:1) |
+| | `--sm-warn` | `#ffc857` 琥珀(12.6:1) |
+| | `--sm-danger` | `#ff8a94`(8.6:1) |
+| | `--sm-selection` | `#1c3a25`(对前景 10.8:1) |
+| | `--sm-focus-ring` | `#a9ffb8`(16.3:1) |
+| 字体 | `--sm-font-mono` | §2.1 定案栈 |
+| 效果(恒有定义) | `--sm-scanline-opacity` / `--sm-caret-blink` | `0.06` / `1.1s` |
+| 深底精灵处理(M3 WP-80) | `--sm-canvas-sprite-filter` | `brightness(1.6)` |
+| 功能对比度族 | `--sm-border` / `--sm-border-button` / `--sm-border-strong` / `--sm-divider` / `--sm-divider-faint` / `--sm-badge-bg` / `--sm-badge-bg-soft` | 磷光绿 α 阶梯(28/34/46/16/12/18/10%) |
 
-| 族 | token | light / dark | terminal(具体色值) |
-|---|---|---|---|
-| 背景三层 | `--sm-bg-base` | `canvas` | `#0b0f0b` 近黑(非纯黑) |
-| | `--sm-bg-panel` | `color-mix(in srgb, canvas 92%, highlight 8%)` | `#101610` 面板 |
-| | `--sm-bg-inset` | `field` | `#070907` 内嵌区 |
-| 前景 | `--sm-fg` | `canvastext` | `#b9ffc4` 磷光绿(16.7:1) |
-| | `--sm-fg-dim` | `graytext` | `#6dd47f` 暗绿(10.5:1) |
-| 语义色 | `--sm-accent` | `linktext` | `#4fe6c2` 青绿(12.4:1) |
-| | `--sm-warn` | `highlight` | `#ffc857` 琥珀(12.6:1) |
-| | `--sm-danger` | `crimson` / `#ff8a94` | `#ff8a94`(8.6:1) |
-| | `--sm-selection` | `color-mix(in srgb, highlight 14%, transparent)` | `#1c3a25`(对前景 10.8:1) |
-| | `--sm-focus-ring` | `accentcolor` | `#a9ffb8`(16.3:1) |
-| 字体 | `--sm-font-mono` | §2.1 定案栈(三预设同源) | 同左 |
-| 效果 | `--sm-scanline-opacity` | `0`(关闭) | `0.06`(WP-74 登记上限) |
-| | `--sm-caret-blink` | `0s`(关闭) | `1.1s` |
-| 深底精灵处理(M3 WP-80) | `--sm-canvas-sprite-filter` | `none`(零视觉变化) | `brightness(1.6)` |
-| 冻结族(功能对比度 8) | `--sm-border` / `--sm-border-button` / `--sm-border-strong` / `--sm-divider` / `--sm-divider-faint` / `--sm-badge-bg` / `--sm-badge-bg-soft` / `--sm-danger` | light = 现行硬编码原样;dark = 功能对比度初值 | 磷光绿 α 阶梯(28/34/46/16/12/18/10%) |
-
-- **数值口径**:light / dark 的新 token 取**系统颜色关键词**(与现行渲染同源,
-  `color-scheme` 自适应 ⇒ 组件开始消费这些 token 时 light / dark 仍像素级零变化);
-  terminal 一律**具体色值**(真机 axe 判定确定、跨平台一致),为**保守可读初值**
-  —— 前景对三层背景的 WCAG 对比度实测 ≥ 8.1:1(括号内数值 = 对 `--sm-bg-base`)。
-- **可读性口径**:真机 axe color-contrast 是**唯一权威门禁**(WP-74 三预设扩面 +
-  13px 字号下限);本包在 jsdom 层固化结构 + 公式面证据
-  (`test/theming/theme-terminal.test.ts`:token 齐备 / 锚同源生成 / 效果面 light·dark
-  关闭 / terminal 色板 WCAG 逐对机检),**terminal 数值以 WP-74 真机报告修正**。
-- **注入 = `data-sm-theme` 属性锚 + 文档级样式表 + 自定义属性继承**:
-  `ensureSmThemeStyles(document)` 幂等注入(各组件 connectedCallback 调用;WP-73 只
-  扩样式表**内容**,注入面结构零变化),文档级规则命中携带锚的宿主元素(嵌入形态 =
-  WP-52 落的 `<pwn-memory-vm data-sm-theme>`),变量沿 composed 树继承穿透 shadow
-  DOM,组件以 `var(--sm-*, <light 值>)` 消费、零 JS 解析;`auto` 的系统跟随 =
-  `@media (prefers-color-scheme: dark)`(嵌入形态的 auto 已由 WP-52 解析为二值锚,
-  两条路径互不依赖)。锚样式表由变量记录**同源生成**(单一来源,严禁手写重复块)。
-- **独立使用形态**:`<sm-workspace theme="light|dark|terminal|auto">`(转写为自身
-  `data-sm-theme`,最近锚优先;值域即 `SmThemeValue`,terminal 随之可选)。
-- **`terminal` 承载口径(D-MP-2;嵌入协议零改动)**:`terminal` **不经冻结协议**
-  传达(协议外观值域仍为 light / dark / auto),由宿主元素上的
-  `data-sm-theme="terminal"` 扩展锚承载 —— **插件文档页预置**(部署面)或集成方在
-  同文档内直接设置。插件自身的落锚只写二值 `resolvedTheme`,故该锚出现即视为
-  **外部显式锚优先**(保留锚 + `color-scheme` 落 dark;宿主 `theme_changed` 不夺锚;
-  锚属性变更经 MutationObserver 即时生效),锚被移除或改写为协议三值时交还插件控制
-  —— light / dark / auto 路径逐字零变化。跨源宿主无法直接写插件文档内的锚
-  (同源策略),该形态承载面(插件文档 / 部署配置)口径由 WP-74 / WP-77 成文。
-- **效果类 token 的实装义务归 WP-74**(本包只落变量、组件零动画):扫描线 overlay 与
-  光标闪烁必须 `aria-hidden` 纯装饰、`pointer-events: none`、包在
-  `prefers-reduced-motion: no-preference` 内(或给 reduce 覆盖)、动画只用
-  transform / opacity;字号下限 13px 亦归 WP-74,本包不越界改组件字号。
+- **数值口径**:一律**具体色值**(不依赖系统颜色关键词 ⇒ 真机 axe 判定确定、跨平台
+  一致),为**保守可读初值** —— 前景对三层背景的 WCAG 对比度实测 ≥ 8.1:1
+  (括号内数值 = 对 `--sm-bg-base`)。
+- **可读性口径**:真机 axe color-contrast 是**唯一权威门禁**;本包在 jsdom 层固化
+  结构 + 公式面证据(`test/theming/theme-terminal.test.ts`:21 键精确锁定 / 锚同源
+  生成 / 效果面恒有定义 / 色板 WCAG 逐对机检)。
+- **注入 = `:root` 级缺省 + 单一显式 terminal 锚 + 文档级样式表 + 自定义属性继承**:
+  `ensureSmThemeStyles(document)` 幂等注入(各组件 connectedCallback 调用);
+  `:root{…}` 规则落在 `html` ⇒ **未设锚的元素同样是终端**(单主题的结构性保证,
+  不依赖组件侧回退值副本);`[data-sm-theme="terminal"]` 显式锚同值幂等,并兜住
+  三预设期的历史坏锚(一律收敛为终端值)。变量沿 composed 树继承穿透 shadow DOM,
+  组件以 `var(--sm-*)` **裸形态**消费(无回退值)、零 JS 解析。锚样式表由变量记录
+  **同源生成**(单一来源,严禁手写重复块)。
+- **回退值纪律(2026-09-18 起)**:`var(--sm-*, <回退>)` 的回退值**不得是浅色字面量**
+  (token 缺失时会静默回落成浅色),只允许终端等价或省略 —— 本仓现行处置 =
+  **省略**(唯一例外 = 等宽字体栈 `var(--sm-font-mono, <SM_MONO_FONT_STACK>)`,
+  逐字形态由 `test/theming/theme.test.ts` 机检防副本漂移)。
+- **独立使用形态**:`<sm-workspace theme="terminal">`(转写为自身 `data-sm-theme`;
+  值域即 `SmThemeValue` = 单值;`null` = 不写锚 ⇒ `:root` 缺省 = 终端)。
+- **效果类 token 的实装**:扫描线 overlay 与光标闪烁为 `aria-hidden` 纯装饰、
+  `pointer-events: none`、包在 `prefers-reduced-motion: no-preference` 内(或给
+  reduce 覆盖)、动画只用 transform / opacity;字号下限 13px 由机检固定。
 - **深底画布精灵处理(M3 WP-80;M1 遗留项结清)**:Blockly 画布上的垃圾桶 / 缩放
   图标取自 `media/sprites.svg`(`.trash{fill:#888}` / `.zoom{stroke:#888}`,整张精灵表
-  经 `<image>` 引用),在暗色 / terminal 近黑画布上偏暗。**按主题锚改写选择器不可行**
+  经 `<image>` 引用),在近黑画布上偏暗。**按主题锚改写选择器不可行**
   —— 画布样式表注入**画布宿主所在根**(生产形态 = 工作区 shadow 根),而主题锚
   `data-sm-theme` 在 shadow 树**之外**,树内样式表匹配不到树外祖先(M1 真机实测
   `filter` 恒 `none`);故改由 **token 承载**:
   `blockly-theme.ts` 的 `PAYLOAD_CANVAS_CSS` 对 `.blocklyTrash` / `.blocklyZoom`
-  取 `filter: var(--sm-canvas-sprite-filter, none)` —— 自定义属性**沿 composed 树继承**
+  取 `filter: var(--sm-canvas-sprite-filter)` —— 自定义属性**沿 composed 树继承**
   穿透 shadow 边界,`var()` 在元素自身求值 ⇒ 零祖先选择器、零重新 inject。真机
-  (chromium,真 dist + 真画布)实测:`.blocklyTrash` 的 `filter` = light `none` /
-  dark·terminal `brightness(1.6)`(元素自身 `opacity = 0.4` 为 Blockly 基态),
-  合成后非文本对比度 light **1.56:1 不变** / dark **1.84 → 3.07** / terminal
-  **1.82 → 3.04**(达到 WCAG 1.4.11 非文本 3:1);像素级复核(包围盒截图平均亮度)
-  dark **+0.0102** / terminal **+0.0098** / light **±0**,证明滤镜实际参与绘制。
-  机检:`test/payload/canvas-sprite-filter.test.ts`(绑定 + **禁锚选择器回潮** +
-  三预设齐备)、`test/theming/theme-terminal.test.ts`(键数锁 21)。`--sm-canvas-sprite-filter` 是唯一一处**非颜色** token。
+  (chromium,真 dist + 真画布)实测 `brightness(1.6)` 下合成非文本对比度
+  **3.04:1**(达 WCAG 1.4.11 非文本 3:1;修前 1.82);`--sm-canvas-sprite-filter`
+  是唯一一处**非颜色** token。机检:`test/payload/canvas-sprite-filter.test.ts`
+  (绑定 + **禁锚选择器回潮** + 单主题恒有定义)、`test/theming/theme-terminal.test.ts`
+  (键数锁 21)。
 - 机械护栏测试(`test/theming/theme.test.ts` + `test/theming/theme-terminal.test.ts`):
-  全部组件样式 var() 之外零 `rgb(0 0 0` / `crimson` 硬编码;axe 套件 **light / dark /
-  terminal 三锚**零 violations(`color-contrast` 沿既有豁免,真机补测归 WP-55 / WP-74)。
+  全部组件样式 var() 之外零 `rgb(0 0 0` / `crimson` 硬编码;除等宽字体栈外**零回退
+  值**;axe 套件 **terminal 单锚**零 violations(`color-contrast` 沿既有豁免)。
+- **沿革(仅留档,不再有效)**:WP-73 曾把变量面扩为「21 token × light / dark /
+  terminal 三预设」(light / dark 取系统颜色关键词 ⇒ 零视觉变化,light / dark 下
+  效果面取 `0` / `0s`、精灵滤镜取 `none`),并以 `FROZEN_CONTRAST_VARIABLES` 冻结
+  light / dark 的 8 个功能对比度值 —— 该冻结语料与三预设键集一致断言**随 D-UI-6
+  一并退场**(测试改为单主题断言,**键集精确锁定保留**)。
 
 ### i18n(src/i18n/)
 

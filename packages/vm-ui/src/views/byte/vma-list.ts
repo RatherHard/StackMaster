@@ -140,11 +140,11 @@ export class SmVmaList extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 8px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      background: var(--sm-bg-base);
+      color: var(--sm-fg);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
     }
 
@@ -176,7 +176,7 @@ export class SmVmaList extends LitElement {
       gap: 0.125rem 0.75rem;
       text-align: start;
       padding: 0.375rem 0.5rem;
-      border: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border: 1px solid var(--sm-divider);
       border-radius: 6px;
       background: transparent;
       color: inherit;
@@ -185,12 +185,12 @@ export class SmVmaList extends LitElement {
     }
 
     button.region:hover {
-      border-color: var(--sm-border-strong, rgb(0 0 0 / 25%));
+      border-color: var(--sm-border-strong);
     }
 
     button.region.selected {
-      background: var(--sm-selection, color-mix(in srgb, highlight 14%, transparent));
-      border-color: var(--sm-warn, highlight);
+      background: var(--sm-selection);
+      border-color: var(--sm-warn);
     }
 
     .region-label {
@@ -198,7 +198,7 @@ export class SmVmaList extends LitElement {
     }
 
     .region-id {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .region-address {
@@ -210,12 +210,12 @@ export class SmVmaList extends LitElement {
     }
 
     .region-window {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty {
       margin: 0;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
   `;
 }

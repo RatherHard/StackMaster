@@ -70,8 +70,8 @@ export class SmErrorExplainer extends LitElement {
       flex: none;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      background: var(--sm-badge-bg);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
     }
 
@@ -84,7 +84,7 @@ export class SmErrorExplainer extends LitElement {
     }
 
     dt {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     dd {
@@ -93,20 +93,20 @@ export class SmErrorExplainer extends LitElement {
     }
 
     .mono {
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
     }
 
     .teaching-note {
       margin: 0.5rem 0 0;
       padding: 0.25rem 0.5rem;
-      border-inline-start: 3px solid var(--sm-border-button, rgb(0 0 0 / 20%));
+      border-inline-start: 3px solid var(--sm-border-button);
       font-size: 0.875rem;
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.875rem;
     }
   `;

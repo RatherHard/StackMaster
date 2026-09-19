@@ -13,16 +13,17 @@
  *     规则 —— 声明强于继承,故「给容器挂前景色」不能改写它,只能以同根样式表
  *     + 更高特异性改写。
  *
- * **修法(单一色源 = WP-73 主题 token)**:
+ * **修法(单一色源 = 主题 token)**:
  *  - 承载背景/前景的 Blockly 组件样式经**官方主题 API**(`Blockly.Theme
  *    .defineTheme` 的 `componentStyles`)映射到 `var(--sm-*)` —— Blockly 以
  *    `element.style.setProperty(prop, value)` 落地,内联层 + `var()` 引用使
- *    **token 换档(light / dark / terminal)即时生效**,无需重新 inject;
+ *    **token 值变更即时生效**,无需重新 inject;
  *  - 只有「类目标签前景」一处无法用主题 API 覆盖(`color` 的 CSS 字面量声明),
  *    以注入到**画布宿主所在根**的样式表按更高特异性改写(Blockly 自身也把它的
  *    样式表注入同一根,故作用域与级联层级一致);
- *  - 组件内**零色值复制**:全部值都是 `var(--sm-*)` 引用(缺 token 时回落到
- *    系统色关键词,与 WP-73 light / dark 同源口径一致)。
+ *  - 组件内**零色值复制**:全部值都是 `var(--sm-*)` 引用(2026-09-18 D-UI-6
+ *    单主题起为**裸形态、无回退值**——`:root` 缺省恒有定义 ⇒ 回退不可达,而留
+ *    浅色回退反而会在 token 缺失时静默回落成浅色)。
  *
  * 注:未映射的组件样式(`cursorColour` / `markerColour` / `insertionMarkerColour`
  * / `*Opacity`)保持 Blockly 默认 —— 它们经 `getComponentStyle` 读入**渲染器常量**
@@ -48,12 +49,12 @@ export const PAYLOAD_BLOCKLY_THEME_NAME = "stackmaster-payload";
  *  - 滚动条 = `--sm-fg-dim`(暗色下不至于消失在深底里)。
  */
 export const PAYLOAD_BLOCKLY_COMPONENT_STYLES: Blockly.Theme.ComponentStyle = {
-  workspaceBackgroundColour: "var(--sm-bg-base, canvas)",
-  toolboxBackgroundColour: "var(--sm-bg-panel, canvas)",
-  toolboxForegroundColour: "var(--sm-fg, canvastext)",
-  flyoutBackgroundColour: "var(--sm-bg-inset, field)",
-  flyoutForegroundColour: "var(--sm-fg, canvastext)",
-  scrollbarColour: "var(--sm-fg-dim, graytext)",
+  workspaceBackgroundColour: "var(--sm-bg-base)",
+  toolboxBackgroundColour: "var(--sm-bg-panel)",
+  toolboxForegroundColour: "var(--sm-fg)",
+  flyoutBackgroundColour: "var(--sm-bg-inset)",
+  flyoutForegroundColour: "var(--sm-fg)",
+  scrollbarColour: "var(--sm-fg-dim)",
 };
 
 /**
@@ -76,26 +77,26 @@ export const PAYLOAD_BLOCKLY_COMPONENT_STYLES: Blockly.Theme.ComponentStyle = {
  *    `getComputedStyle(.blocklyTrash).filter` 恒为 `none`);CSS 亦无「按继承的
  *    `color-scheme` 取 `filter` 值」的手段(`light-dark()` 只作用于颜色值)。
  *    ⇒ **修法 = 变量承载**(WP-80 定案 (a) 支):新增 token
- *    `--sm-canvas-sprite-filter`(light `none` / dark·terminal `brightness(1.6)`),
- *    规则取 `var(...)`,靠**自定义属性继承穿透 shadow 边界**(与其余 token 同机制),
- *    零祖先选择器、零重新 inject。
+ *    `--sm-canvas-sprite-filter`(单主题下恒取 `brightness(1.6)`;`light` 档
+ *    `none` 已随 2026-09-18 D-UI-6 退役),规则取 `var(...)`,靠**自定义属性继承
+ *    穿透 shadow 边界**(与其余 token 同机制),零祖先选择器、零重新 inject。
  */
 export const PAYLOAD_CANVAS_CSS = `
 .${PAYLOAD_CANVAS_HOST_CLASS} {
-  background: var(--sm-bg-base, canvas);
+  background: var(--sm-bg-base);
 }
 
 .${PAYLOAD_CANVAS_HOST_CLASS} .blocklySvg {
-  background-color: var(--sm-bg-base, canvas);
+  background-color: var(--sm-bg-base);
 }
 
 .${PAYLOAD_CANVAS_HOST_CLASS} .blocklyToolboxCategoryLabel {
-  color: var(--sm-fg, canvastext);
+  color: var(--sm-fg);
 }
 
 .${PAYLOAD_CANVAS_HOST_CLASS} .blocklyTrash,
 .${PAYLOAD_CANVAS_HOST_CLASS} .blocklyZoom {
-  filter: var(--sm-canvas-sprite-filter, none);
+  filter: var(--sm-canvas-sprite-filter);
 }
 `;
 

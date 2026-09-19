@@ -113,7 +113,7 @@ export class SmJumpChain extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
     }
 
@@ -125,15 +125,15 @@ export class SmJumpChain extends LitElement {
     }
 
     .chain-arrow {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .chain-address {
       padding: 0 0.25rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 4px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-accent, linktext);
+      background: var(--sm-bg-base);
+      color: var(--sm-accent);
       font: inherit;
       cursor: pointer;
     }
@@ -145,7 +145,7 @@ export class SmJumpChain extends LitElement {
     .chain-address:focus-visible,
     .chain-expand:focus-visible,
     .chain-extend-button:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
+      outline: 2px solid var(--sm-focus-ring);
       outline-offset: 1px;
     }
 
@@ -161,10 +161,10 @@ export class SmJumpChain extends LitElement {
 
     .chain-expand {
       padding: 0 0.375rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 4px;
       background: none;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font: inherit;
       font-size: 0.8125rem;
       cursor: pointer;
@@ -173,22 +173,22 @@ export class SmJumpChain extends LitElement {
     /* 延伸入口 + 反馈(WP-F8 调试档;FE-ST-08/10)。 */
     .chain-extend-button {
       padding: 0 0.375rem;
-      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
+      border: 1px solid var(--sm-border-button);
       border-radius: 4px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-accent, linktext);
+      background: var(--sm-bg-base);
+      color: var(--sm-accent);
       font: inherit;
       font-size: 0.8125rem;
       cursor: pointer;
     }
 
     .chain-extend-button:disabled {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       cursor: not-allowed;
     }
 
     .chain-extend-status {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-family: system-ui, sans-serif;
       font-size: 0.8125rem;
     }
@@ -206,7 +206,7 @@ export class SmJumpChain extends LitElement {
     .chain-value,
     .chain-outside {
       margin-inline-start: 0.5rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-family: system-ui, sans-serif;
       font-size: 0.8125rem;
     }
@@ -226,11 +226,11 @@ export class SmJumpChain extends LitElement {
     .pseudo-asm {
       margin-inline-start: 0.375rem;
       padding: 0 0.25rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 4px;
-      background: var(--sm-bg-panel, color-mix(in srgb, canvas 92%, highlight 8%));
-      color: var(--sm-fg, canvastext);
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      background: var(--sm-bg-panel);
+      color: var(--sm-fg);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
       white-space: nowrap;
     }
@@ -247,7 +247,7 @@ export class SmJumpChain extends LitElement {
        让整份样式表语法失效(TS1005 连锁错;本包已踩过一次,登记于此)。 */
     .pseudo-asm[data-pseudo-asm-source="solve"],
     .pseudo-asm[data-pseudo-asm-source="no-coverage"] {
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg);
       font-family: system-ui, sans-serif;
     }
   `;

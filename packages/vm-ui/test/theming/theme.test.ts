@@ -1,19 +1,22 @@
 /**
- * WP-53 主题 token 机制测试(Q6 定案;WP-73 扩展为三预设):
- *  - 文档级锚样式表幂等安装与**四值锚规则**结构(light / dark / terminal 三预设 +
- *    auto;auto 由 @media 系统跟随——vm-ui 侧 auto 走 CSS,零 JS 解析;嵌入形态
- *    auto 已由 WP-52 解析为二值锚,边界登记于决策草稿);
- *  - 变量面断言:**light / dark 既有 8 个功能对比度变量逐值冻结**
- *    (`FROZEN_CONTRAST_VARIABLES` 机检语料,WP-73 light / dark 零变化证明)、
- *    terminal 预设键集一致且逐 token 齐备(结构与可读性下限见
- *    `theme-terminal.test.ts`);
- *  - sm-workspace `theme` 属性(独立使用形态)→ 自身 data-sm-theme 转写,
- *    显式属性胜过祖先锚(最近锚优先;值域含 terminal);
+ * WP-53 主题 token 机制测试(Q6 定案;WP-73 扩展为三预设;
+ * **2026-09-18 D-UI-6 收敛为终端单主题**)。
+ *  - 文档级样式表幂等安装与**单主题锚规则**结构(`:root` 级缺省 = 终端 +
+ *    单一显式 `[data-sm-theme="terminal"]` 锚;`light` / `dark` / `auto` 三预设与
+ *    `@media (prefers-color-scheme)` 系统跟随分支**已退役**);
+ *  - **「未设锚也是终端」机检**(D-UI-6 收敛实质 ⓑ 的结构面证据):未设锚元素的
+ *    计算值即终端 token 值(不依赖组件侧回退值副本);
+ *  - sm-workspace `theme` 属性(独立使用形态)→ 自身 data-sm-theme 转写;
+ *    **值域只剩 `terminal`**;`null` = 不写锚(由 `:root` 缺省决定 = 终端);
  *  - 机械护栏:全部 vm-ui 组件静态样式中不再存在 var() 之外的黑色半透明
- *    灰阶 / crimson 硬编码(组件零硬编码颜色改读变量);
- *  - **axe 套件三预设**(light 锚 / dark 锚 / terminal 锚各跑一遍,零 violations;
- *    color-contrast 沿既有豁免登记,真机补测归 WP-55 / WP-74);
- *  - 未授予 theme 的插件侧禁用锚(§4.4 降级矩阵第 2 行):无锚 = light 缺省。
+ *    灰阶 / crimson 硬编码(组件零硬编码颜色改读变量);豁免清单与源码
+ *    `@customElement` 清单并集机检(防漏项);字号下限 13px;等宽字体栈回退值
+ *    逐字一致(单主题下唯一保留的回退值形态,防多处副本漂移);
+ *  - **axe 单主题**(terminal 一遍;color-contrast 沿既有 jsdom 豁免登记)。
+ *
+ * 随 D-UI-6 废止的断言(不在此文件复活):三预设键集一致、
+ * `FROZEN_CONTRAST_VARIABLES`(light / dark 冻结语料)、四值锚规则、
+ * axe light / dark 两遍。
  */
 import axe from "axe-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -50,16 +53,17 @@ import type { SmWorkspace } from "../../src/workspace/sm-workspace.js";
 import {
   SM_MONO_FONT_STACK,
   SM_THEME_ANCHOR_STYLESHEET_TEXT,
+  SM_THEME_ATTRIBUTE,
+  SM_THEME_PRESET_VALUES,
+  SM_THEME_VALUES,
   SM_THEME_VARIABLES,
   ensureSmThemeStyles,
-  type SmThemeValue,
 } from "../../src/theme/theme-tokens.js";
 
 /**
- * 参与机械护栏的**消费清单**(标签名 → 元素类)。WP-74 由 8 个扩到全部消费主题
- * 变量的 vm-ui 组件;未消费者见 `THEME_EXEMPT_TAGS`。两者**并集**由「护栏覆盖
- * 全部注册组件」一条与源码 `@customElement` 清单机检对齐 ⇒ **新增组件若不登记
- * 即变红**,杜绝手写清单漏项。
+ * 参与机械护栏的**消费清单**(标签名 → 元素类)。未消费者见 `THEME_EXEMPT_TAGS`。
+ * 两者**并集**由「护栏覆盖全部注册组件」一条与源码 `@customElement` 清单机检
+ * 对齐 ⇒ **新增组件若不登记即变红**,杜绝手写清单漏项。
  */
 const THEME_COMPONENT_TAGS: readonly { readonly tag: string; readonly type: unknown }[] = [
   { tag: "sm-workspace", type: undefined },
@@ -148,23 +152,12 @@ function normalizeCss(text: string): string {
 }
 
 /**
- * light / dark 变量面冻结语料(WP-73 light / dark 零变化证明):
- * 8 个功能对比度变量的 light / dark 值一字不差地固化在此——任何改动(含
- * terminal 预设落地时的"顺手统一")都会让本测试变红。light 值 = 现行硬编码值
- * 原样(dark 侧白透明等可见度放大量为 WP-55 校准结论)。
+ * 计算值比对归一化:jsdom 的 CSSOM 会去掉 `/` 两侧空白(`rgb(0 0 0/15%)`),
+ * 故比对前剥除全部空白——两侧同口径处理,不掩盖值本身的差异。
  */
-const FROZEN_CONTRAST_VARIABLES: Readonly<
-  Record<string, { readonly light: string; readonly dark: string }>
-> = {
-  "--sm-border": { light: "rgb(0 0 0 / 15%)", dark: "rgb(255 255 255 / 22%)" },
-  "--sm-border-button": { light: "rgb(0 0 0 / 20%)", dark: "rgb(255 255 255 / 30%)" },
-  "--sm-border-strong": { light: "rgb(0 0 0 / 25%)", dark: "rgb(255 255 255 / 40%)" },
-  "--sm-divider": { light: "rgb(0 0 0 / 10%)", dark: "rgb(255 255 255 / 14%)" },
-  "--sm-divider-faint": { light: "rgb(0 0 0 / 8%)", dark: "rgb(255 255 255 / 10%)" },
-  "--sm-badge-bg": { light: "rgb(0 0 0 / 8%)", dark: "rgb(255 255 255 / 14%)" },
-  "--sm-badge-bg-soft": { light: "rgb(0 0 0 / 4%)", dark: "rgb(255 255 255 / 8%)" },
-  "--sm-danger": { light: "crimson", dark: "#ff8a94" },
-};
+function normalizeComputed(text: string): string {
+  return text.replace(/\s+/gu, "");
+}
 
 /** 移除全部平衡的 var(...) 片段(fallback 内保留的旧值不算硬编码)。 */
 function stripVarSpans(cssText: string): string {
@@ -202,6 +195,35 @@ function cssTextOf(tag: string): string {
   return styles.map((style) => String((style as { cssText?: string }).cssText ?? style)).join("\n");
 }
 
+/**
+ * 抽出全部**带回退值的** `var(--sm-*, <fallback>)`(平衡括号扫描;`rgb(...)` /
+ * `color-mix(...)` 这类回退值内含括号,正则 `[^)]*` 会截断 ⇒ 必须配平计数)。
+ * 裸形态 `var(--sm-*)` 不在结果内(无回退值 = 合规,无需判定)。
+ */
+function varSpans(cssText: string): { readonly name: string; readonly fallback: string }[] {
+  const spans: { name: string; fallback: string }[] = [];
+  const start = /var\(\s*(--sm-[a-z-]+)\s*,\s*/gu;
+  for (let match = start.exec(cssText); match !== null; match = start.exec(cssText)) {
+    const name = match[1] ?? "";
+    let depth = 1;
+    let cursor = start.lastIndex;
+    for (; cursor < cssText.length; cursor += 1) {
+      const char = cssText[cursor];
+      if (char === "(") {
+        depth += 1;
+      } else if (char === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          break;
+        }
+      }
+    }
+    spans.push({ name, fallback: cssText.slice(start.lastIndex, cursor).trim() });
+    start.lastIndex = cursor + 1;
+  }
+  return spans;
+}
+
 let main: HTMLElement | null = null;
 
 beforeAll(() => {
@@ -219,7 +241,7 @@ afterAll(() => {
   document.getElementById("sm-theme-token-styles")?.remove();
 });
 
-describe("主题锚样式表(文档级注入)", () => {
+describe("主题样式表(文档级注入;单主题)", () => {
   it("幂等安装:重复调用只保留一份 <style>", () => {
     ensureSmThemeStyles(document);
     ensureSmThemeStyles(document);
@@ -228,40 +250,58 @@ describe("主题锚样式表(文档级注入)", () => {
     expect(installed[0]?.textContent).toBe(SM_THEME_ANCHOR_STYLESHEET_TEXT);
   });
 
-  it("四值锚规则齐备:预设三锚 + auto(由 @media (prefers-color-scheme: dark) 承担)", () => {
+  it("单主题锚规则齐备::root 级缺省(:root 缺省块)+ 单一显式 terminal 锚", () => {
     const css = SM_THEME_ANCHOR_STYLESHEET_TEXT;
-    for (const value of ["light", "dark", "terminal", "auto"]) {
-      expect(css).toContain(`[data-sm-theme="${value}"]`);
+    expect(css).toContain(":root{");
+    expect(css).toContain(`[${SM_THEME_ATTRIBUTE}="terminal"]`);
+    // 退役面零残留:三预设其余值与系统跟随分支不得在场。
+    for (const retired of ["light", "dark", "auto"]) {
+      expect(css.includes(`[${SM_THEME_ATTRIBUTE}="${retired}"]`), `退役锚仍在:${retired}`).toBe(
+        false,
+      );
     }
-    expect(css).toContain("@media (prefers-color-scheme: dark)");
-    // auto 的暗色规则位于 media 内(系统跟随;vm-ui 零 JS 主题解析)。
-    const mediaBody = css.slice(css.indexOf("@media"));
-    expect(mediaBody).toContain('[data-sm-theme="auto"]');
-    expect(mediaBody).toContain(SM_THEME_VARIABLES.dark["--sm-border"] ?? "");
+    expect(css.includes("@media (prefers-color-scheme"), "系统跟随分支未退役").toBe(false);
+    // 值域单一(无 auto 兼容别名)。
+    expect([...SM_THEME_PRESET_VALUES]).toEqual(["terminal"]);
+    expect([...SM_THEME_VALUES]).toEqual(["terminal"]);
   });
 
-  it("light / dark 变量面逐值冻结:功能对比度 8 变量零变化(machine corpus)", () => {
-    for (const [name, frozen] of Object.entries(FROZEN_CONTRAST_VARIABLES)) {
-      expect(SM_THEME_VARIABLES.light[name], `light 变量漂移:${name}`).toBe(frozen.light);
-      expect(SM_THEME_VARIABLES.dark[name], `dark 变量漂移:${name}`).toBe(frozen.dark);
+  it("单一变量记录:21 枚 token 名齐备且逐 token 有值(键集精确锁定见 theme-terminal)", () => {
+    const names = Object.keys(SM_THEME_VARIABLES);
+    expect(names).toHaveLength(21);
+    for (const [name, value] of Object.entries(SM_THEME_VARIABLES)) {
+      expect(value, `token 空值:${name}`).toBeTruthy();
     }
-    // 冻结语料必须覆盖全部既有功能对比度名字(防"删名即通过")。
-    for (const name of Object.keys(FROZEN_CONTRAST_VARIABLES)) {
-      expect(Object.keys(SM_THEME_VARIABLES.light)).toContain(name);
-      expect(Object.keys(SM_THEME_VARIABLES.dark)).toContain(name);
-    }
-  });
-
-  it("三预设键集一致:terminal 与 light / dark 同名同序,逐 token 有值", () => {
-    const lightNames = Object.keys(SM_THEME_VARIABLES.light);
-    expect(Object.keys(SM_THEME_VARIABLES.dark)).toEqual(lightNames);
-    expect(Object.keys(SM_THEME_VARIABLES.terminal)).toEqual(lightNames);
-    for (const [name, value] of Object.entries(SM_THEME_VARIABLES.terminal)) {
-      expect(value, `terminal 空值:${name}`).toBeTruthy();
-    }
-    expect(SM_THEME_VARIABLES.terminal["--sm-bg-base"]).not.toBe(
-      SM_THEME_VARIABLES.light["--sm-bg-base"],
+    // 单一来源:显式锚块与 `:root` 缺省块逐字同值(同一份记录生成)。
+    const block = Object.entries(SM_THEME_VARIABLES)
+      .map(([name, value]) => `${name}:${value}`)
+      .join(";");
+    expect(SM_THEME_ANCHOR_STYLESHEET_TEXT).toContain(`:root{${block}}`);
+    expect(SM_THEME_ANCHOR_STYLESHEET_TEXT).toContain(
+      `[${SM_THEME_ATTRIBUTE}="terminal"]{${block}}`,
     );
+  });
+
+  it("未设锚也是终端:无锚元素的计算值即终端 token 值(D-UI-6 收敛实质 ⓑ)", () => {
+    document.getElementById("sm-theme-token-styles")?.remove();
+    ensureSmThemeStyles(document);
+    // 未设锚的宿主(生产形态:嵌入宿主 / 独立包裹层 / 任意祖先)。
+    const host = document.createElement("div");
+    const child = document.createElement("span");
+    child.textContent = "probe";
+    host.append(child);
+    main!.append(host);
+    expect(host.hasAttribute(SM_THEME_ATTRIBUTE)).toBe(false);
+    expect(
+      normalizeComputed(getComputedStyle(document.documentElement).getPropertyValue("--sm-bg-base")),
+    ).toBe(normalizeComputed(SM_THEME_VARIABLES["--sm-bg-base"] ?? ""));
+    for (const [name, value] of Object.entries(SM_THEME_VARIABLES)) {
+      expect(
+        normalizeComputed(getComputedStyle(child).getPropertyValue(name)),
+        `缺省未命中终端值:${name}`,
+      ).toBe(normalizeComputed(value));
+    }
+    host.remove();
   });
 });
 
@@ -320,53 +360,106 @@ describe("变量消费机械护栏(组件零硬编码颜色)", () => {
     // 全仓必须至少有一处消费(防"删掉声明即通过")。
     expect(checked, "未发现任何 --sm-font-mono 消费点").toBeGreaterThan(0);
   });
+
+  it("回退值纪律:回退值只允许「省略」/「逐字等于终端值」/「非颜色中性值」(D-UI-6 收敛实质 ⓑ)", () => {
+    const violations: string[] = [];
+    let scanned = 0;
+    for (const { tag } of THEME_COMPONENT_TAGS) {
+      for (const span of varSpans(cssTextOf(tag))) {
+        scanned += 1;
+        if (span.name === "--sm-font-mono") {
+          // 唯一例外:等宽字体栈回退值必须逐字等于定案栈(防副本漂移;见上一条机检)。
+          expect(normalizeCss(span.fallback), `${tag} 的 --sm-font-mono 回退值漂移`).toBe(
+            normalizeCss(SM_MONO_FONT_STACK),
+          );
+          continue;
+        }
+        // 三档合规:
+        //  ① 逐字等于该 token 的终端值(终端等价;与单一来源不冲突);
+        //  ② `none` / `0` / `0s` 这类**非颜色中性值**(效果面 token 的缺省关闭态,
+        //     不产生浅色回落);
+        //  ③ 裸形态 `var(--sm-x)`(无回退值;不在本扫描面内)。
+        const equivalent =
+          normalizeComputed(span.fallback) ===
+          normalizeComputed(SM_THEME_VARIABLES[span.name] ?? "");
+        const neutral = ["none", "0", "0s"].includes(span.fallback.toLowerCase());
+        const shallow = /^(canvas|canvastext|graytext|linktext|accentcolor|field|mark|highlight|highlighttext|buttonface|buttontext|crimson|#fff|white)$|^rgb\(0 0 0/iu.test(
+          normalizeCss(span.fallback),
+        );
+        if (!equivalent && !neutral) {
+          violations.push(`${tag}::${span.name}::${normalizeCss(span.fallback)}`);
+          continue;
+        }
+        // 浅色语义硬拒(即便"中性 / 等价"判定通过也不得出现)。
+        expect(
+          shallow,
+          `${tag} 的 ${span.name} 回退值是浅色字面量:var(${span.name},${span.fallback})`,
+        ).toBe(false);
+      }
+    }
+    // 防"零扫描即通过"(扫描面必须真的覆盖到组件样式)。
+    expect(scanned).toBeGreaterThan(0);
+
+    // ── 未偿余额登记 lane(具名 + 计数锁定)────────────────────────────────
+    // 曾在本轮**禁改文件**(`sm-workspace.ts` / `sm-workspace-menu.ts`)里存在的
+    // 浅色回退(共 18 处:`var(--sm-fg, canvastext)` ×3 / `graytext` ×5 /
+    // `canvas` ×1 / `accentcolor` ×2 / `field` ×3 / `highlight` ×2 /
+    // `rgb(0 0 0 / x%)` ×2 族)**已由文件持有方修毕**(终值回退 / 删除);
+    // 故本登记表现为空 —— 纪律变为**严格**:任何新增浅色回退一律直接变红
+    // (无豁免通道)。若将来又出现必须跨 agent 暂缓的槽位,按
+    // `{tag, token, fallback, count}` 入册(计数不得增长,修好后同批删除)。
+    const pendingFixRegistry: readonly { readonly tag: string; readonly token: string; readonly fallback: string; readonly count: number }[] = [];
+    const actualCounts = new Map<string, number>();
+    for (const key of violations) {
+      actualCounts.set(key, (actualCounts.get(key) ?? 0) + 1);
+    }
+    const registered = new Map<string, number>();
+    for (const entry of pendingFixRegistry) {
+      const key = `${entry.tag}::${entry.token}::${entry.fallback}`;
+      registered.set(key, (registered.get(key) ?? 0) + entry.count);
+    }
+    const exceeding = [...actualCounts].filter(
+      ([key, count]) => count > (registered.get(key) ?? 0),
+    );
+    expect(
+      exceeding.map(([key, count]) => {
+        const registeredCount = registered.get(key) ?? 0;
+        return `${key}(实际 ${String(count)} > 登记 ${String(registeredCount)})`;
+      }),
+      "新增未登记的浅色回退值(单主题纪律:回退值必须省略或终端等价)",
+    ).toEqual([]);
+    const stale = [...registered].filter(([key, count]) => (actualCounts.get(key) ?? 0) < count);
+    expect(
+      stale.map(([key, count]) => {
+        const actualCount = actualCounts.get(key) ?? 0;
+        return `${key}(登记 ${String(count)} > 实际 ${String(actualCount)})`;
+      }),
+      "登记项已过期:请同步收缩 pendingFixRegistry(该 token 回退值已修复)",
+    ).toEqual([]);
+  });
 });
 
-describe("sm-workspace theme 属性(独立使用形态)", () => {
-  it("theme 属性转写为自身 data-sm-theme;显式属性胜过祖先锚(最近锚优先)", async () => {
-    const outer = document.createElement("div");
-    outer.setAttribute("data-sm-theme", "light");
+describe("sm-workspace theme 属性(独立使用形态;单主题值域)", () => {
+  it("theme = terminal → 自身锚 = terminal;theme = null → 不写锚(:root 缺省 = 终端)", async () => {
     const workspace = document.createElement("sm-workspace") as SmWorkspace;
-    outer.append(workspace);
-    main!.append(outer);
-    workspace.theme = "dark";
-    await workspace.updateComplete;
-    expect(workspace.getAttribute("data-sm-theme")).toBe("dark");
+    main!.append(workspace);
 
-    // WP-73:terminal 进值域(SmThemeValue),便捷属性同源扩展。
     workspace.theme = "terminal";
     await workspace.updateComplete;
-    expect(workspace.getAttribute("data-sm-theme")).toBe("terminal");
+    expect(workspace.getAttribute(SM_THEME_ATTRIBUTE)).toBe("terminal");
 
-    workspace.theme = "auto";
-    await workspace.updateComplete;
-    expect(workspace.getAttribute("data-sm-theme")).toBe("auto");
-
-    // 缺省 null = 不写锚(由祖先锚或 light 缺省决定)。
     workspace.theme = null;
     await workspace.updateComplete;
-    expect(workspace.hasAttribute("data-sm-theme")).toBe(false);
-    outer.remove();
+    expect(workspace.hasAttribute(SM_THEME_ATTRIBUTE)).toBe(false);
+
+    workspace.remove();
   });
 });
 
-describe("未授予 theme 的插件侧禁用锚(§4.4 降级矩阵第 2 行)", () => {
-  it("无锚 = 不消费,变量缺省生效(light 缺省;与 WP-52 降级矩阵共用语义)", () => {
-    document.getElementById("sm-theme-token-styles")?.remove();
-    const host = document.createElement("div"); // 无 data-sm-theme
-    host.innerHTML = "<p>light-default</p>";
-    main!.append(host);
-    // 样式表在场时,三值锚才可能改写变量;无锚元素不在任何选择器命中面内。
-    expect(host.hasAttribute("data-sm-theme")).toBe(false);
-    ensureSmThemeStyles(document);
-    host.remove();
-  });
-});
-
-describe("axe 三预设(light / dark / terminal 锚各一遍;零 violations)", () => {
-  async function runAxeUnderTheme(theme: SmThemeValue): Promise<void> {
+describe("axe 单主题(terminal 锚;零 violations)", () => {
+  async function runAxeUnderTerminal(): Promise<void> {
     const wrapper = document.createElement("div");
-    wrapper.setAttribute("data-sm-theme", theme);
+    wrapper.setAttribute(SM_THEME_ATTRIBUTE, "terminal");
     main!.append(wrapper);
 
     // ED 七组件代表性满内容挂载(与既有 axe 套件同口径)。
@@ -439,7 +532,7 @@ describe("axe 三预设(light / dark / terminal 锚各一遍;零 violations)", (
     const results = await axe.run(wrapper, {
       resultTypes: ["violations"],
       rules: {
-        // jsdom 无布局引擎,对比度不可判定(既有豁免登记;真机补测归 WP-55)。
+        // jsdom 无布局引擎,对比度不可判定(既有豁免登记;真机补测归 E2E 面)。
         "color-contrast": { enabled: false },
       },
     });
@@ -455,18 +548,8 @@ describe("axe 三预设(light / dark / terminal 锚各一遍;零 violations)", (
     wrapper.remove();
   }
 
-  it("light 锚:零 violations", async () => {
+  it("terminal 锚:零 violations(单主题生效的结构面证据)", async () => {
     ensureSmThemeStyles(document);
-    await runAxeUnderTheme("light");
-  });
-
-  it("dark 锚:零 violations", async () => {
-    ensureSmThemeStyles(document);
-    await runAxeUnderTheme("dark");
-  });
-
-  it("terminal 锚:零 violations(WP-73 预设生效的结构面证据)", async () => {
-    ensureSmThemeStyles(document);
-    await runAxeUnderTheme("terminal");
+    await runAxeUnderTerminal();
   });
 });

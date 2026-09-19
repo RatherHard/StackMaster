@@ -73,7 +73,7 @@ export class SmHintLadder extends LitElement {
 
     li {
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
+      border-block-end: 1px solid var(--sm-divider-faint);
     }
 
     .hint-text {
@@ -81,13 +81,13 @@ export class SmHintLadder extends LitElement {
     }
 
     .locked {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-style: italic;
     }
 
     .reveal-button {
       padding: 0.25rem 0.75rem;
-      border: 1px solid var(--sm-border-strong, rgb(0 0 0 / 25%));
+      border: 1px solid var(--sm-border-strong);
       border-radius: 4px;
       background: none;
       color: inherit;
@@ -96,14 +96,14 @@ export class SmHintLadder extends LitElement {
     }
 
     .reveal-button:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
+      outline: 2px solid var(--sm-focus-ring);
       outline-offset: 1px;
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.875rem;
     }
   `;

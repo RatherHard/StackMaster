@@ -150,11 +150,11 @@ export class SmInstructionView extends LitElement {
     :host {
       display: block;
       block-size: 24rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 8px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      background: var(--sm-bg-base);
+      color: var(--sm-fg);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
     }
 
@@ -169,7 +169,7 @@ export class SmInstructionView extends LitElement {
       flex-direction: column;
       gap: 0.25rem;
       padding: 0.5rem 0.75rem;
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider);
     }
 
     .toolbar-row {
@@ -199,14 +199,14 @@ export class SmInstructionView extends LitElement {
     .paused-line {
       margin: 0;
       font-size: 0.8125rem;
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg);
     }
 
     .status-line {
       margin: 0;
       min-block-size: 1.1em;
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .table {
@@ -231,10 +231,10 @@ export class SmInstructionView extends LitElement {
       line-height: 1.6;
     }
 
-    /* 暂停行底 = 选择 / 锚点底语义(--sm-selection 的 light / dark 值即本混色
-       原样 ⇒ 明暗逐像素不变,terminal 下转暗绿底)。 */
+    /* 暂停行底 = 选择 / 锚点底语义(2026-09-18 D-UI-6 单主题下取暗绿底
+       --sm-selection = #1c3a25)。 */
     .instruction-row.paused-row {
-      background: var(--sm-selection, color-mix(in srgb, highlight 14%, transparent));
+      background: var(--sm-selection);
     }
 
     .row-address {
@@ -243,7 +243,7 @@ export class SmInstructionView extends LitElement {
 
     .row-bytes {
       white-space: pre;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .row-text {
@@ -256,16 +256,16 @@ export class SmInstructionView extends LitElement {
     /* payload 客户端步进暂停行(WP-76 #4;与调试通道暂停严格分面:不同文案,
        不改 paused-row 高亮语义)。 */
     .client-step-pause {
-      color: var(--sm-accent, linktext);
+      color: var(--sm-accent);
     }
 
     .jump-target {
       margin-inline-start: 1ch;
       padding: 0 0.25rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 4px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-accent, linktext);
+      background: var(--sm-bg-base);
+      color: var(--sm-accent);
       font: inherit;
       font-size: 0.8125rem;
       cursor: pointer;
@@ -276,38 +276,38 @@ export class SmInstructionView extends LitElement {
     .function-jump:focus-visible,
     .anchor-rewind:focus-visible,
     .search-hit:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
+      outline: 2px solid var(--sm-focus-ring);
       outline-offset: 1px;
     }
 
     .breakpoint-toggle {
       margin-inline-end: 0.5ch;
       padding: 0 0.25rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 4px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
+      background: var(--sm-bg-base);
+      color: var(--sm-fg);
       cursor: pointer;
       line-height: 1.2;
     }
 
     .breakpoint-toggle[aria-pressed="true"] {
-      color: var(--sm-danger, crimson);
-      border-color: var(--sm-danger, crimson);
+      color: var(--sm-danger);
+      border-color: var(--sm-danger);
     }
 
     .function-panel,
     .search-panel {
       margin: 0;
       padding: 0.25rem 0.75rem;
-      border-block-start: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-start: 1px solid var(--sm-divider);
       font-size: 0.8125rem;
     }
 
     .function-panel summary,
     .search-panel summary {
       cursor: pointer;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .function-list,
@@ -327,21 +327,21 @@ export class SmInstructionView extends LitElement {
       padding: 0 0.25rem;
       border: none;
       background: none;
-      color: var(--sm-accent, linktext);
+      color: var(--sm-accent);
       font: inherit;
       cursor: pointer;
       text-align: start;
     }
 
     .hit-bytes {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty,
     .guide {
       margin: 0;
       padding: 1rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
   `;
 

@@ -30,11 +30,11 @@
  *
  * 动画纪律:样式不产生动画;如后续引入过渡,只允许 transform / opacity。
  *
- * 主题消费(WP-74):底色 / 前景 / 次要前景 / 锚点行选中底 / 锚点标记(琥珀)/
- * 等宽字体栈全走既有 token;字号下限 13px(0.75rem → 0.8125rem)。
- * 锚点标记原色 `highlight` 归 `--sm-warn`(light / dark 值逐字等于 `highlight`
- * ⇒ 明暗零变化);锚点行底 `color-mix(highlight 14%, transparent)` 归
- * `--sm-selection`(其 light / dark 值即该混色原样)。
+ * 主题消费(WP-74;2026-09-18 D-UI-6 单主题口径):底色 / 前景 / 次要前景 /
+ * 锚点行选中底 / 锚点标记(琥珀)/ 等宽字体栈全走既有 token,且**不带回退值**
+ * (`:root` 缺省 = 终端 ⇒ 回退不可达);字号下限 13px(0.8125rem)。
+ * 锚点标记原色 `highlight` 归 `--sm-warn`(单主题 = 琥珀 `#ffc857`);
+ * 锚点行底 `color-mix(highlight 14%, transparent)` 归 `--sm-selection`。
  */
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -92,6 +92,21 @@ export interface ByteRowDecoration {
   readonly lead?: unknown;
   readonly specialSuffix?: unknown;
 }
+
+
+/**
+ * 窗口化列表的**可读性地板**(px)= 4 个行单位(4 × 20.8 = 83.2)。
+ *
+ * 本值在此处复算,**不从 workspace/layout-presets.ts import**:那条 import 会形成
+ * layout-presets → tab-registry → byte-view → layout-presets 的**循环依赖**,使本
+ * 模块的 css 模板标签在求值时尚未就绪(实测报 Cannot read properties of undefined
+ * (reading '_$cssResult$'))。单一来源仍是 layout-presets.ts 的
+ * BYTE_VIEW_MIN_VISIBLE_HEX_ROWS 与 HEX_ROW_HEIGHT_PX(13 × 1.6);漂移由
+ * test/workspace/layout-presets.test.ts 的推导式机检约束(改动其一必须两处同改)。
+ */
+const BYTE_VIEW_MIN_VISIBLE_HEX_ROWS = 4;
+const BYTE_VIEW_ROW_HEIGHT_PX = 13 * 1.6;
+const BYTE_VIEW_MIN_BLOCK_SIZE_PX = BYTE_VIEW_MIN_VISIBLE_HEX_ROWS * BYTE_VIEW_ROW_HEIGHT_PX;
 
 @customElement("sm-byte-view")
 export class SmByteView extends LitElement {
@@ -626,12 +641,26 @@ export class SmByteView extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      block-size: 24rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      /* 高度由**容器给定**(整页布局改版,2026-09-18 / D-API-153):
+         此处原为固定 block-size: 24rem,而「固定高 + 无压缩」会让高视口下
+         视图位装不下更多行、矮视口下工具区吃掉全部高度(真机实测 768 宽档下
+         数据行只剩 47px)。改为 block-size: 100%:
+         视图位高度由工作区的 viewSlotHeightPx() 决定,字节视图**恰占满**该位。
+         独立挂载(无定高祖先)时 100% 退化为内容高 —— 与 sm-byte-tab
+         (同样 block-size: 100%)同口径。
+         **下限** = BYTE_VIEW_MIN_BLOCK_SIZE_PX(4 行):窄屏下工具区换行长高时
+         数据区不得被压到装不下一行字节(sm-workspace 的 .tab-content 用
+         overflow: visible 让视图位裁剪胜出,故本下限不会被内层滚动条抵消)。
+         纪律:本文件是 css 模板字面量内部,**注释里一律不得出现反引号**
+         (TypeScript 5.9 的 scanner 会把它当模板定界符 ⇒ 全文件解析崩塌;
+         机检 = test/render/template-literal-safety.test.ts)。 */
+      block-size: 100%;
+      min-block-size: 0;
+      border: 1px solid var(--sm-border);
       border-radius: 8px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      background: var(--sm-bg-base);
+      color: var(--sm-fg);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
     }
 
@@ -639,6 +668,10 @@ export class SmByteView extends LitElement {
       display: flex;
       flex-direction: column;
       block-size: 100%;
+      /* 列表保地板(4 行)后总高可能超出视图位 ⇒ 由本节承担滚动,
+         使「可见数据行 ≥ 4」成为几何保证(工作区的视图位裁剪仍在最外层兜底)。 */
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .toolbar {
@@ -646,7 +679,7 @@ export class SmByteView extends LitElement {
       flex-direction: column;
       gap: 0.25rem;
       padding: 0.5rem 0.75rem;
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      border-block-end: 1px solid var(--sm-divider);
     }
 
     .toolbar-row {
@@ -664,7 +697,7 @@ export class SmByteView extends LitElement {
 
     .window-caption {
       margin: 0;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.8125rem;
     }
 
@@ -696,9 +729,14 @@ export class SmByteView extends LitElement {
 
     sm-window-list.byte-list {
       /* 窗口化列表自身即滚动容器(组件内置 relative + overflow-y);
-         flex 链下以 flex-grow 撑开视口。 */
-      flex: 1 1 0;
-      min-block-size: 0;
+         flex 链下以 flex-grow 撑开视口。
+         **可读性地板**(2026-09-18 整页布局改版):flex-shrink 取 0 + 内容盒
+         下限 = 4 个行单位 ⇒ 窄屏下字节视图工具区换行长高时,**列表仍保有
+         4 行的可视高**;上限 = 容器可用高(否则 flex-basis: auto 会把列表
+         按内容全高排布、滚动位置被推出视口 —— 真机实测读数退化为 16/16)。 */
+      flex: 1 0 auto;
+      min-block-size: ${BYTE_VIEW_MIN_BLOCK_SIZE_PX}px;
+      max-block-size: 100%;
       overscroll-behavior: contain;
     }
 
@@ -712,19 +750,19 @@ export class SmByteView extends LitElement {
     }
 
     .header-row {
-      color: var(--sm-fg-dim, graytext);
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
+      color: var(--sm-fg-dim);
+      border-block-end: 1px solid var(--sm-divider);
     }
 
     .anchor-row {
-      background: var(--sm-selection, color-mix(in srgb, highlight 14%, transparent));
+      background: var(--sm-selection);
     }
 
     .anchor-marker {
       margin-inline-start: 0.5ch;
       font-style: normal;
       font-weight: 600;
-      color: var(--sm-warn, highlight);
+      color: var(--sm-warn);
     }
 
     .hex-grouped {
@@ -738,7 +776,7 @@ export class SmByteView extends LitElement {
 
     .cell-outside,
     .hex-grouped .cell-outside {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .row-special .cell-special {
@@ -759,7 +797,7 @@ export class SmByteView extends LitElement {
     }
 
     .anchor-outside {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .anchor-name,
@@ -773,7 +811,7 @@ export class SmByteView extends LitElement {
       margin: 0;
       min-block-size: 1.1em;
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .search-hits {
@@ -792,16 +830,17 @@ export class SmByteView extends LitElement {
     }
 
     .hit-bytes {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty {
       margin: 0;
       padding: 1rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
   `;
 }
+
 
 declare global {
   interface HTMLElementTagNameMap {

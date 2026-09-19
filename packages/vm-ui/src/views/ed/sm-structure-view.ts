@@ -80,7 +80,7 @@ export class SmStructureView extends LitElement {
       margin-block: 0.5rem 0.25rem;
       font-size: 0.8125rem;
       font-weight: 600;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .group > ul {
@@ -94,7 +94,7 @@ export class SmStructureView extends LitElement {
       inline-size: 100%;
       margin-block: 2px;
       padding: 0.25rem 0.5rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 4px;
       background: none;
       color: inherit;
@@ -104,7 +104,7 @@ export class SmStructureView extends LitElement {
     }
 
     .entry-button:focus-visible {
-      outline: 2px solid var(--sm-focus-ring, accentcolor);
+      outline: 2px solid var(--sm-focus-ring);
       outline-offset: 1px;
     }
 
@@ -112,7 +112,7 @@ export class SmStructureView extends LitElement {
       flex: none;
       padding: 0 0.35rem;
       border-radius: 999px;
-      background: var(--sm-badge-bg, rgb(0 0 0 / 8%));
+      background: var(--sm-badge-bg);
       font-size: 0.8125rem;
     }
 
@@ -121,15 +121,15 @@ export class SmStructureView extends LitElement {
     }
 
     .entry-meta {
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.875rem;
     }
   `;

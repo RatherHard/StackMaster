@@ -75,28 +75,28 @@ export class SmMemoryDiff extends LitElement {
       padding-block: 0.25rem;
       text-align: start;
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     th,
     td {
       padding: 0.25rem 0.5rem;
       text-align: start;
-      border-block-end: 1px solid var(--sm-divider-faint, rgb(0 0 0 / 8%));
+      border-block-end: 1px solid var(--sm-divider-faint);
     }
 
     thead th {
       font-size: 0.8125rem;
       font-weight: 600;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .mono {
-      font-family: var(--sm-font-mono, ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace);
+      font-family: var(--sm-font-mono);
     }
 
     .unknown {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-style: italic;
     }
 
@@ -104,13 +104,13 @@ export class SmMemoryDiff extends LitElement {
       margin: 0.25rem 0 0;
       padding: 0.25rem 0.5rem;
       font-size: 0.8125rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem 0.75rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.875rem;
     }
   `;

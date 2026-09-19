@@ -181,7 +181,7 @@ export class SmPayloadTab extends LitElement {
       min-block-size: 24rem;
       font-family: system-ui, sans-serif;
       font-size: 0.8125rem;
-      color: var(--sm-fg, canvastext);
+      color: var(--sm-fg);
     }
 
     .layout {
@@ -196,7 +196,7 @@ export class SmPayloadTab extends LitElement {
     .canvas-pane {
       display: flex;
       min-block-size: 24rem;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 8px;
       overflow: hidden;
     }
@@ -211,7 +211,7 @@ export class SmPayloadTab extends LitElement {
     .canvas-fallback {
       margin: 0;
       padding: 1rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
     }
 
     /* 右区:工具栏 + 程序区 + 输出区(纵向分割)。 */
@@ -231,22 +231,22 @@ export class SmPayloadTab extends LitElement {
 
     .toolbar button {
       padding: 0.125rem 0.5rem;
-      border: 1px solid var(--sm-border-button, rgb(0 0 0 / 20%));
+      border: 1px solid var(--sm-border-button);
       border-radius: 6px;
-      background: var(--sm-bg-base, canvas);
-      color: var(--sm-fg, canvastext);
+      background: var(--sm-bg-base);
+      color: var(--sm-fg);
       font: inherit;
       cursor: pointer;
     }
 
     .toolbar button:disabled {
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       cursor: not-allowed;
     }
 
     .executor-status {
       margin-inline-start: auto;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.8125rem;
     }
 
@@ -254,7 +254,7 @@ export class SmPayloadTab extends LitElement {
       display: flex;
       flex-direction: column;
       min-block-size: 0;
-      border: 1px solid var(--sm-border, rgb(0 0 0 / 15%));
+      border: 1px solid var(--sm-border);
       border-radius: 8px;
       overflow: hidden;
     }
@@ -267,17 +267,16 @@ export class SmPayloadTab extends LitElement {
       flex: 1 1 50%;
     }
 
-    /* 面板标题条底:原字面量 canvas 92% + highlight 8% 逐字等于 --sm-bg-panel 的
-       light / dark 值 ⇒ 直接归该 token(明暗逐像素不变,terminal 取设计好的面板色
-       #101610,不产生既有 token 面外的新颜色)。本处**不用**嵌套重组写法:口径 =
-       字面量逐字等于某 token 值 ⇒ 直接用该 token;字面量不等于任何 token 值、但
-       可由 token 重组而明暗不动 ⇒ 才用嵌套 var(),并把基底关键词原样落回退位
-       (该形态仅适用于 field 基底那一类淡染底)。 */
+    /* 面板标题条底:原字面量 canvas 92% + highlight 8% 曾逐字等于三预设期
+       --sm-bg-panel 的值 ⇒ 直接归该 token(2026-09-18 D-UI-6 单主题后取设计好的
+       面板色 #101610,不产生既有 token 面外的新颜色)。本处**不用**嵌套重组写法:
+       口径 = 字面量逐字等于某 token 值 ⇒ 直接用该 token;字面量不等于任何 token
+       值、但可由 token 重组 ⇒ 才用嵌套 var()(该形态仅适用于淡染底那一类)。 */
     .pane h3 {
       margin: 0;
       padding: 0.25rem 0.5rem;
-      border-block-end: 1px solid var(--sm-divider, rgb(0 0 0 / 10%));
-      background: var(--sm-bg-panel, color-mix(in srgb, canvas 92%, highlight 8%));
+      border-block-end: 1px solid var(--sm-divider);
+      background: var(--sm-bg-panel);
       font-size: 0.8125rem;
       font-weight: 600;
     }
@@ -292,30 +291,30 @@ export class SmPayloadTab extends LitElement {
 
     .program-list li.current {
       font-weight: 700;
-      color: var(--sm-warn, highlight);
+      color: var(--sm-warn);
     }
 
     .program-list li.breakpoint {
-      color: var(--sm-danger, crimson);
+      color: var(--sm-danger);
     }
 
     .stale-note,
     .compile-errors {
       margin: 0;
       padding: 0.25rem 0.5rem;
-      color: var(--sm-danger, crimson);
+      color: var(--sm-danger);
       font-size: 0.8125rem;
     }
 
     .empty {
       margin: 0;
       padding: 0.5rem;
-      color: var(--sm-fg-dim, graytext);
+      color: var(--sm-fg-dim);
       font-size: 0.8125rem;
     }
 
     .output-log li.error {
-      color: var(--sm-danger, crimson);
+      color: var(--sm-danger);
     }
   `;
 
