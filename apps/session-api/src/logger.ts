@@ -89,6 +89,41 @@ export function serializeError(err: unknown, includeStack = false): object {
 }
 
 /**
+ * 请求 URL 的日志脱敏(WP-91;D-LT-3 ⓪ 项「查询串脱敏」的落地)。
+ *
+ * **为什么必须存在**:`req` 序列化器此前**原样打印 `req.url`(含查询串)**。
+ * 而启动票据的承载方式(D-LT-2 方案 A)恰好把票据放在查询串里
+ * (`?t=<ticket>`)⇒ 票据会随每一次换票请求落进访问日志。pino 的 `redact`
+ * 是**按字段名**遮蔽的,对"值内嵌在字符串里的秘密"结构性无效 ⇒ 必须在
+ * 序列化器里先剥掉。这是**应用侧**的处置;反代侧的脱敏是运维硬要求,
+ * 但本仓库不给未实测的配置片段(D-API-138 纪律)。
+ *
+ * **取值选择 = 剥离整个查询串(而不是只 censor `t`)**:
+ *  - 只 censor 已知的票据参数名(`LAUNCH_TICKET_QUERY_PARAM`)依赖"每一个
+ *    未来出现的查询参数都被正确分类为是否携带秘密"——这正是本仓库反复踩过
+ *    的**漂移面**(改一处忘一处)。整体剥离**结构性免疫**参数名漂移:无论
+ *    以后谁加了什么参数,都不可能泄漏。
+ *  - **代价如实登记**:日志丢失查询串内容。对本服务是可接受的 —— 查询串里
+ *    的诊断信息(`cursor` / `limit` / `tenantId`)要么可从其它已记录字段
+ *    重建,要么不是排障所必需;而**假阴性的代价是凭证泄漏**,两者不对称。
+ *  - **刻意不发标记**:不输出 `?[Redacted]` 之类的占位符 —— 那会让日志面
+ *    多一个"这里原本有查询串"的可观察位,而它对本控制的目的毫无贡献。
+ *
+ * **纯函数**(无 IO、无时钟、无随机),故可被单测穷举形态;主控制是
+ * **运行时断言**(机检取日志捕获里的全部 `req.url`,断言不含票据)。
+ *
+ * fragment(`#`)一并剥离:`u` + `#` 之外的形态在生产 HTTP 请求行里不出现
+ * (fragment 不过线路),但本函数是通用原语,不依赖该前提。
+ */
+export function redactRequestUrl(url: string | undefined): string | undefined {
+  if (typeof url !== "string") {
+    return url;
+  }
+  const cut = url.search(/[?#]/);
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
+/**
  * 创建服务 logger。
  *
  * @param config 运行配置(level 与堆栈开关来源)。
@@ -104,10 +139,17 @@ export function createLogger(config: SessionApiConfig, destination?: NodeJS.Writ
       serializers: {
         err: (err: unknown) => serializeError(err, config.logErrorStacks),
         // 请求对象白名单序列化:method / url 之外的一切(头部、连接细节)
-        // 结构性不入日志;凭证不入 URL 是上游纪律(D-API-3 传输卫生)。
+        // 结构性不入日志。
+        //
+        // ⚠ **url 必须经 `redactRequestUrl`**(WP-91;D-LT-3 ⓪):此前这里是
+        // `url: req.url` 原样透出,而启动票据的承载方式(D-LT-2 方案 A)把票据
+        // 放在 `?t=` 里 ⇒ 票据会落访问日志。pino `redact` 按字段名遮蔽,对
+        // "值内嵌在字符串里的秘密"无效,故剥离必须在**序列化器内**完成。
+        // 该控制有**运行时断言**护航(test/launch/log-redaction.test.ts 取
+        // 捕获日志的全部 req.url 断言不含票据),不靠这条注释。
         req: (req: { method?: string; url?: string }) => ({
           method: req.method,
-          url: req.url,
+          url: redactRequestUrl(req.url),
         }),
       },
     },
