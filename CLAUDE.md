@@ -4,7 +4,9 @@
 
 ## 项目一句话
 
-StackMaster 是一个**可嵌入、可回放、可解释的 Pwn 概念实验室**:后端权威 VM + 浏览器公开投影,以 Web 插件(独立来源 iframe + Web Component)形态嵌入各类 CTF 平台,让初学者通过直接操作内存学习 pwn 基础。MVP 聚焦"栈帧、缓冲区与返回地址"闭环(计划书 11.1)。
+StackMaster 是一个**可回放、可解释的 Pwn 概念实验室**:后端权威 VM + 浏览器公开投影,**以与 API 同源的独立页面形态交付**(服务端签发一次性启动地址并下发,学习者直接打开该地址),让初学者通过直接操作内存学习 pwn 基础。MVP 聚焦"栈帧、缓冲区与返回地址"闭环(计划书 11.1)。
+
+**分发改版状态(2026-09-18)**:此表述为**目标态**;~~可嵌入~~、~~Web 插件(独立来源 iframe + Web Component)形态嵌入各类 CTF 平台~~ **已于文档面退役** —— 计划书与四条底线第 4 条的修订**本批已执行**,但**磁盘实现仍是插件形态**(`apps/plugin-dev`、`packages/embed-runtime|web-component|react-wrapper` 未删),退役**尚未落地**,见「在途改版」小节。
 
 **非目标**:不做完整 CPU/OS 模拟器、完整 x86-64 指令集、ELF 加载器、真实 shellcode、完整 glibc、复杂堆分配器、在线编辑器、AI 自动 exploit、多人实时协作;浏览器端永远不存在本地权威执行或本地判题。
 
@@ -13,7 +15,7 @@ StackMaster 是一个**可嵌入、可回放、可解释的 Pwn 概念实验室*
 1. VM Core、完整状态和隐藏判题信息完全隔离在后端。
 2. 浏览器只接收可公开的脱敏投影,不负责最终计分或权威状态保存。
 3. 服务端会话串行执行所有动作;单步、回退、checkpoint、回放和最终裁决均以服务端为准。
-4. 题目 DSL 不执行任意宿主代码;默认使用独立来源 iframe;保持 Core、UI、协议和平台适配层解耦。
+4. **题目 DSL 不执行任意宿主代码，以与 API 同源的独立页面分发（不提供与第三方页面共享 DOM 或执行上下文的嵌入形态），并保持 Core、UI、协议和平台适配层解耦。**
 
 ## 安全红线(每次涉及数据流动的改动逐条自查)
 
@@ -36,16 +38,17 @@ stackmaster/
 │   ├── session-api/          # 会话编排器(Fastify;管理 vm-worker 进程池)——信任域 2
 │   ├── verifier/             # 独立裁决服务(复用 vm-engine 回放实现)——信任域 4
 │   ├── admin/                # 最小管理面(只读:题目登记 / 裁决查询 / 成绩导出;独立凭证与网络域,
-│   │                         #   自有只读库角色 admin_ro;不入插件链路)——信任域 4
-│   └── plugin-dev/           # 插件 iframe 开发壳与接入 Demo
+│   │                         #   自有只读库角色 admin_ro;不入页面分发链路)——信任域 4
+│   ├── page-app/             # **新增(2026-09-18 分发改版)**:与 API 同源的独立页面应用(替代 plugin-dev 的插件壳职能)
+│   └── ~~plugin-dev/~~       # **退役(2026-09-18 分发改版)**:插件 iframe 开发壳与接入 Demo(替代 = page-app + 启动票据签发端点)
 ├── packages/                 # TypeScript 包
 │   ├── protocol/             # @stackmaster/protocol:Zod 契约 → JSON Schema(跨语言契约唯一来源)
 │   ├── challenge-schema/     # 公开/私有题目包 JSON Schema 与字段分类校验器
 │   ├── challenge-compiler/   # DSL → 受限 IR(仅后端)
-│   ├── embed-runtime/        # postMessage 嵌入协议(宿主侧 SDK)
-│   ├── web-component/        # <pwn-memory-vm>(Lit 3)
+│   ├── ~~embed-runtime/~~    # **退役(2026-09-18 分发改版)**:postMessage 嵌入协议(宿主侧 SDK);替代 = 启动票据 / 启动地址
+│   ├── ~~web-component/~~    # **退役(2026-09-18 分发改版)**:<pwn-memory-vm>(Lit 3);替代 = page-app 内 Lit 组件
 │   ├── vm-ui/                # 投影渲染:字节视图、寄存器、调用栈、时间线、Payload 构造器
-│   └── react-wrapper/        # 可选 React 薄包装
+│   └── ~~react-wrapper/~~    # **退役(2026-09-18 分发改版)**:可选 React 薄包装
 ├── vm-engine/                # Rust workspace(cargo)——信任域 3,仅后端
 │   ├── vm-worker/            # 二进制:单会话进程入口,stdio / 本地 socket JSON 协议
 │   ├── vm-core/              # 纯 VM 语义
@@ -57,7 +60,7 @@ stackmaster/
 
 依赖方向由 CI 强制(dependency-cruiser / cargo workspace 声明,5.5):
 
-- TS:`protocol` 可被所有 TS 包依赖(唯一跨域共享面);`challenge-schema` 只被 challenge-compiler、session-api、verifier、admin 依赖(WP-79 起,admin 按公开包 Schema 展示题目登记元数据);`vm-ui` / `web-component` / `embed-runtime` / `react-wrapper` 只依赖 `protocol`。`admin` 对工作区包的依赖面 = `protocol` + `challenge-schema`(数据面是自有只读库角色直连 PG,**禁 app→app 依赖**;dependency-cruiser `admin-workspace-deps-allowlist` 强制)。
+- TS:`protocol` 可被所有 TS 包依赖(唯一跨域共享面);`challenge-schema` 只被 challenge-compiler、session-api、verifier、admin 依赖(WP-79 起,admin 按公开包 Schema 展示题目登记元数据);`vm-ui` 只依赖 `protocol`(~~`vm-ui` / `web-component` / `embed-runtime` / `react-wrapper` 只依赖 `protocol`~~ —— 2026-09-18 分发改版:`web-component` / `embed-runtime` / `react-wrapper` 三包**退役**,不再计依赖面)。`admin` 对工作区包的依赖面 = `protocol` + `challenge-schema`(数据面是自有只读库角色直连 PG,**禁 app→app 依赖**;dependency-cruiser `admin-workspace-deps-allowlist` 强制)。
 - Rust:`vm-core` ← vm-runtime、projection、vm-worker;`vm-runtime` 与 `projection` ← vm-worker。
 - 跨语言规则:IR 与题目包是版本化**序列化格式**,不是共享代码;VM Core 不知道自己运行在 Lit、React、iframe 还是 Node.js 里。
 
@@ -65,7 +68,7 @@ stackmaster/
 
 | 层 | 选型 |
 |---|---|
-| 浏览器 UI | Lit 3 + TypeScript;Vite library mode 多入口;语义化 DOM + lit-virtualizer + SVG;IndexedDB(idb-keyval) |
+| 浏览器 UI | Lit 3 + TypeScript;Vite ~~library mode 多入口~~(2026-09-18 分发改版:插件三形态打包退役 ⇒ **页面应用 application build**;library mode 仅服务内部包);语义化 DOM + lit-virtualizer + SVG;IndexedDB(idb-keyval) |
 | 契约 | `@stackmaster/protocol`(Zod → JSON Schema);题目包 JSON Schema 2020-12 + Ajv |
 | 传输 | HTTPS + Fastify(REST);认证 WSS(@fastify/websocket)+ JSON 消息 |
 | 服务运行时 | Node.js LTS(≥22) |
@@ -88,8 +91,8 @@ stackmaster/
 ## 契约纪律(5.6)
 
 - `protocol` / `challenge-schema` 包是契约单一来源;Zod schema 同时产出 TS 类型与 JSON Schema;JSON Schema 是 TS 与 Rust 的共同权威,Rust 以 serde + schemars 消费;
-- 服务端对一切入站数据(HTTP、WSS、postMessage 转发的动作)按同一契约重新校验,不信任客户端类型标注;
-- 每类契约(嵌入协议、会话动作协议、题目包 Schema、引擎进程协议)携带独立版本号;破坏性变更递增版本并保留 N-1 兼容窗口;
+- 服务端对一切入站数据(HTTP、WSS;~~postMessage 转发的动作~~ —— 2026-09-18 分发改版:嵌入协议整体退役)按同一契约重新校验,不信任客户端类型标注;
+- 每类契约(~~嵌入协议~~ ⇒ **启动票据 / 启动地址**、会话动作协议、题目包 Schema、引擎进程协议)携带独立版本号;破坏性变更递增版本并保留 N-1 兼容窗口(**例外**:嵌入协议**整体退役**,不适用 N-1 演进窗口,走硬切 + 迁移指引;**启动票据属新契约面,须先契约后实现**);
 - 错误类型也是契约:`PublicError` 枚举保持稳定,前端不得解析非契约字段;
 - 修改协议必须同步更新 golden fixture:同一组样例必须被 TS 与 Rust 校验器同时接受或拒绝,且规范化 JSON 序列化一致。
 
@@ -130,7 +133,7 @@ stackmaster/
 5. golden fixture 跨语言往返一致;
 6. 浏览器产物隔离扫描(不得含引擎代码、私有题目包内容、vm-worker 二进制);
 7. Compose 集成测试:会话创建 → 动作 → 投影 → 断线重连 → 提交裁决全链路;
-8. Playwright E2E:iframe 嵌入、Chrome/Firefox/Safari、断线恢复;
+8. Playwright E2E:~~iframe 嵌入~~ ⇒ 页面分发(启动地址进入的同源页面;2026-09-18 分发改版)、Chrome/Firefox/Safari、断线恢复;
 9. k6 benchmark 归档(T2 触发判据)。
 
 新功能先写测试(TDD);测试用行为描述命名;错误反馈断言要覆盖"可解释性"而不只是状态码。
@@ -140,7 +143,7 @@ stackmaster/
 - 复杂功能先出实现计划再写代码;涉及协议、投影、题目包 Schema 的改动,必须先更新 `protocol` / `challenge-schema` 契约与 golden fixture,再改实现;
 - 涉及认证、投影生成、协议、题目包校验、判题的代码,提交前必须做安全审查;
 - 文档、提交信息与面向人的注释用中文;代码标识符用英文;
-- Conventional commits:`feat|fix|refactor|docs|test|chore|perf|ci: <描述>`;对外发包(`web-component`、`react-wrapper`、`embed-runtime`)用 Changesets;
+- Conventional commits:`feat|fix|refactor|docs|test|chore|perf|ci: <描述>`;对外发包用 Changesets —— **仅契约包**(`protocol`、`challenge-schema` 等);~~对外发包(`web-component`、`react-wrapper`、`embed-runtime`)用 Changesets~~ **2026-09-18 退役(分发改版)**:前端三包随嵌入协议整体退役,**不再对外发包**;
 - 不提交 `.env`、私有题目包样本、真实隐藏 flag;`private-bundles` 类内容永不进入 git。
 
 ## 阶段三落地事实(2026-09-10,WP-8 收口;只登记事实,纪律仍以上文与计划书为准)
@@ -205,6 +208,8 @@ stackmaster/
 ### 在途改版(未落地,不得当现状):前端整页布局 + 终端单主题(2026-09-18,D-API-153)
 
 > **本节登记的是「正在改、尚未落地」的要求,不是落地事实** —— 以下任何一条**都还没有出现在磁盘实现里**;不要据本节判断产品现状、不要据它改 E2E 断言或用户文档。
+>
+> **2026-09-18 分发改版执行注(文档面 = 本批已执行)**:本节的**文档面**部分(计划书 + 本文件四条底线第 4 条的修订)**已于本批执行完毕** —— 计划书 §一 / §二 / §三 / 5.2 / 5.3 / 5.4 / 5.5 / 5.6 / 5.8 / 六 / 八 / 九 / 十一 / 十二 / 十三 / 十四 / 十五 / 十六 / 十七 与 `CLAUDE.md`(项目一句话、四条底线第 4 条、仓库结构、依赖方向、技术栈、契约纪律、门禁、提交规范、章节速查)均已按「与 API 同源的独立页面分发」改写并逐处加退役标注(治理依据 = `docs/develop/计划书与底线修订草案(分发改版).md` **§〇.2 主控裁定**)。**仍未执行** = 本节其余各项(整页布局 / 终端单主题 / **代码与契约的物理删除**)—— 磁盘实现仍是插件形态;同批取代注已加至 `docs/中期计划.md` §2.1 / D-MP-2 与 `docs/README.md` 索引。**不得据文档面修订单方面删代码 / 删契约 / 改 E2E 断言。**
 
 - **要求要点(9 条,浓缩)**:① 窗口为**无边框紧密贴合的矩形**(无间隙 / 无描边 / 无分隔条);② **工作区占据整个页面**(整页布局);③ **页面右半侧固定为 payload 搭建窗口**;④ **左半侧 = 视图管理窗口**(管理其他所有视图);⑤ 左半侧在**上下两半显示视图**、**纵向堆叠**、**上下滚动**;⑥ 滚动带**丝滑动画**;⑦ **视图类型名写在视图内左上角**(无独立标题栏);⑧ **`Ctrl + ↑ / ↓` 上下切换视图窗口**;⑨ UI 风格 = **简洁的黑客 Linux 终端风格**。
 - **4 项现场定案**:① 原口述「页面**有**半侧」为笔误,裁定为**左半侧**(依据:第 ⑤⑥ 条均锚定「左半侧…上下滚动」);② 列表按钮的「勾选」= **控制左半侧显示哪些视图** —— 视图**仍全部常驻**,未勾选属「**暂离**」的第二种成因(第一种仍是滚出可视区)⇒ **D-MP-1 不修订**(无开 / 关状态);③ **主题只保留终端一种**,`light` / `dark` **退役**;④ 「无边框紧密贴合」**连带废止窗高下限**(D-API-152 的 `MIN_ROW_HEIGHT_PX` = 266px)**与列高下限**(`columnMinHeightPx` / `columnChromePx` / 拖拽像素语义);**D-API-152 条目本身是历史决策,不得删除**。
@@ -213,13 +218,13 @@ stackmaster/
 - **冻结契约面只有一处(2026-09-18 下午订正;原记「两处」是把布局快照面误计为契约面)**:**嵌入协议面**(`EMBED_PROTOCOL_VERSION` / `EMBED_THEMES` / 嵌入协议 V-1~V-13)。其处置已现场定案为**整体退役**(见下条),**不是「收窄枚举 + 递增版本」** ⇒ 按版本演进的契约变更流程(改分类论证 → 改契约包与 fixture → 评审 → 再改实现,契约纪律 5.6)**对本面不适用**(该路径作废);`fixtures:manifest` 重算随之不再是本面的义务。
 - **「契约面二 = 布局快照面」的说法已撤销**:`WorkspaceLayoutSnapshot` 定义在 `packages/vm-ui/src/workspace/workspace-model.ts:92`,而 **`packages/protocol` 对 `layoutSnapshot` / `widthRatio` / `rowHeights` / `viewportWidth` 零命中** ⇒ **它不是冻结契约面** ⇒ 按**内部模型自由重构 + 同步改 vm-ui 测试**处理,**无需契约变更流程**;且**全仓零 `idb-keyval` / `indexedDB`** ⇒ **无持久化面、无迁移义务**。
 - **2026-09-18 下午新增定案三项(同属未落地要求)**:
-  - **⑤ 嵌入协议面整体退役 —— 取消插件形式,页面分发为唯一形态**:`EMBED_PROTOCOL_VERSION` / `EMBED_THEMES` / 嵌入协议 V-1~V-13 / `packages/embed-runtime` / `packages/react-wrapper` / `packages/web-component` **随协议整体退役,不做版本演进**。**退役面**还包括 `docs/contracts/嵌入协议.md`、`apps/plugin-dev`(**宿主模拟页 `/host-mock/`** / **5174 插件产物页** / **embed token 签发面**)与 `e2e/reports/axe/**` 中的 **`plugin-iframe-*` 面矩阵**(历史归档**只增不改**)。**⚠ 本项是底线级 + 产品定位级变更**。
+  - **⑤ 嵌入协议面整体退役 —— 取消插件形式,页面分发为唯一形态**:`EMBED_PROTOCOL_VERSION` / `EMBED_THEMES` / 嵌入协议 V-1~V-13 / `packages/embed-runtime` / `packages/react-wrapper` / `packages/web-component` **随协议整体退役,不做版本演进**。**退役面**还包括 `docs/contracts/嵌入协议.md`、`apps/plugin-dev`(**宿主模拟页 `/host-mock/`** / **5174 插件产物页** / **embed token 签发面**)与 `e2e/reports/axe/**` 中的 **`plugin-iframe-*` 面矩阵**(历史归档**只增不改**)。**⚠ 本项是底线级 + 产品定位级变更**。**（文档面已于本批执行,见上方执行注;实现与物理删除仍未落地。）**
   - **⑥ 「工作区占据整个页面」= 顶层页面 `100dvh` + 左半侧内部滚动**(无宿主高度上报、无 iframe)⇒ **`MAX_EMBED_HEIGHT_PX` / `height_changed` / `auto_resize` 属退役面**。
   - **⑦ 菜单**:原**「布局」组 → 「视图」组**(勾选显示 / 排序 / 「重置视图」= 恢复默认顺序与全选)⇒ 菜单四组 = **窗口 / 视图 / 模式 / 运行**;**⚠ 与左半侧列表按钮功能重叠**(同为「勾选 + 排序」),**「谁是唯一入口」仍未定**。
 - **三件事必须写清(2026-09-18 下午;均属未落地口径)**:
-  1. **⑤ 属底线级 + 产品定位级变更** ⇒ 须修订本文件(**`CLAUDE.md`**)**四条底线第 4 条**与 `docs/项目计划书.md`(**§一 / §二 产品定位**、**§5.4 与 `:341` 分发形态**、**第八章 插件嵌入与协议**、**5.5 结构**);**该修订尚未执行** —— 本文件四条底线第 4 条与计划书**目前仍按现状有效**。
-  2. **§五 已于 2026-09-18 成文**(权威文本 = `docs/develop/前端重设计与分发形态改版.md` **§五**;四项定案 = ① **载体与同源关系 = 与 session-api 同源**(页面由 session-api 或**同域反代**提供,同域两路径如 `/app` 与 `/api`);② **授权入口 = 服务端下发地址**(服务端签发票据 → 地址携带 → 页面**服务端换票**);③ **题目与租户定位 = 服务端分发、一题一址**(`challengeId` / `version` 属**公开导航信息**,**租户与授权由服务端绑定、不由 URL 自报**);④ **迁移路径 = 硬切 + 迁移指引**(**不留并存窗口**;退役走下线公告 + 指引,不适用契约纪律 5.6 的 N-1 演进窗口))⇒ **当前阻塞改为「计划书 + 四条底线第 4 条的修订未执行 + 实现未开工」**(修订依据已到,修订本身仍未执行)。**仍未定案(实施前须钉死)**:票据形态(URL query 还是 fragment;长度 / 熵 / 有效期 / 单次消费与重放防护)、**签发端点**的路由 / 鉴权 / 限流键与错误语义(**属新契约面,须先契约后实现**)、换票响应与失败语义、票据进访问日志 / Referer 泄漏的处置、**产品定位表述与 `docs/user/**` 回填时机**;**保留面** = `/host/scores`(WP-78,**不属嵌入协议**)、`SESSION_API_HOST_BACKEND_TOKEN`(保留并扩展用途)、信任域(计划书 5.2)与 ADR-7 投影脱敏边界**零改动**。
-  3. **在计划书修订与替代设计落地前,磁盘实现与唯一权威来源仍按现状有效** ⇒ **不得据退役决定删代码 / 删契约 / 改 E2E 断言**(删 `packages/embed-runtime` / `react-wrapper` / `web-component`、删 `docs/contracts/嵌入协议.md`、改 `e2e/embed-protocol.spec.ts` 断言,一律禁止)。
+  1. **⑤ 属底线级 + 产品定位级变更** ⇒ 须修订本文件(**`CLAUDE.md`**)**四条底线第 4 条**与 `docs/项目计划书.md`(**§一 / §二 产品定位**、**§5.4 与 `:341` 分发形态**、**第八章 插件嵌入与协议**、**5.5 结构**);**该修订已于本批执行(2026-09-18)** —— 本文件四条底线第 4 条与计划书十六章第 4 条现为**同一措辞(L1,方案 B)**:「题目 DSL 不执行任意宿主代码，以与 API 同源的独立页面分发（不提供与第三方页面共享 DOM 或执行上下文的嵌入形态），并保持 Core、UI、协议和平台适配层解耦。」**底线 1 / 2 / 3 一字未动**;计划书 §八 标题已改为「页面分发、协议与部署」,**不再有「默认嵌入」的口子**。
+  2. **§五 已于 2026-09-18 成文**(权威文本 = `docs/develop/前端重设计与分发形态改版.md` **§五**;四项定案 = ① **载体与同源关系 = 与 session-api 同源**(页面由 session-api 或**同域反代**提供,同域两路径如 `/app` 与 `/api`);② **授权入口 = 服务端下发地址**(服务端签发票据 → 地址携带 → 页面**服务端换票**);③ **题目与租户定位 = 服务端分发、一题一址**(`challengeId` / `version` 属**公开导航信息**,**租户与授权由服务端绑定、不由 URL 自报**);④ **迁移路径 = 硬切 + 迁移指引**(**不留并存窗口**;退役走下线公告 + 指引,不适用契约纪律 5.6 的 N-1 演进窗口))⇒ **计划书 + 四条底线第 4 条的修订已于本批执行(2026-09-18)**;**当前阻塞 = 「实现未开工」**(签发端点 / 换票 / `page-app` 均未开始,退役面代码与契约仍在磁盘上)。**仍未定案(实施前须钉死)**:票据形态(URL query 还是 fragment;长度 / 熵 / 有效期 / 单次消费与重放防护)、**签发端点**的路由 / 鉴权 / 限流键与错误语义(**属新契约面,须先契约后实现**)、换票响应与失败语义、票据进访问日志 / Referer 泄漏的处置、**产品定位表述与 `docs/user/**` 回填时机**;**保留面** = `/host/scores`(WP-78,**不属嵌入协议**)、`SESSION_API_HOST_BACKEND_TOKEN`(保留并扩展用途)、信任域(计划书 5.2)与 ADR-7 投影脱敏边界**零改动**。
+  3. **唯一权威来源(计划书 + 本文件)已完成文档面修订;替代设计仍未落地** ⇒ **磁盘实现仍按现状有效** ⇒ **不得据退役决定删代码 / 删契约 / 改 E2E 断言**(删 `packages/embed-runtime` / `react-wrapper` / `web-component`、删 `docs/contracts/嵌入协议.md`、改 `e2e/embed-protocol.spec.ts` 断言,一律禁止)。**状态核对口径**:文档 = **目标态**(与 API 同源的独立页面分发);**磁盘 = 现状(插件形态)** ⇒ 现状核对 / E2E 断言 / `docs/user/**` 一律以磁盘实现为准,两者不一致由遗留 **#38** 承接。
 - **可读性纪律不得误读(关键)**:**废止窗高 / 列高下限 ≠ 放松可读性** —— 本版把「压缩以适配」这一机制**整条移除**,改由「**左半侧纵向滚动 + 每个视图位有确定高度**」满足;**判据 = 若落地实现仍出现「视图被压到装不下一行字节」即违反本条**(历史反例 = 2026-09-17 取证:4 窗列每窗 **146px**,而面板 chrome 实测 **182.1px**,连一行字节都看不见)。
 - **遗留承接 = #38**(P0:需求文档与磁盘实现不一致 ⇒ 不处置会让「按文档核对现状」得出错误结论):见 `docs/phases/中期遗留清单.md` **§十一** 与 `docs/phases/中期验收评审.md` **§六 #38**(编号双射;两处均已按 2026-09-18 下午定案订正);同批 **#1 载体退役**(webkit 跨源 WSS 认证面,**不是被修复,而是失去载体 ⇒ 不得记为已修复**)、**#30 / #35 / #37 由改版消解(待落地结案)**(属宿主 / iframe 形态的产物)、**#34 载体退役(待拖拽语义定案)**(整页布局下视口 = 浏览器视口)、**#33 仍开放且不得消解**(护栏判据随下限废止改以「不得出现视图压到装不下一行字节」为准则)、**#36 载体变更(不结案)**(免折行实测约束仍有效,改版后约束**左半侧宽度**,**不得当作已解决**)。
 
@@ -236,7 +241,7 @@ stackmaster/
 | 部署、可观测、质量门禁 | 5.8 |
 | VM 语义、状态模型、确定性 | 六 |
 | 题目 DSL 与双包模型 | 七 |
-| 插件嵌入与协议 | 八 |
+| 页面分发、协议与部署（原「插件嵌入与协议」，2026-09-18 分发改版） | 八 |
 | 权威判题与威胁模型 | 九 |
 | 前端性能约束 | 十 |
 | MVP 定义 | 十一 |

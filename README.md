@@ -62,15 +62,15 @@ stackmaster/
 │   ├── verifier/             # 独立裁决服务(信任域 4)
 │   ├── admin/                # 最小管理面(只读:题目登记 / 裁决查询 / 成绩导出;独立凭证 +
 │   │                         #   独立网络域 + 独立只读库角色 admin_ro,不入插件链路)——信任域 4
-│   └── plugin-dev/           # 插件 iframe 开发壳
+│   └── ~~plugin-dev/~~       # **退役(2026-09-18 定案;实现未落地)**:插件 iframe 开发壳
 ├── packages/                 # TS 包(pnpm workspaces)
 │   ├── protocol/             # @stackmaster/protocol:Zod 契约 → JSON Schema(已落地,会话动作协议 v1)
 │   ├── challenge-schema/     # 公开/私有题目包 Schema(WP-4,进行中)
 │   ├── challenge-compiler/   # DSL → 受限 IR(仅后端)
-│   ├── embed-runtime/        # postMessage 嵌入协议(宿主侧 SDK)
-│   ├── web-component/        # <pwn-memory-vm>(Lit 3)
+│   ├── ~~embed-runtime/~~    # **退役(2026-09-18 定案;实现未落地)**:postMessage 嵌入协议(宿主侧 SDK)
+│   ├── ~~web-component/~~    # **退役(2026-09-18 定案;实现未落地)**:<pwn-memory-vm>(Lit 3)
 │   ├── vm-ui/                # 投影渲染:字节视图、寄存器、调用栈、时间线
-│   └── react-wrapper/        # 可选 React 薄包装
+│   └── ~~react-wrapper/~~    # **退役(2026-09-18 定案;实现未落地)**:可选 React 薄包装
 ├── vm-engine/                # Rust workspace(信任域 3,阶段二起搭建)
 │   ├── vm-worker/            # 单会话进程入口,stdio JSON 协议
 │   ├── vm-core/              # 纯 VM 语义(safe Rust,无 async、无直接 IO)
