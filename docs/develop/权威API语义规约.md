@@ -193,6 +193,7 @@ Redis 键域全部带 TTL、可重建、不作权威(ADR-4)。**可用性分级*
 | `route:{sessionId}` | **fail-closed** | 会话路由定位是投递一致性控制,降级造成双属主投递歧义 |
 | `rate:{tenant}:{user}` | **fail-closed** | 限流计数是资源保护控制;数值策略归 WP-6 |
 | `launch:{jti}`(WP-91,启动票据;**第五键域**,2026-09-18 同批登记) | **fail-closed** | 票据**比较并交换**式单次消费是启动面重放防线(D-LT-2);降级到进程内会让多实例部署下同一票据被消费两次,且进程内形态无法与 Redis TTL 语义同构 ⇒ Redis 不可用即 **503 `store_unavailable`**,不降级、不静默放行 |
+| `launchGrant:{jti}`(WP-91,启动授权凭证;**第六键域**,2026-09-18 同批登记) | **fail-closed** | 授权凭证单次消费是 `create_session` 的重放防线(D-LT-5 5c):同一枚凭证只允许换一次会话。与 `token:{jti}` **同构但独立类**(两族记录字段集合不同,合一会让"给授权凭证写 embedSessionId"在类型上成为可能);降级到进程内会让多实例部署下同一凭证被消费两次 ⇒ 不降级、不静默放行 |
 
 fail-closed 路径确定性:依赖故障翻译为稳定错误码 `store_unavailable` 立即上抛(ioredis `enableOfflineQueue: false` + ready 门),不静默放行;幂等窗口降级后同接口同语义(fresh / replay-identical / conflict / TTL 过期 → fresh)。**幂等缓存后端切换**:进程内(阶段二)→ Redis Lua 原子"比较并登记"(同键同规范化负载 → 字节相同重放裁决;同键异负载 → conflict);键命名 `idem:{sessionId}:{encodeURIComponent(key)}`(幂等键为客户端输入,编码保形防键分隔符注入);TTL = `IDEMPOTENCY_WINDOW_TTL_SECONDS`(D-API-4,默认 300 s),**固定窗口自首次登记起算、重放不续期**(无限重试不得到无限窗口);session-core 的进程内幂等缓存不动(编排核心零改动),Redis 窗口是编排器前置的应用层守卫,装配归 WP-4。
 
@@ -1848,4 +1849,29 @@ D-API-70 登记"暴露面收敛是部署面配置事项,不是端点语义变更
 ### D-API-157 WP-91 第二步连带影响面清单(`/auth/embed-tokens` 退役;侦察登记,待第二步处置)
 
 代码面(逐处):`src/auth/plugin.ts:55`(常量)/`:83`(私有 `EmbedTokenIssuanceRequestSchema`)/`:97`(已导出的 `EmbedTokenIssuanceResponse` interface)/`:196-262`(端点本体);`src/auth/index.ts:25`(barrel `export *`)。测试面:**专属该端点的用例面整体重写** —— `test/auth/issuance-route.test.ts`(8 it,其中 3 例为循环展开的红灯矩阵)、`test/auth/e2e-chain.test.ts`(6 it,含 `fullChain()` 辅助的签发段与审计断言)。**改 URL 即可的**:`test/wp7/cross-domain-payload-audit.test.ts:120`(裸字面量)。**改 URL 不够(请求体键 + `create_session` payload 同步改)**:`k6/scenarios/{rest-lifecycle,concurrent-sessions,action-rtt-wss}.js` 各 1 处;`test/compose/compose-full-chain.integration.test.ts` 10 处;`test/compose/mvp-challenge-set.compose.integration.test.ts:99`(共享辅助 1 处)。**`docs/user/**` 一律不改**(D-LT-4:WP-96 才回填;现有唯一路由字面量在 `docs/user/试用环境部署指南.md:391`)。**本机 compose 面不可达**(docker 镜像不可重建,代理被拒)⇒ 上述 compose 用例的改造**只做静态改写,不得声称已实测**。
+
+### D-API-158 WP-91 第二步落地形态(签发 / 换票 / create_session v2;2026-09-18)
+
+- **范围**:主控「D-LT-5 实施细化 5a ~ 5d」与 `docs/contracts/启动票据协议.md` 的实现落地。**契约面零新增**(全部 Schema 从 `@stackmaster/protocol` 导入,实现包零字面量)。
+- **签发端点 `POST /auth/launch-tickets`**:鉴权**复用** `hostBackendTokenMatches`(单份实现);租户只由「宿主凭证 × `SESSION_API_HOST_TENANTS`」派生(锚租户 = 白名单字典序最小项);请求体 `LaunchTicketRequestSchema`(恰两键)+ 长度粗闸(256,与 Schema 的精确闸双保险);题目已发布校验经 `findPublishedChallengeVersion`(**跨租户公开面**);频率闸 `rate:{锚租户}:launch_tickets`(维度 `launch_ticket_rate`)。
+- **闸序(定案)**:401(宿主凭证)→ 404(签发面未启用:白名单空 / 未配公开来源)→ 400(请求体)→ **429(频率)** → 404(题目不存在 / 未发布)→ 201。**频率闸刻意排在题目查询之前**(PG 往返是昂贵操作;沿 `host-scores-routes.ts` 先例)。两种 404 返回**同一常量** ⇒ 与「不存在」逐字节同形。
+- **`mapDomainFailure` 是执行面而非注释**:频率闸与存储调用**整段包在既有域失败映射里** ⇒ 限流天然 **429 字节级一致**、存储故障天然 **503**(`store_unavailable`)。**首版漏了这层包裹,实测限流用例拿到 500 而非 429** —— 已在实现注释中留痕(该缺陷形态值得复用:新路由若自建 try/catch 之外的错误面,就会绕开唯一出口)。
+- **换票 `GET /app/c/:challengeId/:version?t=`,按 5b**:`Sec-Fetch-Mode: navigate` → 票据形态(纯函数,不触存储)→ **`launch:{jti}` Lua CAS 原子消费** → 依据记录**签发起动授权凭证** ⇒ `Set-Cookie` + **302 到不含票据的干净路径**(Location 由 `launchRedeemPath` 产出,该函数**结构上无法**表达查询串)+ `Cache-Control: no-store` + `Referrer-Policy: no-referrer`(**含 401 路径**)。**不建会话、不调 `issueSessionCredential`**(5b,候选 C 已否决)。
+- **401 三态同形是结构性的**:不存在 / 已消费 / 已过期 / 绑定不符**四种**形态在**端口面**就同形返回 `null` ⇒ 只有一个出口,不可能出现"三处分别写对"的漂移。
+- **`create_session` v2(5c)**:授权来源 = `launchGrant` Cookie;身份 / 题目绑定由「凭证签名 claims × 签发记录(`launchGrant:{jti}`)」派生;payload 恰两键且必须与凭证绑定**逐字一致**(不一致 = **401**,**不得**降级为以 payload 为准);校验通过后**才**建会话行(预算 / 双包装 / 超时语义零改动);凭证**单次消费**,重放 = 401。**v1 分支(embed token)在 N-1 窗口期内保留**,两条链产出的身份形状逐字相同 ⇒ 下游零分支。
+- **新键域 `launchGrant:{jti}`(第六键域)**:分级 **fail-closed**(`REDIS_DEGRADE_POLICY.launchGrantStore`);消费 = GETDEL 原子单次消费(与 `token:{jti}` 同构但**独立类**,理由:两族记录字段集合不同,合一会让"给授权凭证写 embedSessionId"在类型上成为可能)。已登记进 D-API-24 表与计划书 §5.7 `:427`。
+- **`VerifiedCreateIdentity` 字段改名**:`embedTokenJti` → `credentialJti` + 新增 `credentialKind`(`launch_grant` / `embed_token`)。理由:两族共存期内锚字段必须能表达两个来源,且**不得**让 v1 分支硬塞一个语义不符的名字。`create_session` 审计 detail 同批改为 `{credentialJti, credentialKind, challengeVersion}`。
+- **装配四处同改**:`server.ts`(deps + register)/ `runtime.ts`(组装 + 速率闸)/ `index.ts`(传递)/ `test/routes/helpers/session-rig.ts`(测试接缝)。**同批修复 D-API-156 缺陷 1**(`index.ts` 补传 `hostScoresRoutes` ⇒ 生产 `GET /host/scores` 恢复挂载)。
+- **契约包的类型缺口(本 WP 的绕行 + 根治归属)**:`sessionCommandRequestSchemaForVersion` 的 `createSessionPayload` 形参类型是 `z.ZodType`(无类型参数 ⇒ `ZodType<unknown>`),故判别联合解析出的 `createSession` **payload 在 TS 层是 `unknown`**。本 WP 的处置 = 在消费点用**冻结载荷 Schema 再 `safeParse` 一次**(取回有类型的载荷,顺带满足"入站一律重新校验"纪律),失败按 400 并在日志留痕。**根治**(给该形参加类型参数)**归 WP-90 的契约包**,不在本 WP 越界改。
+- **机检 9 条**:①~⑧ 落 `test/launch/launch-routes.test.ts`(19 例);④ 另有内存替身版(`test/launch/launch-ticket-store.test.ts`,含 32 路并发放大)与**真实 Redis** 版(`test/persistence/redis.integration.test.ts`,容器门控);⑨ golden fixture 归 WP-90。
+
+### D-API-159 WP-91 侦察发现的既有缺陷(第二批;**登记不修**)
+
+- **WSS 连接级版本锚定是死代码(D-API-2 未实现)**:`apps/session-api/src/wss/wss-channel.ts` 的 `#anchoredVersion` **从未被赋值**(恒 `null`)⇒ `frame-contract.ts` 的锚定分支永不触发。**单版本时代不可观测**(受理集合只有一版时「在集合内」≡「等于锚定版本」,漂移帧被 `unsupported_version` 顺手拦掉);**N-1 窗口一开即成可观测缺口**(连接可在首帧 v1 之后改用 v2 帧继续投递)。**未在本 WP 补**:补齐锚定会让**出站面**暴露第二个缺口 —— `#emitFrame` 系列已按 `#anchoredVersion ?? 当前版本` 表达出站帧,而出站自检用的是**仅 v2** 的 `WssFrameSchema` ⇒ 锚到 v1 即出站自检失败(**实测:4 个测试文件、11 个用例转红**)。⇒ 补锚定必须与「出站自检版本化」**成对落地**,属独立 WP。**留白并登记,好过半修**(半修会把 WSS 出站面打红)。
+- **受影响的用例已按实然收窄**:`test/wss/channel.integration.test.ts` 的版本用例**不再断言**「锚定后漂移被拒」(那条断言在单版本时代是**绿灯的假象**,不是锚定生效的证据),只断言「集合外版本即拒 + 集合内版本被受理」,并在用例内注明缺口与承接指针。**刻意不把当前(错误)行为写成期望值** —— 那会把缺口固化成规格。
+
+### D-API-160 WP-91 退役面处置结果与**未处置清单**(如实登记)
+
+- **已处置**:`test/auth/issuance-route.test.ts` **删除**(主题随端点消失;等价而更强的断言由 `test/launch/launch-routes.test.ts` 承接);`test/auth/e2e-chain.test.ts` 改走 `rig.issueEmbedToken()` 直铸(消费链载荷与断言逐字不变,锚点仍是窗口期内的 v1 分支);`test/helpers/auth-rig.ts` 的 `issueEmbedToken()` **补上 `embed_token_issued` 审计**(该事件的唯一生产点是被删端点,不补则从审计面**静默消失** —— 而它仍是冻结十值封闭集成员;实测补前 2 例红、补后全绿);`test/wp7/cross-domain-payload-audit.test.ts` 去掉退役端点的 HTTP 注入。
+- **未处置(明确不做,不提交无法验证的半改)**:`k6/scenarios/{rest-lifecycle,concurrent-sessions,action-rtt-wss}.js` 三场景,以及 `test/compose/compose-full-chain.integration.test.ts`(10 处)/ `test/compose/mvp-challenge-set.compose.integration.test.ts`(1 处共享辅助)。**理由**:①它们不是「改 URL 即可」—— 新链的请求体键、响应读取(`issued.json("embedToken")`)与后续 `create_session` payload 都要改;②k6 与 compose **均需 docker**,而**本机容器不可达**(Docker 引擎管道不存在)⇒ **无法实测**。**半改会让这些脚本静默跑错链路,比不改更坏**。承接建议:与 WP-92(`page-app` 托管)同批,或独立小 WP。
 
