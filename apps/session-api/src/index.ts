@@ -37,6 +37,11 @@ async function main(): Promise<void> {
     hostScoresRoutes: runtime.hostScoresRoutes,
     // 启动票据路由(分发改版 WP-91):页面分发的唯一授权入口。
     launchRoutes: runtime.launchRoutes,
+    // 页面应用静态托管(分发改版 WP-92;D-API-161):**必须在 launchRoutes
+    // 之后**(`/app` 前缀共享 ⇒ 换票路由优先),故在 buildServer 内按声明序
+    // 注册。未配置页面目录时 runtime 不构造该插件(undefined = 不注册),
+    // 换票路由不受影响。
+    pageAppShell: runtime.pageAppShell,
     wssChannel: runtime.wssChannel,
     // 调试通道插件(中期 WP-76 越界缺陷修复):runtime 构好但此前**漏传**,
     // 而 `server.ts:171` 仅在 `deps.debugChannel !== undefined` 时注册 ⇒ 生产入口

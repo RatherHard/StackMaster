@@ -105,6 +105,9 @@ describe("配置加载与启动校验(fail-closed)", () => {
       launchUserId: "launch-anon",
       publicOrigin: null,
       launchTicketIssuancePerMinute: 60,
+      // 分发改版 WP-92 页面应用静态托管(D-API-161)默认值:未配置 ⇒ 该部署
+      // 不托管页面(路由不注册,换票不受影响)。
+      pageAppDir: null,
     });
   });
 

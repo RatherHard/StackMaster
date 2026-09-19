@@ -25,6 +25,8 @@
  * 替身(测试装配见 test/routes/helpers/session-rig.ts 的内存同构形态)。
  */
 import { randomBytes } from "node:crypto";
+import { statSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyPluginAsync } from "fastify";
 import type { Logger } from "pino";
@@ -80,6 +82,7 @@ import { buildDescriptorRoutes } from "../routes/descriptor-routes.js";
 import { buildVerdictRoutes } from "../routes/verdict-routes.js";
 import { buildHostScoresRoutes } from "../routes/host-scores-routes.js";
 import { buildLaunchRoutes } from "../launch/launch-routes.js";
+import { buildPageAppShell } from "../page-app/page-app-shell.js";
 import { createSessionAuthContext } from "../auth/auth-context.js";
 import { LiveSessionManager } from "../sessions/session-manager.js";
 import { SessionMetrics, buildMetricsPlugin } from "../metrics/index.js";
@@ -105,6 +108,51 @@ import {
 
 /** 迁移目录(apps/session-api/migrations;src 与 dist 同深度布局共用)。 */
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../migrations/", import.meta.url));
+
+/**
+ * 页面应用构建产物的**仓库内缺省位置**(`apps/page-app/dist`;D-API-161)。
+ *
+ * 与 `MIGRATIONS_DIR` 同款:由**本模块自身位置**派生,不依赖 `process.cwd()`
+ * —— 服务从哪个目录启动不得改变托管内容。`src/` 与 `dist/` 同深度(`src/runtime/`
+ * 与 `dist/runtime/`)⇒ 两者共用同一相对路径。
+ */
+const DEFAULT_PAGE_APP_DIR = fileURLToPath(new URL("../../../page-app/dist/", import.meta.url));
+
+/**
+ * 解析页面托管目录(**启动期判定,优于运行期 404**)。
+ *
+ *  - 配置值显式给出 ⇒ 相对路径按 `process.cwd()` 解析(运维显式表达意图),
+ *    **必须存在且是目录**,否则抛错拒绝启动(fail-closed:配了却指不到目录,
+ *    是配置错误而不是"没启用");
+ *  - 配置值缺省 ⇒ 用 `DEFAULT_PAGE_APP_DIR`,**存在即启用、不存在即不注册**
+ *    (缺省不强制构建 page-app:换票路由与页面托管是解耦的两件事)。
+ */
+export function resolvePageAppDir(config: SessionApiConfig, logger: Logger): string | null {
+  const declared = config.pageAppDir;
+  const candidate =
+    declared === null ? DEFAULT_PAGE_APP_DIR : isAbsolute(declared) ? declared : resolve(declared);
+  /** `statSync` 抛错(不存在 / 权限)与"存在但不是目录"同形:都算不可用。 */
+  const isDirectory = ((): boolean => {
+    try {
+      return statSync(candidate).isDirectory();
+    } catch {
+      return false;
+    }
+  })();
+  if (isDirectory) {
+    return candidate;
+  }
+  if (declared !== null) {
+    throw new Error(
+      `SESSION_API_PAGE_APP_DIR 指向的不是目录:${candidate}(请指向 apps/page-app/dist)`,
+    );
+  }
+  logger.info(
+    { pageAppDir: candidate },
+    "page app dist not present: static hosting for /app/** not registered",
+  );
+  return null;
+}
 
 /** readiness 探针(server.ts /readyz 消费;name 只进受控日志)。 */
 export interface ReadinessProbe {
@@ -238,6 +286,13 @@ export interface SessionApiRuntime {
    * 生产 404 而测试绿(D-API-156 缺陷 1 的形态)。
    */
   readonly launchRoutes: FastifyPluginAsync;
+  /**
+   * 页面应用静态托管插件(`GET /app/**`;分发改版 WP-92,D-API-161)。
+   * **必须在 `index.ts` 传递**,且**必须晚于 `launchRoutes` 注册** ——
+   * 漏传即"页面托管配了却不生效"而测试接缝绿(D-API-156 缺陷 1 的形态)。
+   * 未配置页面目录时 runtime **不构造**该插件(undefined = 不注册)。
+   */
+  readonly pageAppShell: FastifyPluginAsync | undefined;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5,D-API-40)。 */
   readonly wssChannel: FastifyPluginAsync;
   /**
@@ -593,6 +648,20 @@ export async function buildSessionApiRuntime(
       ),
   });
 
+  // ── 8.8 页面应用静态托管(分发改版 WP-92;D-API-161)───────────────
+  //    与 API **同源**的页面承载面(改版 §五 第 ① 项):`GET /app/**` 由
+  //    session-api 直接发文件 ⇒ 学习者打开启动地址、换票 302 回到同一 origin,
+  //    Cookie(SameSite=Strict)因此天然可用,`SESSION_API_ALLOWED_ORIGINS`
+  //    **不需要**为 page-app 放宽(同源的意义)。
+  //    **必须在 launchRoutes 之后注册**(见 server.ts 与 page-app-shell.ts 的
+  //    「路由优先级」段);未配置页面目录 ⇒ 不构造该插件(换票路由照常)。
+  const pageAppDir = resolvePageAppDir(config, logger);
+  const pageAppShell =
+    pageAppDir === null ? undefined : buildPageAppShell({ distDir: pageAppDir });
+  if (pageAppDir !== null) {
+    logger.info({ pageAppDir }, "page app static hosting enabled at /app/**");
+  }
+
   // ── 9. WSS 动作通道(WP-5;WP-6 每会话闸与保持到期回收钩子在此挂载)──
   const wssChannelAssembly = buildWssChannel({
     manager,
@@ -715,6 +784,7 @@ export async function buildSessionApiRuntime(
     verdictRoutes,
     hostScoresRoutes,
     launchRoutes,
+    pageAppShell,
     wssChannel: wssChannelAssembly.plugin,
     wssRegistry: wssChannelAssembly.registry,
     debugChannel: debugChannelPlugin,

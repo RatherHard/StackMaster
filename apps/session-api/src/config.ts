@@ -352,6 +352,8 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_LAUNCH_USER_ID",
   "SESSION_API_PUBLIC_ORIGIN",
   "SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE",
+  // ── 分发改版 WP-92 页面应用静态托管(2026-09-18;D-API-161)──
+  "SESSION_API_PAGE_APP_DIR",
 ];
 
 const envSchema = z.object({
@@ -688,6 +690,27 @@ const envSchema = z.object({
     .min(1)
     .max(LAUNCH_TICKET_ISSUANCE_PER_MINUTE_CEILING)
     .default(DEFAULT_LAUNCH_TICKET_ISSUANCE_PER_MINUTE),
+  // ── 分发改版 WP-92 页面应用静态托管(D-API-161)──
+  // 指向 `apps/page-app/dist`(页面与 API **同源**的承载面,改版 §五 第 ① 项)。
+  // **不在 REQUIRED_ENV_KEYS**:缺失是合法部署形态(该部署不托管页面,或页面由
+  // 同域反代提供)⇒ 路由不注册,但**换票路由照常工作**(换票是服务端语义,
+  // 与谁来托管页面解耦)。
+  // 形态闸:**只做声明值校验**(非空、无控制字符),**不在此解析路径** ——
+  // 配置层不承担 `process.cwd()` 相对解析("服务从哪个目录启动"不得悄悄改变
+  // 托管内容);绝对化与"目录确实存在"的判定归装配侧(runtime.ts,启动即失败,
+  // 优于运行期 404)。
+  SESSION_API_PAGE_APP_DIR: z
+    .string()
+    .superRefine((value, ctx) => {
+      if (value.trim().length === 0) {
+        ctx.addIssue({ code: "custom", message: "不得为空白路径" });
+      }
+      // eslint-disable-next-line no-control-regex -- 意图即"拒绝控制字符"(路径注入面)
+      if (/[\u0000-\u001f\u007f]/.test(value)) {
+        ctx.addIssue({ code: "custom", message: "不得包含控制字符" });
+      }
+    })
+    .optional(),
 });
 
 /** 会话编排器运行配置(启动校验后的冻结形态,进程内只读)。 */
@@ -832,6 +855,13 @@ export interface SessionApiConfig {
   readonly publicOrigin: string | null;
   /** 启动票据签发频率(次/分钟;rate:{锚租户}:launch_tickets 固定窗口 60 s)。 */
   readonly launchTicketIssuancePerMinute: number;
+  // ── 分发改版 WP-92 页面应用静态托管(D-API-161)──
+  /**
+   * 页面应用构建产物目录(`apps/page-app/dist`)。`null` = 该部署不托管页面
+   * ⇒ `GET /app/**` 静态路由**不注册**(换票路由不受影响;页面可由同域反代
+   * 提供)。**声明值**:路径绝对化与存在性判定归装配侧(runtime.ts)。
+   */
+  readonly pageAppDir: string | null;
 }
 
 /** 启动校验拒绝(issues 只含字段名与原因,不含字段值)。 */
@@ -992,6 +1022,7 @@ export function loadSessionApiConfig(
     launchUserId: raw.SESSION_API_LAUNCH_USER_ID,
     publicOrigin: raw.SESSION_API_PUBLIC_ORIGIN ?? null,
     launchTicketIssuancePerMinute: raw.SESSION_API_LAUNCH_TICKET_ISSUANCE_PER_MINUTE,
+    pageAppDir: raw.SESSION_API_PAGE_APP_DIR ?? null,
   };
 }
 

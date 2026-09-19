@@ -87,6 +87,14 @@ export interface SessionApiServerDeps {
    * —— 该缺陷的装配路径断言现由 `test/runtime/assembly.test.ts` 承载。
    */
   readonly launchRoutes?: FastifyPluginAsync;
+  /**
+   * 页面应用静态托管(`GET /app/**`;分发改版 WP-92,D-API-161)。
+   * **必须晚于 `launchRoutes` 注册** —— 换票路由(`GET /app/c/:challengeId/:version`)
+   * 与静态面共享 `/app` 前缀,注册序是二者优先级的装配层保证(详见
+   * `src/page-app/page-app-shell.ts` 文件头「路由优先级」与集成测试
+   * `test/launch/static-hosting.test.ts`)。
+   */
+  readonly pageAppShell?: FastifyPluginAsync;
   /** WSS 动作通道插件(GET /sessions/channel;WP-5 装配,D-API-40)。 */
   readonly wssChannel?: FastifyPluginAsync;
   /** 调试通道插件(GET /sessions/debug-channel;阶段四 WP-41,须在 wssChannel 之后注册)。 */
@@ -179,6 +187,12 @@ export function buildServer(
   }
   if (deps.launchRoutes !== undefined) {
     app.register(deps.launchRoutes);
+  }
+  // 页面应用静态托管(**必须在 launchRoutes 之后**;D-API-161)。注册序 =
+  // 「换票路由先于静态通配」的装配层显式保证(另一重保证 = 静态侧
+  // `wildcard: false`,结构上不存在能吞掉动态段的通配处理器)。
+  if (deps.pageAppShell !== undefined) {
+    app.register(deps.pageAppShell);
   }
   if (deps.wssChannel !== undefined) {
     app.register(deps.wssChannel);

@@ -70,6 +70,8 @@ import { buildDescriptorRoutes } from "../../../src/routes/descriptor-routes.js"
 import { buildVerdictRoutes } from "../../../src/routes/verdict-routes.js";
 import { buildHostScoresRoutes } from "../../../src/routes/host-scores-routes.js";
 import { buildLaunchRoutes } from "../../../src/launch/launch-routes.js";
+import { resolvePageAppDir } from "../../../src/runtime/runtime.js";
+import { buildPageAppShell } from "../../../src/page-app/page-app-shell.js";
 import type { Logger } from "pino";
 import { createLogCapture, type LogCapture } from "../../helpers/log-capture.js";
 import { OutboundFrameRecorder } from "../../wss/helpers/outbound-frame-recorder.js";
@@ -89,6 +91,18 @@ export const TEST_CHALLENGE_VERSION = "1.2.3";
 export const DEFAULT_ALLOWED_ORIGINS = "https://plugin.example";
 
 export const TEST_HOST_BACKEND_TOKEN = HOST_BACKEND_TOKEN;
+
+/**
+ * 页面托管插件(测试接缝;**与生产同一份目录解析逻辑**)。
+ *
+ * 刻意**调用** `resolvePageAppDir` 而不是在测试里另写一份判定:目录解析
+ * (绝对化 / 存在性 / 缺省回落)是 D-API-161 的实质逻辑,复制一份就等于
+ * 让测试接缝与生产装配分叉 —— 那正是 D-API-156 缺陷 1 的成因。
+ */
+function pageAppShellForTest(config: SessionApiConfig): ReturnType<typeof buildPageAppShell> | undefined {
+  const distDir = resolvePageAppDir(config, createLogger(config));
+  return distDir === null ? undefined : buildPageAppShell({ distDir });
+}
 
 const FAKE_WORKER = join(fileURLToPath(new URL(".", import.meta.url)), "fake-worker.mjs");
 
@@ -522,6 +536,11 @@ export async function buildSessionTestRig(options: SessionRigOptions = {}): Prom
         ),
       ...(now === undefined ? {} : { now }),
     }),
+    // 页面应用静态托管(分发改版 WP-92;D-API-161):与 runtime.ts 同一装配
+    // 拓扑(装配侧解析目录 + `wildcard: false` 精确路由),且**同一注册序**
+    // (launchRoutes 之后)。未配 `SESSION_API_PAGE_APP_DIR` 且仓库内缺省目录
+    // 不存在 ⇒ undefined(与生产同形:该部署不托管页面)。
+    pageAppShell: pageAppShellForTest(config),
   });
   await app.ready();
 
