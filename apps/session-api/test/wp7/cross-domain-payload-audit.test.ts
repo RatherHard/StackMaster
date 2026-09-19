@@ -32,7 +32,6 @@ import {
 import {
   TEST_CHALLENGE_ID,
   TEST_CHALLENGE_VERSION,
-  TEST_HOST_BACKEND_TOKEN,
   buildSessionTestRig,
   credentialHeaders,
   sessionCommand,

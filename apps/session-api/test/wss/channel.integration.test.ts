@@ -15,7 +15,6 @@ import type { Socket } from "node:net";
 import { connect as netConnect } from "node:net";
 import {
   MAX_WSS_FRAME_BYTES,
-  SESSION_ACTION_PROTOCOL_PREVIOUS_VERSION,
   SESSION_ACTION_PROTOCOL_VERSION,
   WssFrameSchema,
   type WssFrame,
