@@ -1,0 +1,29 @@
+{
+  "name": "@stackmaster/page-app",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "sync:vm-ui": "node scripts/sync-vm-ui-dist.mjs",
+    "predev": "pnpm run sync:vm-ui",
+    "dev": "vite",
+    "prebuild": "pnpm run sync:vm-ui",
+    "build": "vite build && tsc -b --force",
+    "prepreview": "pnpm run sync:vm-ui",
+    "preview": "vite preview",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:e2e": "pnpm run build && playwright test"
+  },
+  "dependencies": {
+    "@stackmaster/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.4.0",
+    "jsdom": "^30.0.1",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist/types",
+    "declarationDir": "dist/types",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "emitDeclarationOnly": true
+  },
+  "include": ["src"]
+}

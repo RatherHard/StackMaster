@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 页面分发形态:题目与租户由服务端按地址绑定,不由 URL 自报;此处零元数据。 -->
+    <title>StackMaster</title>
+    <!--
+      整页定高链(分发改版 WP-92;D-API-153 第 6 项)。
+
+      判据(遗留 #37):`document.documentElement.scrollHeight ≤ innerHeight + 1`
+      —— 页面**不纵向溢出**,溢出由工作区**内部**滚动承载。
+
+      ⚠ **刻意不写 `overflow: hidden`**(本仓库 WP-93/94 实测到的坑):
+      `overflow: hidden` 会把 `overflow-x` 升格为**裁剪**,于是窄屏(D-UI-5:
+      左右两半侧各保底 452.4px)下网格宽超出视口时,内容宽**不再上浮到文档层**
+      ⇒ `document.documentElement.scrollWidth` 停在视口宽 ⇒ **右半侧不可达**。
+      纵向无需 `hidden` 兜底:高度链已把文档高钉在视口高。
+    -->
+    <style>
+      html,
+      body,
+      #app {
+        block-size: 100%;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        /* 见上:不得用 hidden(会裁剪横向溢出 ⇒ 窄屏右半侧不可达)。 */
+        overflow: visible;
+        background: var(--sm-bg-base, #0b0f0b);
+      }
+      /* 工作区自身即 `100dvh`(vm-ui :host 声明),此处只保证它拿到整页位置。 */
+      #app {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
+      }
+    </style>
+    <!--
+      预取 vm-ui 构建产物(提示级:同源静态资源,由 vite publicDir 从
+      packages/vm-ui/dist 整目录拷贝而来)。本地未构建 vm-ui 时本请求 404,
+      引导逻辑会给出可操作提示;模块本身由 src/main.ts 在运行期动态 import。
+    -->
+    <link rel="modulepreload" href="/vm-ui/index.js" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

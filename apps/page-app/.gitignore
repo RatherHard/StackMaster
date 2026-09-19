@@ -1,0 +1,3 @@
+# vm-ui 构建产物的同步落点(scripts/sync-vm-ui-dist.mjs 每次构建前重写)。
+# 它不是源码:不得进 git(与 packages/vm-ui/dist 同性质,根 .gitignore 已忽略 dist/)。
+public/vm-ui/
