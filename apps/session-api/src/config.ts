@@ -20,7 +20,6 @@ import {
   DEFAULT_LAUNCH_TICKET_TTL_SECONDS,
   IDENTIFIER_CHARSET_PATTERN,
   MAX_CHECKPOINTS_PER_SESSION,
-  MAX_EMBED_TOKEN_TTL_SECONDS,
   MAX_LAUNCH_TICKET_TTL_SECONDS,
   MAX_SESSION_CREDENTIAL_TTL_SECONDS,
   MAX_WSS_FRAME_BYTES,
@@ -54,8 +53,12 @@ export const DEFAULT_MINIO_PORT = 9000;
 export const DEFAULT_MINIO_BUCKET_PRIVATE = "private-bundles";
 export const DEFAULT_MINIO_BUCKET_PUBLIC = "public-descriptors";
 
-/** WP-2:embed token 签发 TTL 默认值(秒);上限 = MAX_EMBED_TOKEN_TTL_SECONDS(604800)。 */
-export const DEFAULT_EMBED_TOKEN_TTL_SECONDS = 3600;
+// 2026-09-19 WP-96(分发改版退役面物理删除):`DEFAULT_EMBED_TOKEN_TTL_SECONDS`
+// 与配置键 `SESSION_API_EMBED_TOKEN_TTL_SECONDS` / `embedTokenTtlSeconds` **已删除**。
+// 它们的唯一消费者 = 嵌入协议的 `/auth/embed-tokens` 签发链,该端点与 embed token 一族
+// （`EmbedTokenClaims` / `consumeEmbedToken` / `TokenIssuanceStore`）已随嵌入协议面
+// 整体退役 ⇒ 该键在退役后**无任何消费者**。删除是「退役面零残留」的口径:
+// 部署若仍设置该键,会按「未登记保留键」**拒绝启动**(fail-closed,而不是静默忽略)。
 
 /** WP-2:会话凭证签发 TTL 默认值(秒);上限 = MAX_SESSION_CREDENTIAL_TTL_SECONDS(86400)。 */
 export const DEFAULT_SESSION_CREDENTIAL_TTL_SECONDS = 3600;
@@ -308,7 +311,7 @@ const KNOWN_ENV_KEYS: readonly string[] = [
   "SESSION_API_SIGNING_KEY",
   "SESSION_API_HOST_BACKEND_TOKEN",
   "SESSION_API_ALLOWED_ORIGINS",
-  "SESSION_API_EMBED_TOKEN_TTL_SECONDS",
+  // 2026-09-19 WP-96:`SESSION_API_EMBED_TOKEN_TTL_SECONDS` 已随嵌入协议面退役删除。
   "SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS",
   // ── WP-4 请求护栏与 clientSeq 预算(2026-09-10;D-API-31)──
   "SESSION_API_MAX_REQUEST_BODY_BYTES",
@@ -439,12 +442,6 @@ const envSchema = z.object({
       }
     })
     .optional(),
-  SESSION_API_EMBED_TOKEN_TTL_SECONDS: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(MAX_EMBED_TOKEN_TTL_SECONDS)
-    .default(DEFAULT_EMBED_TOKEN_TTL_SECONDS),
   SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS: z.coerce
     .number()
     .int()
@@ -760,8 +757,7 @@ export interface SessionApiConfig {
   readonly hostBackendToken: string;
   /** CORS 精确来源白名单;空数组 = 不允许任何跨源(fail-closed 默认)。 */
   readonly allowedOrigins: readonly string[];
-  /** embed token 签发 TTL(秒);≤ MAX_EMBED_TOKEN_TTL_SECONDS(协议外圈护栏)。 */
-  readonly embedTokenTtlSeconds: number;
+  // 2026-09-19 WP-96:`embedTokenTtlSeconds` 已随嵌入协议面退役删除(无消费者)。
   /** 会话凭证签发 TTL(秒);≤ MAX_SESSION_CREDENTIAL_TTL_SECONDS(协议外圈护栏)。 */
   readonly sessionCredentialTtlSeconds: number;
   // ── WP-4 请求护栏(D-API-31)──
@@ -984,7 +980,6 @@ export function loadSessionApiConfig(
       raw.SESSION_API_ALLOWED_ORIGINS === undefined
         ? []
         : splitAllowedOrigins(raw.SESSION_API_ALLOWED_ORIGINS),
-    embedTokenTtlSeconds: raw.SESSION_API_EMBED_TOKEN_TTL_SECONDS,
     sessionCredentialTtlSeconds: raw.SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS,
     maxRequestBodyBytes: raw.SESSION_API_MAX_REQUEST_BODY_BYTES,
     maxJsonDepth: raw.SESSION_API_MAX_JSON_DEPTH,

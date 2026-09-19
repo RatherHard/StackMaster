@@ -16,7 +16,7 @@
  * **不在此文件的数值护栏**:`LAUNCH_URL_MAX_LENGTH` /
  * `MAX_LAUNCH_TICKET_TTL_SECONDS` / `DEFAULT_LAUNCH_TICKET_TTL_SECONDS` 落
  * `../common/limits.ts` —— 沿该文件既有惯例:协议级数值上限(如
- * `MAX_EMBED_TOKEN_TTL_SECONDS`)与「带上限的缺省值」(如
+ * `MAX_SESSION_CREDENTIAL_TTL_SECONDS`)与「带上限的缺省值」(如
  * `MAX_BYTES_PER_RANGE_DEFAULT`)统一在那一处登记(该文件头已声明其定位为
  * 「协议级资源护栏常量」)。
  */

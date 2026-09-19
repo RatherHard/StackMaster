@@ -42,7 +42,8 @@ export interface AuthModuleConfig {
   readonly nodeEnv: "development" | "test" | "production";
   readonly hostBackendToken: string;
   readonly allowedOrigins: readonly string[];
-  readonly embedTokenTtlSeconds: number;
+  // 2026-09-19 WP-96:`embedTokenTtlSeconds` 已随嵌入协议面退役删除(原唯一消费者 =
+  // `/auth/embed-tokens` 签发链,该端点与 embed token 一族同批物理删除)。
   readonly sessionCredentialTtlSeconds: number;
   /** 签名私钥 PEM(SessionApiConfig 携带;无 signer 注入时必经此字段装配)。 */
   readonly signingKey?: string;

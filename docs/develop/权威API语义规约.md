@@ -155,8 +155,10 @@ WP-2 交付三个端口 + 内存默认实现(`apps/session-api/src/auth/`):`Toke
 | `SESSION_API_SIGNING_KEY` | 是 | —— | Ed25519 私钥 PKCS#8 PEM;启动期 createPrivateKey 解析 + 密钥类型断言,失败拒绝启动(消息仅字段名与结构原因,绝不回显取值) |
 | `SESSION_API_HOST_BACKEND_TOKEN` | 是 | —— | 签发端点宿主共享凭证(bearer);最低长度 16 字符 |
 | `SESSION_API_ALLOWED_ORIGINS` | 否 | 缺省 | 逗号分隔精确来源(禁通配 / 路径 / 尾斜杠);缺省 = 不允许任何跨源(D-API-16) |
-| `SESSION_API_EMBED_TOKEN_TTL_SECONDS` | 否 | 3600 | 上限 `MAX_EMBED_TOKEN_TTL_SECONDS`(604800);即签发记录 TTL |
+| ~~`SESSION_API_EMBED_TOKEN_TTL_SECONDS`~~ | 否 | ~~3600~~ | ~~上限 `MAX_EMBED_TOKEN_TTL_SECONDS`(604800);即签发记录 TTL~~ —— **2026-09-19 WP-96 物理删除**:唯一消费者 `/auth/embed-tokens` 随嵌入协议面退役 ⇒ 键与常量同批删除;部署若仍设置该键 ⇒ 按未登记保留键**拒绝启动**(fail-closed)。本行为退役前留档 |
 | `SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS` | 否 | 3600 | 上限 `MAX_SESSION_CREDENTIAL_TTL_SECONDS`(86400);推荐 ≤ 会话 wall-clock 预算 + 续期余量 |
+
+**2026-09-19 WP-96 订正**:上表原为「五键」,**现为四键**(`SESSION_API_EMBED_TOKEN_TTL_SECONDS` 已删除)。
 
 五键均过配置三道闸(D-API-9);键名带 `SESSION_API_` 前缀,受未知保留键闸校验。
 

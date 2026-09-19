@@ -57,7 +57,7 @@ describe("配置加载与启动校验(fail-closed)", () => {
       signingKey: REQUIRED_WP3.SESSION_API_SIGNING_KEY,
       hostBackendToken: "host-backend-test-token-0123456789",
       allowedOrigins: [],
-      embedTokenTtlSeconds: 3600,
+      // 2026-09-19 WP-96:`embedTokenTtlSeconds` 已随嵌入协议面退役删除。
       sessionCredentialTtlSeconds: 3600,
       // WP-4 请求护栏(D-API-31)默认值。
       maxRequestBodyBytes: 65536,
@@ -128,7 +128,6 @@ describe("配置加载与启动校验(fail-closed)", () => {
       SESSION_API_AUTO_SNAPSHOT_EVERY_REVISIONS: "10",
       // WP-2 认证与凭证面配置键生效(D-API-19)。
       SESSION_API_ALLOWED_ORIGINS: "https://plugin.example,https://backup.example",
-      SESSION_API_EMBED_TOKEN_TTL_SECONDS: "600",
       SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS: "1800",
       // WP-4 请求护栏配置键生效(D-API-31)。
       SESSION_API_MAX_REQUEST_BODY_BYTES: "131072",
@@ -165,7 +164,6 @@ describe("配置加载与启动校验(fail-closed)", () => {
     expect(config.autoSnapshotEveryRevisions).toBe(10);
     // WP-2 认证与凭证面:精确来源白名单拆分 + TTL 透传。
     expect(config.allowedOrigins).toEqual(["https://plugin.example", "https://backup.example"]);
-    expect(config.embedTokenTtlSeconds).toBe(600);
     expect(config.sessionCredentialTtlSeconds).toBe(1800);
     // WP-4 请求护栏:字符串数字强制转换。
     expect(config.maxRequestBodyBytes).toBe(131072);
@@ -210,9 +208,9 @@ describe("配置加载与启动校验(fail-closed)", () => {
       ["堆栈开关取值越界(coerce 布尔的拼写变体)", { SESSION_API_LOG_ERROR_STACKS: "yes" }, "SESSION_API_LOG_ERROR_STACKS"],
       ["停机宽限为 0", { SESSION_API_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS: "0" }, "SESSION_API_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS"],
       // WP-2 认证与凭证面取值闸。
-      ["embed token TTL 超过协议外圈护栏", { SESSION_API_EMBED_TOKEN_TTL_SECONDS: "604801" }, "SESSION_API_EMBED_TOKEN_TTL_SECONDS"],
       ["会话凭证 TTL 超过协议外圈护栏", { SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS: "86401" }, "SESSION_API_SESSION_CREDENTIAL_TTL_SECONDS"],
-      ["embed token TTL 为 0", { SESSION_API_EMBED_TOKEN_TTL_SECONDS: "0" }, "SESSION_API_EMBED_TOKEN_TTL_SECONDS"],
+      // 2026-09-19 WP-96:原「embed token TTL 护栏 / 为 0」两条取值闸用例随该配置键
+      // 退役而删除(键已不存在 ⇒ 设它会命中「未登记保留键」闸,由既有用例族覆盖)。
       ["签发密钥不是合法 PEM", { SESSION_API_SIGNING_KEY: "not-a-pem" }, "SESSION_API_SIGNING_KEY"],
       ["宿主后端共享凭证过短", { SESSION_API_HOST_BACKEND_TOKEN: "short" }, "SESSION_API_HOST_BACKEND_TOKEN"],
       ["CORS 白名单含通配符", { SESSION_API_ALLOWED_ORIGINS: "*" }, "SESSION_API_ALLOWED_ORIGINS"],

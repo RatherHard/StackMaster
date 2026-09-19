@@ -96,17 +96,18 @@ export const MAX_ERROR_HINTS = 4;
  */
 
 /**
- * embed token 有效期上限(秒;7 天外圈护栏)。计划书 9.2 要求短期、单用途
- * 或有限次数的 token;具体签发 TTL 属阶段五运维参数,必须 ≤ 本值。
+ * ~~embed token 有效期上限(秒;7 天外圈护栏)~~ —— **2026-09-19 随 WP-96 物理删除**。
  *
- * **为什么它在嵌入协议面退役后仍然在场(2026-09-19,WP-96)**:该常量是
- * `apps/session-api/src/config.ts` 中配置键 `SESSION_API_EMBED_TOKEN_TTL_SECONDS`
- * 的**.max() 外圈护栏**——配置面不在本批退役面内(WP-96 的删除面 = 嵌入协议
- * 契约 / v1 冻结面 / embed token 消费链),删掉它会让该配置键失去护栏、
- * 或迫使 WP-96 越界改配置文件。名字里的 `EMBED` 是历史命名,语义是
- * 「短期凭证 TTL 的协议外圈上限」。**登记:本常量在配置面仍被消费**。
+ * 计划书 9.2 要求短期、单用途或有限次数的 token;该上限的**唯一消费者**是
+ * session-api 的配置键 `SESSION_API_EMBED_TOKEN_TTL_SECONDS`(其 `.max()` 外圈护栏),
+ * 而该键的唯一消费者是 `/auth/embed-tokens` 签发链。⇒ 端点与 embed token 一族随
+ * 嵌入协议面整体退役后,该键**无任何消费者** ⇒ **配置键与常量同批删除**
+ * (「退役面零残留」口径;部署若仍设置该键会按未登记保留键**拒绝启动**,
+ * fail-closed 而不是静默忽略)。
+ *
+ * **仍然在场的同族常量**:`EMBED_TOKEN_MAX_LENGTH`(历史命名;被
+ * `SESSION_CREDENTIAL_MAX_LENGTH` 复用为凭证载体长度上限,属活跃消费方)。
  */
-export const MAX_EMBED_TOKEN_TTL_SECONDS = 604800;
 
 /* ------------------------------------------------------------------ */
 /* 会话级命令与传输信封护栏(阶段三 WP-0;计划书 8.2 / 8.3 / 9.1)        */
@@ -188,7 +189,7 @@ export const DEBUG_FUNCTION_TABLE_MAX_ENTRIES = 256;
 /*
  * 归属说明(为什么这三个数值在此文件、而**不**在 `src/launch-ticket/`):
  * 本文件的定位是「**协议级资源护栏常量**」(见文件头),既有惯例是——数值上限
- * (`MAX_EMBED_TOKEN_TTL_SECONDS`)与其同族的**带上限缺省值**
+ * (如 `MAX_SESSION_CREDENTIAL_TTL_SECONDS`)与其同族的**带上限缺省值**
  * (`MAX_BYTES_PER_RANGE_DEFAULT`)统一登记在此。启动票据的数值护栏照此惯例
  * 落在这里;而**形态常量**(签发路由 / 换票路径模板 / 查询参数名 / 令牌长度)
  * 不是护栏数值,落 `src/launch-ticket/launch-ticket-contract.ts`(族内单源,
