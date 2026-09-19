@@ -2,14 +2,22 @@
  * 浏览器联调 host 启动器(开发专用,非测试基建)。
  *
  * 用途:在本机以"依赖容器 + 宿主进程"形态起 session-api(13000)与
- * verifier(13100),并把 plugin-dev 开发壳 origin(http://localhost:5173)
- * 加入来源白名单——compose 集成测试拓扑(test/compose/helpers/topology.ts
- * 的 HostProcess)只放行 13000,浏览器从 5173 发起经 vite 代理的请求会被
- * CORS / CSRF 闸拒绝,故本脚本独立装配环境。
+ * verifier(13100),**并由 session-api 同源托管 `apps/page-app` 的构建产物**
+ * —— 这样浏览器打开启动地址时,页面与 `/sessions`、`/auth` 同源,`SameSite=Strict`
+ * 的启动授权凭证 Cookie 才会被呈递(跨源形态下不会被带上,页面拿 401)。
+ *
+ * ⚠ **2026-09-19 分发改版(WP-96)订正**:本脚本此前把 `plugin-dev` 开发壳
+ * (http://localhost:5173)加入来源白名单,靠 vite 代理做跨源联调;**该应用已随
+ * 嵌入协议面整体退役并物理删除**,且新链(一次性启动地址 → 换票 → 授权凭证
+ * Cookie)在**跨源**下结构性走不通 ⇒ 联调形态改为**同源托管**:session-api 直接
+ * 服务页面产物 + 签发启动地址(`SESSION_API_PUBLIC_ORIGIN` = 本进程自身源)。
  *
  * 用法(cwd = apps/session-api):
- *   pnpm --filter @stackmaster/session-api compose:deps:up   # 先起依赖服务
- *   pnpm --filter @stackmaster/session-api dev:host          # 本脚本
+ *   pnpm --filter @stackmaster/session-api compose:deps:up          # 先起依赖服务
+ *   pnpm --filter @stackmaster/vm-ui build                          # 页面依赖 vm-ui 产物
+ *   pnpm --filter @stackmaster/page-app build                       # 页面产物(dist/)
+ *   pnpm --filter @stackmaster/session-api dev:host                 # 本脚本
+ *   # 然后在另一个终端领一张启动地址并贴进浏览器(见脚本末尾的输出)
  *
  * 凭证纪律:签发密钥与宿主共享凭证是**本地开发专用合成值**(与
  * compose/app.yaml / test/helpers/required-env.ts 的合成值同性质),
@@ -30,11 +38,17 @@ const REPO_ROOT = join(APP_DIR, "..", "..");
 
 const SESSION_API_PORT = process.env["DEV_SESSION_API_PORT"] ?? "13000";
 const VERIFIER_PORT = process.env["DEV_VERIFIER_PORT"] ?? "13100";
-const ALLOWED_ORIGINS =
-  process.env["DEV_ALLOWED_ORIGINS"] ?? "http://localhost:5173,http://localhost:13000";
+/**
+ * 页面与 API 的**共同源**(同源是启动地址链在浏览器里可用的前提:
+ * `sm_launch_grant` 是 `SameSite=Strict`)。缺省与 `ALLOWED_ORIGINS` 的 API 源
+ * 逐字一致(`localhost`,不是 `127.0.0.1` —— 两者是**不同源**)。
+ */
+const PUBLIC_ORIGIN =
+  process.env["DEV_PUBLIC_ORIGIN"] ?? `http://localhost:${SESSION_API_PORT}`;
+const ALLOWED_ORIGINS = process.env["DEV_ALLOWED_ORIGINS"] ?? PUBLIC_ORIGIN;
 
 // 本地联调专用固定合成密钥(与 test/helpers/required-env.ts 同生成方式;
-// 固定值使重启后已签发的 embed token 仍然有效,便于浏览器联调)。
+// 固定值使重启后已签发的启动授权凭证 / 会话凭证仍然有效,便于浏览器联调)。
 const DEV_SIGNING_KEY_PEM = [
   "-----BEGIN PRIVATE KEY-----",
   "MC4CAQAwBQYDK2VwBCIEIPe35BIZKZY7An/tmhbo7bSz5c42xxuo/w4KmoZuF+XI",
@@ -162,6 +176,11 @@ const verifierDist = assertDist(
   "先 pnpm --filter @stackmaster/verifier build",
 );
 const verifierDir = join(REPO_ROOT, "apps", "verifier");
+// 同源托管:页面产物必须存在(否则换票后的干净路径 404 —— 换票本身仍会成功)。
+const pageAppDist = assertDist(
+  join(REPO_ROOT, "apps", "page-app", "dist"),
+  "先 pnpm --filter @stackmaster/vm-ui build && pnpm --filter @stackmaster/page-app build",
+);
 
 const sharedEnv = {
   ...integrationEnv,
@@ -170,12 +189,17 @@ const sharedEnv = {
   STACKMASTER_WORKER_BIN: workerBin,
 };
 
-console.log("[dev-host] 联调形态:依赖容器(compose:deps:up)+ 宿主进程;5173 已加入来源白名单。");
+console.log(
+  `[dev-host] 联调形态:依赖容器(compose:deps:up)+ 宿主进程;**同源托管 page-app 产物**;PUBLIC_ORIGIN=${PUBLIC_ORIGIN}。`,
+);
 spawnChild("session-api", APP_DIR, sessionApiDist, {
   ...sharedEnv,
   SESSION_API_HOST: "127.0.0.1",
   SESSION_API_PORT: SESSION_API_PORT,
   SESSION_API_ALLOWED_ORIGINS: ALLOWED_ORIGINS,
+  // 启动面:同源页面 + 一次性启动地址(WP-96 后的唯一浏览器形态)。
+  SESSION_API_PUBLIC_ORIGIN: PUBLIC_ORIGIN,
+  SESSION_API_PAGE_APP_DIR: pageAppDist,
 });
 spawnChild("verifier", verifierDir, verifierDist, {
   ...sharedEnv,
@@ -192,4 +216,13 @@ console.log(
 console.log(
   "[dev-host] 下一步 ①登记题目:SESSION_API_COMPOSE=1 pnpm --filter @stackmaster/session-api exec vitest run test/extended-challenges/register-extended.compose.integration.test.ts",
 );
-console.log("[dev-host] 下一步 ②签发 token 并启动 plugin-dev:见 apps/session-api/test/extended-challenges/README.md;按 Ctrl+C 停止全部进程。");
+console.log(
+  `[dev-host] 下一步 ②领一张一次性启动地址并贴进浏览器(PUBLIC_ORIGIN=${PUBLIC_ORIGIN}):\n` +
+    `  curl.exe -sS -X POST ${PUBLIC_ORIGIN}/auth/launch-tickets \\\n` +
+    `    -H "authorization: Bearer ${DEV_HOST_BACKEND_TOKEN}" -H 'content-type: application/json' \\\n` +
+    `    -d '{"challengeId":"<已登记题目 id>","version":"1.0.0"}'   # ⇒ 取返回的 launchUrl 顶层导航打开`,
+);
+console.log(
+  "[dev-host] ⚠ 刷新页面 = 票据已消费 ⇒ 401「地址已失效,请向平台重新获取」⇒ **重新领一张**,不要复用同一地址。",
+);
+console.log("[dev-host] 按 Ctrl+C 停止全部进程。");
