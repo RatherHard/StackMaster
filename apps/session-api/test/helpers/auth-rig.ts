@@ -252,6 +252,24 @@ export async function buildAuthTestRig(options: AuthRigOptions = {}): Promise<Au
         expiresAt: claims.expiresAt * 1000,
       };
       await issuanceStore.put(record, ttlSeconds);
+      // **审计面与已退役的签发端点逐字对齐**(WP-91):`/auth/embed-tokens`
+      // 是该事件的**唯一生产点**,它退役后若不在此补上,`embed_token_issued`
+      // 会从审计面**静默消失**(而它仍是冻结十值封闭集的成员,且 e2e 审计
+      // 用例正靠它证明"签发事实可审计")。本助手宣称"绕过 HTTP 端点",故它
+      // 必须自带端点原本的可观察副作用 —— 否则测试面与生产面出现语义差,
+      // 正是本仓库反复登记的"测试接缝绕开真实装配"缺陷族。
+      await audit.append({
+        kind: "embed_token_issued",
+        at: nowMs,
+        actor: { tenantId: claims.tenantId, userId: claims.userId },
+        detail: {
+          jti: claims.jti,
+          challengeId: claims.challengeId,
+          challengeVersion: claims.challengeVersion,
+          embedSessionId: claims.embedSessionId,
+          ttlSeconds,
+        },
+      });
       return { token, claims, record };
     },
     hostHeaders() {

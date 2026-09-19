@@ -114,22 +114,17 @@ describe("跨域载荷录制机检:全链路录制 + 零命中", () => {
     const { rig, http } = await buildAuditedRig();
     await rig.registerChallenge();
 
-    // 1. embed token 签发端点(完整签发链路的 HTTP 响应面进录制集)。
+    // 1. embed token **铸造**(无 HTTP 面)。`/auth/embed-tokens` 端点已退役
+    //    (WP-91;D-LT-1 第 5 项硬切,不留别名)⇒ 该端点的响应面**不再存在**,
+    //    故它从录制集里消失。
+    //
+    //    录制集覆盖面**不缩水**:承继端点 `POST /auth/launch-tickets` 的响应面
+    //    (`{launchUrl, expiresAt}`,跨边界可达)由
+    //    `test/launch/launch-routes.test.ts` 承接 —— 那里有**响应键集冻结**
+    //    (机检 ⑧)、**票据只在 launchUrl 内**、**票据零入日志**(机检 ⑦)三条
+    //    断言,比"把响应塞进本录制集"更直接。
     const issued = await rig.issueEmbedToken();
-    const issuance = await http.inject(rig.app, {
-            url: "/auth/embed-tokens",
-      payload: {
-        tenantId: issued.claims.tenantId,
-        userId: issued.claims.userId,
-        challengeId: issued.claims.challengeId,
-        challengeVersion: issued.claims.challengeVersion,
-        embedSessionId: issued.claims.embedSessionId,
-      },
-      headers: { authorization: `Bearer ${TEST_HOST_BACKEND_TOKEN}` },
-    });
-    expect(issuance.statusCode).toBe(201);
-    // 签发端点走宿主凭证认证(与 issueEmbedToken 直签并存;响应面进机检)。
-    const embedToken = (issuance.body as { embedToken: string }).embedToken;
+    const embedToken = issued.token;
 
     // 2. create_session(201 + Cookie)。
     const created = await http.inject(rig.app, {

@@ -1,57 +1,60 @@
 /**
  * 合法链路端到端 + 传输卫生 + 审计面(WP-2 完成标准的收口测试):
- * 签发 embed token → create-session 消费(三方比对 + jti 单次消费)→
- * 会话凭证签发(Set-Cookie 交付)→ 凭证中间件保护的路由可访问;
- * 凭证不入 URL / 日志 / 错误响应;审计六(七)类事件可观察。
+ * 铸 embed token(直接经 signer + store)→ create-session 消费
+ * (三方比对 + jti 单次消费)→ 会话凭证签发(Set-Cookie 交付)→
+ * 凭证中间件保护的路由可访问;凭证不入 URL / 日志 / 错误响应;
+ * 审计六(七)类事件可观察。
+ *
+ * ⚠ **`/auth/embed-tokens` 端点已退役**(WP-91;D-LT-1 第 5 项「与嵌入协议同批
+ * 硬切」)。本文件测的是**消费链**(三方比对 / 单次消费 / 会话凭证交付 /
+ * 受保护路由 / 审计 / 传输卫生),**不是签发端点本身** ⇒ 签发段改为
+ * `rig.issueEmbedToken()`(直接经**同一** signer + issuanceStore 铸造,与生产
+ * 签发面同源),消费链的载荷与断言**逐字不变**。
+ * **新签发面**(`POST /auth/launch-tickets`)的用例归
+ * `test/launch/launch-routes.test.ts`(19 例,机检 ①~⑧)。
+ *
+ * **为什么消费链在 v2 时代仍以 v1 形态测**:v2 的授权来源是启动授权凭证,
+ * 而 embed token 消费链是 **N-1 窗口期内仍受支持的 v1 分支** —— 它的行为
+ * 必须被继续钉住,直到 WP-96 物理删除 v1 冻结面。
  */
 
 import { PublicErrorSchema } from "@stackmaster/protocol";
 import { describe, expect, it } from "vitest";
 
-import { EMBED_TOKEN_ISSUANCE_ROUTE } from "../../src/auth/index.js";
 import {
   TEST_CHALLENGE_ID,
   TEST_CHALLENGE_VERSION,
   TEST_TENANT_ID,
   TEST_USER_ID,
   buildAuthTestRig,
-  makeEmbedSessionId,
   sessionCredentialFromSetCookie,
 } from "../helpers/auth-rig.js";
 
 async function fullChain(rig: Awaited<ReturnType<typeof buildAuthTestRig>>): Promise<{
   sessionId: string;
   credential: string;
+  embedToken: string;
 }> {
-  const embedSessionId = makeEmbedSessionId();
-  const issuance = await rig.app.inject({
-    method: "POST",
-    url: EMBED_TOKEN_ISSUANCE_ROUTE,
-    headers: rig.hostHeaders(),
-    payload: {
-      tenantId: TEST_TENANT_ID,
-      userId: TEST_USER_ID,
-      challengeId: TEST_CHALLENGE_ID,
-      challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId,
-    },
-  });
-  expect(issuance.statusCode).toBe(201);
-  const { embedToken } = issuance.json() as { embedToken: string };
+  // 签发段:直接铸 token(端点已退役;见文件头说明)。
+  const issued = await rig.issueEmbedToken();
 
   const created = await rig.app.inject({
     method: "POST",
     url: "/test/sessions",
     payload: {
-      embedToken,
+      embedToken: issued.token,
       challengeId: TEST_CHALLENGE_ID,
       challengeVersion: TEST_CHALLENGE_VERSION,
-      embedSessionId,
+      embedSessionId: issued.claims.embedSessionId,
     },
   });
   expect(created.statusCode).toBe(201);
   const { sessionId } = created.json() as { sessionId: string };
-  return { sessionId, credential: sessionCredentialFromSetCookie(created) };
+  return {
+    sessionId,
+    credential: sessionCredentialFromSetCookie(created),
+    embedToken: issued.token,
+  };
 }
 
 describe("插件装配面(WP-4 取用点)", () => {
@@ -157,31 +160,17 @@ describe("传输卫生(凭证不入 URL / 日志 / 错误响应)", () => {
     }
   });
 
-  it("凭证不出现在 URL:签发与消费均为 POST 体交付,请求 URL 无 query 面", async () => {
+  it("凭证不出现在 URL:消费为 POST 体交付,请求 URL 无 query 面", async () => {
     const rig = await buildAuthTestRig();
-    const embedSessionId = makeEmbedSessionId();
-    const issuance = await rig.app.inject({
-      method: "POST",
-      url: EMBED_TOKEN_ISSUANCE_ROUTE,
-      headers: rig.hostHeaders(),
-      payload: {
-        tenantId: TEST_TENANT_ID,
-        userId: TEST_USER_ID,
-        challengeId: TEST_CHALLENGE_ID,
-        challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId,
-      },
-    });
-    expect(issuance.statusCode).toBe(201);
-    const { embedToken } = issuance.json() as { embedToken: string };
+    const issued = await rig.issueEmbedToken();
     const created = await rig.app.inject({
       method: "POST",
       url: "/test/sessions",
       payload: {
-        embedToken,
+        embedToken: issued.token,
         challengeId: TEST_CHALLENGE_ID,
         challengeVersion: TEST_CHALLENGE_VERSION,
-        embedSessionId,
+        embedSessionId: issued.claims.embedSessionId,
       },
     });
     expect(created.statusCode).toBe(201);
@@ -191,12 +180,14 @@ describe("传输卫生(凭证不入 URL / 日志 / 错误响应)", () => {
       .map((entry) => entry["req"])
       .filter((req): req is Record<string, unknown> => typeof req === "object" && req !== null)
       .map((req) => String(req["url"] ?? ""));
-    expect(urls).toContain(EMBED_TOKEN_ISSUANCE_ROUTE);
     expect(urls).toContain("/test/sessions");
     for (const url of urls) {
-      expect(url).not.toContain(embedToken.slice(0, 24));
+      expect(url).not.toContain(issued.token.slice(0, 24));
       expect(url).not.toContain("?");
     }
+    // ★ 换票链的 query 承载(`?t=`)由**日志脱敏**兜住 —— 那条机检在
+    //   test/launch/log-redaction.test.ts(序列化器级)与
+    //   test/launch/launch-routes.test.ts(换票请求本身)两处。
   });
 });
 
