@@ -13,7 +13,15 @@ import tseslint from "typescript-eslint";
  */
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/*.cjs"],
+    ignores: [
+      "**/dist/**",
+      "**/*.cjs",
+      // WP-92:`apps/page-app/public/vm-ui/` 是构建期从 packages/vm-ui/dist 同步来的
+      // **产物暂存目录**(`.gitignore` 已忽略)。它含 vm-ui 的 `.d.ts`,而声明产物
+      // 里的 `#private` 成员会被 `no-unused-private-class-members` 误报 —— 该规则
+      // 面向源码,不对第三方声明产物负责。等价形态:`**/dist/**` 已被忽略。
+      "apps/page-app/public/vm-ui/**",
+    ],
   },
   eslint.configs.recommended,
   tseslint.configs.recommended,

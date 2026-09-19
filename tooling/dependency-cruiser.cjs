@@ -217,6 +217,16 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: "node_modules" },
+    /**
+     * 排除**构建期同步的产物暂存目录**(WP-92):`apps/page-app/public/vm-ui/` 是
+     * `scripts/sync-vm-ui-dist.mjs` 从 `packages/vm-ui/dist` 拷来的副本(vite 的
+     * publicDir 落点;`.gitignore` 已忽略)。把它纳入巡航只会**重复计数**同一个包的
+     * 模块与依赖边(vm-ui 自身已在 `packages/vm-ui/` 下被完整巡航),让
+     * 「模块数 / 依赖数」这两个门禁读数失真 —— 而这两个读数是本仓库用来比对
+     * 依赖面变化的基线,失真比漏算更坏。**不改变任何依赖方向的判定**:副本内部
+     * 的边与真身同形,真身侧的规则照常生效。
+     */
+    exclude: { path: "^apps/page-app/public/" },
     tsPreCompilationDeps: true,
   },
 };
