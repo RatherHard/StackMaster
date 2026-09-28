@@ -240,7 +240,10 @@ fn watchdog_kills_worker_on_action_deadline() {
         }
     });
     let action_request = json!({
-        "protocolVersion": 1,
+        // 与内嵌 ACTION_REQUEST_SCHEMA 的 protocolVersion.const 同步
+        // (WP-90/96 起 = 2;版本不符会被 Schema 即时拒绝 ⇒ 本用例会退化为
+        // 「被拒后 worker 仍存活」,`read_to_end` 阻塞至看门狗默认 1 小时)。
+        "protocolVersion": 2,
         "sessionId": "s",
         "clientSeq": 1,
         "baseRevision": 0,

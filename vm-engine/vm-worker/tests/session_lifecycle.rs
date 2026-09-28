@@ -155,8 +155,11 @@ fn load_command(seq: u64) -> Value {
 }
 
 fn action_request(client_seq: u64, base_revision: u64, action: Value) -> Value {
+    // protocolVersion 必须等于内嵌 `ACTION_REQUEST_SCHEMA` 的 `protocolVersion.const`
+    // (WP-90/96 起 = 2;worker 按该 Schema 校验,版本不符会被整条拒为 rejected,
+    // 使断言落到「schema 拒绝」而非本用例要测的领域语义)。
     json!({
-        "protocolVersion": 1,
+        "protocolVersion": 2,
         "sessionId": "session-lifecycle",
         "clientSeq": client_seq,
         "baseRevision": base_revision,

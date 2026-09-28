@@ -150,8 +150,10 @@ fn valid_public_descriptor() -> Value {
 }
 
 fn action_request(action: Value) -> Value {
+    // protocolVersion 必须等于内嵌 `ACTION_REQUEST_SCHEMA` 的 `protocolVersion.const`
+    // (WP-90/96 起 = 2;否则整条被 Schema 拒,断言失去领域语义)。
     json!({
-        "protocolVersion": 1,
+        "protocolVersion": 2,
         "sessionId": "session-1",
         "clientSeq": 1,
         "baseRevision": 0,

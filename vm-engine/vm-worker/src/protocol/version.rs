@@ -3,7 +3,10 @@
 //! `ENGINE_PROCESS_PROTOCOL_VERSION` 是引擎进程协议的独立版本号(5.6 第 4 类
 //! 契约;版本策略 §二登记):覆盖帧格式、命令信封与受支持的 Schema 面版本。
 //! 它不与会话动作协议(`SESSION_ACTION_PROTOCOL_VERSION`)共用编号空间——
-//! 后者随 `ActionRequest.protocolVersion` 传输,由 Schema `const 1` 校验。
+//! 后者随 `ActionRequest.protocolVersion` 传输,由 Schema `const` 校验
+//! (WP-90 起 = 2:`packages/protocol/schema/action-request.schema.json` 为唯一
+//! 权威,worker 以 `include_str!` 内嵌同一文件 —— 本注释只作指针,不得据此
+//! 推断版本值)。
 //! TS 侧镜像常量在 `packages/protocol/src/version.ts`,双侧一致性由
 //! contract-smoke 机检(§八)。
 

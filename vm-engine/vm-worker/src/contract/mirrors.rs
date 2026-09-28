@@ -19,7 +19,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ActionRequest(会话动作协议 v1;schema/action-request.schema.json)
+// ActionRequest(会话动作协议 v2;schema/action-request.schema.json)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// 12 动作判别式的动作类型名(stages.allowedActions 与信封 `action.type` 共用)。

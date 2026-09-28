@@ -162,7 +162,9 @@ fn live_material_with(bundle: &Value, descriptor: &Value, actions: &[Value]) -> 
             .handle_frame(&strict(&json!({
                 "type": "apply_action", "seq": seq, "requestId": format!("req-live-{index}"),
                 "actionRequest": {
-                    "protocolVersion": 1, "sessionId": "sess-verify", "clientSeq": index + 1,
+                    // 与内嵌 ACTION_REQUEST_SCHEMA 的 protocolVersion.const 同步
+                    // (WP-90/96 起 = 2;版本不符会被 Schema 拒,活体材料不再前进)。
+                    "protocolVersion": 2, "sessionId": "sess-verify", "clientSeq": index + 1,
                     "idempotencyKey": format!("idem-verify-{index}"), "baseRevision": index, "action": action
                 }
             })))

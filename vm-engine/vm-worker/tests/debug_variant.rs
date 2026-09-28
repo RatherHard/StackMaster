@@ -411,8 +411,12 @@ fn real_session_commands_are_rejected_in_debug_phase() {
     // 真实会话命令在调试实例阶段全部状态机拒绝(apply_action / 快照导出 /
     // 真实 load)——真实私有包与真实快照导入路径零接入(条款 3)。
     let mut harness = loaded_harness();
+    // 夹具取**现行会话动作协议**形态(protocolVersion 与内嵌
+    // ACTION_REQUEST_SCHEMA 的 const 同步,WP-90/96 起 = 2):本用例要证的是
+    // 「调试实例阶段按**状态机**拒绝真实会话命令」,若夹具停在旧版本,拒绝会改由
+    // Schema 版本不符产生 ⇒ 断言虽绿但不再指向相位闸(测试语义被替换)。
     let action_request = json!({
-        "protocolVersion": 1,
+        "protocolVersion": 2,
         "sessionId": "session-1",
         "clientSeq": 1,
         "baseRevision": 0,
