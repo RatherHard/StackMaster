@@ -291,7 +291,8 @@ describe("锚生效(jsdom 计算值面;跨 shadow 与真机 axe 归 E2E 面)", (
   });
 
   it("历史坏锚兜底:`data-sm-theme` 遗留值(light / dark / auto)同样命中终端值集", () => {
-    // 三预设期由嵌入形态宿主写入的锚值在单主题下落入自定义属性继承面;
+    // 三预设期由**外部锚**写入的历史值在单主题下落入自定义属性继承面
+    // (当年由已退役的嵌入形态宿主写入;锚机制保留,写入方现为外层文档);
     // 显式锚规则一律覆盖为终端值 ⇒ 不出现「坏锚改主题」的静默降级。
     for (const stale of ["light", "dark", "auto"]) {
       const { host } = mountAnchored(stale);

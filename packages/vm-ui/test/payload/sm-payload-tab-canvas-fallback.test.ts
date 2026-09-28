@@ -1,7 +1,8 @@
 /**
  * <sm-payload-tab> 画布不可用兜底测试(WP-F6):Blockly inject 失败(极端
- * 嵌入环境)时,画布容器保留、呈兜底文案,编译面经宿主注入的序列化状态
- * 继续工作(loadWorkspaceState / #manualState 路径)。
+ * 环境:画布宿主不可注入)时,画布容器保留、呈兜底文案,编译面经组合根注入的
+ * 序列化状态继续工作(loadWorkspaceState / #manualState 路径)。
+ * (原「极端嵌入环境」表述随嵌入形态 2026-09-19 WP-96 退役改述。)
  */
 import { describe, expect, it, vi } from "vitest";
 

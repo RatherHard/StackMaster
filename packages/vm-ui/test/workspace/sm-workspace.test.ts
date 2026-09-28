@@ -490,8 +490,9 @@ describe("<sm-workspace> 固定窗口集(D-MP-1:全部窗口常驻、无关闭)"
   });
 
   it("首帧前接入会话(client 与挂载同 tick):窗口集绑定不触发未渲染内容的 refresh 崩溃", async () => {
-    // 嵌入形态时序(web-component 插件装配):元素挂载后同一 tick 注入 client,
-    // 首帧尚未渲染即发生数据源装配 / 投影回流 —— 内容元素的 refresh() 必须
+    // 承载页面的装配时序(`apps/page-app` boot:元素挂载后同一 tick 注入 client,
+    // 原开发壳 `apps/plugin-dev` 同形态、已随 WP-96 删除):首帧尚未渲染即发生
+    // 数据源装配 / 投影回流 —— 内容元素的 refresh() 必须
     // 延后到其 renderRoot 就绪(否则内部 querySelector 取空抛错)。
     const harness = createClientHarness();
     const workspace = new SmWorkspace();
@@ -1170,10 +1171,12 @@ describe("<sm-workspace> 跨视图集成接线", () => {
 // ── 效果面(WP-74:扫描线 overlay / 光标闪烁 / 终端式标题栏)────────────────────
 
 /**
- * 终态契约 C1~C9 的判定在真机 E2E(`apps/plugin-dev/e2e/reduced-motion.spec.ts`
- * × `e2e/helpers/decoration.ts` 文件头);本组是 **jsdom 结构面**机检:装饰锚 /
- * 不承载信息口径 / 零控件口径 / 样式面契约标记(jsdom 不评估媒体查询,故动画与
- * 强度取值只能以声明文本机检,token 驱动的计算值面归真机)。
+ * 终态契约 C1~C9 的**真机面原在** `apps/plugin-dev/e2e/reduced-motion.spec.ts`
+ * × `e2e/helpers/decoration.ts` —— 两者均随 `apps/plugin-dev` 于 2026-09-19
+ * (WP-96 物理删除退役面)退场,`apps/page-app/e2e/` 现无等价 reduced-motion
+ * 真机面 ⇒ **本组是当前唯一的机检面**(jsdom 结构面机检:装饰锚 / 不承载信息口径 /
+ * 零控件口径 / 样式面契约标记;jsdom 不评估媒体查询,故动画与强度取值只能以声明
+ * 文本机检,token 驱动的计算值面**当前无真机覆盖** —— 已登记为 WP-96-D 未竞事项)。
  */
 describe("<sm-workspace> 效果面(WP-74)", () => {
   /** 组件静态样式合并文本(与 sm-workspace-layout.test.ts 同款读法;静态面,无需挂载)。 */

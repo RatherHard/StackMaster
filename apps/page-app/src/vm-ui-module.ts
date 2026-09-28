@@ -5,8 +5,9 @@
  *
  * `tooling/dependency-cruiser.cjs` 的 `no-backend-dependency-on-browser-packages`
  * 禁止 `apps/**` 静态依赖浏览器可达包(vm-ui 等)。这是**安全边界**,不是风格
- * 偏好:浏览器包的机制面不得进服务端可达的构建图。`apps/plugin-dev` 的既有
- * 做法(publicDir 提供 dist + 运行期按 URL import)即为本约束下的既有形态,
+ * 偏好:浏览器包的机制面不得进服务端可达的构建图。已删除的原开发壳
+ * `apps/plugin-dev`(2026-09-19 随 WP-96 物理删除)的既有做法(publicDir
+ * 提供 dist + 运行期按 URL import)即为本约束下的既有形态,
  * 本模块沿用同一形态(见 `vite.config.ts` 文件头 §2)。
  *
  * ## 因此本模块**只**做三件事

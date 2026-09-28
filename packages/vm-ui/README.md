@@ -15,30 +15,52 @@ src/
 ├── index.ts                        公开入口(导出工作区 / 视图 / 客户端 /
 │                                   数据源 / 渲染原语)
 ├── workspace/                      WP-F5:工作区容器与菜单
-│   ├── sm-workspace.ts             <sm-workspace> 工作区本体——列式滚动平铺
-│   │                               (列间 Niri 式水平滚动 + 列内 Hyprland 式
-│   │                               二叉分割)、pointer 拖拽排布、**固定窗口集**
-│   │                               (WP-71 / D-MP-1:登记集合各恰一实例常驻)、
-│   │                               组合根装配(client → Projection-
-│   │                               DataSource → 各窗口)、跨视图集成接线
-│   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——窗口分组
-│   │                               (WP-71 聚焦导航,注册表驱动;aria-pressed
-│   │                               表达当前焦点)/ 指令步进 step / 积木步进
-│   │                               payload-step(WP-F6,仅 payload 页激活时
-│   │                               可用)/ 运行到断点(WP-F8,调试档)/
-│   │                               解题/调试模式切换(WP-F8,debugMode
-│   │                               可用才显示)/ 重启 reset(终态禁用+引导)/
+│   ├── sm-workspace.ts             <sm-workspace> 工作区本体——**整页布局**
+│   │                               (自身即页面主体,`block-size: 100dvh`,
+│   │                               不依赖宿主给高度;2026-09-18 UI 改版 =
+│   │                               D-API-153 / D-UI-1 ~ D-UI-7)、**左右两分**
+│   │                               (固定 1:1、无 gap / border / divider、不可
+│   │                               调;右半侧 = payload 搭建窗口,左半侧 =
+│   │                               视图管理窗口 —— 列表按钮 + 固定 2 个可见
+│   │                               视图位纵向堆叠)、**固定窗口集**(WP-71 /
+│   │                               D-MP-1:登记集合各恰一实例常驻)、组合根装配
+│   │                               (client → ProjectionDataSource → 各视图)、
+│   │                               跨视图集成接线
+│   ├── sm-workspace-menu.ts        <sm-workspace-menu> 顶部菜单——**三组**
+│   │                               (D-UI-7 补充裁定 + decisions §四·补.5:
+│   │                               「视图」= 10 个聚焦按钮 + 「重置视图」,
+│   │                               注册表驱动、aria-pressed 表达当前焦点,
+│   │                               **不承载勾选 / 排序** / 「模式」= 模式指示 /
+│   │                               「运行」= 指令步进 step + 积木步进
+│   │                               payload-step(WP-F6,仅 payload 页激活时可用)
+│   │                               + 运行到断点(WP-F8,调试档)+ 解题/调试模式
+│   │                               切换(WP-F8,debugMode 可用才显示)+ 提交 +
+│   │                               重启 reset(终态禁用+引导))/
 │   │                               会话状态与断线横幅 / what-if 纪律横幅 /
-│   │                               拒绝错误呈现
+│   │                               拒绝错误呈现。**「窗口」组与「布局」组均已
+│   │                               不存在**
 │   ├── tab-registry.ts             窗口类型注册表(stack / free / registers /
 │   │                               payload / debug=指令视图 带工厂;ED 组件面
 │   │                               五类(structure/call-stack/memory-diff/
 │   │                               timeline/checkpoints)登记;可扩展;WP-71 /
 │   │                               D-MP-1:一登记项 = 恰一个常驻窗口)
-│   ├── workspace-model.ts          布局模型纯状态机——列/窗口结构、窗口集
-│   │                               绑定(bindWindows)、焦点导航(focusWindow)
-│   │                               与拖拽移动、窗口集不变量机检
-│   │                               (isWindowSetComplete)
+│   ├── workspace-model.ts          布局模型纯状态机——**一条有序视图列表 +
+│   │                               每类型 `visible` 勾选 + 焦点**(取代原
+│   │                               「列 / 窗口结构」)、视图集绑定
+│   │                               (`bindWindows(bindings, order?)`,
+│   │                               **已无 `columns` 参数**,`workspace-model.ts:
+│   │                               191`)、焦点导航(focusWindow)、
+│   │                               列表内重排(moveView)、勾选(setViewVisible)、
+│   │                               重置视图(resetViews)、窗口集不变量机检
+│   │                               (isWindowSetComplete / isLayoutStateValid)
+│   ├── layout-presets.ts           可读性阈值与**视图默认顺序的单一来源**——
+│   │                               宽度推导值(`MIN_COLUMN_WIDTH` = 452.4px ⇒
+│   │                               `SIDE_PANEL_MIN_WIDTH_PX` = 左半侧宽度底线)、
+│   │                               视图位高度算式(viewSlotHeightPx +
+│   │                               VISIBLE_VIEW_SLOT_COUNT = 2)、
+│   │                               `DEFAULT_VIEW_ORDER` / `orderByDefault()`;
+│   │                               原 P0/P1/P2 列预设与窗高下限已废止(见 README
+│   │                               废止表与文件头)
 │   ├── byte-tab.ts                 <sm-byte-tab> 字节页组合(字节视图 + VMA
 │   │                               侧栏;vma-select ↔ showRegion ↔
 │   │                               selectedRegionId 回路;rowDecorator 透传)
@@ -181,7 +203,9 @@ client.store.snapshot ?? null })`(工厂 options = 运输面 & 数据源面:运�
   (`SessionClient.queryVerdict`,Cookie 凭证同模型;响应体过冻结
   `VerdictQueryResponseSchema` 自检)——重询由 `VerdictPoller` 驱动
   (确定性间隔 + 失败退避 + verdicted 即停 + 断线暂停重连恢复;呈现与
-  「已提交」态语义见 D-API-99);裁决数据不经嵌入协议帧(V-9 不破)。
+  「已提交」态语义见 D-API-99);裁决数据只经本通道(REST)呈现,**不经任何跨文档
+  消息面**——嵌入协议已于 2026-09-19 随 WP-96 物理删除,原 V-9(V-1~V-13 同批)
+  的约束**按现状结构性成立**(裁决面不存在可被帧旁路的通路)。
 - **认证 WSS**:`GET /sessions/channel` 升级即 Cookie 认证;客户端→服务端仅
   `action` 帧。**连接级版本锚定**(D-API-2)由首帧 `protocolVersion` 承载——
   本客户端所有帧恒携带 `SESSION_ACTION_PROTOCOL_VERSION`(照 WssFrame 信封
@@ -216,8 +240,12 @@ client.store.snapshot ?? null })`(工厂 options = 运输面 & 数据源面:运�
   `vite build`(库模式多入口:`index` 与 `sm-workspace`,ESM 输出 `dist/`);
   `emptyOutDir: false`——vite 不得抹掉 tsc 先行产出的声明文件;
 - **产物自包含**:运行时依赖(lit、@lit-labs/virtualizer、protocol/zod)内联
-  进 dist 产物,产物不含裸模块导入——宿主(含 `apps/plugin-dev` 开发壳)可以
-  用 `<script type="module">` 直接加载 `dist/index.js`,不经打包器;
+  进 dist 产物,产物不含裸模块导入——承载方可以用 `<script type="module">`
+  直接加载 `dist/index.js`,不经打包器。**当前承载形态 = `apps/page-app`**
+  (prebuild 经 `scripts/sync-vm-ui-dist.mjs` 把 `packages/vm-ui/dist` 同步到
+  `public/vm-ui/`,运行期按 URL 动态 `import("/vm-ui/index.js")` 并带
+  `@vite-ignore` ⇒ 不产生静态依赖边;原 `apps/plugin-dev` 开发壳已于
+  2026-09-19 随 WP-96 物理删除);
 - turbo 任务对齐:`build` outputs 为 `dist/**` 与 `*.tsbuildinfo`。
 
 ## 版本组合登记(WP-F1 锁定,2026-09-11)
@@ -295,7 +323,9 @@ mock 全链路测试覆盖同一代码路径。
 
 ## 主题与语言机制面(WP-53,2026-09-11;WP-73 主题边界修订;2026-09-18 D-UI-6 终端单主题)
 
-嵌入协议冻结面的实现义务(阶段五边界裁决 2:**主题/语言是机制不是视觉美化**);
+本仓的实现义务(阶段五边界裁决 2,**纪律仍然有效**:**主题/语言是机制不是视觉
+美化**;其原载体「嵌入协议冻结面」已于 2026-09-19 随 WP-96 物理删除,纪律本身
+不随之退场 —— 实现载体改为「锚 + 文档级样式表 + `data-sm-*` 属性」);
 定案细节与遗留登记见 `docs/develop/阶段五WP53决策草稿.md`。
 **WP-73 修订(历史,三预设期)**:阶段五的「视觉风格零重设计」边界曾按中期计划 §2.1
 修订为**完整设计 token 集 + terminal 预设**;**2026-09-18 D-UI-6** 进一步把三预设
@@ -382,9 +412,11 @@ mock 全链路测试覆盖同一代码路径。
   `setLocale / getLocale / onLocaleChange` 模块级 store + `LocaleController`
   组件订阅(切换即重渲染);**BCP-47 降级确定性**:精确 → 主子标签前缀
   (zh-TW→zh-CN、en-GB→en)→ 默认 zh-CN,未知标签确定性回落;
-- **锚消费**:组件连接时沿 composed 树找最近 `[data-sm-language]`(嵌入协议
-  语义 = WP-52 落的宿主锚)并挂 MutationObserver,运行中 `language_changed`
-  即生效;无锚(未授予 language,§4.4)= 保持内置默认;
+- **锚消费**:组件连接时沿 composed 树找最近 `[data-sm-language]`(WP-52 落下的
+  锚机制;原嵌入协议的 `language_changed` 消息面已于 2026-09-19 随 WP-96 退役,
+  现在只剩「锚属性」一条路径)并挂 MutationObserver,运行中**锚属性变更**即生效;
+  无锚 = 保持内置默认 zh-CN(原嵌入协议 §4.4「宿主不设锚」降级口径,该契约面
+  已物理删除,口径保留);
 - **抽取面**:全部用户可见字符串(~420 键);协议/状态机词(connected、
   running、write_bytes 等)与数据值(地址、regionId)不入目录;固化语义:
   状态/日志/时间线/编译标签按生成时刻 locale,积木画布按 Blockly 注册时刻
@@ -393,8 +425,8 @@ mock 全链路测试覆盖同一代码路径。
 ### 测试增量(WP-53)
 
 `test/i18n/i18n.test.ts`(目录完整性 / BCP-47 矩阵 / 响应式 / 取词)、
-`test/i18n/locale-anchor.test.ts`(锚消费 / 运行中切换 / 降级矩阵 / 未授予
-禁用锚)、`test/theming/theme.test.ts`(锚样式表 / 变量面 / 机械护栏 /
+`test/i18n/locale-anchor.test.ts`(锚消费 / 运行中切换 / 无锚降级 / 未设锚保持
+默认)、`test/theming/theme.test.ts`(锚样式表 / 变量面 / 机械护栏 /
 theme 属性转写 / axe 双主题);既有 518 用例零回退。
 
 ## 纪律速查
@@ -518,7 +550,7 @@ src/views/
 (与生产同一语义路径)。jsdom 的 Selection 不支持影子根内选区(rangeCount 恒 0,
 真实浏览器无此限制),降级路径测试以 `Selection.addRange` 侦察验证。
 
-## WP-F5:工作区容器与菜单(src/workspace,2026-09-11;WP-71 起固定窗口集;WP-72 Niri 式布局交互)
+## WP-F5:工作区容器与菜单(src/workspace,2026-09-11;WP-71 起固定窗口集;2026-09-18 起整页布局 —— D-API-153 / D-UI-1 ~ D-UI-7)
 
 M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)、
 `<sm-workspace-menu>` 顶部菜单、窗口类型注册表、布局模型纯状态机、
@@ -526,31 +558,43 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
 
 ### 定案规则(主控已裁决,同时登记于源码注释)
 
-- **固定窗口集(D-MP-1,WP-71)**:窗口集合 = 注册表登记的**全部类型、各恰
-  一个实例、常驻**;窗口**没有开 / 关状态**,只有「视口内 / 暂离(条带滚出
-  视野)」——管理动作收敛为**移动位置**(拖拽,WP-72 三类落点)、**调整大小**
-  (列宽 / 窗高,WP-72)、**聚焦导航**(`focusWindow(type)` / 菜单「窗口」分组)。
-  工作区接入(首帧前)按**当前宽度档预设**一次性绑定(`WorkspaceLayoutModel
-  .bindWindows(entries, columns)`;WP-72 起 `columns` = `layout-presets.ts` 的
-  P0 / P1 / P2 表,**默认列排布的唯一来源**;模型层缺省(登记序每列一窗)只是
-  未被预设覆盖类型的不变量兜底);无关闭入口、无空态引导;解题 ↔ 调试模式
-  切换**只换绑数据源**(`layoutSnapshot` 深度相等),布局零副作用。
-- **平铺(Q1 v1)**:工作区 = 列的有序序列,**列间水平滚动**(Niri 式);聚焦
-  列由**相机**居中(`cameraScrollLeft` 纯函数 → `scrollLeft`,相邻列两侧探出);
-  **列内按窗高比例分配列高**(Hyprland 式,面板内联 `flex-grow` 唯一呈现路径)。
-  **平铺不变量:不存在空列**;`moveTab` 落点语义(WP-F5 定案)原样保留。
+- **固定窗口集(D-MP-1,WP-71;2026-09-18 改版后仍不修订)**:视图集合 =
+  注册表登记的**全部类型、各恰一个实例、常驻**;视图**没有开 / 关状态**,只有
+  「显示 / 暂离(不勾选)」与「聚焦」。管理动作收敛为**聚焦导航**
+  (`focusWindow(type)` / 菜单「视图」组)、**勾选显示**(左半侧列表按钮的
+  原生 checkbox,**唯一入口**)、**列表内重排**(左半侧列表按钮的拖拽 /
+  `Alt + ↑ / ↓`,**唯一入口**)。工作区接入(首帧前)一次性绑定
+  (`WorkspaceLayoutModel.bindWindows(entries, order?)` —— **已无 `columns`
+  参数**;顺序缺省 = **登记序**,显式 `order` = 未覆盖类型按登记序补末尾,
+  登记序来源 = `layout-presets.ts` 的 `DEFAULT_VIEW_ORDER`,**顺序语义的唯一
+  来源**,模型自身不持有默认顺序字面量);无关闭入口、无空态引导;
+  解题 ↔ 调试模式切换**只换绑数据源**(`layoutSnapshot` 深度相等),布局零副作用。
+- **整页布局与左右两分(D-UI-1 / D-UI-2)**:工作区自身即页面主体
+  (`display: grid` + `block-size: 100dvh`),**不依赖宿主给高度**,溢出不上浮到
+  文档层;左右两分 = `grid-template-columns: repeat(2, minmax(452.4px, 1fr))`
+  —— **固定 1:1、无 gap / 无 border / 无 divider、不可调**(无分界拖拽手柄);
+  左半侧 `min-inline-size: 452.4px` ⇒ 窄屏页面**横向滚动**;**右半侧 = payload
+  搭建窗口**(从 `#contents` 里把 payload 内容元素**同一实例**挂过去,不重建),
+  **左半侧 = 视图管理窗口**(列表按钮在上,视图位纵向堆叠在下)。详见下节。
 - **窗口类型注册表(Q2 起四类,WP-71 起单实例常驻)**:`stack`(栈视图)/
   `free`(自由视图)共用 `<sm-byte-tab>`(view-kind 只决定标题)/`registers`
   (寄存器视图)/`payload`/`debug`(WP-F8 起 = 指令视图真工厂)带工厂;
   `register()` 为开放扩展点(Map 保序覆盖语义:宿主可替换工厂 / 文案);
   **注册项不携带实例数语义字段**——单实例由 `bindWindows` 结构性保证
   (窗口 id ≡ 类型键,同类型重复实例无法表达)。
-- **菜单(FE-WS-03/04a/05)**:指令步进 = `step` 动作(恰执行一条指令后暂停);
-  重启测试环境 = `reset` 动作,**终态(won/failed)禁用**并呈现
+- **菜单(FE-WS-03/04a/05;三组口径见下)**:**「视图」组** = 10 个视图**聚焦**
+  按钮(点击 = 聚焦并滚动到该视图,`aria-pressed` 表达当前焦点,恒可用无禁用态)
+  + **「重置视图」**(恢复默认顺序 + 全选);该组**不承载勾选 / 排序**(唯一入口
+  = 左半侧列表按钮,D-UI-7 补充裁定,见 `decisions-分发改版与UI重设计.md`
+  §四·补.5)。**「模式」组** = 模式指示(解题模式 / 调试模式)。**「运行」组** =
+  指令步进 `step`(恰执行一条指令后暂停)+ 积木步进 payload-step + 运行到断点 +
+  模式切换 + 提交 + 重启测试环境 `reset`(**终态(won/failed)禁用**并呈现
   「测试环境已结束,请新建会话」引导——引导动作 = `new-session-request` 事件,
-  宿主(plugin-dev 壳)执行 `close_session`(如未关)+ `create_session`
-  新流程(Q5/M11 口径);积木步进归 WP-F6(Q3)、运行到断点与解题/调试模式
-  切换 UI 归 WP-F8(菜单留注释挂点)。
+  **由消费方执行** `close_session`(如未关)+ 新会话流程(工作区只发请求事件)——
+  分发改版后的承载形态 = 独立页面 `apps/page-app`,而启动授权凭证是**单次消费**
+  的 ⇒ 新会话须由平台**重新签发一次性启动地址**;引导动作口径 = Q5/M11)。
+  **「窗口」组与「布局」组均已不存在**。积木步进归 WP-F6(Q3)、运行到断点与
+  解题/调试模式切换 UI 归 WP-F8。
 - **连接状态呈现**:connecting/connected/reconnecting/disconnected 全量呈现
   (status + revision + 连接态);reconnecting 显示 attempt / retryDelayMs;
   connection-replaced(close 1008 单连接策略)转为 alert + 手动重连;
@@ -562,82 +606,106 @@ M2 收口交付面:`<sm-workspace>` 工作区本体(F1 空壳替换为真实现)
   `client.onProjectionChanged(() => 各内容 refresh())` 驱动刷新;视图组件
   本身仍只依赖 `MemoryDataSource` 接口(§四纪律不破)。
 
-### WP-72:Niri 式布局交互(src/workspace 三新模块 + 组件层,**2026-09-11**)
+### 整页布局与视图管理窗口(2026-09-18 UI 改版;D-API-153 / D-UI-1 ~ D-UI-7)
 
-**默认列排布的唯一来源 = `layout-presets.ts` 的三张常量表**(P0 宽屏 5 列 /
-P1 中宽 3 列预设合并 / P2 窄条单列纵向),`selectLayoutPreset(viewportWidth)`
-纯函数按两级阈值选档;预设经 `WorkspaceLayoutModel.bindWindows(entries,
-columns)` 的 `columns` 参数**单点注入**工作区(不得在别处再写一份默认布局)。
-三表「十个登记类型各恰一次、无重无漏」以机检固定(`test/workspace/
-layout-presets.test.ts`,权威来源 = `createDefaultTabTypeRegistry()`)。
+本版把工作区从「Niri 式列条带」整体改为**整页布局 + 左右两分 + 左半侧视图管理
+窗口**。以下逐面登记**当前形态**;原 WP-72 的列条带交互见文末**废止表**
+(历史定案条目本身保留在案,不静默删除)。
 
-**阈值推导(登记式,不得随意取整;来源 = `src/views/byte/byte-view.ts` 行形态)**:
+**① 整页布局(FE-WS-01 / D-UI-1)**:`<sm-workspace>` 自身即页面主体 ——
+`display: grid` + `block-size: 100dvh`(兜底 `100%`),**不依赖宿主 / 壳给出高度**;
+页面根不可滚动,溢出**不上浮到文档层**(纵向由左半侧内部滚动承载)。
 
-| 段 | 来源(CSS / 数据) | 字符数 |
-|---|---|---|
-| 地址列 | `grid-template-columns: 16ch` | 16 |
-| 列间距 / 字节组列 / 列间距 | `1ch` / `26ch` / `1ch` | 1 + 26 + 1 |
-| 特殊显示列 | 8 cell × (1ch + `margin-inline-end: 0.25ch`) | 10 |
-| 行内边距 | `padding-inline: 0.75rem` ÷ 7.8px 上取整 | 4 |
-| **合计** | | **58ch** |
+**② 左右两分(D-UI-1)**:`grid-template-columns: repeat(2, minmax(452.4px, 1fr))`
+—— **固定 1:1、不可调**;两侧同底线 ⇒ 宽屏精确等分;窄屏(网格宽 > 视口宽)时
+**页面横向滚动**(判据见 `test/geometry/measure-workspace-geometry.cjs` ⑦)。
+**无 gap、无 border、无 divider、无分界拖拽手柄**;左半侧另有
+`min-inline-size: 452.4px`(常量 `SIDE_PANEL_MIN_WIDTH_PX`)。**否决项(不得复活)**:
+窄屏隐藏右半侧 / 改抽屉或 Tab 切换 / 改上下堆叠 / 新增断点阈值表的替代物。
 
-- 字符宽 = 13px(组件既有字号 0.8125rem,与「字号下限 13px」一致)× 0.6em
-  (等宽字体 advance 通用近似,登记理由见源码注释)= **7.8px**;
-- `MIN_COLUMN_WIDTH` = 58ch × 7.8px = **452.4px**(十六进制行不折行的最小可读宽度;
-  列宽护栏,模型按 `MIN_COLUMN_WIDTH ÷ 视口宽` 夹取占比下限);
-- `WIDE_MIN_PX` = 2 × 452.4 + 列间空隙(列间距 × 2 + 分隔条宽 12)= **932.8px**(≥2 列并排可读);
-- `NARROW_MAX_PX` = 452.4 + 容器水平内边距 16 = **468.4px**(单列可读下限);
-- 判定:`w ≥ WIDE_MIN_PX` → P0;`NARROW_MAX_PX ≤ w < WIDE_MIN_PX` → P1;`w < NARROW_MAX_PX` → P2。
+**③ 右半侧 = payload 搭建窗口(固定)**:payload 内容元素从 `#contents` 里以
+**同一实例**挂到右半侧(不重建 —— payload 状态跨模式 / 跨渲染必须保留,
+FE-WS-07 的 `#contents` 生命周期约定是既有不变量);右半侧不随左侧滚动移动。
+**裁决 A(D-UI-7 ①)**:左半侧视图栈**不渲染 payload 视图位**(payload 的唯一
+呈现位 = 固定右半侧)⇒ `landmark-unique` 重名消除,面板地标名保持原样。
 
-**尺寸状态进模型(可断言、可重置)**:`layoutSnapshot.columns[]` 增
-`widthRatio`(列宽**视口占比**;缺省 = 视口等分并夹取护栏)与 `rowHeights`
-(同列窗高**比例**,和恒为 1;单窗列恒 `[1]`),快照增 `viewportWidth`
-(护栏基准;`setViewportWidth` 登记,≤0 = 未知则不夹取);新增语义
-`setColumnWidth` / `setRowHeights`(相对比例归一化)/ `applyPreset` /
-`resetLayout` / `openColumnAt`(Niri「列间空隙新建列位」落点,`moveTab` 的
-`column ≥ 列数` 只表达尾插),不变量机检 `isLayoutStateValid`。
-**「重置布局」= 清空列宽 / 窗高调整 + 应用当前视口宽对应预设**(宽屏即回 P0,
-窄屏回该宽度降级形态,避免「回 P0 后立即被降级覆盖」的矛盾);焦点保持。
+**④ 左半侧 = 视图管理窗口(FE-WS-11 / D-UI-2 / D-UI-3 / D-UI-4)**:
 
-**交互面(组件层)**:
+- **列表按钮在上、视图位纵向堆叠在下**;`.ws-stack` 是**滚动容器**
+  (`overflow-y: auto` + `scroll-behavior: smooth`,**`prefers-reduced-motion:
+  reduce` 下降级为 `auto`** —— 本版 reduced-motion 的降级对象就是这条**左半侧
+  丝滑滚动动画**;`Ctrl + ↑/↓` 的滚动定位同受此降级)。
+- **只滚动、不压缩**:每个**可见**视图位高度由 `viewSlotHeightPx()`
+  (`src/workspace/layout-presets.ts`)**算好后内联**到 `.ws-view` 的
+  `block-size`;算式 = `max(floor((左半侧可视高 − 列表按钮高 − 留白) ÷ 2), 下限)`,
+  **下限** = `ceil(VIEW_PANEL_CHROME_HEIGHT_PX + 4 × HEX_ROW_HEIGHT_PX)`;空间不足
+  时视位高不低于下限,多余部分由左半侧纵向滚动承载。**可读性判据(FE-WS-15)**:
+  **不得出现「视图被压到装不下一行字节」**(历史反例:4 窗列每窗 146px 而面板
+  chrome 实测 182.1px;2026-09-19 新反例 = 遗留 #39 窄档 chrome 反超视位高)。
+- **列表按钮(勾选 / 排序的唯一入口,D-UI-4 / D-UI-7 ③)**:视图管理窗口的
+  `<details><summary>` 列表 —— **原生 `<input type="checkbox">`** 承载勾选
+  (`Space` 原生可用)、**列表内拖拽重排**(落点反馈 = 静态 class
+  `drop-before` / `drop-after` + `dragging` opacity,零动画、零浮动层)、
+  **`Alt + ↑ / ↓`** 键盘等价重排;操作经 `aria-live="polite"` 播报
+  「已显示 / 已隐藏 / 已移动到第 N 位」。
+- **`Ctrl + ↑ / ↓`(D-UI-3)**:在**左半侧容器**上捕获 `keydown` 并
+  `preventDefault()`(覆盖浏览器页面滚动默认),切换一格**可见**视图位,
+  **边界不环绕**;当前视图名经常驻 `role="status"` 宣读。
+- **视图类型名写在视图内左上角**(FE-WS-11):`.view-label` 是面板内第一个元素,
+  **不是独立标题栏**(原 `.tab-bar` 整条退场);面板地标名保持原样
+  (`aria-label` = 注册表 `info.title`,D-UI-7 ①:不因标题栏消失而改名,避免
+  二次 axe 地标重名回归)。
+- **视口外降级渲染(保留,与布局形态无关)**:视图位声明
+  `content-visibility: auto` + `contain-intrinsic-size: auto <VIEW_SLOT_INTRINSIC_PX>px`
+  (语义标记 `data-render-degrade="content-visibility"`),
+  离屏子树由浏览器跳过渲染与绘制 —— 零 JS、零浮动层。
+- **尺寸变化驱动**:`#onViewportResize`(+ `#measureLeftRole()` 读 `.ws-left` 的
+  `clientWidth` / `clientHeight`,`view?.innerWidth` / `innerHeight` 作无布局环境
+  兜底)**只更新测量值与快照面**;`#measureViewportWidth()` 与「跨档重绑」语义
+  **已不存在**(窄屏形态不改变,D-UI-5)。
 
-- **列宽可调**:相邻列间分隔条(`role="separator"` + `tabindex=0`,pointer 拖拽
-  复用 `DRAG_THRESHOLD_PX` 阈值语义;方向键 ±32px)与菜单「布局」组五档
-  (1/4、1/3、1/2、2/3、全宽,作用于**焦点列**)。**入口择一登记:列宽档入口只在
-  菜单「布局」组**,标题栏保持零控件(WP-71「标题栏零按钮」口径不破);
-- **窗高可调**:同列窗间分隔条(单窗列无分隔条);面板 `flex-grow` = 模型比例
-  (仅容器比例变化,**虚拟列表 `sm-window-list` 不重排**);
-- **焦点列居中(相机)**:`layout-camera.ts` 的 `cameraScrollLeft(columnBox,
-  viewportWidth, { scrollWidth })` 纯函数 → `scrollLeft`(内容坐标居中、端部
-  夹取、非法输入回落 0);`ensureTabVisible` = 纵向 `scrollIntoView(nearest)`
-  兜底 + 相机横向居中(相机最后执行,权威归相机);平滑滚动按
-  `prefers-reduced-motion` 降级为即时定位(jsdom 无 `Element.scrollTo` 时直接赋
-  `scrollLeft`,同一目标值便于结构断言);
-- **拖拽重排三类落点**(`DropTarget`:`stack` / `cross-column` / `new-column`):
-  落到同列窗口上 / 下半 = 同列堆叠;落到另一列窗口 = 跨列移动;落到列间空隙
-  (分隔条 `data-gap-index`)= 在该列序位置新建列位;列区之外 = 不移动。落点指示 =
-  目标元素的**静态** `drop-target` 轮廓(零浮动层、零重叠、零动画);落点语义与
-  布局变更经**常驻** `role="status"` 状态行(`.layout-status`)宣读;
-- **键盘可达兜底**:窗口标题栏 `tabindex=0`(Tab 巡回 = 窄条形态的窗口切换条),
-  方向键列内重排 / 跨列移动、Enter / Space 激活;分隔条方向键调整列宽 / 窗高;
-- **响应式降级**:`#measureViewportWidth()`(自身内联尺寸优先,嵌入形态 = iframe
-  宽;无布局环境回落 `window.innerWidth`)→ 档位跨断点即按新档预设重绑列结构,
-  同档内只更新列宽基准;驱动 = 宿主 `window resize`(iframe 尺寸变化即其 window
-  resize;不引入 ResizeObserver);
-- **视口外降级渲染(择一登记)**:面板声明 `content-visibility: auto` +
-  `contain-intrinsic-size: auto <MIN_ROW_HEIGHT_PX>px`(占位尺寸 = 面板最小高常量,
-  随该常量插值;语义标记 `data-render-degrade=
-  "content-visibility"`)。判据:零 JS、零浮动层、浏览器原生跳过离屏子树的渲染与
-  绘制,payload(Blockly 挂载即 inject)与指令视图的挂载成本随之推迟到进入视口;
-  行级虚拟列表维持、拖拽期间只改容器比例。**2026-09-17(D-API-152)**:该处置的
-  占位值原为裸 `9rem`(144px),现随窗高下限一并推导为 **266px**
-  (`MIN_ROW_HEIGHT_PX = ceil(面板 chrome 182.1px + 4 行 × 20.8px)`;
-  推导见 `src/workspace/layout-presets.ts`,常量见 `src/workspace/layout-divider.ts`);
-  真机观测(2026-09-11 E2E):10 窗口常驻
-  时工作区 shadow 节点数 250、聚焦交互 RTT 68–83ms;
-- **性能护栏**:零新增运行时依赖(纯 CSS token + 既有 Lit 组件);布局状态随会话
-  内存保持(不落 IndexedDB);主 chunk 实测 1,350.55 kB / gzip 328.65 kB
-  (WP-71 基线 1,327.59 kB ⇒ +22.96 kB;>1.3MB 判据已由 WP-71 触发并登记拆分评估)。
+**⑤ 终端单主题(2026-09-18 D-UI-6)**:主题收敛为**一套** —— `SM_THEME_PRESET_VALUES
+= ["terminal"]`;21 枚 token 名保留(`--sm-*`),锚 = **`:root` 级缺省**(未设锚
+即终端)+ **单一 `[data-sm-theme="terminal"]` 锚**(零 JS 解析,`ensureSmThemeStyles`
+幂等注入);**回退值一律不得是浅色字面量**(token 缺失时会静默回落成浅色 ——
+本仓反复踩过的「看起来生效」失败模式),由无豁免的严格回退值机检兜住;
+字号下限 13px。
+
+**⑥ 常量语义改述(数值一个字不改)**:`VISIBLE_VIEW_SLOT_COUNT = 2`
+(D-UI-2:**固定两个可见视图位**,数量不可配置);`SIDE_PANEL_MIN_WIDTH_PX =
+MIN_COLUMN_WIDTH = 452.4px` —— 该 58ch × 7.8px 推导值**载体已改挂**(沿革:
+原载体 = 已废止的列条带列宽,见下方废止表;现载体 = 左半侧宽度底线),
+含义同步改述为「**十六进制行本身**不折行」,**不含**字节
+视图自带的 `14rem`(224px)VMA 侧栏 ⇒ **左半侧宽 < ≈766px 时字节视图必有某种
+降级**(折叠侧栏 / 列头折行 / 视图内横向滚动)= **已接受的代价,不是缺陷**;
+「把该底线抬到 ≈766px」**已否决**(会把表达力问题变成准入问题,并使 1024 / 1366
+笔记本不可用)。可读性红线的独立载体 = `apps/page-app/e2e/geometry-guard.spec.ts`
+(真机量「完整可见数据行数」;`N ≥ 1` 全档无条件,`N = 4` 仅免折行宽度档要求)。
+
+**⑦ 默认顺序的单一来源**:`layout-presets.ts` 的 `DEFAULT_VIEW_ORDER`(顺序与
+改版前的列排布登记序一致)+ `orderByDefault()`;`bindWindows(bindings, order?)`
+的 `order` 参数是唯一注入点,工作区与菜单**不得**再写第二份默认顺序字面量。
+
+#### 废止表(WP-72 历史定案 → 本版处置;**条目本身保留在案,不得静默删除**)
+
+废止宣告:**已废止(2026-09-18/19 UI 改版;D-API-153 / D-UI-1 ~ D-UI-7)**。
+下表左列为**已验收过的历史定案**(WP-72 / D-API-152),右列为本版处置;原定案
+(三类拖拽落点 / 列宽五档 / 焦点列相机 / P0·P1·P2 预设 / 窗高下限)随**列条带整体
+废止**,源码中已物理删除(不留兼容别名)。**裁决条目本身保留**:权威文本 =
+`docs/develop/decisions-分发改版与UI重设计.md`(D-UI-1 ~ D-UI-7 / §四·补)与
+`docs/develop/权威API语义规约.md` **D-API-152 / D-API-153**(两条**仍在案**)。
+
+| 已废止的 WP-72 定案 | 本版处置 |
+|---|---|
+| Niri 式列条带(列的有序序列、列间水平滚动、列内 Hyprland 二叉分割) | 整条退场;模型改为**一条有序视图列表 + `visible` 勾选 + 焦点**(`workspace-model.ts`) |
+| 视口宽预设 **P0 / P1 / P2** 三档 + 阈值判定表(`WIDE_MIN_PX` / `NARROW_MAX_PX`)+ `selectLayoutPreset` / `LAYOUT_PRESETS` / `LayoutPresetId` | 整条退场;默认顺序改由 `DEFAULT_VIEW_ORDER` + `orderByDefault()` 承担 |
+| 列宽五档 `COLUMN_WIDTH_PRESETS`(1/4、1/3、1/2、2/3、全宽)与「布局」组入口 | 整条退场(列结构不存在);菜单**「布局」组已不存在** |
+| 列间 / 窗间分隔条(`role="separator"` + `tabindex=0` + 方向键 ±32px)与 `DRAG_THRESHOLD_PX` 列宽语义 | 整条退场;两分**固定 1:1、不可调** |
+| 焦点列居中相机 `layout-camera.ts` 的 `cameraScrollLeft` / `ensureTabVisible` 横向居中 | **源码文件已删除**;纵向滚动改由 `.ws-stack` 原生滚动 + `Ctrl + ↑/↓` 切换承担 |
+| 三类拖拽落点 `DropTarget`:`stack` / `cross-column` / `new-column`、列间空隙新建列位 `openColumnAt`、`data-gap-index` / `drop-target` 轮廓 / `.layout-status` | 整条退场;只保留**列表内重排**一种落点语义(`drop-before` / `drop-after`) |
+| 窗高 / 列高下限:`MIN_ROW_HEIGHT_PX = 266`、`columnMinHeightPx` / `columnChromePx`、拖拽像素语义与 `layout-divider.ts` | **常量与文件均已删除**;可读性改由「左半侧只滚动不压缩 + 每视图位确定高度」承载(算式见 ④) |
+| 尺寸状态进模型:`columns[].widthRatio` / `columns[].rowHeights` / `viewportWidth` / `setColumnWidth` / `setRowHeights` / `applyPreset` / `resetLayout` | 快照面替换为 `views[]` / `focusedType` / `activeType` / `leftRoleWidth`;「重置布局」→ **「重置视图」**(恢复默认顺序 + 全选) |
+| 窗口标题栏 `tabindex=0` 方向键列内重排 / 跨列移动、标题栏控件面 | `.tab-bar` 与标题栏键盘面退场;类型名移入视图内左上角,键盘路径改由列表按钮承担 |
 
 ### 跨视图集成接线(本 WP 落地点)
 - **VMA 回路**:`vma-select` → `byteView.showRegion(regionId)`;
@@ -669,18 +737,25 @@ layout-presets.test.ts`,权威来源 = `createDefaultTabTypeRegistry()`)。
 
 ### 测试面
 
-`test/workspace/`:布局模型(窗口集绑定各恰一实例 / 缺省每列一窗与显式列分组 /
-焦点导航 focusWindow / 拖拽落点含跨列与开新列 / 原地 no-op / 窗口集不变量机检
-`isWindowSetComplete`)、注册表(默认登记序 / 工厂面 / 登记集合 → 窗口集 1:1 /
-可扩展 / 覆盖更新)、`<sm-workspace-menu>`(窗口分组与 aria-pressed 焦点表达 /
-无「打开 / 关闭」语义文案 / step·reset 禁用矩阵 / 终态引导 / 断线横幅
-attempt·retryDelayMs / connection-replaced 手动重连 / 拒绝错误含 explanation)、
-`<sm-byte-tab>`(vma 回路 / rowDecorator 透传 / refresh)、
-`<sm-register-annotation>`(按钮面 / 点击展开收起)、`<sm-workspace>` 集成
-(全部登记类型常驻且各恰一实例 / 无关闭入口(按钮 / aria / 公共 API 三面)/
-无空态引导 / focusWindow 聚焦与滚动 / pointer 拖拽模拟 / **模式切换
-layoutSnapshot 深度相等** / **真实 SessionClient mock 全链路**:step·reset 帧
-形态、终态禁用引导、断线横幅、踢旧重连、rejected 呈现、投影回流刷新、
+`test/workspace/`:布局模型(`workspace-model.test.ts` / `workspace-layout-model.test.ts`:
+窗口集绑定各恰一实例 / 缺省登记序与显式 `order` / 焦点导航 focusWindow /
+**`visible` 勾选幂等与焦点不受影响** / **列表内重排 `moveView` 与原地 no-op** /
+`resetViews` 恢复默认顺序 + 全选 / `Ctrl + ↑/↓` 落点 `stepActiveView` 不环绕 /
+窗口集不变量机检 `isWindowSetComplete` / `isLayoutStateValid`)、可读性阈值与默认
+顺序(`layout-presets.test.ts`:宽度推导逐项机检 / `SIDE_PANEL_MIN_WIDTH_PX =
+MIN_COLUMN_WIDTH` 载体改挂左半侧 / `viewSlotHeightPx()` 与
+`VISIBLE_VIEW_SLOT_COUNT`)、注册表(默认登记序 / 工厂面 / 登记集合 → 窗口集 1:1 /
+可扩展 / 覆盖更新)、`<sm-workspace-menu>`(**三组口径与 aria-pressed 焦点表达 /
+无 `.window-group-label` 与 `.layout-group` 断言** / 无「打开 / 关闭」语义文案 /
+step·reset 禁用矩阵 / 终态引导 / 断线横幅 attempt·retryDelayMs /
+connection-replaced 手动重连 / 拒绝错误含 explanation)、`<sm-byte-tab>`(vma 回路 /
+rowDecorator 透传 / refresh)、`<sm-register-annotation>`(按钮面 / 点击展开收起)、
+`<sm-workspace>` 集成与整页布局(`sm-workspace.test.ts` / `sm-workspace-layout.test.ts`:
+全部登记类型常驻且各恰一实例 / 无关闭入口(按钮 / aria / 公共 API 三面)/
+无空态引导 / focusWindow 聚焦与滚动 / **左右两分与视位高内联** / **列表按钮勾选与
+`Alt + ↑/↓` 重排 / `aria-live` 播报** / **`Ctrl + ↑/↓` 捕获与 `preventDefault`** /
+**模式切换 layoutSnapshot 深度相等** / **真实 SessionClient mock 全链路**:
+step·reset 帧形态、终态禁用引导、断线横幅、踢旧重连、rejected 呈现、投影回流刷新、
 交叉标注与跳转链挂载、viewport-jump 滚动/窗口外反馈)。
 
 ## WP-F9:教学组件面(src/views/ed + src/ed,2026-09-11)
@@ -749,8 +824,9 @@ axe 穿透 open shadow DOM)。豁免清单(逐条理由登记在测试文件头,
    对比度不可判定,任何结论都是环境伪影;对比度证据留给 WP-45 的真实浏览器
    Playwright 报告归档(阶段退出条件 6);
 2. 页面级 harness 修正(非规则豁免)——测试文档注入 `lang="zh-CN"`、
-   `document.title`、唯一 `<main>` + `<h1>`:模拟宿主(工作区/插件壳)的
-   页面职责,不构成对组件面的让步。
+   `document.title`、唯一 `<main>` + `<h1>`:模拟**承载页面**的页面职责
+   (当前分发形态 = `apps/page-app` 整页壳;原插件壳已随 WP-96 物理删除),
+   不构成对组件面的让步。
 
 测试面:`test/ed/`(computeByteDiff 归并/窗口外/前值缺失边界、buildTimeline
 动作流/checkpoint 混合/终态/submit 合并、标签校验、axe 套件)、
@@ -976,8 +1052,10 @@ run-to-breakpoint(FE-IN-08 / FE-WS-04c)、跳转链全延伸(FE-ST-08/10)、
    可用,宿主计算 `runToBreakpointEnabled` 注入)→ `debug_run_to_breakpoint`
    (breakpoints = 当前集合);命中 / 预算 / 停机文案见上。
 4. **FE-WS-06/07 模式切换**:工作区菜单「切换到调试模式 / 返回解题模式」
-   (`debugModeAvailable` 属性门槛——可用性 = plugin-dev 开发壳经夹具描述包
-   `debugMode` 注入;未启用题目隐藏切换项);切换 = workspace 重绑数据源
+   (`debugModeAvailable` 属性门槛——可用性 = **公开描述包的 `debugMode` 声明**
+   (opt-out:缺省即启用,仅显式 `false` 关闭)由承载方注入;当前分发形态 =
+   独立页面 `apps/page-app` 在 boot 阶段经 `GET /descriptors/:id/:version`
+   取包后注入;未启用题目隐藏切换项);切换 = workspace 重绑数据源
    (公开档 ProjectionDataSource ↔ DebugDataSource,`debugDataSourceFactory`
    测试接缝,缺省 `createDebugDataSource(client)` 组合根装配),字节视图换绑
    即重建 = 锚点/滚动重置(F5 既有行为,验收口径);client 换绑(新会话)
@@ -1010,16 +1088,18 @@ run-to-breakpoint(FE-IN-08 / FE-WS-04c)、跳转链全延伸(FE-ST-08/10)、
    经 `client.store.subscribe` 维护"前一投影 visibleRegions + 最新 delta")
    ——注入机制 = 组合根 `#syncEdContents` duck-typing(同 dataSource /
    actionSink 约定);FE-ED-06 提示 ladder + FE-ED-07 错误解释挂工作区
-   「教学面板」(`<details>` 折叠区,提示 = 夹具描述包 hintLadder,失败计数 =
+   「教学面板」(`<details>` 折叠区,提示 = 公开描述包 hintLadder,失败计数 =
    宿主自 onActionResponse `failed` 状态自账;错误解释与 F5 菜单内联拒绝呈现
-   **增强并存**,数据 = userVisibleError + 夹具描述包 publicErrorMapping)。
+   **增强并存**,数据 = userVisibleError + 公开描述包 publicErrorMapping)。
    `src/index.ts` 导出 ED 组件、纯函数与 DebugDataSource / DebugChannelClient。
-7. **夹具描述包注入(plugin-dev)**:`apps/plugin-dev/fixtures/dev-descriptor.
-   json` 本地夹具(照 `packages/challenge-schema/test/fixtures/public-
-   descriptor/basic.json` 数据形态自建,**只复制数据形态,零代码依赖**,数据
-   占位无秘密);开发壳 boot 读入后 `applyChallengeDescriptor` 把
-   debugModeAvailable / hintLadder / publicErrorMapping 注入工作区装配;
-   描述包加载失败 fail-soft(状态行降级明示,切换项隐藏)。
+7. **描述包注入(当前形态 = 服务端取包)**:承载方在 boot 阶段取**公开描述包**
+   (独立页面形态 = `apps/page-app` 的 `GET /descriptors/:id/:version`,同源),
+   再把 `debugModeAvailable`(opt-out 归一)/ `hintLadder` / `publicErrorMapping`
+   注入工作区装配(`challengeDescriptor` / `challengeStatic` / `descriptorStatus`);
+   取包失败 = **fail-soft**:`descriptorStatus="absent"` + 缺席明示,会话照常可用,
+   切换项隐藏。**沿革**:`apps/plugin-dev` 曾以本地夹具
+   `apps/plugin-dev/fixtures/dev-descriptor.json`(照公开包数据形态自建,零代码
+   依赖)走同一注入面 —— 该应用已于 2026-09-19 随 WP-96 物理删除,夹具随之退场。
 
 ### 测试面
 

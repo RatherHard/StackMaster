@@ -371,8 +371,10 @@ export class SessionClient {
 
   /**
    * GET /verdicts/:submissionId — 正式裁决查询(阶段六 WP-63,D-API-83;
-   * 插件 ↔ session-api 直连 HTTP,凭证 Cookie 呈递,宿主 postMessage 零
-   * 权威语义不破——裁决数据不经嵌入协议帧)。非 2xx = 冻结 PublicError
+   * 页面侧(vm-ui 客户端,现承载形态 = 独立页面 `apps/page-app`)↔ session-api
+   * **直连 HTTP**,凭证 Cookie 呈递 —— **裁决数据不经任何跨文档消息面**:
+   * 原嵌入协议帧面已于 2026-09-19 随 WP-96 物理删除 ⇒ 该约束按现状结构性成立
+   * (不存在可被帧旁路的通路)。非 2xx = 冻结 PublicError
    * (404 同形 / 429 重询限流,D-API-84);响应体过冻结
    * `VerdictQueryResponseSchema` 自检(漂移即契约漂移错误)。
    */

@@ -6,8 +6,9 @@
  *
  * 做四件事:
  *  1. 以仓库内 `vite`(packages/vm-ui 的依赖)拉起 5199 端口的测量服务器;
- *  2. 用 apps/plugin-dev 的 `@playwright/test`(仓库唯一 Playwright 依赖,浏览器
- *     已装)启动 chromium,分别打开 `?variant=current`(当前源码)与
+ *  2. 用 apps/page-app 的 `@playwright/test`(仓库唯一 Playwright 依赖,浏览器
+ *     已装;持有者原为已删除的 `apps/plugin-dev`)启动 chromium,分别打开
+ *     `?variant=current`(当前源码)与
  *     `?variant=prefix`(修复前构建产物)两个形态;
  *  3. 在同一页面骨架 / 同一 CSS / 同一数据夹具下测量行高、真行盒数、一屏行数、
  *     锚点行可见比例;
@@ -38,7 +39,12 @@ const REPO_ROOT = (() => {
 })();
 
 const VM_UI_DIR = join(REPO_ROOT, "packages/vm-ui");
-const PLUGIN_DEV_PKG = join(REPO_ROOT, "apps/plugin-dev/package.json");
+/**
+ * Playwright 依赖持有者(= 仓库唯一 `@playwright/test` 依赖所在包)。
+ * 沿革:原为 `apps/plugin-dev/package.json`(已随 WP-96 物理删除)⇒ 现指
+ * `apps/page-app`(与 API 同源的独立页面应用),它是当前的依赖持有者。
+ */
+const PLAYWRIGHT_PKG = join(REPO_ROOT, "apps/page-app/package.json");
 const PREFIX_BUILD = join(VM_UI_DIR, "dist/sm-workspace-CpaZ0UGg.js");
 const HARNESS_URL = "http://127.0.0.1:5199/test/geometry/harness.html";
 
@@ -185,7 +191,7 @@ async function main() {
     dirname(resolveFrom(join(VM_UI_DIR, "package.json"), "vite/package.json")),
     "bin/vite.js",
   );
-  const playwright = createRequire(PLUGIN_DEV_PKG)("@playwright/test");
+  const playwright = createRequire(PLAYWRIGHT_PKG)("@playwright/test");
   const { chromium } = playwright;
 
   const server = spawn(

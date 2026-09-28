@@ -6,8 +6,9 @@
  *
  * 做四件事:
  *  1. 以仓库内 `vite`(packages/vm-ui 的依赖)拉起 5198 端口的测量服务器;
- *  2. 用 apps/plugin-dev 的 `@playwright/test`(仓库唯一 Playwright 依赖,浏览器
- *     已装)启动 chromium,打开 `workspace-harness.html`(整页布局骨架);
+ *  2. 用 apps/page-app 的 `@playwright/test`(仓库唯一 Playwright 依赖,浏览器
+ *     已装;持有者原为已删除的 `apps/plugin-dev`)启动 chromium,打开
+ *     `workspace-harness.html`(整页布局骨架);
  *  3. 读真机几何:左右半侧 clientWidth / 每个可见视图位的 clientHeight 与
  *     **字节视图内可见数据行数** / 左半侧是否滚动容器 / 文档层是否溢出;
  *  4. 按**完成标准判据**断言(任一失败即非零退出并打印证据 JSON)。
@@ -42,7 +43,14 @@ const REPO_ROOT = (() => {
 })();
 
 const VM_UI_DIR = join(REPO_ROOT, "packages/vm-ui");
-const PLUGIN_DEV_PKG = join(REPO_ROOT, "apps/plugin-dev/package.json");
+/**
+ * Playwright 依赖持有者(= 仓库唯一 `@playwright/test` 依赖所在包)。
+ *
+ * 沿革:原为 `apps/plugin-dev/package.json` —— 该应用已随 WP-96 物理删除,持有者
+ * 现为 `apps/page-app`(与 API 同源的独立页面应用),故改指此处。**不得**改为
+ * 「找不到就跳过浏览器测量」的软失败:那会把「无法取证」伪装成通过。
+ */
+const PLAYWRIGHT_PKG = join(REPO_ROOT, "apps/page-app/package.json");
 const VITE_CONFIG = join(VM_UI_DIR, "test/geometry/vite.workspace-geometry.config.mjs");
 const HARNESS_URL = "http://127.0.0.1:5198/test/geometry/workspace-harness.html";
 
@@ -105,7 +113,7 @@ async function main() {
   let browser = null;
   try {
     await waitForServer(HARNESS_URL, 60_000);
-    ({ chromium } = require(resolveFrom(PLUGIN_DEV_PKG, "@playwright/test")));
+    ({ chromium } = require(resolveFrom(PLAYWRIGHT_PKG, "@playwright/test")));
     browser = await chromium.launch();
     const page = await browser.newPage();
 

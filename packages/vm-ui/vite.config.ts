@@ -10,8 +10,9 @@ import { defineConfig } from "vite";
  *  - 声明文件由 `tsc -b`(emitDeclarationOnly)先行产出到 dist/,因此
  *    emptyOutDir 必须为 false,避免 vite build 抹掉 dist/*.d.ts;
  *  - 产物自包含:运行时依赖(lit、@lit-labs/virtualizer)内联进 bundle,
- *    plugin-dev / 宿主平台以 <script type="module"> 直接加载 dist 产物,
- *    不经打包器解析裸模块导入(加载模型见 apps/plugin-dev/README.md);
+ *    承载页面以 <script type="module"> 直接加载 dist 产物,不经打包器解析裸
+ *    模块导入(当前承载形态 = `apps/page-app`,见其 README;原 `apps/plugin-dev`
+ *    开发壳已于 2026-09-19 随 WP-96 物理删除);
  *  - 动画纪律(CLAUDE.md 第十章):组件样式只允许 transform / opacity 等
  *    compositor 友好属性参与动画,入口层面不做任何全局样式注入。
  */

@@ -150,6 +150,13 @@ describe("SessionClient REST 5 命令", () => {
       command: "create_session",
       payload: { ...CREATE_INPUT },
     });
+    // v2 载荷形状**恰两键**的独立钉子(不复用 CREATE_INPUT 的自洽性):
+    // 上面那条 `toEqual({ … payload: { ...CREATE_INPUT } })` 对「夹具自己长回
+    // v1 四键」是**自洽**的 ⇒ 夹具悄悄回退时它仍会绿。故此处按字面白名单独立断言
+    // (`embedToken` / `embedSessionId` = 已随 WP-96 物理删除的 v1 协议面)。
+    const sentPayload = (JSON.parse(String(call?.init.body)) as { payload: Record<string, unknown> })
+      .payload;
+    expect(Object.keys(sentPayload).sort()).toEqual(["challengeId", "challengeVersion"]);
     // 初始公开投影已入存储(revision 0 = 首个动作 baseRevision 的对齐锚)。
     expect(harness.client.store.revision).toBe(0);
     expect(harness.client.projection?.visibleRegions[0]?.regionId).toBe("region-stack");

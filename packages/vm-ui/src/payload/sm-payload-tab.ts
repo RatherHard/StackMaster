@@ -574,7 +574,8 @@ export class SmPayloadTab extends LitElement {
       this.loadWorkspaceState(seedState());
       this.#canvasUnavailable = false;
     } catch {
-      // Blockly 环境不可用(极端嵌入环境):画布容器保留,呈兜底文案。
+      // Blockly 环境不可用(极端环境:画布宿主不可注入):画布容器保留,
+      // 呈兜底文案(原「嵌入环境」表述随嵌入形态 2026-09-19 WP-96 退役改述)。
       this.#canvasUnavailable = true;
       this.#workspace = null;
       host.textContent = t("payload.canvasUnavailableText");

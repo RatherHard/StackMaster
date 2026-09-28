@@ -4,24 +4,27 @@
  * 组成:
  *  - **消息目录**:`catalog-zh-CN.ts`(默认语言 = 现行文案原样,键集事实源)+
  *    `catalog-en.ts`(类型系统强制同键集);
- *  - **locale 状态**:模块级单例 store(iframe 内单工作区形态的 MVP 定案;
- *    独立多实例形态留演进),`setLocale` / `getLocale` / `onLocaleChange`——
- *    接口形态与 WP-52 `EmbedAppearanceController`(apply / onChange / snapshot)
- *    同词汇;
+ *  - **locale 状态**:模块级单例 store(**整页独立页面 `apps/page-app` 的单工作区
+ *    形态**的 MVP 定案;同页多工作区实例形态留演进),`setLocale` / `getLocale` /
+ *    `onLocaleChange`——接口形态沿用 WP-52 `apply / onChange / snapshot` 三词汇
+ *    (该控制器随 `packages/web-component` 于 2026-09-19 WP-96 退役,**仅作词汇
+ *    沿革留档**,不再是本包的对接面);
  *  - **BCP-47 匹配降级确定性**(`resolveLocale`):精确匹配(zh-CN / en,连字符
  *    与下划线、大小写归一)→ 主子标签前缀匹配(zh-TW → zh-CN、en-GB → en)→
- *    内置默认(zh-CN)。非法 / 未知标签确定性落到默认(嵌入协议侧 Schema 已拒
- *    非法语法,本层是最后一道确定性兜底);
+ *    内置默认(zh-CN)。非法 / 未知标签确定性落到默认(**原嵌入协议侧 Schema 的
+ *    前置语法拒绝已随 WP-96 退役** ⇒ 本层现为**唯一**一道确定性兜底);
  *  - **类型安全取词**:`t(key, params?)`——key 为目录键集类型,`{name}` 占位
  *    替换(缺参保留占位,便于定位);目录缺键(理论不可能,类型已闸)回落
  *    zh-CN,再回落键名(防御性);
  *  - **响应式 locale**:`LocaleController`(Lit ReactiveController)——组件
  *    订阅 locale 变化即重渲染,连接时消费 `data-sm-language` 锚;
  *  - **锚消费**:`consumeAnchoredLanguage(element)`——沿 composed 树上溯
- *    (自身 → 祖先 → shadow host 链)找最近 `[data-sm-language]`(嵌入协议
- *    语义,WP-52 落于宿主元素),解析后应用;并对锚元素挂共享 MutationObserver,
- *    运行中 `language_changed` 更新锚属性即生效(未授予 language 的插件宿主
- *    不设锚 → 无消费,保持内置默认,§4.4 降级矩阵第 3 行)。
+ *    (自身 → 祖先 → shadow host 链)找最近 `[data-sm-language]`(**外部锚**语义;
+ *    原由嵌入协议规定「WP-52 落于宿主元素」,该**契约面已于 2026-09-19 随 WP-96
+ *    退役**,锚机制本身保留),解析后应用;并对锚元素挂共享 MutationObserver,
+ *    运行中更新锚属性即生效(**原嵌入协议 `language_changed` 消息面已退役**;
+ *    现形态 = 外部锚属性变更直接生效;不设锚 → 无消费,保持内置默认 ——
+ *    沿原嵌入协议 §4.4 降级矩阵第 3 行口径,该契约文本已退场)。
  *
  * 定态语义(登记):已生成的状态字符串(payload 执行日志、跳转/检索状态行、
  * 时间线/编译标签)按**生成时刻 locale 固化**;语言切换重渲染刷新的是模板内
@@ -174,7 +177,10 @@ function* composedAncestors(element: Element): Generator<Element> {
   }
 }
 
-/** 语言锚属性(嵌入协议语义;WP-52 落于插件宿主元素)。 */
+/**
+ * 语言锚属性(**外部锚**语义;原嵌入协议契约面已于 2026-09-19 随 WP-96 退役,
+ * 锚机制本身保留 —— 锚可在任意祖先或 shadow 链上,由外层文档自行设置)。
+ */
 export const SM_LANGUAGE_ATTRIBUTE = "data-sm-language";
 
 /** 共享锚观察器(单锚:单工作区形态 MVP 定案;属性变化 → 重解析应用)。 */
@@ -183,8 +189,9 @@ let observedAnchor: Element | null = null;
 
 /**
  * 消费最近语言锚:找最近 `[data-sm-language]` 祖先(含自身),解析并应用;
- * 无锚(未授予 language 的宿主,§4.4)= 不消费,保持当前(内置默认)值。
- * 对锚挂共享 MutationObserver——运行中 `language_changed` 更新锚属性即生效。
+ * 无锚 = 不消费,保持当前(内置默认)值(沿原嵌入协议 §4.4 降级口径,该契约为
+ * 历史留档)。对锚挂共享 MutationObserver —— 运行中更新锚属性即生效
+ * (原 `language_changed` 消息面已随 WP-96 退役,现为外部锚属性直接变更)。
  */
 export function consumeAnchoredLanguage(element: Element): void {
   let anchor: Element | null = null;

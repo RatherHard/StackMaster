@@ -2,8 +2,9 @@
  * VerdictPoller —— 正式裁决重询状态机(阶段六 WP-63;D-API-83 / D-API-84)。
  *
  * 职责:submit 受理后跟随 submissionId 轮询裁决呈现通道
- * (`GET /verdicts/:submissionId`,插件 ↔ session-api 直连 HTTP;**宿主
- * postMessage 零权威语义不破**——裁决数据不经嵌入协议帧,V-9),把异步
+ * (`GET /verdicts/:submissionId`,页面侧 ↔ session-api **直连 HTTP**;
+ * **裁决数据不经任何跨文档消息面** —— 原嵌入协议帧面已于 2026-09-19 随 WP-96
+ * 物理删除,该约束按现状结构性成立),把异步
  * 裁决状态机(pending → verdicted 单向)投影为确定性呈现状态:
  *
  *  - `idle`:未跟随任何提交;

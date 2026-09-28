@@ -18,8 +18,9 @@
  *    可用),动作语义 = `debug_run_to_breakpoint`(断点集合 = 当前集合),
  *    由宿主(sm-workspace)执行;
  *  - **解题/调试模式切换**(FE-WS-06,WP-F8):`toggle-debug-mode` 动作;
- *    **调试可用性由题目声明**(`debugModeAvailable`,plugin-dev 开发壳经
- *    夹具描述包注入)——未启用的题目**隐藏切换项**(FE-WS-06);
+ *    **调试可用性由题目声明**(`debugModeAvailable`,公开描述包 opt-out 口径;
+ *    现行注入点 = `apps/page-app/src/boot.ts`,原开发壳已随 WP-96 删除)
+ *    ——未启用的题目**隐藏切换项**(FE-WS-06);
  *  - **what-if 纪律横幅**(ADR-DC1 条款 7):调试模式下常驻显式呈现
  *    "调试通过 ≠ 提交通过(裁决以提交为准)"+ ASLR 地址差异提示语,
  *    调试结果不得被误读为权威结论;
@@ -143,8 +144,9 @@ export class SmWorkspaceMenu extends LitElement {
   runToBreakpointEnabled = false;
 
   /**
-   * 调试模式可用性(FE-WS-06):题目 debugMode 声明(plugin-dev 开发壳经
-   * 夹具描述包注入)。false = 未启用调试的题目,**隐藏模式切换项**。
+   * 调试模式可用性(FE-WS-06):题目 `debugMode` 声明(公开描述包 opt-out 口径;
+   * 现行注入点 = `apps/page-app/src/boot.ts`,原开发壳已随 WP-96 删除)。
+   * false = 未启用调试的题目,**隐藏模式切换项**。
    */
   @property({ type: Boolean, attribute: "debug-mode-available" })
   debugModeAvailable = false;

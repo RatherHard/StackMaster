@@ -66,12 +66,38 @@ function deepElements(root: ParentNode): HTMLElement[] {
   return collected;
 }
 
+/** 深扫(含 shadow 根)找 Blockly 画布根 `<g class="blocklyWorkspace">`。 */
+function canvasRootPresent(scope: ParentNode): boolean {
+  for (const element of scope.querySelectorAll("*")) {
+    if (element.getAttribute("class") === "blocklyWorkspace") {
+      return true;
+    }
+    if (element.shadowRoot !== null && canvasRootPresent(element.shadowRoot)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function mountWorkspace(): Promise<SmWorkspace> {
   const element = new SmWorkspace();
   document.body.append(element);
   await element.updateComplete;
-  // Blockly 画布在首帧后异步注入(SVG 树晚于 updateComplete 出现)。
-  await new Promise((resolve) => setTimeout(resolve, 120));
+  // Blockly 画布在首帧后经**动态导入**注入(SVG 树晚于 updateComplete 出现)。
+  //
+  // 2026-09-19(WP-96-D 复跑):原实现是固定 `setTimeout(120ms)`,实测该动态导入
+  // 的耗时随机器负载剧烈变化 —— 空闲态 ≈ 120ms 内完成,负载态实测 **432ms**
+  // (诊断脚本轮询取证)⇒ 固定睡眠是**脆的**,会让本用例在「机器忙」时变成
+  // 「未找到画布根」而红,与该用例真正要防的 id 口径缺陷无关。
+  // 故改为**有界轮询**:断言面一个字不改(下方 `withId.length > 0` 的非空护栏
+  // 仍在,画布根照旧必须在场),只是把「机器多快」从判据里剔除。
+  const deadline = Date.now() + 8000;
+  while (!canvasRootPresent(document.body)) {
+    if (Date.now() > deadline) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
   await element.updateComplete;
   return element;
 }

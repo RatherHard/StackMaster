@@ -279,8 +279,10 @@ export class SmWorkspace extends LitElement {
   tabTypes: WorkspaceTabTypeRegistry = defaultTabTypeRegistry;
 
   /**
-   * 调试模式可用性(FE-WS-06):题目 debugMode 声明(plugin-dev 开发壳经
-   * 夹具描述包注入)。false = 未启用调试的题目,菜单隐藏模式切换项。
+   * 调试模式可用性(FE-WS-06):题目 `debugMode` 声明(公开描述包 opt-out
+   * 口径 —— 现行注入点 = `apps/page-app/src/boot.ts` 取包后按
+   * `view["debugMode"] !== false` 注入;原开发壳 `apps/plugin-dev` 已随 WP-96
+   * 物理删除)。false = 未启用调试的题目,菜单隐藏模式切换项。
    */
   @property({ type: Boolean, attribute: "debug-mode-available" })
   debugModeAvailable = false;
@@ -323,10 +325,11 @@ export class SmWorkspace extends LitElement {
   verdictPollerFactory: ((client: SessionClient) => VerdictPoller) | null = null;
 
   /**
-   * 主题属性(WP-53 / Q6 独立使用形态便捷注入面):`light` / `dark` / `auto`
-   * (auto = 跟随系统 prefers-color-scheme,CSS media 承担)。设值即转写为
-   * 自身 `data-sm-theme`(最近锚优先——显式属性胜过祖先锚);缺省 null =
-   * 不写锚,由最近的祖先 `data-sm-theme`(嵌入形态)或 light 缺省决定。
+   * 主题属性(WP-53 / Q6 独立使用形态便捷注入面;2026-09-18 D-UI-6 收敛为
+   * **终端单主题**):值域 = `SM_THEME_PRESET_VALUES`(**仅 `terminal`**;
+   * `light` / `dark` / `auto` 三预设已退役)。设值即转写为自身
+   * `data-sm-theme`(最近锚优先——显式属性胜过祖先锚);缺省 null =
+   * 不写锚,由 `:root` 级缺省决定(**未设锚即终端**)。
    */
   @property({ type: String, attribute: "theme" })
   theme: SmThemeValue | null = null;
@@ -1692,7 +1695,8 @@ export class SmWorkspace extends LitElement {
         break;
       case "new-session":
         // 终态引导动作:close_session(如未关)+ create_session 新流程由
-        // 宿主(plugin-dev 壳)执行;工作区只发请求事件。
+        // **承载页面**(`apps/page-app`;原开发壳已随 WP-96 删除)执行;
+        // 工作区只发请求事件。
         this.dispatchEvent(new CustomEvent("new-session-request", { bubbles: true, composed: true }));
         break;
       case "focus-window":

@@ -72,7 +72,8 @@ export const PAYLOAD_BLOCKLY_COMPONENT_STYLES: Blockly.Theme.ComponentStyle = {
  *    (`.trash{fill:#888}` / `.zoom{stroke:#888}`,整张精灵表经 `<image>` 引用),
  *    在暗色 / terminal 近黑画布上偏暗。**不能**按主题锚改写:本样式表所在根 =
  *    画布宿主所在的 shadow 根,而主题锚 `data-sm-theme` 落在 shadow 树**之外**
- *    (嵌入形态 = `pwn-memory-vm`;独立形态 = `sm-workspace` 自身或更外层),
+ *    (三预设期形态 = `pwn-memory-vm` 插件壳,已随 2026-09-19 WP-96 退役面删除;
+ *    独立形态 = `sm-workspace` 自身或更外层),
  *    `[data-sm-theme="dark"] …` 在树内样式表里匹配不到树外祖先(M1 真机实测
  *    `getComputedStyle(.blocklyTrash).filter` 恒为 `none`);CSS 亦无「按继承的
  *    `color-scheme` 取 `filter` 值」的手段(`light-dark()` 只作用于颜色值)。

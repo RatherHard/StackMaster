@@ -1,9 +1,10 @@
 /**
- * WP-53 组件级语言机制测试:data-sm-language 锚消费(嵌入协议语义,与
- * WP-52 EmbedAppearanceController 落地面对接)、BCP-47 降级在锚上的确定性、
- * locale 切换 → 组件重渲染、以及 **未授予 language 的插件侧禁用锚**
- * (嵌入协议 §4.4 降级矩阵第 3 行:宿主不设锚 / 不发 language_changed →
- * vm-ui 保持内置默认 zh-CN;与 web-component 侧降级矩阵测试共用语义锚)。
+ * WP-53 组件级语言机制测试:data-sm-language **外部锚**消费(原嵌入协议语义,
+ * 该契约面已于 2026-09-19 随 WP-96 物理删除;锚机制本身保留,写入方现为外层
+ * 文档 / 承载页面)、BCP-47 降级在锚上的确定性、locale 切换 → 组件重渲染、
+ * 以及 **不设锚时的确定性默认**:外部不设锚 → vm-ui 保持内置默认 zh-CN
+ * (沿原嵌入协议 §4.4 降级矩阵第 3 行口径,该契约文本已退场;
+ * 原「与 web-component 侧降级矩阵测试共用语义锚」已随该包退役)。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { html, render } from "lit";
@@ -37,7 +38,7 @@ afterEach(() => {
   }
 });
 
-describe("data-sm-language 锚消费(嵌入形态对接)", () => {
+describe("data-sm-language 外部锚消费(原嵌入形态对接面;锚机制保留)", () => {
   it("锚 en → 组件以英文重渲染(切换即生效)", async () => {
     const host = await mount(html`
       <div data-sm-language="en">
@@ -61,9 +62,10 @@ describe("data-sm-language 锚消费(嵌入形态对接)", () => {
     expect(focusButton?.textContent?.trim()).toBe("Stack view");
   });
 
-  it("运行中锚属性更新(language_changed 形态)→ MutationObserver 生效", async () => {
-    // 嵌入形态时序契约:WP-52 宿主元素在 connectedCallback 即落 data-sm-*
-    // 锚(早于工作区挂载),故消费点(组件连接)时锚已在场。
+  it("运行中锚属性更新(原 language_changed 形态)→ MutationObserver 生效", async () => {
+    // 装配时序契约:锚在**工作区挂载之前**就已落在祖先上(原嵌入协议 WP-52
+    // 由宿主元素落锚;现形态由外层文档 / 承载页面落锚),故消费点(组件连接)时
+    // 锚已在场。
     const anchor = document.createElement("div");
     anchor.setAttribute("data-sm-language", "zh-CN");
     const menu = document.createElement("sm-workspace-menu") as SmWorkspaceMenu;
@@ -72,7 +74,7 @@ describe("data-sm-language 锚消费(嵌入形态对接)", () => {
     await menu.updateComplete;
     expect(menu.shadowRoot?.querySelector(".step-button")?.textContent?.trim()).toBe("指令步进");
 
-    // 宿主运行中切换语言(WP-52 侧更新 data-sm-language 属性)。
+    // 运行中由外层更新锚属性(原 `language_changed` 消息面已退役;现为属性变更直接生效)。
     anchor.setAttribute("data-sm-language", "en");
     await TICK();
     await menu.updateComplete;
@@ -119,10 +121,12 @@ describe("data-sm-language 锚消费(嵌入形态对接)", () => {
   });
 });
 
-describe("未授予 language 的插件侧禁用锚(§4.4 降级矩阵第 3 行)", () => {
-  it("无锚 = 不消费对应面,保持内置默认 zh-CN(与 WP-52 降级矩阵共用语义)", async () => {
-    // 未授予 language 时,WP-52 侧不落 data-sm-language 锚、对应消息按 V-8
-    // 丢弃;vm-ui 侧锚消费为 no-op,外观保持内置默认。
+describe("不设语言锚时的确定性默认(原 §4.4 降级矩阵第 3 行)", () => {
+  it("无锚 = 不消费对应面,保持内置默认 zh-CN(原嵌入协议降级口径)", async () => {
+    // 沿革:原形态 = 「未授予 language 的插件宿主不落锚、对应消息按 V-8 丢弃」
+    // —— 嵌入协议 / 插件宿主 / V-8 均已随 2026-09-19 WP-96 物理删除。
+    // 现行形态 = **外层文档不设锚** ⇒ vm-ui 侧锚消费为 no-op,外观保持内置默认
+    // (口径本身原样保留:确定性、不外泄、不猜测)。
     const host = await mount(html`
       <div>
         <sm-workspace-menu .tabTypes=${defaultTabTypeRegistry.list()}></sm-workspace-menu>

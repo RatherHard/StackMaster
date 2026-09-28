@@ -29,11 +29,22 @@ import type {
 // ── 常量与夹具 ──────────────────────────────────────────────────────────────
 
 export const SESSION_ID = "session-0001";
+/**
+ * `create_session` **v2 载荷夹具(恰两键)** —— 公开导航信息,授权不在载荷里。
+ *
+ * 沿革(v2 = WP-90 / D-LT-5;N-1 窗口随 2026-09-19 WP-96 关闭):
+ * v1 载荷是**四键** `{challengeId, challengeVersion, embedSessionId, embedToken}`,
+ * 其中 `embedToken` 由换票产出的**启动授权凭证 Cookie** 取代(授权来源 =
+ * 服务端签发的凭证,不是客户端提交的 token),`embedSessionId` 所绑定的
+ * **嵌入会话在本形态不存在**(D-LT-5 第 3 条)。二者随嵌入协议与
+ * `apps/plugin-dev` 一同**物理删除**,故此处**不得**再保留、也不得再用四键形态
+ * 充当 `createSession` 的输入 —— 否则 vm-ui 测试会继续固化已删协议的请求形状。
+ * (v1 契约面本身留档于 `packages/protocol/src/session-command/session-command-request.ts`
+ * 文件头「N-1 兼容窗口的历史与关闭」段。)
+ */
 export const CREATE_INPUT = {
   challengeId: "challenge-0001",
   challengeVersion: "1.0.0",
-  embedSessionId: "embed-session-fixture-0001",
-  embedToken: "embed-token-fixture-0001",
 } as const;
 export const SESSION_COOKIE = "sm_session=fixture-cookie-value";
 

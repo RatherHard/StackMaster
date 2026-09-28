@@ -1,7 +1,8 @@
 /**
  * page-app 引导序列(分发改版 WP-92;组合根)。
  *
- * ## 序列(与 `apps/plugin-dev/src/main.ts` 的**会话装配**部分同源,授权链换成新的)
+ * ## 序列(与原开发壳 `apps/plugin-dev/src/main.ts` 的**会话装配**部分同源,授权链换成新的;
+ * 该应用已于 2026-09-19 随 WP-96 物理删除,此处只作沿革对照)
  *
  *   1. 从路径取 `challengeId` / `version`(`/app/c/:challengeId/:version`);
  *   2. 运行期加载 vm-ui 构建产物(见 `vm-ui-module.ts`);

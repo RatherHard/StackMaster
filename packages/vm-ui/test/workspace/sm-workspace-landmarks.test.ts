@@ -18,7 +18,8 @@
  *
  * 本文件独立成篇(不复用 sm-workspace.test.ts 的共享文档):axe 在 jsdom 下
  * 生成深层选择器时会被同文档残留夹具影响,独立文档让本规则的判定面确定;
- * 真机门禁口径仍以 `apps/plugin-dev/e2e/axe-contrast.spec.ts`(chromium)为准。
+ * 真机门禁口径 = `apps/page-app/e2e/axe-matrix.spec.ts`(chromium;
+ * 原 `apps/plugin-dev/e2e/axe-contrast.spec.ts` 已随 WP-96 物理删除)。
  */
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";

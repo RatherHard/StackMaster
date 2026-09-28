@@ -10,8 +10,11 @@
  *  - 字节视图「特殊显示」列(`render/special-display.ts` 的 `.cell-special`,
  *    样式声明在 `views/byte/byte-view.ts`):每 cell 2 个行盒 ⇒ 数据行实测
  *    **187.17px**(免折行宽)/ 236.8~259.6px(真实列宽),应然值 = 行单位
- *    **20.8px**(13px × line-height 1.6);工作区窗高下限 `MIN_ROW_HEIGHT_PX`
+ *    **20.8px**(13px × line-height 1.6);当时的工作区窗高下限 `MIN_ROW_HEIGHT_PX`
  *    (= 面板 chrome 182.1px + 4 × 20.8px)随之失效(可用内容区连一行都放不下)。
+ *    **沿革**:该下限本身已随 2026-09-18 UI 改版整条废止(D-API-153 / D-UI-1~7;
+ *    可读性的现行载体 = 左半侧视图位高度,见 `layout-presets.ts`)—— 本段保留为
+ *    该缺陷家族的历史取证理由,不描述当前形态。
  *  - 指令视图地址列 / 伪机器码列(`views/instruction/sm-instruction-view.ts`
  *    的 `.row-address` / `.row-bytes`,M3 遗留-5 ①):修复前每行 **113px**、
  *    一屏仅 ≈1.5 行(M3 修复后 20.8px)。

@@ -61,8 +61,9 @@ export * from "./views/instruction/sm-instruction-view.js";
 // ── Payload 搭建(WP-F6;WP-83:Blockly 承载面退场为「类型 + 惰性访问器」)──
 // 背景(实测):`sm-payload-tab` / `compiler/blocks` / `compiler/compile` 静态
 // import `blockly`(blockly_compressed.js 等,合计约 904 kB raw / 216 kB gzip),
-// 而本入口桶被 plugin-dev 与宿主以 `<script type="module" src="…/index.js">`
-// **直接加载** ⇒ 静态再导出会把 Blockly 拉进首屏静态图。故值面只保留与
+// 而本入口桶被承载页面(`apps/page-app` 以 `<script type="module" src="…/index.js">`
+// 直接加载 dist 产物;原 `apps/plugin-dev` 开发壳已于 2026-09-19 随 WP-96 删除)
+// ⇒ 静态再导出会把 Blockly 拉进首屏静态图。故值面只保留与
 // Blockly 无关的三个模块,Blockly 承载面改为**类型再导出 + 惰性访问器**;
 // 工作区内的取值路径 = `<sm-payload-tab-host>`(payload/lazy-payload-tab.ts)。
 // 前后实测与「只改注册表 = 假绿」陷阱见 docs/develop/decisions-m3/WP-83.md。
@@ -119,10 +120,12 @@ export * from "./render/special-display.js";
 // ── i18n 与主题机制面(WP-53)──
 // i18n:消息目录(zh-CN = 现行文案原样 / en)、t() 类型安全取词、响应式
 // locale(setLocale / onLocaleChange / LocaleController)、data-sm-language
-// 锚消费(嵌入协议语义,与 EmbedAppearanceController 对接)。
+// 锚消费(外部锚语义:锚可在任意祖先或 shadow 链上,2026-09-19 WP-96 起不再由
+// 已退役的 `EmbedAppearanceController` 转写)。
 export * from "./i18n/i18n.js";
 export * from "./i18n/catalog-zh-CN.js";
 export * from "./i18n/catalog-en.js";
-// 主题:light/dark 双套 CSS 自定义属性变量集 + data-sm-theme 文档级锚样式表
-// (auto 由 @media (prefers-color-scheme: dark) 承担,零 JS 解析)。
+// 主题:终端单套 CSS 自定义属性变量集 + data-sm-theme 文档级锚样式表
+// (2026-09-18 D-UI-6 收敛:light / dark 双套已退役;锚 = `:root` 级缺省 +
+// 单一 `[data-sm-theme="terminal"]`,零 JS 解析)。
 export * from "./theme/theme-tokens.js";

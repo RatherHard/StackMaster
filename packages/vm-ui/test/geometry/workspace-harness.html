@@ -4,10 +4,11 @@
     <meta charset="utf-8" />
     <title>工作区整页布局真机几何测量(2026-09-18 改版 / D-API-153)</title>
     <style>
-      /* 测量骨架 = **整页布局语义的最小复刻**:页面根不可滚动
-         (`html, body { margin:0; overflow:hidden }`),工作区自身即页面主体
-         (`100dvh`)。这正是「无宿主高度上报、无 iframe」的形态 —— 与
-         `apps/plugin-dev` / `page-app` 的整页壳同构。 */
+      /* 测量骨架 = **整页布局语义的最小复刻**:页面根纵向不可滚动
+         (`html, body { margin:0 }` + 纵向由工作区内部承载;**横向必须允许滚**,
+         见下方 D-UI-5 的实测要点),工作区自身即页面主体(`100dvh`)。这正是
+         「无宿主高度上报、无 iframe」的形态 —— 与 `apps/page-app` 的整页壳
+         同构(原 `apps/plugin-dev` 开发壳已随 WP-96 物理删除,由 page-app 承接)。 */
       html,
       body {
         margin: 0;

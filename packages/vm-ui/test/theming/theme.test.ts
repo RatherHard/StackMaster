@@ -285,7 +285,8 @@ describe("主题样式表(文档级注入;单主题)", () => {
   it("未设锚也是终端:无锚元素的计算值即终端 token 值(D-UI-6 收敛实质 ⓑ)", () => {
     document.getElementById("sm-theme-token-styles")?.remove();
     ensureSmThemeStyles(document);
-    // 未设锚的宿主(生产形态:嵌入宿主 / 独立包裹层 / 任意祖先)。
+    // 未设锚的宿主(生产形态:承载页面的包裹层 / 任意祖先;原嵌入宿主形态
+    // 已随 2026-09-19 WP-96 退役)。
     const host = document.createElement("div");
     const child = document.createElement("span");
     child.textContent = "probe";
