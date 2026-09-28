@@ -129,7 +129,7 @@ stackmaster/
 1. TS:tsc(project references)+ ESLint;Rust:cargo clippy(`-D warnings`)+ cargo fmt 检查;
 2. dependency-cruiser 依赖边界 + 引擎确定性 lint + `#![forbid(unsafe_code)]` 检查;
 3. 单元与属性测试:Vitest + fast-check / cargo test + proptest;覆盖率整体 ≥ 80%,`vm-core`、`vm-runtime`、`projection`、`challenge-compiler` ≥ 90%;
-4. cargo miri(vm-core UB 敏感面:掩蔽算术 / 译码边界 / 页与 COW / 快照克隆 / 条件求值;本地全量入口 `pnpm test:miri`)+ cargo-fuzz(题目包、动作与 IR 解析器);
+4. cargo miri(vm-core UB 敏感面:掩蔽算术 / 译码边界 / 页与 COW / 快照克隆 / 条件求值;本地全量入口 `pnpm test:miri`)+ cargo-fuzz(题目包、动作与 IR 解析器);**⚠ miri 是受限命令(2026-09-28 主控裁定;起因 = agent 在监控项目进度时未经同意自行启动 `pnpm test:miri`,已中止)** —— 任何 `test:miri` / `cargo +nightly miri` 的启动(**本机 / CI / 由 agent 代跑一律适用**)**必须先取得用户(主控)明确同意,并说明理由**;理由至少含「**为何此刻必须跑 / 预期收益 / 预计耗时**」(VM 敏感面实测量级 = **十至数十分钟**,且长时间独占机器);**未获同意不得启动**,也不得以「顺手补一条证据」「既然 nightly 在场」为由自行开跑;**未获同意期间该门禁在证据行里保持「未实测」登记** —— 既不得记为通过,也不构成阻塞项;
 5. golden fixture 跨语言往返一致;
 6. 浏览器产物隔离扫描(不得含引擎代码、私有题目包内容、vm-worker 二进制);
 7. Compose 集成测试:会话创建 → 动作 → 投影 → 断线重连 → 提交裁决全链路;
@@ -142,6 +142,7 @@ stackmaster/
 
 - 复杂功能先出实现计划再写代码;涉及协议、投影、题目包 Schema 的改动,必须先更新 `protocol` / `challenge-schema` 契约与 golden fixture,再改实现;
 - 涉及认证、投影生成、协议、题目包校验、判题的代码,提交前必须做安全审查;
+- **受限命令:miri** —— `test:miri` / `cargo +nightly miri` 的运行**须先经用户(主控)同意并说明理由**(规范条文与判据见上文「测试与质量门禁」第 4 条);**agent 不得自行启动、不得代为补跑、不得以「顺手补证据」为由开跑**;
 - 文档、提交信息与面向人的注释用中文;代码标识符用英文;
 - Conventional commits:`feat|fix|refactor|docs|test|chore|perf|ci: <描述>`;对外发包用 Changesets —— **仅契约包**(`protocol`、`challenge-schema` 等);~~对外发包(`web-component`、`react-wrapper`、`embed-runtime`)用 Changesets~~ **2026-09-18 退役(分发改版)**:前端三包随嵌入协议整体退役,**不再对外发包**;
 - 不提交 `.env`、私有题目包样本、真实隐藏 flag;`private-bundles` 类内容永不进入 git。
