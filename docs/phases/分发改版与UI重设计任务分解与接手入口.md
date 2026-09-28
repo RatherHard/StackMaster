@@ -94,9 +94,9 @@
 
 | WP | 内容 | 依赖 | 完成标准 |
 |---|---|---|---|
-| 🟡 **WP-96 · 迁移与退役** | `docs/user/宿主平台接入指南.md` 改写(调签发端点 + 下发地址);退役面**清点后删除**(三包 + `plugin-dev` + `docs/contracts/嵌入协议.md` + 相关 E2E + `MAX_EMBED_HEIGHT_PX`/`height_changed`/`auto_resize`);Changesets 收敛为仅契约包 | WP-91~95 | `pnpm build` / `lint:deps`(模块数下降)/ `scan:public`;退役面**零残留**;宿主迁移指引成文 |
-| ⬜ **WP-97 · 遗留真机复跑** | 三引擎真机复跑:**#1(webkit 跨源认证)载体退役验证**;#9 `e2e-matrix` 面集合重定义;**#34 / #35 / #37 结案判定**;#36 左半侧宽度下免折行约束重算 | WP-95/96 | `E2E_MATRIX=1` 实测读数;**#1 不得记为「已修复」**(是失去载体) |
-| ⬜ **WP-98 · 用户文档回填** | `docs/user/界面帮助手册.html` / `学习者上手指南.md`(**只在实现落地后**才改;现在改 = 让文档说谎);`出题人文档` 如有受影响 | WP-95 | 用户文档与磁盘行为一致 |
+| ✅ **WP-96 · 迁移与退役**(2026-09-19/20 落地) | `docs/user/宿主平台接入指南.md` 改写(调签发端点 + 下发地址);退役面**清点后删除**(三包 + `plugin-dev` + `docs/contracts/嵌入协议.md` + 相关 E2E + `MAX_EMBED_HEIGHT_PX`/`height_changed`/`auto_resize`);Changesets 收敛为仅契约包 | WP-91~95 | `pnpm build` / `lint:deps`(模块数下降)/ `scan:public`;退役面**零残留**;宿主迁移指引成文 —— **已达成(2026-09-28 WP-97 复核)**:退役面五处**均不在磁盘**(`apps/plugin-dev` / `packages/{embed-runtime,web-component,react-wrapper}` / `docs/contracts/嵌入协议.md`);落地提交 `9fbb78b`(WP-96 尾,32 文件 +731/−309)+ 推送 `a070acb` 起 59 个提交 |
+| ✅ **WP-97 · 遗留真机复跑**(2026-09-28) | 三引擎真机复跑:**#1(webkit 跨源认证)载体退役验证**;#9 `e2e-matrix` 面集合重定义;**#34 / #35 / #37 结案判定**;#36 左半侧宽度下免折行约束重算 | WP-95/96 | `E2E_MATRIX=1` 实测读数;**#1 不得记为「已修复」**(是失去载体) —— **已达成**:`E2E_MATRIX=1` = **51 passed / 24 skipped / 0 failed**(三引擎逐格同形;axe 九面归档 `2026-09-28/run-1`);**#1 保持「失去载体」口径并新增未实测登记**(同源形态的 webkit 认证 WSS 握手——矩阵用桩、真拓扑本机 Docker 不可达,`E2E_LAUNCH_CHAIN=1` = **2 skipped 非通过**);**#9** artifact 面已落地、CI 面保持开放;**#34 / #35 / #37 结案判定已出**(依据见评审 **§六·三** 与清单 **§三 / §十**);**#36** 已于 WP-95a 结案 |
+| ✅ **WP-98 · 用户文档回填**(2026-09-19 落地) | `docs/user/界面帮助手册.html` / `学习者上手指南.md`(**只在实现落地后**才改;现在改 = 让文档说谎);`出题人文档` 如有受影响 | WP-95 | 用户文档与磁盘行为一致 —— 落地提交 `f247b48`(界面帮助手册:整页布局 / 终端单主题 / 启动地址链)+ `7867232`(学习者上手指南 / 试用环境部署指南 / 出题人两页) |
 | ⬜ **WP-99 · 验收评审** | 阶段收口评审;**更新遗留清单与评审 §六**(同批,维持双射);`CLAUDE.md` 事实段回填 | 全部 | 遗留 #38 结案;新增遗留同号登记 |
 
 ### 4.4 并行轨(与本次改版无关的既有开放遗留,可随时派单)
@@ -115,14 +115,14 @@
 ```
 P0-决(主控 7 项) ✅ ──────────┐
                               ▼
-WP-90(契约)✅ ─▶ WP-91(后端)✅ ─▶ WP-95(门禁)✅ ─▶ WP-96(迁移退役)🟡 ─▶ WP-97(真机复跑)⬜ ─▶ WP-98 ⬜ ─▶ WP-99 ⬜
+WP-90(契约)✅ ─▶ WP-91(后端)✅ ─▶ WP-95(门禁)✅ ─▶ WP-96(迁移退役)✅ ─▶ WP-97(真机复跑)✅ ─▶ WP-98 ✅ ─▶ WP-99 ⬜
         └────▶ WP-92(page-app)✅ ─┘
         └────▶ WP-93 ✅ ──▶ WP-94 ✅ ─┘
 ```
 
-**进度(2026-09-19 主控)**:`P0-决`(D-UI-1~7 / D-LT-1~5)与 **WP-90 ~ WP-95a** 已落地;**WP-96 在途**;最短关键路径的剩余段 = **WP-96 → WP-97 → WP-99**(WP-98 与 WP-97 可并行)。
+**进度(2026-09-28 WP-97 收口)**:`P0-决`(D-UI-1~7 / D-LT-1~5)与 **WP-90 ~ WP-98 已全部落地**(WP-97 真机复跑与遗留结案判定于 2026-09-28 完成);**唯一未开工 = WP-99(阶段收口评审 + 遗留清单 / 评审 §六 / `CLAUDE.md` 事实段回填)**。
 
-**最短关键路径 = WP-90 → WP-91 → WP-95 → WP-96 → WP-97 → WP-99。**
+**最短关键路径 = WP-90 → WP-91 → WP-95 → WP-96 → WP-97 → WP-99(WP-98 已落地,不再占关键路径)。**
 
 ---
 
@@ -134,12 +134,16 @@ pnpm test:rust; pnpm scan:public; pnpm fixtures:manifest; pnpm smoke:contract
 pnpm test:miri; pnpm fuzz:smoke
 $env:SESSION_API_IT='1'; pnpm test:coverage        # 完整覆盖率形态
 
-# E2E(必须带这两个环境变量,否则夹具阶段全倒,不是断言失败)
+# E2E(**默认形态不需要 Docker、不需要任何 env**)
+pnpm --filter @stackmaster/page-app test:e2e                       # 构建 + chromium 全量(23 passed / 2 skipped)
+$env:E2E_MATRIX='1'; pnpm --filter @stackmaster/page-app test:e2e  # 追加 firefox / webkit(51 passed / 24 skipped / 0 failed)
+
+# 真拓扑启动地址链(**需要 compose 拓扑 + page-app 产物被 session-api 托管**;本机 Docker 不可达 ⇒ 按设计 skip,不是通过)
+#   前置四步见 apps/page-app/README.md §5.2(compose:app:up → 构建 vm-ui + page-app → 种子登记 → 注入凭证)
 $env:SESSION_API_HOST_BACKEND_TOKEN='host-backend-shared-credential-0123456789'
 $env:SESSION_API_ORIGIN='http://127.0.0.1:13000'
 $env:E2E_SKIP_COMPOSE='1'                          # 对接已在运行的旧拓扑
-pnpm --filter @stackmaster/plugin-dev exec playwright test
-$env:E2E_MATRIX='1'; ...                            # 三引擎矩阵
+$env:E2E_LAUNCH_CHAIN='1'; pnpm --filter @stackmaster/page-app exec playwright test e2e/launch-chain.spec.ts
 ```
 
 **已知环境事实**:① `pnpm lint:deps` 本机默认堆 OOM ⇒ 需 `NODE_OPTIONS=--max-old-space-size=12288`(遗留 #18);② 本机镜像**不可重建**(docker daemon 代理被拒)⇒ `test:compose` 本机**不可达**(遗留 #19),不是「未做」。
@@ -220,6 +224,8 @@ $env:E2E_MATRIX='1'; ...                            # 三引擎矩阵
 | `WP-95`(本轮) | **门禁改造**:① **几何护栏升级为真浏览器 E2E**(`apps/page-app/e2e/geometry-guard.spec.ts`;承接 **遗留 #33**;逐条断言 **D-UI-2 四条**,四视口 × 三引擎 **27 例**;**不断言任何常量算式** —— 已废止的 `MIN_ROW_HEIGHT_PX` / `columnMinHeightPx` / `columnChromePx` 不在断言里,`layout-presets.ts` 的高度面常量也不被引用;含**反例自证**实测三条);**护栏首跑即抓出真实缺口**:字节视图**完整可见数据行**在窄档为 **0**(chromium 1024×768 / 768×900;firefox 同两档;webkit 1024 / 768 / 375),**N ≥ 1 红线在 9/12 个「引擎 × 视口」格上不成立**,成因 = 列头行窄档折 4 行(21.8 → **84.2px**)+ 工具区换行 ⇒ chrome(≈296~410px)超过视图位高(267~350px);缺口以 `<引擎>:<视口>` 登记表留档 + 双层层「状态已变即红」机检,**修法在 `packages/vm-ui`(本 WP 不改产品代码)**;② **E2E 改页面分发** = `apps/page-app/e2e/{helpers/launch-chain.ts,launch-chain.spec.ts}`(`POST /auth/launch-tickets` → **顶层导航** `page.goto(launchUrl)` → 断言 302 后地址栏无 `?t=` → `connection-status=connected`;含票据单次消费 = 401);plugin-dev 侧新建同链夹具 + **`e2e/RETIRED-SURFACE.md`**(逐文件:可改 / 改不动 + 理由 + 承接方;可改而未改的理由 = **本机 Docker 不可达 ⇒ 无法实测**);③ **axe 面矩阵重定义**(`apps/page-app/e2e/axe-matrix.spec.ts` **9 面** = 1440×{default,list-open,instruction,payload} / 1024×{default,list-open} / 768×default / 375×{default,payload};归档 `apps/page-app/e2e/reports/axe/<日期>/<run-N>/`,**同日不覆盖** + **确定性规范化**(剥 `esid` / Lit 标记 / 键排序 / LF)+ `summary.md` **两栏分列** + **未扫描面清单**;9 面 **violations = 0**,但 **9 面全部含 `color-contrast` 的 incomplete**(62 ~ 132 节点/面,合计 839)**如实分列** —— 单主题下 axe 无法自动判定全部对比度);④ **`E2E_MATRIX` 三引擎挂到 page-app**(plugin-dev 保留一份):**本机实测三引擎**(整套 **51 passed / 24 skipped**),但 **#1 不得记为已修复**(载体退役的验证,结案归 WP-97);⑤ 遗留 **#20** 断言收紧(`toBeInViewport({ratio:0.9})` + 锚点行行高 ≤ 28px)。决策 **D-API-162 ~ D-API-165**;**未实测**:真拓扑启动地址链(`E2E_LAUNCH_CHAIN`)/ 全量 plugin-dev E2E / k6 / `test:compose`(Docker 引擎不可达)、#20 收紧用例 |
 
 | ✅ `WP-95a`(遗留 #39 修复;2026-09-19) | **窄档字节视图完整可见数据行 = 0 的修复**(承接 WP-95 护栏首跑抓出的 P0 产品缺陷):① `byte-tab.ts` 的 VMA 侧栏折叠判定由**视口媒体查询**改为**容器查询**(`@container (max-width: 40rem)`,`:host` 加 `contain` / `container-type: inline-size`)—— 旧写法在 1024 档视口 > 640px 故不折叠,而视图位只有 512px(**媒体查询 vs 容器查询的类别错误**);② `byte-view.ts` 的 `.byte-row` 第三轨 `1fr → minmax(0,1fr)` + 表头行三段 `white-space: nowrap`(列头行 84.19 → **21.8px**);③ 工具区窄档紧凑(`input` 收口 `14ch` / 两行 `nowrap` / `@container` 收紧内边距,工具区 166.3 → **92.3px**)。**真机逐格读数(完整可见数据行,修前 → 修后)**:chromium `4→8 / 0→5 / 0→7 / 1→5`、firefox `7→9 / 0→5 / 0→9 / 1→5`、webkit `6→8 / 0→5 / 0→8 / 0→4`(视口序 1440×900 / 1024×768 / 768×900 / 375×667)⇒ **12/12 格满足红线 `N ≥ 1`,并 12/12 达 `N = 4` 目标**;`KNOWN_GEOMETRY_GAPS` **清空**(登记机制保留);`E2E_MATRIX=1` **51 passed / 24 skipped / 0 failed**;**反例自证** = 红线阈值临时改 9 ⇒ chromium 四档全红且失败文本回读**实测行数**,还原后全绿。**规格改述同批**(D-UI-2 补 / D-UI-5 补):`SIDE_PANEL_MIN_WIDTH_PX` **数值未改**、只改述含义(不含 `14rem` 侧栏;< ≈766px 必有降级 = 已接受的代价);**#36 随之结案**。决策 = **D-API-166**;**未做(不得视为通过)**:axe 面矩阵收尾复跑见 `0cd4780`(9 面 violations = 0,但 9 面**全部**含 `color-contrast` 的 `incomplete`,如实分列)、plugin-dev 全量 E2E、`test:coverage` / `test:miri` / `fuzz:smoke` / `test:compose`(Docker 引擎不可达) |
+
+| ✅ `WP-97`(真机收口;2026-09-28) | **三引擎真机复跑 + 遗留结案判定**(在 WP-96 退役面落地**之后**跑,故本轮读数才是新形态的权威读数):① **`E2E_MATRIX=1 pnpm --filter @stackmaster/page-app test:e2e` = 51 passed / 24 skipped / 0 failed**(exit 0,44.5s);**三引擎逐格** = chromium **23 / 2 / 0**、firefox **14 / 11 / 0**、webkit **14 / 11 / 0**(每引擎 25 例;差额 9 例 = axe 面矩阵为 **chromium 门禁口径**,firefox / webkit 整面 `test.skip`,与 chromium 的 2 例 `launch-chain` 跳过合计恰好 24);**axe 九面**当日归档 `apps/page-app/e2e/reports/axe/2026-09-28/run-1/`(9 面 JSON、violations = 0;`color-contrast` 的 incomplete **两栏分列**口径不变)。② **#1(webkit 跨源认证)载体退役验证 = 口径不变,#1 不得记为「已修复」** —— 新形态三引擎**无引擎特异性失败**(webkit 与原 12 格红面逐格同形),**但矩阵不覆盖握手面**:会话应答由 `page.route("/sessions")` **桩**提供(`page-app.spec.ts:92` / `geometry-guard.spec.ts:236` / `axe-matrix.spec.ts:313`)⇒ **WSS 升级与 Cookie 呈递未发生**,`connection-status=connected` 是页面按桩应答写入的**客户端状态**;握手面唯一载体 = `apps/page-app/e2e/launch-chain.spec.ts`,本机 **Docker 引擎不可达**(2026-09-28 复核:`\\.\pipe\dockerDesktopLinuxEngine` 与 `\\.\pipe\docker_engine` **均不存在**、`docker info` 失败、`127.0.0.1:13000` 的 `/healthz` 与 `/readyz` 均不可达、13000 端口**零监听**)⇒ 带 `E2E_LAUNCH_CHAIN=1` 实跑 = **2 skipped(非通过)**;**新增未实测登记 = 同源形态的 webkit 认证 WSS 握手**。③ **#9** artifact 面已落地(`ci.yml:119-120` job 已切到 page-app + `E2E_MATRIX: "1"` + 归档 `apps/page-app/e2e/reports/axe/**`;本机读数与 job 注释**逐字一致**),**CI 面保持开放**(主控 2026-09-28 指示「不要管 CI」)。④ **#34 / #35 / #37 结案判定**:#34 = **载体消亡 + 触发条件结构性不成立**(真机量 `ul.view-list`:3 引擎 × 2 视口 `scrollHeight ≡ clientHeight` = 234 / 244 / 224、**10 条目恒全可见**、`itemsOutsideListBox = 0`、`itemsOffscreen = 0`;拖拽路径**仍无自动滚动**但「落点在列表之外」有**明示播报** + 键盘等价路径 `Alt+↑↓`)⇒ **结案**,触发条件改写为「`ul.view-list` 成为滚动容器时」;#37 = **已消解且判据已机检化**(`documentElement.scrollHeight ≡ innerHeight` = **900/900**、**667/667**;`.ws-stack` 恒 `scroll > client` = client 449/162~471/232 vs scroll 2449~3232;判据 = `page-app.spec.ts:158` 与 `:174`,**三引擎全绿**);#35 = **载体已物理删除**(`apps/plugin-dev` 不在磁盘、源码面 `.tab-area` **零命中**)。⑤ **#36** 已于 WP-95a 结案(≈766px 升格为 `N = 4` 阈值依据),本轮复核无需重算。**未实测(明文登记,不得视为通过)**:启动地址链真机 E2E(Docker 不可达)/ CI `e2e-matrix` / `test:integration` / `test:compose` / `test:miri` / `fuzz:smoke` / `test:coverage` 完整形态 |
 
 **主控复核的门禁读数(2026-09-18,本机实测,非 lane 自报;用于对标后续 WP)**:`pnpm build` **13/13 ✅**;`pnpm typecheck` **18/18 ✅**;`pnpm lint` **exit 0 ✅**;`lint:deps` **1436 模块 / 4458 依赖零违规 ✅**;`lint:deps:self-test` **20 组边 ✅**;`fixtures:manifest --check` **289 一致 ✅**;`smoke:contract` **24 Schema / 70 接受 / 162 拒绝 / 289 摘要比对 / serde 15 / private-bundle 10 ✅**;`scan:public` **0 违规 / 3 条既有豁免 ✅**;`pnpm test --continue` **25/26**,唯一红 = **`@stackmaster/web-component#test` 1 例** —— 该例断言的是**本包自己发出的 v1 `create_session`(带 `embedToken` / `embedSessionId`)**,属**结构性**(非字面量),随 **WP-96 物理删除该包自然消解**;**不得**为让它变绿而把该包移植到新链(与退役方向相悖)。**未实测(明文登记,不得视为通过)**:`test:integration` / `test:compose`(本机 **Docker 引擎不可达**,`dockerDesktopLinuxEngine` 管道缺失)/ 全量 E2E / `E2E_MATRIX` / `test:coverage` 完整形态 / `test:miri` / `fuzz:smoke`。
 
